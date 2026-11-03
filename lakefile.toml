@@ -1,0 +1,24 @@
+name = "smbrta"
+version = "0.1.0"
+defaultTargets = ["smbrta"]
+
+[[lean_lib]]
+name = "Smbrta"
+precompileModules = true
+
+# paths of the files outside the repository (smbrta.json)
+[[lean_lib]]
+name = "Config"
+
+# theorem statements and how they follow from computations (no game data)
+[[lean_lib]]
+name = "Theorems"
+globs = ["Theorems.+"]
+
+[[lean_exe]]
+name = "smbrta"
+root = "Main"
+
+[[lean_exe]]
+name = "test-mini"
+root = "Test.Mini"

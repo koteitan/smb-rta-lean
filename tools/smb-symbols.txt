@@ -1,0 +1,47 @@
+# Names the Lean model needs, as `key=spec` (see extract_syms.py). No values here.
+# RAM variables
+Player_X_Speed
+Player_X_MoveForce
+SprObject_X_MoveForce
+Player_XSpeedAbsolute
+Player_MovingDir
+PlayerFacingDir
+RunningSpeed
+RunningTimer
+SavedJoypadBits
+Player_X_Position
+Player_PageLoc
+OperMode
+OperMode_Task
+WorldNumber
+LevelNumber
+NumberofLives
+GameEngineSubroutine
+Player_State
+PreviousA_B_Buttons
+A_B_Buttons
+Left_Right_Buttons
+Timers
+Player_Y_Position
+Player_Y_HighPos
+Player_Y_Speed
+Player_YMF_Dummy
+Player_Y_MoveForce
+JumpOrigin_Y_Position
+DiffToHaltJump
+VerticalForce
+VerticalForceDown
+Platform_X_Scroll
+Player_SprAttrib
+Player_CollisionBits
+# code: the player's frame routine, and the point inside it just before scrolling
+PlayerCtrlRoutine
+PlayerSubs
+# values
+GameModeValue
+VictoryModeValue
+Task_GameCore=index:GameMode:GameCoreRoutine
+Eng_PlayerCtrl=index:GameRoutines:PlayerCtrlRoutine
+FrameTimersLast=byte:DecTimers+1
+# the running top speed (first entry of the right-speed table)
+RunTopSpeed=byte:MaxRightXSpdData+0
