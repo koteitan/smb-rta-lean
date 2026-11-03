@@ -44,6 +44,38 @@ theorem lower_of_check (sy : Syms) (ctx : Machine) (rins : List (UInt8 × Bool))
     (start sy ctx) n h seq h1 h2
   simpa using this
 
+/-! ## Every land area
+
+The relaxed step reads, besides its state, the input and bytes shown not to matter, only the
+scene bytes `PlayerSize`, `AreaType`, `SwimmingFlag`, `PlayerChangeSizeFlag`,
+`JumpspringAnimCtrl`, `TimerControl`, `GameEngineSubroutine`, `Player_CollisionBits`
+(found by `smbrta relax-reads`). The bounds are proved for each land `AreaType`; the other
+scene bytes keep their values at the 1-1 start (small Mario, normal play, open area). -/
+
+/-- the `AreaType` values of land areas: ground, underground, castle (water is 0) -/
+def landAreas : List UInt8 := [1, 2, 3]
+
+/-- the 1-1 start with `AreaType` set to `a` -/
+def inArea (sy : Syms) (ctx : Machine) (a : UInt8) : Machine := poke ctx sy.AreaType a
+
+/-- `Bounds` in every land area -/
+def BoundsAllAreas (sy : Syms) (ctx : Machine) (eins : List UInt8) (rins : List (UInt8 × Bool))
+    (lo n : Nat) : Prop :=
+  ∀ a ∈ landAreas, Bounds sy (inArea sy ctx a) eins rins lo n
+
+theorem allAreas_of {sy : Syms} {ctx : Machine} {eins : List UInt8} {rins : List (UInt8 × Bool)}
+    {lo n : Nat} (h1 : Bounds sy (inArea sy ctx 1) eins rins lo n)
+    (h2 : Bounds sy (inArea sy ctx 2) eins rins lo n) (h3 : Bounds sy (inArea sy ctx 3) eins rins lo n) :
+    BoundsAllAreas sy ctx eins rins lo n := by
+  intro a ha
+  rcases List.mem_cons.mp ha with h | ha
+  · exact h ▸ h1
+  rcases List.mem_cons.mp ha with h | ha
+  · exact h ▸ h2
+  rcases List.mem_cons.mp ha with h | ha
+  · exact h ▸ h3
+  exact absurd ha List.not_mem_nil
+
 /-- 34 frames, real controller: two backward jumps (found by the pruned exact search) -/
 def witness : List UInt8 := [0x02, 0x04, 0x81, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
   0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x41, 0x01, 0x02, 0x81,

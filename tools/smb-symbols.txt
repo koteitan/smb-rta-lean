@@ -45,3 +45,10 @@ Eng_PlayerCtrl=index:GameRoutines:PlayerCtrlRoutine
 FrameTimersLast=byte:DecTimers+1
 # the running top speed (first entry of the right-speed table)
 RunTopSpeed=byte:MaxRightXSpdData+0
+# scene bytes read by the player routine
+PlayerSize
+AreaType
+SwimmingFlag
+PlayerChangeSizeFlag
+JumpspringAnimCtrl
+TimerControl

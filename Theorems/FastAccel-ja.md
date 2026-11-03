@@ -2,16 +2,32 @@
 
 # fast accel
 
-**命題.** 1-1 で操作できるようになった最初のフレームから、本物のコントローラで、マリオは
-**34 フレーム**で走りの最高速（2.5 ピクセル／フレーム）に達することができ、33 フレーム以下では
-達することができない。
+**命題.** 小さいマリオが、ステージの最初のように地面で止まっていて（速さ 0、右向き）、陸のステージ
+（地上・地下・城）で周りに何もないなら、本物のコントローラで、**34 フレーム**で走りの最高速
+（2.5 ピクセル／フレーム）に達することができ、33 フレーム以下では達することができない。
 
 ```
 upper :  ∃ w ∈ PadA^34,  v(Full(ctx, w)) ≥ v_top
 lower :  ∀ σ ∈ (PadA × {着地する, しない})^{≤ 33},  v(Relax(ctx, σ)) < v_top
 ```
 
-Lean: `fast_accel : FastAccel.Bounds sy ctx padInputsA relaxInputs 33 34`。
+Lean: `fast_accel : FastAccel.BoundsAllAreas sy ctx padInputsA relaxInputs 33 34`。陸のステージの
+種類（`AreaType`）ごとの `FastAccel.Bounds`（`fast_accel_area1` 〜 `area3`）です。
+
+**条件.** 緩めたモデルの 1 ステップが、状態と入力のほかに読むのは、次の場面のバイトだけです
+（`smbrta relax-reads` で調べた。位置と縦のバイトも読みますが、結果に関係しません。下を参照）。
+
+| 場面のバイト | 定理での値 |
+|---|---|
+| `AreaType` | 陸のステージ全部: 地上、地下、城 |
+| `PlayerSize` | 小さいマリオ |
+| `SwimmingFlag`、`PlayerChangeSizeFlag`、`JumpspringAnimCtrl`、`TimerControl` | 1-1 の最初と同じ（ふつうに遊んでいるとき） |
+| `GameEngineSubroutine` | マリオを操作できる段階 |
+| `Player_CollisionBits` | 何にも触れていない（開けた場所） |
+
+開始状態は 1-1 の最初のものです。2 本の TAS で、地面から始まるステージの最初はどれも同じ状態でした。
+なので、この定理は、これらの値をもつどのフレームにも当てはまります。空中から始まる場合（地下の
+ステージに上から入るとき）、大きいマリオ、水中は、まだ含みません。
 
 * `Full` は本物のエミュレータ（モデルではない）。`PadA` は、本物のコントローラで Start と
   Select を除いて押せるボタンの組み合わせ 36 通り。

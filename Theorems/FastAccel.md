@@ -2,15 +2,35 @@
 
 # Fast accel
 
-**Statement.** From the first controllable frame of 1-1, with a real controller, Mario can
-reach the running top speed (2.5 px/frame) in **34** frames, and cannot in 33 or fewer.
+**Statement.** If small Mario stands still on the ground at the start of a level (speed 0,
+facing right), in a land area (ground, underground or castle) with nothing around him, then
+with a real controller he can reach the running top speed (2.5 px/frame) in **34** frames,
+and cannot in 33 or fewer.
 
 ```
 upper :  ∃ w ∈ PadA^34,  v(Full(ctx, w)) ≥ v_top
 lower :  ∀ σ ∈ (PadA × {land, stay})^{≤ 33},  v(Relax(ctx, σ)) < v_top
 ```
 
-Lean: `fast_accel : FastAccel.Bounds sy ctx padInputsA relaxInputs 33 34`.
+Lean: `fast_accel : FastAccel.BoundsAllAreas sy ctx padInputsA relaxInputs 33 34`, i.e.
+`FastAccel.Bounds` for each land `AreaType` (`fast_accel_area1` … `area3`).
+
+**Conditions.** The relaxed step reads, besides its state and the input, only these scene
+bytes (found by `smbrta relax-reads`; the position and the vertical bytes are read too but do
+not matter, see below):
+
+| scene byte | value in the theorem |
+|---|---|
+| `AreaType` | each land area: ground, underground, castle |
+| `PlayerSize` | small Mario |
+| `SwimmingFlag`, `PlayerChangeSizeFlag`, `JumpspringAnimCtrl`, `TimerControl` | as at the 1-1 start (normal play) |
+| `GameEngineSubroutine` | the player can be controlled |
+| `Player_CollisionBits` | nothing touched (open area) |
+
+The start state is the one of the 1-1 start; every level start in two TAS movies has the same
+state when it starts on the ground. So the theorem covers every frame with these values.
+Starting in the air (entering an underground level from above), big Mario, and water are not
+covered yet.
 
 * `Full` is the full emulator (no model). `PadA`: the 36 button sets a real controller can
   press without Start/Select.

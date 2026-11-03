@@ -2,8 +2,9 @@
 
 # TAS fast accel
 
-**命題.** 1-1 で操作できるようになった最初のフレームから、左右同時押しを許すと（TAS のルール）、
-マリオは **32 フレーム**で走りの最高速に達することができ、31 フレーム以下では達することができない。
+**命題.** [fast accel](FastAccel-ja.md) の条件（小さいマリオが陸のステージの最初のように地面で
+止まっていて、周りに何もない）で、左右同時押しを許すと（TAS のルール）、マリオは **32 フレーム**で
+走りの最高速に達することができ、31 フレーム以下では達することができない。
 （ほかの条件は [fast accel](FastAccel-ja.md) と同じ。）
 
 ```
@@ -12,7 +13,8 @@ lower :  ∀ σ ∈ (LRA × {着地する, しない})^{≤ 30},  v(Relax(ctx, �
 31 フレーム: 無理                                         （全探索。Lean ではない）
 ```
 
-Lean: `tas_fast_accel : FastAccel.Bounds sy ctx lrInputsA relaxInputsLR 30 32`。
+Lean: `tas_fast_accel : FastAccel.BoundsAllAreas sy ctx lrInputsA relaxInputsLR 30 32`
+（陸のステージの種類ごと）。
 
 **入力.** HappyLee さんの TAS（tasvideos 公開 1715M）の出だしです。
 

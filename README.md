@@ -8,8 +8,8 @@ Super Mario Bros. speedrun facts, checked in Lean 4.
 
 | theorem | statement | status |
 |---|---|---|
-| [Fast accel](Theorems/FastAccel.md) | From the first controllable frame of 1-1, with a real controller, Mario can reach the running top speed in 34 frames, and cannot in 33 or fewer. | 34 frames: theorem. 33 or fewer impossible: theorem on a relaxed model |
-| [TAS fast accel](Theorems/TasFastAccel.md) | From the first controllable frame of 1-1, with Left+Right allowed, Mario can reach the running top speed in 32 frames, and cannot in 31 or fewer. | 32 frames: theorem. 30 or fewer impossible: theorem on a relaxed model. 31 impossible: exhaustive search |
+| [Fast accel](Theorems/FastAccel.md) | If small Mario stands still on the ground at the start of a level, in a land area with nothing around him, then with a real controller he can reach the running top speed in 34 frames, and cannot in 33 or fewer. | 34 frames: theorem. 33 or fewer impossible: theorem on a relaxed model |
+| [TAS fast accel](Theorems/TasFastAccel.md) | Under the same conditions, with Left+Right allowed, Mario can reach the running top speed in 32 frames, and cannot in 31 or fewer. | 32 frames: theorem. 30 or fewer impossible: theorem on a relaxed model. 31 impossible: exhaustive search |
 
 Each page gives the statement, what Lean proves, the assumptions and how they were checked,
 and how to reproduce it. A theorem is three files in `Theorems/`: `Name.lean` (the statement

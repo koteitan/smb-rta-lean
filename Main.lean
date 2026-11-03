@@ -18,12 +18,22 @@ def hex4 (v : UInt16) : String := hex2 (v >>> 8).toUInt8 ++ hex2 v.toUInt8
 
 def flush : IO Unit := do (← IO.getStdout).flush
 
+/-- `--poke NAME=VALUE` options: RAM bytes (by symbol name) to change in the 1-1 start -/
+initialize pokes : IO.Ref (List (String × Nat)) ← IO.mkRef []
+
 def loadCart (romPath : String) : IO Machine := do
   match Machine.ofINes (← IO.FS.readBinFile romPath) with
   | .ok m => pure m
   | .error e => throw (IO.userError e)
 
 def lst (w : List UInt8) : String := "[" ++ ", ".intercalate (w.map fun b => s!"0x{hex2 b}") ++ "]"
+
+/-- the first controllable frame of 1-1, with the `--poke` changes -/
+def startM (sy : Syms) (romPath : String) : IO Machine := do
+  let m := smb11Start sy (← loadCart romPath)
+  (← pokes.get).foldlM (fun m (n, v) => match Syms.fields.lookup n with
+    | some f => pure (poke m (f sy) v.toUInt8)
+    | none => throw (IO.userError s!"--poke: unknown name {n}")) m
 
 /-! ## nestest: the CPU against the reference log -/
 
@@ -103,27 +113,37 @@ open Smbrta Smbrta.Rom
 
 set_option maxHeartbeats 0
 "
-  IO.FS.writeFile s!"{dir}/FastAccel.lean" (head ["FastAccel"] ++ "
+  -- one file per land area (built in parallel), and one file that combines them
+  let parts := [("FastAccel", "fast_accel", "padInputsA", "relaxInputs", 33, 34, "witness",
+      "fast accel, real controller: relaxed lower bound 33, emulator witness of 34 frames"),
+    ("TasFastAccel", "tas_fast_accel", "lrInputsA", "relaxInputsLR", 30, 32, "TasFastAccel.witness",
+      "TAS fast accel (Left+Right): relaxed lower bound 30, emulator witness of 32 frames")]
+  for (file, thm, eins, rins, lo, n, wit, doc) in parts do
+    let mods := if file == "FastAccel" then ["FastAccel"] else ["FastAccel", "TasFastAccel"]
+    for a in [1, 2, 3] do
+      IO.FS.writeFile s!"{dir}/{file}Area{a}.lean" (head mods ++ s!"
 open Smbrta.FastAccel in
-/-- fast accel, real controller: relaxed lower bound 33, emulator witness of 34 frames -/
-theorem fast_accel : Bounds sy ctx padInputsA relaxInputs 33 34 :=
-  ⟨lower_of_check sy ctx relaxInputs 33 (by native_decide), witness, by native_decide, by native_decide⟩
+/-- {doc}; `AreaType` = {a} -/
+theorem {thm}_area{a} : Bounds sy (inArea sy ctx {a}) {eins} {rins} {lo} {n} :=
+  ⟨lower_of_check sy (inArea sy ctx {a}) {rins} {lo} (by native_decide), {wit}, by native_decide, by native_decide⟩
 ")
-  IO.FS.writeFile s!"{dir}/TasFastAccel.lean" (head ["FastAccel", "TasFastAccel"] ++ "
+    IO.FS.writeFile s!"{dir}/{file}.lean" ("\n".intercalate ([1, 2, 3].map (s!"import Proof.{file}Area{·}")) ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom
+
 open Smbrta.FastAccel in
-/-- TAS fast accel (Left+Right): relaxed lower bound 30, emulator witness of 32 frames -/
-theorem tas_fast_accel : Bounds sy ctx lrInputsA relaxInputsLR 30 32 :=
-  ⟨lower_of_check sy ctx relaxInputsLR 30 (by native_decide), TasFastAccel.witness,
-    by native_decide, by native_decide⟩
+/-- {doc}, in every land area -/
+theorem {thm} : BoundsAllAreas sy ctx {eins} {rins} {lo} {n} :=
+  allAreas_of {thm}_area1 {thm}_area2 {thm}_area3
 ")
-  IO.println s!"wrote {dir}/FastAccel.lean, TasFastAccel.lean"
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean"
   return 0
 
 /-! ## Ground physics -/
 
 def physValidate (sy : Syms) (romPath : String) (runs len : Nat) (bias : UInt8) (pct : Nat) :
     IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let s0 := PState.read sy m0
   let ins := groundInputs.toArray
   let mut seed : Nat := 12345
@@ -147,7 +167,7 @@ def physValidate (sy : Syms) (romPath : String) (runs len : Nat) (bias : UInt8) 
 
 /-- RAM bytes the ground step reads and writes over the search up to `depth`. -/
 def physLive (sy : Syms) (romPath : String) (depth : Nat) : IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let mut rd := ByteArray.mk (Array.replicate 2048 0)
   let mut wr := ByteArray.mk (Array.replicate 2048 0)
   let mut io := false
@@ -174,7 +194,7 @@ def physLive (sy : Syms) (romPath : String) (depth : Nat) : IO UInt32 := do
 
 /-- Vary the dropped bytes (x, page, position fraction) on every search step up to `depth`. -/
 def physIndep (sy : Syms) (romPath : String) (depth : Nat) : IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let variants : List (UInt8 × UInt8 × UInt8) := [(0xF0, 0xFF, 0x00), (0x80, 0x7F, 0x01), (0x10, 0x00, 0x02)]
   let ctxs := variants.map fun (p, x, pg) =>
     (poke (poke m0 sy.Player_X_Position x) sy.Player_PageLoc pg, p)
@@ -200,7 +220,7 @@ def openLo : Int := 0x18
 def openHi : Int := 0xE0
 
 def jumpDiscover (sy : Syms) (romPath : String) (walks len : Nat) : IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let (carried, io) := discoverCarried sy m0 walks len openLo openHi
   let name := fun (a : UInt16) => match Syms.fields.find? (fun (_, f) => f sy == a) with
     | some (n, _) => n
@@ -230,7 +250,7 @@ def jumpDiscover (sy : Syms) (romPath : String) (walks len : Nat) : IO UInt32 :=
 
 def relaxLayers (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8 × Bool)) :
     IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let top := sy.RunTopSpeed.toNat
   let mut layer : List RState := [{ h := dropPos (PState.read sy m0), air := false }]
   for d in [1:depth + 1] do
@@ -243,7 +263,7 @@ def relaxLayers (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8
 /-- Exact search for `depth` frames, pruned by relaxed reachability (loses no real path). -/
 def realize (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8 × Bool))
     (eins : List UInt8) : IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let top := sy.RunTopSpeed.toNat
   let goalR := fun (s : RState) => s.h.speedInt ≥ top
   let mut layers : Array (List RState) := #[[{ h := dropPos (PState.read sy m0), air := false }]]
@@ -285,7 +305,7 @@ def realize (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8 × 
 context and check that the relaxed result does not change. -/
 def relaxIndep (sy : Syms) (romPath : String) (depth : Nat) (posMode : Bool)
     (rins : List (UInt8 × Bool)) : IO UInt32 := do
-  let m0 := smb11Start sy (← loadCart romPath)
+  let m0 := (← startM sy romPath)
   let vert : List (List (UInt16 × UInt8)) := [
     [(sy.Player_Y_Position, 0x70), (sy.Player_Y_HighPos, 1), (sy.Player_Y_Speed, 0xFC), (sy.Player_YMF_Dummy, 0x40),
      (sy.Player_Y_MoveForce, 0x80), (sy.JumpOrigin_Y_Position, 0xB0), (sy.DiffToHaltJump, 1),
@@ -315,9 +335,37 @@ def relaxIndep (sy : Syms) (romPath : String) (depth : Nat) (posMode : Bool)
   IO.println s!"relax independence: {steps} varied steps, {bad} differences"
   return if bad == 0 then 0 else 1
 
+/-- On every relaxed search step up to `depth`, record the RAM bytes the step reads before
+writing them: the bytes the relaxed model depends on. -/
+def relaxReads (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8 × Bool)) : IO UInt32 := do
+  let m0 := (← startM sy romPath)
+  let mut rd := ByteArray.mk (Array.replicate 2048 0)
+  let mut io := false
+  let mut layer : List RState := [{ h := dropPos (PState.read sy m0), air := false }]
+  let z := ByteArray.mk (Array.replicate 2048 0)
+  for _ in [0:depth] do
+    for s in layer do
+      for (inp, _) in rins do
+        let m := poke m0 sy.Player_State (if s.air then 1 else 0)
+        let m := poke m sy.PreviousA_B_Buttons 0
+        let m := prepare sy m s.h inp
+        let m := { m with trk := true, trkRead := z, trkWrite := z, trkIO := false }
+        let m := callRange m sy.PlayerCtrlRoutine sy.PlayerSubs
+        for k in [0:2048] do
+          if m.trkRead.get! k != 0 then rd := rd.set! k 1
+        io := io || m.trkIO
+    layer := Cert.next (stepRelax sy m0) rins layer
+  let name := fun (k : Nat) => match Syms.fields.find? (fun (_, f) => (f sy).toNat == k) with
+    | some (n, _) => n
+    | none => s!"(unnamed {k})"
+  IO.println s!"I/O read: {io}"
+  IO.println s!"bytes read by the relaxed step: {(flagged rd).map name}"
+  return 0
+
 /-! ## main -/
 
-def usage : String := "usage: smbrta [--config FILE] COMMAND
+def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMMAND
+  (--poke changes a RAM byte, named as in tools/smb-symbols.txt, in the 1-1 start)
   nestest                            the CPU against the nestest log
   run FM2 [skip]                     play a movie, report level changes and the clear
   gen-rom                            private: Rom.lean (ROM, symbols, 1-1 start)
@@ -328,12 +376,35 @@ def usage : String := "usage: smbrta [--config FILE] COMMAND
   jump-discover WALKS LEN            carried bytes with jumping; model vs emulator
   relax-layers DEPTH [pad|lr]
   realize DEPTH [pad|lr]             exact search for a DEPTH-frame sequence
+  relax-reads DEPTH [pad|lr]         RAM bytes the relaxed step reads
+  check-witness [pad|lr]             play a theorem's witness on the full emulator
   relax-indep DEPTH [vert|pos] [pad|lr]"
 
+/-- play a theorem's witness on the full emulator; print the speed per frame -/
+def checkWitness (sy : Syms) (romPath : String) (w : List UInt8) : IO UInt32 := do
+  let m0 ← startM sy romPath
+  let top := (sy.RunTopSpeed.toNat : Int)
+  let mut m := m0
+  let mut out := ""
+  let mut first : Option Nat := none
+  for h : k in [0:w.length] do
+    m := runFrame m (smbToPad w[k])
+    let v := (PState.read sy m).speedInt
+    out := out ++ s!"{v} "
+    if first.isNone && v ≥ top then first := some (k + 1)
+  IO.println s!"speeds: {out}"
+  IO.println s!"top speed first reached after frame {first} of {w.length}"
+  return if first == some w.length then 0 else 1
+
 def main (args : List String) : IO UInt32 := do
-  let (cfgPath, args) := match args with
-    | "--config" :: p :: rest => (some p, rest)
-    | rest => (none, rest)
+  let rec opts (cfg : Option String) : List String → IO (Option String × List String)
+    | "--config" :: p :: rest => opts (some p) rest
+    | "--poke" :: kv :: rest => do
+      match kv.splitOn "=" with
+      | [k, v] => pokes.modify (· ++ [(k, v.toNat!)]); opts cfg rest
+      | _ => throw (IO.userError s!"--poke NAME=VALUE, got {kv}")
+    | rest => pure (cfg, rest)
+  let (cfgPath, args) ← opts none args
   let cfg ← Config.load cfgPath
   let lr := fun (s : String) => s == "lr"
   match args with
@@ -358,6 +429,10 @@ def main (args : List String) : IO UInt32 := do
   | ["realize", d] => realize sy rom d.toNat! relaxInputs padInputsA
   | ["realize", d, m] =>
     if lr m then realize sy rom d.toNat! relaxInputsLR lrInputsA else realize sy rom d.toNat! relaxInputs padInputsA
+  | ["check-witness"] => checkWitness sy rom FastAccel.witness
+  | ["check-witness", m] => checkWitness sy rom (if lr m then TasFastAccel.witness else FastAccel.witness)
+  | ["relax-reads", d] => relaxReads sy rom d.toNat! relaxInputs
+  | ["relax-reads", d, m] => relaxReads sy rom d.toNat! (if lr m then relaxInputsLR else relaxInputs)
   | ["relax-indep", d] => relaxIndep sy rom d.toNat! false relaxInputs
   | ["relax-indep", d, v] => relaxIndep sy rom d.toNat! (v == "pos") relaxInputs
   | ["relax-indep", d, v, m] =>

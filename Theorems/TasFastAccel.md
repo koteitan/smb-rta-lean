@@ -2,8 +2,9 @@
 
 # TAS fast accel
 
-**Statement.** From the first controllable frame of 1-1, with Left+Right allowed (TAS rules),
-Mario can reach the running top speed in **32** frames, and cannot in 31 or fewer.
+**Statement.** Under the conditions of [Fast accel](FastAccel.md) (small Mario standing at a
+level start in a land area, nothing around), with Left+Right allowed (TAS rules), Mario can
+reach the running top speed in **32** frames, and cannot in 31 or fewer.
 (Otherwise as in [Fast accel](FastAccel.md).)
 
 ```
@@ -12,7 +13,8 @@ lower :  ∀ σ ∈ (LRA × {land, stay})^{≤ 30},  v(Relax(ctx, σ)) < v_top  
 31 frames: impossible                                     (exhaustive search, not Lean)
 ```
 
-Lean: `tas_fast_accel : FastAccel.Bounds sy ctx lrInputsA relaxInputsLR 30 32`.
+Lean: `tas_fast_accel : FastAccel.BoundsAllAreas sy ctx lrInputsA relaxInputsLR 30 32`
+(each land `AreaType`).
 
 **The input.** The opening of the HappyLee TAS (tasvideos publication 1715M):
 

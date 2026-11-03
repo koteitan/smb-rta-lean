@@ -53,6 +53,12 @@ structure Syms where
   Eng_PlayerCtrl : UInt16
   FrameTimersLast : UInt16
   RunTopSpeed : UInt16
+  PlayerSize : UInt16
+  AreaType : UInt16
+  SwimmingFlag : UInt16
+  PlayerChangeSizeFlag : UInt16
+  JumpspringAnimCtrl : UInt16
+  TimerControl : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -98,7 +104,13 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("Task_GameCore", fun s => s.Task_GameCore),
   ("Eng_PlayerCtrl", fun s => s.Eng_PlayerCtrl),
   ("FrameTimersLast", fun s => s.FrameTimersLast),
-  ("RunTopSpeed", fun s => s.RunTopSpeed)]
+  ("RunTopSpeed", fun s => s.RunTopSpeed),
+  ("PlayerSize", fun s => s.PlayerSize),
+  ("AreaType", fun s => s.AreaType),
+  ("SwimmingFlag", fun s => s.SwimmingFlag),
+  ("PlayerChangeSizeFlag", fun s => s.PlayerChangeSizeFlag),
+  ("JumpspringAnimCtrl", fun s => s.JumpspringAnimCtrl),
+  ("TimerControl", fun s => s.TimerControl)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -153,6 +165,12 @@ def Syms.parse (text : String) : Except String Syms := do
     Eng_PlayerCtrl := ← get "Eng_PlayerCtrl"
     FrameTimersLast := ← get "FrameTimersLast"
     RunTopSpeed := ← get "RunTopSpeed"
+    PlayerSize := ← get "PlayerSize"
+    AreaType := ← get "AreaType"
+    SwimmingFlag := ← get "SwimmingFlag"
+    PlayerChangeSizeFlag := ← get "PlayerChangeSizeFlag"
+    JumpspringAnimCtrl := ← get "JumpspringAnimCtrl"
+    TimerControl := ← get "TimerControl"
   }
 
 def Syms.load (path : String) : IO Syms := do
