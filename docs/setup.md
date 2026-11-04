@@ -39,7 +39,8 @@ cp /path/to/your/smb.nes PATH_OF_rom
 python3 prove.py
 ```
 
-It stops with a message at the first step that fails. The last step takes about 20 minutes.
+It stops with a message at the first step that fails. The proofs take about 2 minutes;
+`python3 prove.py --full` also runs the full-search proofs (about 20 minutes more).
 The build command is `lake build`; set `SMBRTA_BUILD` to use another one.
 
 ## What prove.py does
@@ -56,7 +57,7 @@ The build command is `lake build`; set `SMBRTA_BUILD` to use another one.
 2. builds this repository;
 3. checks the emulator against the nestest log (`smbrta nestest`);
 4. generates the private proof files: `Proof/Rom.lean` (the ROM, the symbols, the 1-1 start)
-   and one file per theorem (`smbrta gen-rom`, `smbrta gen-proofs`). Each theorem file only
+   and the theorem files (`smbrta gen-rom`, `smbrta gen-proofs`). Each theorem file only
    applies `native_decide` to a statement in `Theorems/`;
 5. builds the private project: here Lean checks the theorems;
 6. lists the checked theorems.

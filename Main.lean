@@ -2,6 +2,7 @@ import Smbrta
 import Config
 import Theorems.FastAccel
 import Theorems.TasFastAccel
+import Theorems.TopSpeed
 
 open Smbrta
 
@@ -106,37 +107,85 @@ end Smbrta.Rom
   return 0
 
 /-- the theorem files that only apply `native_decide` to the public statements -/
-def genProofs (dir : String) : IO UInt32 := do
+def genProofs (dir : String) (full : Bool) : IO UInt32 := do
   let head := fun (mods : List String) => "\n".intercalate (("import Proof.Rom" :: mods.map (s!"import Theorems.{·}"))) ++ s!"
 /-! {privateNote} -/
 open Smbrta Smbrta.Rom
 
 set_option maxHeartbeats 0
 "
-  -- one file per land area (built in parallel), and one file that combines them
+  -- fast accel: one file per land area (built in parallel) and one that combines them.
+  -- Fast proofs (pruned search, assuming `GainBound`) always; full search proofs with `full`.
   let parts := [("FastAccel", "fast_accel", "padInputsA", "relaxInputs", 33, 34, "witness",
-      "fast accel, real controller: relaxed lower bound 33, emulator witness of 34 frames"),
+      "fast accel, real controller: lower bound 33 in the relaxed model, emulator witness of 34 frames"),
     ("TasFastAccel", "tas_fast_accel", "lrInputsA", "relaxInputsLR", 30, 32, "TasFastAccel.witness",
-      "TAS fast accel (Left+Right): relaxed lower bound 30, emulator witness of 32 frames")]
+      "TAS fast accel (Left+Right): lower bound 30 in the relaxed model, emulator witness of 32 frames")]
   for (file, thm, eins, rins, lo, n, wit, doc) in parts do
     let mods := if file == "FastAccel" then ["FastAccel"] else ["FastAccel", "TasFastAccel"]
     for a in [1, 2, 3] do
       IO.FS.writeFile s!"{dir}/{file}Area{a}.lean" (head mods ++ s!"
 open Smbrta.FastAccel in
-/-- {doc}; `AreaType` = {a} -/
-theorem {thm}_area{a} : Bounds sy (inArea sy ctx {a}) {eins} {rins} {lo} {n} :=
+/-- {doc}; `AreaType` = {a}; pruned search, assuming `GainBound` -/
+theorem {thm}_area{a} (hG : GainBound sy (inArea sy ctx {a}) {rins}) :
+    Bounds sy (inArea sy ctx {a}) {eins} {rins} {lo} {n} :=
+  ⟨lower_of_fast hG (by native_decide), {wit}, by native_decide, by native_decide⟩
+")
+      if full then
+        IO.FS.writeFile s!"{dir}/{file}FullArea{a}.lean" (head mods ++ s!"
+open Smbrta.FastAccel in
+/-- {doc}; `AreaType` = {a}; full search of the relaxed model, no assumption -/
+theorem {thm}_full_area{a} : Bounds sy (inArea sy ctx {a}) {eins} {rins} {lo} {n} :=
   ⟨lower_of_check sy (inArea sy ctx {a}) {rins} {lo} (by native_decide), {wit}, by native_decide, by native_decide⟩
 ")
+    let land := fun (pre : String) (suf : String) => " ".intercalate ([1, 2, 3].map fun a => s!"{pre}{a}{suf}")
     IO.FS.writeFile s!"{dir}/{file}.lean" ("\n".intercalate ([1, 2, 3].map (s!"import Proof.{file}Area{·}")) ++ s!"
 /-! {privateNote} -/
 open Smbrta Smbrta.Rom
 
 open Smbrta.FastAccel in
-/-- {doc}, in every land area -/
-theorem {thm} : BoundsAllAreas sy ctx {eins} {rins} {lo} {n} :=
-  allAreas_of {thm}_area1 {thm}_area2 {thm}_area3
+/-- {doc}, in every land area; assuming `GainBound` in each -/
+theorem {thm} (hG : ∀ a ∈ landAreas, GainBound sy (inArea sy ctx a) {rins}) :
+    BoundsAllAreas sy ctx {eins} {rins} {lo} {n} :=
+  forall_land (P := fun a => Bounds sy (inArea sy ctx a) {eins} {rins} {lo} {n})
+    {land s!"({thm}_area" " (hG _ (by decide)))"}
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean"
+    if full then
+      IO.FS.writeFile s!"{dir}/{file}Full.lean" ("\n".intercalate ([1, 2, 3].map (s!"import Proof.{file}FullArea{·}")) ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom
+
+open Smbrta.FastAccel in
+/-- {doc}, in every land area; full search, no assumption -/
+theorem {thm}_full : BoundsAllAreas sy ctx {eins} {rins} {lo} {n} :=
+  allAreas_of {land s!"{thm}_full_area" ""}
+")
+  -- top speed bound: one file per routine check (built in parallel), the attainment, and a summary
+  let checks := [("Friction", "frictionCheck"), ("Physics", "physicsCheck"), ("Mover", "moverCheck"),
+    ("Impede", "impedeCheck"), ("Anim", "animCheck")]
+  for (f, c) in checks do
+    IO.FS.writeFile s!"{dir}/TopSpeed{f}.lean" (head ["TopSpeed"] ++ s!"
+open Smbrta.TopSpeed in
+theorem top_{c} : {c} sy ctx = true := by native_decide
+")
+  IO.FS.writeFile s!"{dir}/TopSpeedAttain.lean" (head ["TopSpeed"] ++ "
+open Smbrta.TopSpeed in
+/-- after fast accel, 20 frames of Right+B move `P` by exactly `16·top` each -/
+theorem top_attain : attainCheck sy ctx 20 = true := by native_decide
+
+open Smbrta.TopSpeed in
+theorem top_ge_16 : 16 ≤ (top sy : Int) := by native_decide
+")
+  IO.FS.writeFile s!"{dir}/TopSpeed.lean" ("\n".intercalate ((checks.map (s!"import Proof.TopSpeed{·.1}")) ++ ["import Proof.TopSpeedAttain"]) ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom Smbrta.TopSpeed
+
+/-- every routine check holds, running at top speed reaches the bound, and `16 ≤ top`:
+with `Frame.bound` and `chain_bound`, `P` never grows faster than `16·top` per frame -/
+theorem top_speed : frictionCheck sy ctx = true ∧ physicsCheck sy ctx = true ∧ moverCheck sy ctx = true ∧
+    impedeCheck sy ctx = true ∧ animCheck sy ctx = true ∧ attainCheck sy ctx 20 = true ∧ 16 ≤ (top sy : Int) :=
+  ⟨top_frictionCheck, top_physicsCheck, top_moverCheck, top_impedeCheck, top_animCheck, top_attain, top_ge_16⟩
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -362,6 +411,61 @@ def relaxReads (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8 
   IO.println s!"bytes read by the relaxed step: {(flagged rd).map name}"
   return 0
 
+/-- run the top-speed checks as a program, with timings -/
+def topCheck (sy : Syms) (romPath : String) (which : String) : IO UInt32 := do
+  let m0 ← startM sy romPath
+  let mut ok := true
+  for (name, f) in [("friction", TopSpeed.frictionCheck), ("physics", TopSpeed.physicsCheck),
+      ("impede", TopSpeed.impedeCheck), ("anim", TopSpeed.animCheck), ("mover", TopSpeed.moverCheck),
+      -- a false claim, to see that the checks can fail: top lowered by one
+      ("friction-neg", fun sy m => TopSpeed.frictionCheck { sy with RunTopSpeed := sy.RunTopSpeed - 1 } m),
+      ("attain", fun sy m => TopSpeed.attainCheck sy m 20)] do
+    if which == "all" || which == name then
+      let t0 ← IO.monoMsNow
+      let r := f sy m0
+      let t1 ← IO.monoMsNow
+      IO.println s!"{name}: {r} ({t1 - t0} ms)"; flush
+      ok := ok && r
+  return if ok then 0 else 1
+
+/-- relaxed search keeping, for each state up to its speed, only the fastest one
+(experiment: is the answer the same, and how many states remain?) -/
+def relaxDom (sy : Syms) (romPath : String) (depth : Nat) (rins : List (UInt8 × Bool)) : IO UInt32 := do
+  let m0 ← startM sy romPath
+  let top := (sy.RunTopSpeed.toNat : Int)
+  let key := fun (s : RState) => ({ s with h := { s.h with speed := 0, fricMF := 0, absSpd := 0 } } : RState)
+  let val := fun (s : RState) => 256 * s.h.speedInt + s.h.fricMF.toNat
+  let mut layer : Array RState := #[{ h := dropPos (PState.read sy m0), air := false }]
+  let t0 ← IO.monoMsNow
+  for d in [1:depth + 1] do
+    let mut best : Std.HashMap RState RState := {}
+    for s in layer do
+      for c in rins do
+        let t := stepRelax sy m0 s c
+        let k := key t
+        match best.get? k with
+        | some u => if val t > val u then best := best.insert k t
+        | none => best := best.insert k t
+    layer := best.toArray.map (·.2)
+    let hi := layer.foldl (fun b s => max b s.h.speedInt) (-1000)
+    let t1 ← IO.monoMsNow
+    IO.println s!"depth {d}: {layer.size} states, best speed {hi}, {t1 - t0} ms"; flush
+    if hi ≥ top then IO.println s!"top speed first reached at depth {d}"; return 0
+  return 0
+
+/-- run the fast lower-bound checks of fast accel and TAS fast accel, every land area -/
+def fastCheck (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← startM sy romPath
+  let mut ok := true
+  for (name, rins, n) in [("fast accel", relaxInputs, 33), ("TAS fast accel", relaxInputsLR, 30)] do
+    for a in FastAccel.landAreas do
+      let t0 ← IO.monoMsNow
+      let r ← IO.lazyPure fun _ => FastAccel.lowerFastCheck sy (FastAccel.inArea sy m0 a) rins n
+      let t1 ← IO.monoMsNow
+      IO.println s!"{name}, AreaType {a}, lower bound {n}: {r} ({t1 - t0} ms)"; flush
+      ok := ok && r
+  return if ok then 0 else 1
+
 /-! ## main -/
 
 def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMMAND
@@ -369,7 +473,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   nestest                            the CPU against the nestest log
   run FM2 [skip]                     play a movie, report level changes and the clear
   gen-rom                            private: Rom.lean (ROM, symbols, 1-1 start)
-  gen-proofs                         private: the theorem files
+  gen-proofs [--full]                private: the theorem files (--full: also the full-search proofs)
   phys-validate RUNS LEN [BIAS PCT]  ground model vs emulator
   phys-live DEPTH                    RAM bytes the ground step uses
   phys-indep DEPTH                   position does not affect the ground step
@@ -377,6 +481,8 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   relax-layers DEPTH [pad|lr]
   realize DEPTH [pad|lr]             exact search for a DEPTH-frame sequence
   relax-reads DEPTH [pad|lr]         RAM bytes the relaxed step reads
+  top-check NAME|all                 the top-speed routine checks, as a program
+  fast-check                         the pruned fast-accel lower bounds, as a program
   check-witness [pad|lr]             play a theorem's witness on the full emulator
   relax-indep DEPTH [vert|pos] [pad|lr]"
 
@@ -417,7 +523,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => genProofs dir
+  | ["gen-proofs"] => genProofs dir false
+  | ["gen-proofs", "--full"] => genProofs dir true
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!
@@ -431,6 +538,16 @@ def main (args : List String) : IO UInt32 := do
     if lr m then realize sy rom d.toNat! relaxInputsLR lrInputsA else realize sy rom d.toNat! relaxInputs padInputsA
   | ["check-witness"] => checkWitness sy rom FastAccel.witness
   | ["check-witness", m] => checkWitness sy rom (if lr m then TasFastAccel.witness else FastAccel.witness)
+  | ["top-check", w] => topCheck sy rom w
+  | ["fast-check"] => fastCheck sy rom
+  | ["fast-check-neg"] => do
+    -- reachable bounds: these must be false
+    let m0 ← startM sy rom
+    IO.println s!"fast accel, 34: {FastAccel.lowerFastCheck sy m0 relaxInputs 34}"
+    IO.println s!"TAS fast accel, 31: {FastAccel.lowerFastCheck sy m0 relaxInputsLR 31}"
+    return 0
+  | ["relax-dom", d] => relaxDom sy rom d.toNat! relaxInputs
+  | ["relax-dom", d, m] => relaxDom sy rom d.toNat! (if lr m then relaxInputsLR else relaxInputs)
   | ["relax-reads", d] => relaxReads sy rom d.toNat! relaxInputs
   | ["relax-reads", d, m] => relaxReads sy rom d.toNat! (if lr m then relaxInputsLR else relaxInputs)
   | ["relax-indep", d] => relaxIndep sy rom d.toNat! false relaxInputs

@@ -71,3 +71,53 @@ theorem lower_bound (step : σ → ι → σ) (inputs : List ι) (P : σ → Boo
       (run_mem step inputs seq [s0] s0 (by simp) hseq)
 
 end Smbrta.Cert
+
+namespace Smbrta.Cert
+
+variable {σ ι : Type} [DecidableEq σ] [Hashable σ] [LawfulHashable σ]
+
+/-! ## Pruned search
+
+`keep r s` says whether to follow `s` when `r` frames remain. The dropped states must be
+safe by another argument (`hdrop`): every sequence of at most `r` frames from them keeps `P`. -/
+
+def checkPruned (step : σ → ι → σ) (inputs : List ι) (P : σ → Bool) (keep : Nat → σ → Bool) :
+    Nat → List σ → Bool
+  | 0, L => L.all P
+  | r + 1, L => L.all P && checkPruned step inputs P keep r ((next step inputs L).filter (keep r))
+
+theorem pruned_spec (step : σ → ι → σ) (inputs : List ι) (P : σ → Bool) (keep : Nat → σ → Bool)
+    (hdrop : ∀ r s, keep r s = false →
+      ∀ seq : List ι, (∀ i ∈ seq, i ∈ inputs) → seq.length ≤ r → P (run step s seq) = true) :
+    ∀ (r : Nat) (L : List σ), checkPruned step inputs P keep r L = true →
+      ∀ s ∈ L, ∀ seq : List ι, (∀ i ∈ seq, i ∈ inputs) → seq.length ≤ r → P (run step s seq) = true
+  | 0, L, h, s, hs, seq, _, hlen => by
+    have : seq = [] := List.eq_nil_of_length_eq_zero (by omega)
+    subst this
+    simp only [checkPruned, List.all_eq_true] at h
+    exact h s hs
+  | r + 1, L, h, s, hs, seq, hseq, hlen => by
+    simp only [checkPruned, Bool.and_eq_true, List.all_eq_true] at h
+    cases seq with
+    | nil => exact h.1 s hs
+    | cons i rest =>
+      have hi : i ∈ inputs := hseq i (by simp)
+      have hrest : ∀ j ∈ rest, j ∈ inputs := fun j hj => hseq j (by simp [hj])
+      have hlen' : rest.length ≤ r := by simp at hlen; omega
+      have ht : step s i ∈ next step inputs L := mem_next step inputs L hs hi
+      show P (rest.foldl step (step s i)) = true
+      by_cases hk : keep r (step s i) = true
+      · exact pruned_spec step inputs P keep hdrop r _ h.2 (step s i)
+          (List.mem_filter.2 ⟨ht, hk⟩) rest hrest hlen'
+      · exact hdrop r (step s i) (by simpa using hk) rest hrest hlen'
+
+/-- If the pruned check passes from `s0`, `P` holds after every sequence of at most `n` frames. -/
+theorem lower_bound_pruned (step : σ → ι → σ) (inputs : List ι) (P : σ → Bool)
+    (keep : Nat → σ → Bool) (s0 : σ) (n : Nat)
+    (hdrop : ∀ r s, keep r s = false →
+      ∀ seq : List ι, (∀ i ∈ seq, i ∈ inputs) → seq.length ≤ r → P (run step s seq) = true)
+    (h : checkPruned step inputs P keep n [s0] = true) :
+    ∀ seq : List ι, (∀ i ∈ seq, i ∈ inputs) → seq.length ≤ n → P (run step s0 seq) = true :=
+  fun seq hseq hlen => pruned_spec step inputs P keep hdrop n [s0] h s0 (by simp) seq hseq hlen
+
+end Smbrta.Cert

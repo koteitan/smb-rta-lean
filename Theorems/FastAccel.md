@@ -12,8 +12,22 @@ upper :  ∃ w ∈ PadA^34,  v(Full(ctx, w)) ≥ v_top
 lower :  ∀ σ ∈ (PadA × {land, stay})^{≤ 33},  v(Relax(ctx, σ)) < v_top
 ```
 
-Lean: `fast_accel : FastAccel.BoundsAllAreas sy ctx padInputsA relaxInputs 33 34`, i.e.
-`FastAccel.Bounds` for each land `AreaType` (`fast_accel_area1` … `area3`).
+Lean: `fast_accel : (∀ a ∈ landAreas, GainBound …) → FastAccel.BoundsAllAreas sy ctx padInputsA relaxInputs 33 34`,
+i.e. `FastAccel.Bounds` for each land `AreaType` (`fast_accel_area1` … `area3`). With
+`prove.py --full` also `fast_accel_full`, the same without `GainBound` (full search).
+
+**Two proofs of the lower bound.**
+
+* *Pruned search* (default, about 20 s per area). `V = 256·speed + subspeed`.
+  `GainBound`: one frame gives `V' ≤ max(V, 0) + a_max` (`a_max` = the largest friction adder).
+  So a state with `max(V, 0) + a_max·r < 256·v_top`, with `r` frames left, cannot reach the
+  top speed in time, and is dropped (`Cert.lower_bound_pruned`, `lower_of_fast`). Only about
+  14,000 states remain instead of about 900,000. Subspeed tricks (freezing it in the air,
+  keeping it after L+R) are inside `V`, so they are covered. `GainBound` follows from the
+  routine checks of [Top speed bound](TopSpeed.md), under the same assumption that these
+  routines are the only writers.
+* *Full search* (`--full`, about 16 min per area): every relaxed state of every frame; no
+  `GainBound`.
 
 **Conditions.** The relaxed step reads, besides its state and the input, only these scene
 bytes (found by `smbrta relax-reads`; the position and the vertical bytes are read too but do

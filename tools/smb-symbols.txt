@@ -52,3 +52,20 @@ SwimmingFlag
 PlayerChangeSizeFlag
 JumpspringAnimCtrl
 TimerControl
+# player physics segments and their variables and tables
+X_Physics
+ImposeFriction
+MoveObjectHorizontally
+ImpedePlayerMove
+MaximumRightSpeed
+MaximumLeftSpeed
+FrictionAdderLow
+FrictionAdderHigh
+SideCollisionTimer
+MaxRightXSpdData
+MaxLeftXSpdData
+FrictionData
+GetPlayerAnimSpeed
+# operands read from the code: the running timer reset value, the running-speed threshold
+RunTimerReset=byte:SetRTmr+1
+RunSpeedMin=byte:GetPlayerAnimSpeed+6

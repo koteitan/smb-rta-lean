@@ -23,6 +23,11 @@ Only `checkUpTo` (P on every layer) is computed by `native_decide`. Many input s
 lead to the same state, so the layers stay small (at most a few hundred thousand states)
 although there are about 36^33 sequences.
 
+**Pruned search.** A state that cannot reach the goal in the frames left, by a proved bound
+on what one frame can do, is dropped (`Cert.lower_bound_pruned`): the kept states must satisfy
+the property, and the dropped ones are safe by the bound. Fast accel uses
+`V' ≤ max(V, 0) + a_max` for the speed with subspeed `V`.
+
 **Relaxed model.** For jumps, the vertical state is replaced by a ground/air flag, and
 landing may happen at the end of any frame. Every real run is a run of the relaxed model,
 so a relaxed lower bound is a real lower bound.

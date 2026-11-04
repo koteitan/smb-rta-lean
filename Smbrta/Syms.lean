@@ -59,6 +59,21 @@ structure Syms where
   PlayerChangeSizeFlag : UInt16
   JumpspringAnimCtrl : UInt16
   TimerControl : UInt16
+  X_Physics : UInt16
+  ImposeFriction : UInt16
+  MoveObjectHorizontally : UInt16
+  ImpedePlayerMove : UInt16
+  MaximumRightSpeed : UInt16
+  MaximumLeftSpeed : UInt16
+  FrictionAdderLow : UInt16
+  FrictionAdderHigh : UInt16
+  SideCollisionTimer : UInt16
+  MaxRightXSpdData : UInt16
+  MaxLeftXSpdData : UInt16
+  FrictionData : UInt16
+  GetPlayerAnimSpeed : UInt16
+  RunTimerReset : UInt16
+  RunSpeedMin : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -110,7 +125,22 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("SwimmingFlag", fun s => s.SwimmingFlag),
   ("PlayerChangeSizeFlag", fun s => s.PlayerChangeSizeFlag),
   ("JumpspringAnimCtrl", fun s => s.JumpspringAnimCtrl),
-  ("TimerControl", fun s => s.TimerControl)]
+  ("TimerControl", fun s => s.TimerControl),
+  ("X_Physics", fun s => s.X_Physics),
+  ("ImposeFriction", fun s => s.ImposeFriction),
+  ("MoveObjectHorizontally", fun s => s.MoveObjectHorizontally),
+  ("ImpedePlayerMove", fun s => s.ImpedePlayerMove),
+  ("MaximumRightSpeed", fun s => s.MaximumRightSpeed),
+  ("MaximumLeftSpeed", fun s => s.MaximumLeftSpeed),
+  ("FrictionAdderLow", fun s => s.FrictionAdderLow),
+  ("FrictionAdderHigh", fun s => s.FrictionAdderHigh),
+  ("SideCollisionTimer", fun s => s.SideCollisionTimer),
+  ("MaxRightXSpdData", fun s => s.MaxRightXSpdData),
+  ("MaxLeftXSpdData", fun s => s.MaxLeftXSpdData),
+  ("FrictionData", fun s => s.FrictionData),
+  ("GetPlayerAnimSpeed", fun s => s.GetPlayerAnimSpeed),
+  ("RunTimerReset", fun s => s.RunTimerReset),
+  ("RunSpeedMin", fun s => s.RunSpeedMin)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -171,6 +201,21 @@ def Syms.parse (text : String) : Except String Syms := do
     PlayerChangeSizeFlag := ← get "PlayerChangeSizeFlag"
     JumpspringAnimCtrl := ← get "JumpspringAnimCtrl"
     TimerControl := ← get "TimerControl"
+    X_Physics := ← get "X_Physics"
+    ImposeFriction := ← get "ImposeFriction"
+    MoveObjectHorizontally := ← get "MoveObjectHorizontally"
+    ImpedePlayerMove := ← get "ImpedePlayerMove"
+    MaximumRightSpeed := ← get "MaximumRightSpeed"
+    MaximumLeftSpeed := ← get "MaximumLeftSpeed"
+    FrictionAdderLow := ← get "FrictionAdderLow"
+    FrictionAdderHigh := ← get "FrictionAdderHigh"
+    SideCollisionTimer := ← get "SideCollisionTimer"
+    MaxRightXSpdData := ← get "MaxRightXSpdData"
+    MaxLeftXSpdData := ← get "MaxLeftXSpdData"
+    FrictionData := ← get "FrictionData"
+    GetPlayerAnimSpeed := ← get "GetPlayerAnimSpeed"
+    RunTimerReset := ← get "RunTimerReset"
+    RunSpeedMin := ← get "RunSpeedMin"
   }
 
 def Syms.load (path : String) : IO Syms := do

@@ -13,8 +13,9 @@ lower :  ∀ σ ∈ (LRA × {着地する, しない})^{≤ 30},  v(Relax(ctx, �
 31 フレーム: 無理                                         （全探索。Lean ではない）
 ```
 
-Lean: `tas_fast_accel : FastAccel.BoundsAllAreas sy ctx lrInputsA relaxInputsLR 30 32`
-（陸のステージの種類ごと）。
+Lean: `tas_fast_accel : (∀ a ∈ landAreas, GainBound …) → FastAccel.BoundsAllAreas sy ctx lrInputsA relaxInputsLR 30 32`
+（陸のステージの種類ごと。間引いた探索で、ステージの種類ごとに約 30 秒）。`prove.py --full` では、
+`GainBound` を使わない `tas_fast_accel_full`（全探索）も証明します。
 
 **入力.** HappyLee さんの TAS（tasvideos 公開 1715M）の出だしです。
 

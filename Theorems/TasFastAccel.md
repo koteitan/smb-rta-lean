@@ -13,8 +13,9 @@ lower :  ∀ σ ∈ (LRA × {land, stay})^{≤ 30},  v(Relax(ctx, σ)) < v_top  
 31 frames: impossible                                     (exhaustive search, not Lean)
 ```
 
-Lean: `tas_fast_accel : FastAccel.BoundsAllAreas sy ctx lrInputsA relaxInputsLR 30 32`
-(each land `AreaType`).
+Lean: `tas_fast_accel : (∀ a ∈ landAreas, GainBound …) → FastAccel.BoundsAllAreas sy ctx lrInputsA relaxInputsLR 30 32`
+(each land `AreaType`; pruned search, about 30 s per area). With `prove.py --full` also
+`tas_fast_accel_full` (full search, no `GainBound`).
 
 **The input.** The opening of the HappyLee TAS (tasvideos publication 1715M):
 
