@@ -121,3 +121,65 @@ theorem lower_bound_pruned (step : σ → ι → σ) (inputs : List ι) (P : σ 
   fun seq hseq hlen => pruned_spec step inputs P keep hdrop n [s0] h s0 (by simp) seq hseq hlen
 
 end Smbrta.Cert
+
+namespace Smbrta.Cert
+
+/-! ## Searches where each state has its own successors
+
+`succ s` lists the states one step from `s` (the inputs allowed in `s` may depend on it).
+`Reach succ s n t`: `t` is reached from `s` in `n` steps. -/
+
+inductive Reach {σ : Type} (succ : σ → List σ) : σ → Nat → σ → Prop
+  | refl (s : σ) : Reach succ s 0 s
+  | step {s t u : σ} {n : Nat} : t ∈ succ s → Reach succ t n u → Reach succ s (n + 1) u
+
+theorem Reach.zero {σ : Type} {succ : σ → List σ} {s u : σ} (h : Reach succ s 0 u) : u = s := by
+  cases h; rfl
+
+theorem Reach.split {σ : Type} {succ : σ → List σ} :
+    ∀ {s u : σ} (a b : Nat), Reach succ s (a + b) u → ∃ y, Reach succ s a y ∧ Reach succ y b u
+  | s, u, 0, b, h => ⟨s, .refl s, by simpa using h⟩
+  | s, u, a + 1, b, h => by
+    rw [show a + 1 + b = (a + b) + 1 by omega] at h
+    cases h with
+    | step ht hr =>
+      obtain ⟨y, h1, h2⟩ := Reach.split a b hr
+      exact ⟨y, .step ht h1, h2⟩
+
+variable {σ : Type} [DecidableEq σ] [Hashable σ] [LawfulHashable σ]
+
+def nextS (succ : σ → List σ) (L : List σ) : List σ :=
+  (Std.HashSet.ofList (L.flatMap succ)).toList
+
+theorem mem_nextS (succ : σ → List σ) (L : List σ) {s t : σ} (hs : s ∈ L) (ht : t ∈ succ s) :
+    t ∈ nextS succ L := by
+  unfold nextS
+  rw [Std.HashSet.mem_toList, Std.HashSet.mem_ofList, List.contains_iff_mem]
+  exact List.mem_flatMap.2 ⟨s, hs, ht⟩
+
+/-- `P` on every kept state of the layers `0..r`; `keep r s`: follow `s` with `r` steps left -/
+def checkPrunedS (succ : σ → List σ) (P : σ → Bool) (keep : Nat → σ → Bool) : Nat → List σ → Bool
+  | 0, L => L.all P
+  | r + 1, L => L.all P && checkPrunedS succ P keep r ((nextS succ L).filter (keep r))
+
+theorem prunedS_spec (succ : σ → List σ) (P : σ → Bool) (keep : Nat → σ → Bool)
+    (hdrop : ∀ r s, keep r s = false → ∀ m u, m ≤ r → Reach succ s m u → P u = true) :
+    ∀ (r : Nat) (L : List σ), checkPrunedS succ P keep r L = true →
+      ∀ s ∈ L, ∀ m u, m ≤ r → Reach succ s m u → P u = true
+  | 0, L, h, s, hs, m, u, hm, hr => by
+    have : m = 0 := by omega
+    subst this
+    rw [hr.zero]
+    simp only [checkPrunedS, List.all_eq_true] at h
+    exact h s hs
+  | r + 1, L, h, s, hs, m, u, hm, hr => by
+    simp only [checkPrunedS, Bool.and_eq_true, List.all_eq_true] at h
+    cases hr with
+    | refl => exact h.1 s hs
+    | @step _ t _ m' ht hrest =>
+      have htn : t ∈ nextS succ L := mem_nextS succ L hs ht
+      by_cases hk : keep r t = true
+      · exact prunedS_spec succ P keep hdrop r _ h.2 t (List.mem_filter.2 ⟨htn, hk⟩) m' u (by omega) hrest
+      · exact hdrop r t (by simpa using hk) m' u (by omega) hrest
+
+end Smbrta.Cert

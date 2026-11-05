@@ -13,10 +13,11 @@
 ```
 Frame.bound :  |v| ≤ v_top  →  |v'| ≤ v_top  ∧  P' − P ≤ 16·v_top
 chain_bound :  P(n) − P(0) ≤ 16·v_top·n
+Frame.gain  :  V' ≤ max(V, 0) + a_max          （V = 256·v + subspeed。fast accel の GainBound）
 attain      :  最高速で右 + B を 20 フレーム: 毎フレーム P' − P = 16·v_top
 ```
 
-Lean: `Theorems/TopSpeed.lean`（`Frame.bound`、`chain_bound`。計算を使わずに証明）、非公開の
+Lean: `Theorems/TopSpeed.lean`（`Frame.bound`、`chain_bound`、`Frame.gain`。計算を使わずに証明）、非公開の
 `top_speed`（各処理の確認と `attain`。`native_decide`）。
 
 ## 分け方

@@ -3,6 +3,9 @@ import Config
 import Theorems.FastAccel
 import Theorems.TasFastAccel
 import Theorems.TopSpeed
+import Theorems.Reach
+import Theorems.Potential
+import Theorems.Opening
 
 open Smbrta
 
@@ -107,7 +110,7 @@ end Smbrta.Rom
   return 0
 
 /-- the theorem files that only apply `native_decide` to the public statements -/
-def genProofs (dir : String) (full : Bool) : IO UInt32 := do
+def genProofs (sy : Syms) (romPath dir : String) (full : Bool) : IO UInt32 := do
   let head := fun (mods : List String) => "\n".intercalate (("import Proof.Rom" :: mods.map (s!"import Theorems.{·}"))) ++ s!"
 /-! {privateNote} -/
 open Smbrta Smbrta.Rom
@@ -185,7 +188,91 @@ theorem top_speed : frictionCheck sy ctx = true ∧ physicsCheck sy ctx = true �
     impedeCheck sy ctx = true ∧ animCheck sy ctx = true ∧ attainCheck sy ctx 20 = true ∧ 16 ≤ (top sy : Int) :=
   ⟨top_frictionCheck, top_physicsCheck, top_moverCheck, top_impedeCheck, top_animCheck, top_attain, top_ge_16⟩
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean"
+  -- reach: the bound from the 1-1 start, its closed form past `K` frames, and a witness
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let K := TopSpeed.reachK sy m0
+  let R := TopSpeed.reachG sy m0 K
+  let nw := 52
+  let D := TopSpeed.walkDist sy m0 (TopSpeed.reachWitness nw)
+  IO.FS.writeFile s!"{dir}/Reach.lean" (head ["Reach"] ++ s!"
+open Smbrta.TopSpeed in
+/-- from the first controllable frame of 1-1, `n` chained frames move `P` by at most
+`reachG n`; past `K` frames that is `reachG K + 16·top` per frame; the TAS fast accel and
+Right+B move `P` by `D` in {nw} frames -/
+theorem reach_11 :
+    (∀ (fs : List (Frame (top sy : Int) (amax sy ctx))) (f : Frame (top sy : Int) (amax sy ctx)),
+      Chain (f :: fs) →
+      f.v = (FastAccel.start sy ctx).h.speedInt ∧ f.f = ((FastAccel.start sy ctx).h.fricMF.toNat : Int) →
+      (fs.getLastD f).P' - f.P ≤ reachG sy ctx (fs.length + 1)) ∧
+    (∀ m : Nat, reachG sy ctx ({K} + m) = {R} + 16 * (top sy : Int) * (m : Int)) ∧
+    walkDist sy ctx (reachWitness {nw}) = {D} := by
+  have h16 : 16 ≤ (top sy : Int) := by native_decide
+  have h255 : 255 ≤ amax sy ctx := by native_decide
+  refine ⟨fun fs f hc h0 => reach_from h16 h255 _ _ (by native_decide) fs f hc h0, fun m => ?_, by native_decide⟩
+  unfold reachG
+  rw [reach_closed {K} h16 (by native_decide) (by native_decide) m,
+    show reach (top sy) (amax sy ctx) (w0 sy ctx) {K} = {R} by native_decide]
+")
+  -- reach in the open area, with the potential: one check file per facing direction, and the bound
+  for fd in Potential.facings do
+    IO.FS.writeFile s!"{dir}/ReachOpen{fd}.lean" (head ["Potential"] ++ s!"
+open Smbrta.Potential in
+theorem pot_check{fd} : potCheck sy ctx {fd} = true := by native_decide
+")
+  let p0 := Potential.phi sy m0 (Potential.startHS sy m0)
+  let K2 := Potential.openK sy m0 p0
+  let R2 := Potential.dbound sy m0 p0 K2
+  IO.FS.writeFile s!"{dir}/ReachOpen.lean" ("\n".intercalate (Potential.facings.map (s!"import Proof.ReachOpen{·}")) ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom
+
+open Smbrta.Potential in
+theorem pot_facts : Facts sy ctx :=
+  ⟨check_of (by native_decide) (by native_decide) pot_check1 pot_check2 pot_check3, by native_decide, by native_decide,
+    by native_decide, by native_decide⟩
+
+open Smbrta.Potential in
+/-- in the open area, from the 1-1 start, the horizontal frames move `P` by at most `dbound`;
+past `K` frames that is `dbound K + 16·top` per frame -/
+theorem reach_open :
+    (∀ is : List HIn, (∀ i ∈ is, i ∈ inputs) →
+      hdist sy ctx (startHS sy ctx) is ≤ dbound sy ctx (phi sy ctx (startHS sy ctx)) is.length) ∧
+    (∀ n : Nat, dbound sy ctx (phi sy ctx (startHS sy ctx)) ({K2} + n) = {R2} + 16 * (TopSpeed.top sy : Int) * (n : Int)) := by
+  have hJ : J sy ctx (startHS sy ctx) (phi sy ctx (startHS sy ctx)) :=
+    ⟨by native_decide, Int.le_refl _, fun h => absurd (by native_decide : (startHS sy ctx).rs = 0) h⟩
+  refine ⟨fun is his => dist_le pot_facts is _ _ hJ his, fun n => ?_⟩
+  rw [dbound_closed pot_facts _ {K2} (by native_decide) n,
+    show dbound sy ctx (phi sy ctx (startHS sy ctx)) {K2} = {R2} by native_decide]
+")
+  -- the opening: the search from the 1-1 start up to the end of the TAS fast accel
+  let N := TasFastAccel.witness.length
+  let D := TopSpeed.walkDist sy m0 (TopSpeed.reachWitness N)
+  IO.FS.writeFile s!"{dir}/Opening.lean" ("import Proof.ReachOpen\nimport Theorems.Opening" ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom
+
+set_option maxHeartbeats 0
+
+open Smbrta.Potential Smbrta.Opening in
+theorem opening_facts : OFacts sy ctx := by
+  have h : inputsN.all (fun i => inputs.contains i) = true := by native_decide
+  refine ⟨pot_facts, fun i hi => ?_⟩
+  simp only [List.all_eq_true] at h
+  exact List.contains_iff_mem.1 (h i hi)
+
+open Smbrta.Potential Smbrta.Opening in
+/-- from the 1-1 start, in the model (`hstep` and the measured jump lengths), no input moves `P`
+further than {D} in {N} frames, nor further than {D} + 16·top per frame after; the TAS fast accel
+moves it {D} in {N} frames on the emulator -/
+theorem opening :
+    (∀ k u, k ≤ {N} → Cert.Reach (succ sy ctx (jumpLens sy ctx)) (start sy ctx) k u → u.2 ≤ {D}) ∧
+    (∀ k u, Cert.Reach (succ sy ctx (jumpLens sy ctx)) (start sy ctx) ({N} + k) u →
+      u.2 ≤ {D} + 16 * (TopSpeed.top sy : Int) * k) ∧
+    TopSpeed.walkDist sy ctx (TopSpeed.reachWitness {N}) = {D} := by
+  have h : optCheck sy ctx (jumpLens sy ctx) {D} {N} = true := by native_decide
+  exact ⟨opt_of_check opening_facts h, opt_after opening_facts (by native_decide) h, by native_decide⟩
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -466,6 +553,226 @@ def fastCheck (sy : Syms) (romPath : String) : IO UInt32 := do
       ok := ok && r
   return if ok then 0 else 1
 
+/-- the reach bound against the distance of some input sequences, as a program -/
+def reachCheck (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let top := (TopSpeed.top sy : Int)
+  let a := amax sy m0
+  let K := TopSpeed.reachK sy m0
+  let R := TopSpeed.reachG sy m0 K
+  IO.println s!"top {top}, amax {a}, w0 {TopSpeed.w0 sy m0}, K {K}, reach K {R}, loss {16 * top * K - R} (1/256 px)"
+  let p0 := Potential.phi sy m0 (Potential.startHS sy m0)
+  let K2 := Potential.openK sy m0 p0
+  let R2 := Potential.dbound sy m0 p0 K2
+  IO.println s!"open area: phi0 {p0}, K {K2}, dbound K {R2}, loss {16 * top * K2 - R2} (1/256 px)"
+  let pad := fun (n : Nat) => FastAccel.witness ++ List.replicate (n - 34) 0x41
+  let rb := fun (n : Nat) => List.replicate n (0x41 : UInt8)
+  for n in [34, 40, 50, 60, 100] do
+    IO.println s!"n {n}: bound {TopSpeed.reachG sy m0 n}, open bound {Potential.dbound sy m0 p0 n}, TAS witness {TopSpeed.walkDist sy m0 (TopSpeed.reachWitness n)}, pad witness {TopSpeed.walkDist sy m0 (pad n)}, Right+B {TopSpeed.walkDist sy m0 (rb n)}"
+    flush
+  return 0
+
+/-- experiment: for each speed `s`, is `s` unreachable before the TAS witness first reaches it? -/
+def profileCheck (sy : Syms) (romPath : String) (lr : Bool) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let w := if lr then TasFastAccel.witness else FastAccel.witness
+  let rins := if lr then relaxInputsLR else relaxInputs
+  let top := (sy.RunTopSpeed.toNat : Int)
+  -- speeds of the witness, frame by frame
+  let mut m := m0
+  let mut sp : Array Int := #[]
+  for i in w do
+    m := runFrame m (smbToPad i)
+    sp := sp.push (PState.read sy m).speedInt
+  IO.println s!"witness speeds: {sp.toList}"
+  let mut ok := true
+  for T in (List.range top.toNat).map (fun (i : Nat) => i + 1) do
+    let d := (sp.toList.findIdx? (· ≥ (T : Int))).getD w.length  -- reached after frame d+1
+    let keep := fun (r : Nat) (s : RState) => !(FastAccel.inRange sy s) ||
+      decide (256 * (T : Int) ≤ max (FastAccel.V s) 0 + amax sy m0 * r)
+    let t0 ← IO.monoMsNow
+    let r ← IO.lazyPure fun _ => Cert.checkPruned (stepRelax sy m0) rins
+      (fun s => decide (s.h.speedInt < (T : Int))) keep d [FastAccel.start sy m0]
+    let t1 ← IO.monoMsNow
+    IO.println s!"speed {T}: witness reaches it at frame {d + 1}; none by frame {d}: {r} ({t1 - t0} ms)"; flush
+    ok := ok && r
+  return if ok then 0 else 1
+
+/-- experiment: the abstract transitions (facing, moving dir) of the relaxed step on the states of
+the pruned search, the largest `|V|` gain of each, and the smallest per-frame gain `g` that a
+potential `w(facing, moving)` allows in the slow regime (`RunningSpeed = 0`, `|v|` below the air
+threshold of `X_Physics`) -/
+def phiExplore (sy : Syms) (romPath : String) (lr : Bool) (depth : Nat) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let rins := if lr then relaxInputsLR else relaxInputs
+  let top := (sy.RunTopSpeed.toNat : Int)
+  let airFast := sy.AirFastSpeed.toNat
+  let absV := fun (s : RState) => (FastAccel.V s).natAbs
+  let node := fun (s : RState) => s.h.faceDir.toNat * 4 + s.h.movDir.toNat
+  let slow := fun (s : RState) => s.h.runSpd == 0 && (s.h.speedInt.natAbs < airFast)
+  -- edges: (from, to, slow) ↦ max Δ|V|
+  let mut edges : Std.HashMap (Nat × Nat × Bool) Int := {}
+  let mut layer : Array RState := #[FastAccel.start sy m0]
+  for k in [0:depth] do
+    let r := depth - k
+    let mut nxt : Std.HashSet RState := {}
+    for s in layer do
+      for c in rins do
+        let t := stepRelax sy m0 s c
+        let key := (node s, node t, slow s)
+        let d := (absV t : Int) - absV s
+        edges := edges.insert key (max d (edges.getD key d))
+        if FastAccel.keepFast sy m0 (r - 1) t then nxt := nxt.insert t
+    layer := nxt.toArray
+    IO.println s!"depth {k + 1}: {layer.size} states, {edges.size} edges"; flush
+  for sl in [true, false] do
+    IO.println s!"-- slow = {sl}"
+    for ((a, b, s'), d) in edges.toList do
+      if s' == sl then IO.println s!"  ({a / 4},{a % 4}) -> ({b / 4},{b % 4}): {d}"
+    -- smallest g with potentials: w b ≤ w a + g - d on every edge (no negative cycle)
+    let es := edges.toList.filter (·.1.2.2 == sl)
+    let feasible := fun (g : Int) => Id.run do
+      let mut w : Array Int := Array.replicate 16 0
+      for _ in [0:20] do
+        for ((a, b, _), d) in es do
+          if w[a]! + g - d < w[b]! then w := w.set! b (w[a]! + g - d)
+      let ok := es.all fun ((a, b, _), d) => w[b]! ≤ w[a]! + g - d
+      (ok, w)
+    let mut lo : Int := 0
+    let mut hi : Int := 2000
+    while lo < hi do
+      let mid := (lo + hi) / 2
+      if (feasible mid).1 then hi := mid else lo := mid + 1
+    let w := (feasible lo).2
+    IO.println s!"  smallest g: {lo}; potentials (facing,moving): {(List.range 16).filterMap fun (i : Nat) => if w[i]! != (0 : Int) then some ((i / 4, i % 4, (0 : Int) - w[i]!) : Nat × Nat × Int) else none}"
+  let _ := top
+  return 0
+
+/-- the potential check, as a program; prints the first failures -/
+def potCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  IO.println s!"c {Potential.c sy m0}, g_slow {Potential.gSlow sy m0}, g_fast {Potential.gFast sy m0}"
+  let mut ok := true
+  for fd in Potential.facings do
+    let t0 ← IO.monoMsNow
+    let r ← IO.lazyPure fun _ => Potential.potCheck sy m0 fd
+    let t1 ← IO.monoMsNow
+    IO.println s!"facing {fd}: {r} ({t1 - t0} ms)"; flush
+    if !r then
+      ok := false
+      let bad := (Potential.statesFd sy fd).flatMap fun s =>
+        (Potential.inputs.filter fun i => !Potential.stepOk sy m0 s i).map fun i => (s, i)
+      for (s, i) in bad.take 12 do
+        let t := Potential.hstep sy m0 s i
+        IO.println s!"  {repr s} {repr i} -> {repr t}: phi {Potential.phi sy m0 s} -> {Potential.phi sy m0 t}, slow {Potential.slow sy s}"
+  return if ok then 0 else 1
+
+/-- `hstep` against the relaxed step on the states of the pruned search -/
+def hstepValidate (sy : Syms) (romPath : String) (lr : Bool) (depth : Nat) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let rins := if lr then relaxInputsLR else relaxInputs
+  let toHS := fun (s : RState) =>
+    let rs : UInt8 := if s.h.runSpd == 0 then 0 else sy.RunSpeedMin.toUInt8
+    (Potential.HS.mk s.h.speed s.h.fricMF s.h.faceDir s.h.movDir rs)
+  let mut layer : Array RState := #[FastAccel.start sy m0]
+  let mut n := 0
+  let mut bad := 0
+  for k in [0:depth] do
+    let r := depth - k
+    let mut nxt : Std.HashSet RState := {}
+    for s in layer do
+      for c in rins do
+        let t := stepRelax sy m0 s c
+        let want := toHS t
+        let ok := [(0 : UInt8), 1].any fun rt =>
+          Potential.hstep sy m0 (toHS s) (Potential.HIn.mk (if s.air then 1 else 0)
+            (c.1 &&& 0x80 != 0 && !s.air) (c.1 &&& 0x7F) rt) == want
+        n := n + 1
+        if !ok then
+          bad := bad + 1
+          if bad ≤ 5 then IO.println s!"mismatch: {repr (toHS s)} air {s.air} input {c.1} -> {repr want}"
+        if FastAccel.keepFast sy m0 (r - 1) t then nxt := nxt.insert t
+    layer := nxt.toArray
+  IO.println s!"{n} steps, {bad} mismatches"
+  return if bad == 0 then 0 else 1
+
+/-- play inputs (hex, game layout) from the 1-1 start; print speed, subspeed, state, facing, moving dir -/
+def traceInputs (sy : Syms) (romPath : String) (hex : String) : IO UInt32 := do
+  let m0 ← startM sy romPath
+  let mut m := m0
+  let w := (hexDecode hex).toList
+  for h : k in [0:w.length] do
+    m := runFrame m (smbToPad w[k])
+    let p := PState.read sy m
+    IO.println s!"{k + 1}: in {hex2 w[k]} v {p.speedInt} f {p.fricMF} st {peek m sy.Player_State} fd {p.faceDir} md {p.movDir} y {peek m sy.Player_Y_Position}"
+  return 0
+
+/-- experiment: the largest distance in `n` frames of `hstep` with jumps of the measured lengths -/
+def reachOpt (sy : Syms) (romPath : String) (n : Nat) (target : Int) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  -- jump lengths per takeoff speed: from a tap to a full hold
+  let mut lens : Array (Nat × Nat) := #[]
+  for v in [0:41] do
+    let lo := Opening.airTime sy m0 v.toUInt8 1
+    let hi := Opening.airTime sy m0 v.toUInt8 60
+    lens := lens.push (lo, hi)
+  IO.println s!"jump lengths (tap, hold) by speed: {lens.toList}"; flush
+  let s0 := Potential.startHS sy m0
+  let ins := Potential.inputsN
+  -- mode 0 = ground, r > 0 = air frames left
+  let mut layer : Std.HashMap (Potential.HS × Nat) Int := ({} : Std.HashMap _ _).insert (s0, 0) 0
+  for k in [0:n] do
+    let left := n - k - 1
+    let mut nxt : Std.HashMap (Potential.HS × Nat) Int := {}
+    for ((s, r), d) in layer.toList do
+      for i in ins do
+        let ok := if r == 0 then i.st == 0 else i.st == 1 && !i.jump
+        if ok then
+          let t := Potential.hstep sy m0 s i
+          let d' := d + 16 * sbyte t.v
+          -- optimistic rest: from Φ of t
+          let opt := Potential.dbound sy m0 (Potential.phi sy m0 t) left
+          if d' + opt ≥ target then
+            let modes : List Nat :=
+              if r == 0 && i.jump then
+                let (lo, hi) := lens[(sbyte s.v).natAbs]!
+                (List.range (hi - lo + 1)).map fun j => lo + j - 1
+              else if r == 0 then [0] else [r - 1]
+            for r' in modes do
+              let key := (t, r')
+              if d' > nxt.getD key (-1000000) then nxt := nxt.insert key d'
+    layer := nxt
+    let best := layer.fold (fun a _ d => max a d) (-1000000)
+    IO.println s!"frame {k + 1}: {layer.size} states, best {best}"; flush
+  return 0
+
+/-- the opening search (`Opening.optCheck`), as a program -/
+def openCheck (sy : Syms) (romPath : String) (n : Nat) (T : Int) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let t0 ← IO.monoMsNow
+  let lens := Opening.jumpLens sy m0
+  let t1 ← IO.monoMsNow
+  IO.println s!"jump lengths ({t1 - t0} ms): {lens.toList}"; flush
+  let r ← IO.lazyPure fun _ => Opening.optCheck sy m0 lens T n
+  let t2 ← IO.monoMsNow
+  IO.println s!"no {n}-frame input gets past {T}: {r} ({t2 - t1} ms)"
+  return if r then 0 else 1
+
+/-- the jump-length assumption: every hold length gives a length between a tap and a full hold -/
+def jumpCheck (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let lens := Opening.jumpLens sy m0
+  let mut bad := 0
+  for v in [0:TopSpeed.top sy + 1] do
+    let (lo, hi) := lens[v]!
+    for h in [1:61] do
+      let l := Opening.airTime sy m0 v.toUInt8 h
+      if l < lo || l > hi then
+        bad := bad + 1
+        IO.println s!"speed {v}, hold {h}: length {l} outside {lo}..{hi}"
+  IO.println s!"jump lengths checked, {bad} outside the range"
+  return if bad == 0 then 0 else 1
+
 /-! ## main -/
 
 def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMMAND
@@ -483,6 +790,15 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   relax-reads DEPTH [pad|lr]         RAM bytes the relaxed step reads
   top-check NAME|all                 the top-speed routine checks, as a program
   fast-check                         the pruned fast-accel lower bounds, as a program
+  profile-check [pad|lr]             experiment: is each speed unreachable before the witness reaches it?
+  reach-check                        the reach bounds against some input sequences, as a program
+  pot-check                          the open-area potential check, as a program
+  hstep-validate pad|lr DEPTH        the horizontal frame (hstep) against the relaxed step
+  reach-opt N T                      experiment: the largest distance, keeping the best per state
+  open-check N T                     the opening search: no N-frame input moves P past T, as a program
+  jump-check                         every A hold length gives a jump between a tap and a full hold
+  trace HEX                          play inputs (hex bytes) from the 1-1 start, print the state per frame
+  phi-explore pad|lr DEPTH           experiment: abstract transitions and the smallest potential gain
   check-witness [pad|lr]             play a theorem's witness on the full emulator
   relax-indep DEPTH [vert|pos] [pad|lr]"
 
@@ -523,8 +839,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => genProofs dir false
-  | ["gen-proofs", "--full"] => genProofs dir true
+  | ["gen-proofs"] => genProofs sy rom dir false
+  | ["gen-proofs", "--full"] => genProofs sy rom dir true
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!
@@ -540,6 +856,16 @@ def main (args : List String) : IO UInt32 := do
   | ["check-witness", m] => checkWitness sy rom (if lr m then TasFastAccel.witness else FastAccel.witness)
   | ["top-check", w] => topCheck sy rom w
   | ["fast-check"] => fastCheck sy rom
+  | ["reach-check"] => reachCheck sy rom
+  | ["trace", hex] => traceInputs sy rom hex
+  | ["open-check", n, t] => openCheck sy rom n.toNat! t.toInt!
+  | ["jump-check"] => jumpCheck sy rom
+  | ["reach-opt", n, t] => reachOpt sy rom n.toNat! t.toInt!
+  | ["pot-check"] => potCheckProg sy rom
+  | ["hstep-validate", m, d] => hstepValidate sy rom (lr m) d.toNat!
+  | ["phi-explore", m, d] => phiExplore sy rom (lr m) d.toNat!
+  | ["profile-check"] => profileCheck sy rom false
+  | ["profile-check", m] => profileCheck sy rom (lr m)
   | ["fast-check-neg"] => do
     -- reachable bounds: these must be false
     let m0 ← startM sy rom

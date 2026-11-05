@@ -23,9 +23,11 @@ i.e. `FastAccel.Bounds` for each land `AreaType` (`fast_accel_area1` … `area3`
   So a state with `max(V, 0) + a_max·r < 256·v_top`, with `r` frames left, cannot reach the
   top speed in time, and is dropped (`Cert.lower_bound_pruned`, `lower_of_fast`). Only about
   14,000 states remain instead of about 900,000. Subspeed tricks (freezing it in the air,
-  keeping it after L+R) are inside `V`, so they are covered. `GainBound` follows from the
-  routine checks of [Top speed bound](TopSpeed.md), under the same assumption that these
-  routines are the only writers.
+  keeping it after L+R) are inside `V`, so they are covered. Under the assumption of
+  [Top speed bound](TopSpeed.md) (a frame changes the speed and the subspeed only through the
+  five checked routines), `GainBound` is `Frame.gain`, proved there by arithmetic. As a
+  hypothesis about `stepRelax` it stays an assumption: checking it directly would cost more than
+  the full search.
 * *Full search* (`--full`, about 16 min per area): every relaxed state of every frame; no
   `GainBound`.
 

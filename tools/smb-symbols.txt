@@ -66,6 +66,8 @@ MaxRightXSpdData
 MaxLeftXSpdData
 FrictionData
 GetPlayerAnimSpeed
-# operands read from the code: the running timer reset value, the running-speed threshold
+# operands read from the code: the running timer reset value, the running-speed threshold,
+# the speed from which X_Physics uses the running adder in the air
 RunTimerReset=byte:SetRTmr+1
 RunSpeedMin=byte:GetPlayerAnimSpeed+6
+AirFastSpeed=byte:X_Physics+12

@@ -22,8 +22,9 @@ Lean: `fast_accel : (∀ a ∈ landAreas, GainBound …) → FastAccel.BoundsAll
   残り `r` フレームで `max(V, 0) + a_max·r < 256·v_top` の状態は間に合わないので捨てます
   （`Cert.lower_bound_pruned`、`lower_of_fast`）。残る状態は、約 90 万ではなく約 1 万 4000 です。
   subspeed の技（空中で凍らせる、L+R のあとに保つ）は `V` の中に入っているので、含まれます。
-  `GainBound` は、[最高速の上限](TopSpeed-ja.md) の各処理の確認から、同じ前提（書き換えるのは
-  それらの処理だけ）のもとで出ます。
+  [最高速の上限](TopSpeed-ja.md) の前提（速さと subspeed を書き換えるのは、確かめた 5 つの
+  処理だけ）のもとでは、`GainBound` はそこで算数で証明した `Frame.gain` です。`stepRelax` についての
+  仮定としては残ります。直接確かめると、全探索より時間がかかるからです。
 * *全探索*（`--full`。ステージの種類ごとに約 16 分）: 各フレームの緩めたモデルの状態を全部並べる。
   `GainBound` を使いません。
 

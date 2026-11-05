@@ -14,10 +14,11 @@ Position in 1/256 px: `P = 256·(256·page + x) + fraction`; `v_top` = the runni
 ```
 Frame.bound :  |v| ≤ v_top  →  |v'| ≤ v_top  ∧  P' − P ≤ 16·v_top
 chain_bound :  P(n) − P(0) ≤ 16·v_top·n
+Frame.gain  :  V' ≤ max(V, 0) + a_max          (V = 256·v + subspeed; the GainBound of fast accel)
 attain      :  at top speed, Right+B for 20 frames: P' − P = 16·v_top every frame
 ```
 
-Lean: `Theorems/TopSpeed.lean` (`Frame.bound`, `chain_bound`, proved without computation);
+Lean: `Theorems/TopSpeed.lean` (`Frame.bound`, `chain_bound`, `Frame.gain`, proved without computation);
 private `top_speed` (the routine checks and `attain` by `native_decide`).
 
 ## How it is split

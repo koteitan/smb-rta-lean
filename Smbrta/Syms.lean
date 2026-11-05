@@ -74,6 +74,7 @@ structure Syms where
   GetPlayerAnimSpeed : UInt16
   RunTimerReset : UInt16
   RunSpeedMin : UInt16
+  AirFastSpeed : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -140,7 +141,8 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("FrictionData", fun s => s.FrictionData),
   ("GetPlayerAnimSpeed", fun s => s.GetPlayerAnimSpeed),
   ("RunTimerReset", fun s => s.RunTimerReset),
-  ("RunSpeedMin", fun s => s.RunSpeedMin)]
+  ("RunSpeedMin", fun s => s.RunSpeedMin),
+  ("AirFastSpeed", fun s => s.AirFastSpeed)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -216,6 +218,7 @@ def Syms.parse (text : String) : Except String Syms := do
     GetPlayerAnimSpeed := ← get "GetPlayerAnimSpeed"
     RunTimerReset := ← get "RunTimerReset"
     RunSpeedMin := ← get "RunSpeedMin"
+    AirFastSpeed := ← get "AirFastSpeed"
   }
 
 def Syms.load (path : String) : IO Syms := do

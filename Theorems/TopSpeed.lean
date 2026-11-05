@@ -153,51 +153,88 @@ def attainCheck (sy : Syms) (ctx : Machine) (k : Nat) : Bool :=
 /-! ## Putting the routines together
 
 One frame, as the checks describe it. The assumption is that a frame changes the player's
-speed `v` and position `P` only through these routines, in this order: `GetPlayerAnimSpeed`
-(`anim`), `X_Physics` + `ImposeFriction` (`friction`), `MoveObjectHorizontally` (`move`),
-`ImpedePlayerMove` (`impede`). -/
+speed `v`, subspeed `f` (`Player_X_MoveForce`) and position `P` only through these routines, in
+this order: `GetPlayerAnimSpeed` (`anim`), `X_Physics` + `ImposeFriction` (`friction`, `gain`;
+the adder is a table entry, so at most `amax`), `MoveObjectHorizontally` (`move`),
+`ImpedePlayerMove` (`impede*`). The subspeed is written only by the first two (and by the
+climbing code, which is not in a running frame). -/
 
-structure Frame (top : Int) where
+structure Frame (top amax : Int) where
   v : Int
+  f : Int
   P : Int
   v₁ : Int
+  f₁ : Int
   v₂ : Int
+  f₂ : Int
   P₂ : Int
   v' : Int
+  f' : Int
   P' : Int
-  anim : v₁ = v ∨ v₁ = 0
+  anim : (v₁ = v ∧ f₁ = f) ∨ (v₁ = 0 ∧ f₁ = 0)
   friction : (-top ≤ v₁ ∧ v₁ ≤ top) → (-top ≤ v₂ ∧ v₂ ≤ top)
+  friction_gain : 256 * v₂ + f₂ ≤ max (256 * v₁ + f₁) 0 + amax
+  frac : 0 ≤ f₂ ∧ f₂ ≤ 255
   move : P₂ = P + 16 * v₂
   impedeV : v' = v₂ ∨ v' = 0
+  impedeF : f' = f₂
   impedeP : P' = P₂ ∨ P' = P₂ - 256 ∨ (P' = P₂ + 256 ∧ v₂ ≤ 0)
 
 /-- one frame keeps `|v| ≤ top` and moves `P` by at most `16·top` -/
-theorem Frame.bound {top : Int} (f : Frame top) (h16 : 16 ≤ top) (hv : -top ≤ f.v ∧ f.v ≤ top) :
+theorem Frame.bound {top amax : Int} (f : Frame top amax) (h16 : 16 ≤ top) (hv : -top ≤ f.v ∧ f.v ≤ top) :
     (-top ≤ f.v' ∧ f.v' ≤ top) ∧ f.P' - f.P ≤ 16 * top := by
   have h1 : -top ≤ f.v₁ ∧ f.v₁ ≤ top := by
-    rcases f.anim with h | h <;> rw [h] <;> omega
+    rcases f.anim with ⟨h, _⟩ | ⟨h, _⟩ <;> rw [h] <;> omega
   have h2 := f.friction h1
   have hm := f.move
   refine ⟨?_, ?_⟩
   · rcases f.impedeV with h | h <;> rw [h] <;> omega
   · rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> rw [h] <;> omega
 
+/-- `GainBound` for one frame: `V' ≤ max(V, 0) + amax`, with `V = 256·v + f` -/
+theorem Frame.gain {top amax : Int} (f : Frame top amax) (h255 : 255 ≤ amax) :
+    256 * f.v' + f.f' ≤ max (256 * f.v + f.f) 0 + amax := by
+  have hg := f.friction_gain
+  have hfr := f.frac
+  have hF := f.impedeF
+  have hA : max (256 * f.v₁ + f.f₁) 0 ≤ max (256 * f.v + f.f) 0 := by
+    rcases f.anim with ⟨h1, h2⟩ | ⟨h1, h2⟩ <;> rw [h1, h2] <;> omega
+  rcases f.impedeV with h | h <;> rw [h] <;> omega
+
+/-- the most one frame can move `P`, when `max(V, 0) ≤ w` before it -/
+def adv (top amax w : Int) : Int := max (16 * min top ((w + amax) / 256)) 256
+
+/-- one frame moves `P` by at most `adv`: the speed it moves with is at most `(w + amax) / 256`,
+and a push out of a wall (+256) only comes with a speed `≤ 0` -/
+theorem Frame.adv_le {top amax : Int} (f : Frame top amax) (w : Int) (hv : -top ≤ f.v ∧ f.v ≤ top)
+    (hw : max (256 * f.v + f.f) 0 ≤ w) : f.P' - f.P ≤ adv top amax w := by
+  unfold adv
+  have h1 : -top ≤ f.v₁ ∧ f.v₁ ≤ top := by
+    rcases f.anim with ⟨h, _⟩ | ⟨h, _⟩ <;> rw [h] <;> omega
+  have h2 := f.friction h1
+  have hg := f.friction_gain
+  have hfr := f.frac
+  have hm := f.move
+  have hA : max (256 * f.v₁ + f.f₁) 0 ≤ max (256 * f.v + f.f) 0 := by
+    rcases f.anim with ⟨h1, h2⟩ | ⟨h1, h2⟩ <;> rw [h1, h2] <;> omega
+  rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> rw [h] <;> omega
+
 /-- frames that follow each other -/
-def Chain {top : Int} : List (Frame top) → Prop
+def Chain {top amax : Int} : List (Frame top amax) → Prop
   | [] => True
   | [_] => True
-  | f :: g :: rest => g.v = f.v' ∧ g.P = f.P' ∧ Chain (g :: rest)
+  | f :: g :: rest => g.v = f.v' ∧ g.f = f.f' ∧ g.P = f.P' ∧ Chain (g :: rest)
 
 /-- in `n` chained frames, `P` grows by at most `16·top·n` -/
-theorem chain_bound {top : Int} (h16 : 16 ≤ top) :
-    ∀ (fs : List (Frame top)) (f : Frame top), Chain (f :: fs) → (-top ≤ f.v ∧ f.v ≤ top) →
+theorem chain_bound {top amax : Int} (h16 : 16 ≤ top) :
+    ∀ (fs : List (Frame top amax)) (f : Frame top amax), Chain (f :: fs) → (-top ≤ f.v ∧ f.v ≤ top) →
       (fs.getLastD f).P' - f.P ≤ 16 * top * (fs.length + 1)
   | [], f, _, hv => by
     have := (f.bound h16 hv).2
     simp only [List.getLastD_nil, List.length_nil]
     omega
   | g :: rest, f, hc, hv => by
-    obtain ⟨hgv, hgP, hrest⟩ := hc
+    obtain ⟨hgv, _, hgP, hrest⟩ := hc
     have hf := f.bound h16 hv
     have hg : -top ≤ g.v ∧ g.v ≤ top := by rw [hgv]; exact hf.1
     have ih := chain_bound h16 rest g hrest hg
