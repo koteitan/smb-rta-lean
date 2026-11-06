@@ -99,6 +99,14 @@ structure Syms where
   FastJumpSpeed : UInt16
   PlayerMovementSubs : UInt16
   FlagGrabY : UInt16
+  PipeRightTile : UInt16
+  PipeLeftTile : UInt16
+  EngVerticalPipe : UInt16
+  PipeColumnByte : UInt16
+  RoomBlockLeftByte : UInt16
+  RoomBlockRightByte : UInt16
+  RoomStartX : UInt16
+  L_GroundArea6 : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -190,7 +198,15 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("ClimbHighNybble", fun s => s.ClimbHighNybble),
   ("FastJumpSpeed", fun s => s.FastJumpSpeed),
   ("PlayerMovementSubs", fun s => s.PlayerMovementSubs),
-  ("FlagGrabY", fun s => s.FlagGrabY)]
+  ("FlagGrabY", fun s => s.FlagGrabY),
+  ("PipeRightTile", fun s => s.PipeRightTile),
+  ("PipeLeftTile", fun s => s.PipeLeftTile),
+  ("EngVerticalPipe", fun s => s.EngVerticalPipe),
+  ("PipeColumnByte", fun s => s.PipeColumnByte),
+  ("RoomBlockLeftByte", fun s => s.RoomBlockLeftByte),
+  ("RoomBlockRightByte", fun s => s.RoomBlockRightByte),
+  ("RoomStartX", fun s => s.RoomStartX),
+  ("L_GroundArea6", fun s => s.L_GroundArea6)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -291,6 +307,14 @@ def Syms.parse (text : String) : Except String Syms := do
     FastJumpSpeed := ← get "FastJumpSpeed"
     PlayerMovementSubs := ← get "PlayerMovementSubs"
     FlagGrabY := ← get "FlagGrabY"
+    PipeRightTile := ← get "PipeRightTile"
+    PipeLeftTile := ← get "PipeLeftTile"
+    EngVerticalPipe := ← get "EngVerticalPipe"
+    PipeColumnByte := ← get "PipeColumnByte"
+    RoomBlockLeftByte := ← get "RoomBlockLeftByte"
+    RoomBlockRightByte := ← get "RoomBlockRightByte"
+    RoomStartX := ← get "RoomStartX"
+    L_GroundArea6 := ← get "L_GroundArea6"
   }
 
 def Syms.load (path : String) : IO Syms := do

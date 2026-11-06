@@ -9,6 +9,9 @@ import Theorems.Opening
 import Theorems.AirCap
 import Theorems.PoleGrab
 import Theorems.Jump
+import Theorems.PipeEntry
+import Theorems.PipeTransition
+import Theorems.FastTakeoff
 
 open Smbrta
 
@@ -331,7 +334,112 @@ open Smbrta.Jump in
 /-- rising at the height of a direct grab: only on the third frame of a slow jump, the second of a fast one -/
 theorem jump_grab : arcCheck sy ctx (groundY sy) 1 (riseOk sy 1 2 1) = true := by native_decide
 " ++ blocks)
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean"
+  -- the vertical pipe: the collision routine against the rule, and the position bound left of the window at frame 367
+  let pipeN := TasFastAccel.witness.length
+  let pipeD := TopSpeed.walkDist sy m0 (TopSpeed.reachWitness pipeN)
+  IO.FS.writeFile s!"{dir}/PipeEntry.lean" ("import Proof.Opening\n" ++ head ["PipeEntry"] ++ s!"
+open Smbrta.PipeEntry in
+/-- `PlayerBGCollision` follows the rule on every state near the pipe's top; the level data gives the pipe's page, with no
+pipe of that kind before it -/
+theorem pipe_rules :
+    pipeCheck sy ctx = true ∧ levelOk sy ctx = true ∧ 16 ≤ (TopSpeed.top sy : Int) :=
+  ⟨by native_decide, by native_decide, by native_decide⟩
+
+open Smbrta.PipeEntry in
+/-- the position bound is left of the window's left end at frame 367, and not at frame 368 -/
+theorem pipe_gap :
+    posP sy ctx + {pipeD} + 16 * (TopSpeed.top sy : Int) * ((367 - {pipeN} : Nat) : Int) < windowP sy (pipePage sy ctx) ∧
+    windowP sy (pipePage sy ctx) ≤ posP sy ctx + {pipeD} + 16 * (TopSpeed.top sy : Int) * ((368 - {pipeN} : Nat) : Int) :=
+  ⟨by native_decide, by native_decide⟩
+
+open Smbrta.PipeEntry Smbrta.Opening in
+/-- in the model of `opening`, up to frame 367 he is left of the window -/
+theorem pipe_model :
+    ∀ t u, t ≤ 367 → Cert.Reach (succ sy ctx (jumpLens sy ctx)) (start sy ctx) t u →
+      posP sy ctx + u.2 < windowP sy (pipePage sy ctx) :=
+  model_left (dist := Prod.snd) (by have := pipe_rules.2.2; omega) opening.1 opening.2.1 pipe_gap.1
+
+open Smbrta.PipeEntry Smbrta.Opening in
+/-- so in that model, up to frame 367, a collision at his position does not enter -/
+theorem pipe_model_no_enter (t : Nat) (u : Opening.St) (ht : t ≤ 367)
+    (hr : Cert.Reach (succ sy ctx (jumpLens sy ctx)) (start sy ctx) t u)
+    (c : Case) (hc : c ∈ cases sy) (f : Int) (hf : 0 ≤ f)
+    (hP : posP sy ctx + u.2 = 256 * (256 * ((pipePage sy ctx : Nat) : Int) + (c.x.toNat : Int)) + f) :
+    enters sy (withPipe sy ctx) c = false :=
+  no_enter_left pipe_rules.1 hc hf (by rw [← hP]; exact pipe_model t u ht hr)
+
+open Smbrta.PipeEntry in
+/-- on frames whose entering states are in the domain, on the pipe's page, and that follow the bounds: no entry up
+to frame 367 -/
+theorem pipe_no_entry (a : Int) (fr : Nat → TopSpeed.Frame (TopSpeed.top sy : Int) a) (Enter : Nat → Prop)
+    (hE : ∀ t, Enter t → ∃ c ∈ cases sy, enters sy (withPipe sy ctx) c = true ∧
+      ∃ f : Int, 0 ≤ f ∧ (fr t).P₂ = 256 * (256 * ((pipePage sy ctx : Nat) : Int) + (c.x.toNat : Int)) + f)
+    (hopen : ∀ t, t ≤ {pipeN} → (fr t).P₂ ≤ posP sy ctx + {pipeD})
+    (hB : (fr {pipeN}).P' ≤ posP sy ctx + {pipeD})
+    (hv : -(TopSpeed.top sy : Int) ≤ (fr {pipeN}).v' ∧ (fr {pipeN}).v' ≤ (TopSpeed.top sy : Int))
+    (hn : ∀ j, PoleGrab.Next (fr ({pipeN} + j)) (fr ({pipeN} + j + 1))) :
+    ∀ t, t ≤ 367 → ¬ Enter t :=
+  no_entry_by pipe_rules.2.2 fr Enter _ _ {pipeN} 367 (rule_of_cases pipe_rules.1 fr Enter _ hE) hopen hB hv hn pipe_gap.1
+")
+  -- the vertical pipe: the length of the change to the bonus room
+  IO.FS.writeFile s!"{dir}/PipeTransition.lean" (head ["PipeTransition"] ++ s!"
+open Smbrta.PipeTransition in
+/-- from the witness's entry: one state per frame over the 64 inputs, control on frame 91; other positions, speeds and sizes and 21 entry frames with no input -/
+theorem pipe_checks : allCheck sy ctx 91 21 = true := by native_decide
+
+open Smbrta.PipeTransition in
+/-- control comes exactly 91 frames after the entry -/
+theorem pipe_transition : Statement sy ctx 91 21 := statement_of_check (by decide) pipe_checks
+")
+  -- a fast takeoff in the bonus room: the air frames of the fall, the ground frames before the last takeoff searched,
+  -- the air frames while low, the frames from the floor to the goal frame
+  let takeoff := FastTakeoff.bonusRoom sy 34 6 8 64
+  IO.FS.writeFile s!"{dir}/FastTakeoff.lean" ("import Proof.ReachOpen\nimport Theorems.FastTakeoff" ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom
+
+set_option maxHeartbeats 0
+
+/-- the bonus room: 34 air frames of the fall, takeoffs up to 6 ground frames after it, 8 air frames while low, 64
+frames from the floor to the goal frame -/
+def takeoffRoom : FastTakeoff.Room := FastTakeoff.bonusRoom sy 34 6 8 64
+
+open Smbrta.FastTakeoff in
+theorem fast_takeoff_facts : TFacts sy ctx := ⟨pot_facts, by native_decide⟩
+
+/-- the start, the corner and the goal, computed from the symbols -/
+theorem fast_takeoff_numbers :
+    takeoffRoom.P0 = {takeoff.P0} ∧ takeoffRoom.P1 = {takeoff.P1} ∧ takeoffRoom.cp = {takeoff.cp} ∧
+      takeoffRoom.goal = {takeoff.goal} := by native_decide
+
+open Smbrta.FastTakeoff in
+/-- the search over all inputs -/
+theorem fast_takeoff_check : roomCheck sy ctx takeoffRoom = true := by native_decide
+
+open Smbrta.FastTakeoff in
+theorem fast_takeoff_late : lateOk sy takeoffRoom = true := by native_decide
+
+open Smbrta.Potential Smbrta.FastTakeoff in
+/-- moving right at the air threshold or more, a jump within 6 ground frames of the floor does not stay left of the
+corner through 8 air frames -/
+theorem fast_takeoff_right \{p0 : Int} (hp0 : takeoffRoom.P0 ≤ p0) (hp1 : p0 ≤ takeoffRoom.P1) \{a g : List HIn} \{j : HIn}
+    \{k : List HIn} (T : Takeoff takeoffRoom a g j k) (hgl : g.length ≤ 6)
+    (hv : (sy.AirFastSpeed.toNat : Int) ≤ sbyte (go sy ctx (takeoffRoom.s0, p0) (a ++ g)).1.v)
+    (hlow : Low sy ctx takeoffRoom.cp (go sy ctx (takeoffRoom.s0, p0) a) (g ++ j :: k)) : False :=
+  no_right_takeoff fast_takeoff_facts fast_takeoff_check hp0 hp1 T hgl hv hlow
+
+open Smbrta.Potential Smbrta.FastTakeoff in
+/-- every jump at the air threshold or more, in either direction, at any frame, with `P` left of the corner through
+8 air frames: at the goal frame `P` is short of the goal -/
+theorem fast_takeoff_goal \{p0 : Int} (hp0 : takeoffRoom.P0 ≤ p0) (hp1 : p0 ≤ takeoffRoom.P1) \{a g : List HIn} \{j : HIn}
+    \{k b : List HIn} (T : Takeoff takeoffRoom a g j k) (hb : ∀ i ∈ b, i ∈ inputs)
+    (hN : g.length + 1 + 8 + b.length = 64)
+    (hfast : sy.AirFastSpeed.toNat ≤ (sbyte (go sy ctx (takeoffRoom.s0, p0) (a ++ g)).1.v).natAbs)
+    (hlow : Low sy ctx takeoffRoom.cp (go sy ctx (takeoffRoom.s0, p0) a) (g ++ j :: k)) :
+    (go sy ctx (takeoffRoom.s0, p0) (a ++ g ++ j :: (k ++ b))).2 < takeoffRoom.goal :=
+  fast_takeoff_short fast_takeoff_facts fast_takeoff_check fast_takeoff_late hp0 hp1 T hb hN hfast hlow
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -930,21 +1038,6 @@ def tasInsert (sy : Syms) (romPath fm2Path : String) (at_ k : Nat) (del : Nat :=
   IO.println s!"k {k}: no level change"
   return 1
 
-/-- RAM without the bytes that only echo this frame's buttons (the A bit of the previous buttons
-is kept: it decides whether A is a new press) -/
-def ramKey (sy : Syms) (m : Machine) : Array UInt8 := Id.run do
-  let mut r := m.ram.toList.toArray
-  for a in [sy.SavedJoypadBits, sy.SavedJoypadBits + 1, sy.A_B_Buttons, sy.Left_Right_Buttons,
-      sy.Up_Down_Buttons] do
-    r := r.set! (a &&& 0x7FF).toNat 0
-  let pa := (sy.PreviousA_B_Buttons &&& 0x7FF).toNat
-  r := r.set! pa (r[pa]! &&& 0x80)
-  -- read only for the Start/Select bits
-  for a in [sy.JoypadBitMask, sy.JoypadBitMask + 1] do
-    let j := (a &&& 0x7FF).toNat
-    r := r.set! j (r[j]! &&& 0x30)
-  return r
-
 /-- the machine of a movie at frame `n` (from its first controllable frame), and the inputs -/
 def movieAt (sy : Syms) (romPath fm2Path : String) (n : Nat) : IO (Machine × Array UInt8 × Nat) := do
   let movie := parseFm2 (← IO.FS.readFile fm2Path)
@@ -1331,59 +1424,7 @@ def roomBound (sy : Syms) (romPath fm2Path : String) (a f n cx cy wlo whi tx : N
   let hitS := hitT + sFast - 1
   let g2 := cp + 16 * top' + dB (255 + Potential.gFast sy ctx * ((sFast : Int))) (n - hitS)
   IO.println s!"hit on the ground, jump at {hitT} or later: P ≤ {g2}; margin {target - g2}"
-  let air : List Potential.HIn := Potential.inputsN.filter fun i => i.st == 1 && !i.jump
-  let gnd : List Potential.HIn := Potential.inputsN.filter fun i => i.st == 0 && !i.jump
-  let jmp : List Potential.HIn := Potential.inputsN.filter fun i => i.st == 0 && i.jump
-  let addMin (l : Std.HashMap Potential.HS Int) (s : Potential.HS) (p : Int) :=
-    match l[s]? with
-    | some q => if p < q then l.insert s p else l
-    | none => l.insert s p
-  let mut layer : Std.HashMap Potential.HS Int := {}
-  layer := layer.insert (Potential.startHS sy ma) (posP sy ma)
-  for _ in [a + 1:f + 1] do
-    let mut nx : Std.HashMap Potential.HS Int := {}
-    for (s, p) in layer.toList do
-      for i in air do
-        let t := Potential.hstep sy ctx s i
-        nx := addMin nx t (p + 16 * sbyte t.v)
-    layer := nx
-  IO.println s!"floor frame {f}: {layer.size} horizontal states; max speed {(layer.toList.map fun q => Potential.V q.1).foldl max 0}; TAS P {posP sy mf}"
-  let mut worst : Int := -1
-  let mut worstAt : String := "none"
-  for t in [f + 1:tLast + 1] do
-    -- jump at frame t from the ground state of t-1
-    let mut airL : Std.HashMap Potential.HS Int := {}
-    for (s, p) in layer.toList do
-      if (sbyte s.v).natAbs ≥ fast.toNat then
-        for i in jmp do
-          let u := Potential.hstep sy ctx s i
-          let q := p + 16 * sbyte u.v
-          if q < cp then airL := addMin airL u q
-    IO.println s!"takeoff {t}: {layer.size} ground states, {airL.size} fast takeoffs"
-    (← IO.getStdout).flush
-    for k in [1:sFast] do
-      let mut nx : Std.HashMap Potential.HS Int := {}
-      for (s, p) in airL.toList do
-        for i in air do
-          let u := Potential.hstep sy ctx s i
-          let q := p + 16 * sbyte u.v
-          if q < cp then nx := addMin nx u q
-      airL := nx
-      if k + 1 == sFast then
-        for (s, _) in airL.toList do
-          let b := cp - 1 + dB (Opening.pOf sy ctx s) (n - (t + k))
-          if b > worst then
-            worst := b
-            worstAt := s!"takeoff {t}, s {t + k}, v {sbyte s.v}"
-    -- the ground frame t
-    let mut nx : Std.HashMap Potential.HS Int := {}
-    for (s, p) in layer.toList do
-      if p < cp && Potential.V s + Potential.gFast sy ctx * ((tLast : Int) - t + 1) ≥ 256 * fast then
-        for i in gnd do
-          let u := Potential.hstep sy ctx s i
-          nx := addMin nx u (p + 16 * sbyte u.v)
-    layer := nx
-  IO.println s!"fast takeoff by {tLast}: worst bound P {worst} ({worstAt}); margin {target - worst}"
+  IO.println "takeoffs by then: `takeoff-check` (a Lean theorem, both directions)"
   -- the movie, for comparison; and the model against its frames
   let mut mt := ma
   let mut bad : Nat := 0
@@ -1486,6 +1527,45 @@ def jumpTable (sy : Syms) (romPath : String) : IO UInt32 := do
   IO.println s!"rising at the height of a direct grab: {(rise.map fun x => (x.fast, x.k, x.s.y)).eraseDups}; check {arcCheck sy m0 (groundY sy) 1 (riseOk sy 1 2 1)}"
   return 0
 
+/-- the collision routine on the pipe's top against the rule, and the position bound, as a program -/
+def pipeCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let mp := PipeEntry.withPipe sy m0
+  let cs := PipeEntry.cases sy
+  IO.println s!"{cs.length} cases, level data {PipeEntry.levelOk sy m0}"
+  let bad := cs.filter fun c => !PipeEntry.ruleOk sy mp c
+  IO.println s!"{bad.length} differ"
+  for c in bad.take 30 do
+    let r := PipeEntry.collide sy mp c
+    IO.println s!"x {c.x} y {c.y} v {sbyte c.v} md {c.md} vy {sbyte c.vy} st {c.st} ud {c.ud} fd {c.fd} size {c.size} -> eng {peek r sy.GameEngineSubroutine} rule {PipeEntry.rule sy c}"
+  let n := TasFastAccel.witness.length
+  let d := TopSpeed.walkDist sy m0 (TopSpeed.reachWitness n)
+  let l := PipeEntry.windowP sy (PipeEntry.pipePage sy m0)
+  for t in [367, 368] do
+    let b := posP sy m0 + d + 16 * (TopSpeed.top sy : Int) * ((t - n : Nat) : Int)
+    IO.println s!"frame {t}: the window's left end minus the bound = {l - b} (1/256 px)"
+  return 0
+
+/-- the change from the vertical pipe to the bonus room, as a program -/
+def pipeChangeProg (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 := smb11Start sy (← loadCart romPath)
+  let t0 ← IO.monoMsNow
+  let ok ← IO.lazyPure fun _ => PipeTransition.allCheck sy m0 91 21
+  let t1 ← IO.monoMsNow
+  IO.println s!"the change into the room: {ok} ({t1 - t0} ms)"
+  return if ok then 0 else 1
+
+/-- the fast takeoff search in the bonus room, as a program -/
+def takeoffCheck (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let R := FastTakeoff.bonusRoom sy 34 6 8 64
+  let t0 ← IO.monoMsNow
+  let r ← IO.lazyPure fun _ => FastTakeoff.roomCheck sy m0 R
+  let t1 ← IO.monoMsNow
+  IO.println s!"takeoffs up to {R.G} ground frames after the fall: moving right none stays left of the corner, moving left all short of the goal: {r} ({t1 - t0} ms)"
+  IO.println s!"later takeoffs short of the goal by the top speed: {FastTakeoff.lateOk sy R}"
+  return if r && FastTakeoff.lateOk sy R then 0 else 1
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1561,6 +1641,9 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   end-poke FM2 A Y DX FD D           a movie's state at A with y, x+DX and facing overwritten: the earliest castle
   flag-poke FM2 A Y DX V VY FD D GY  a movie's state at A overwritten: the first touches of the pole over all inputs
   pole-check                         the collision routine near the flagpole against the rules, as a program
+  pipe-check                         the collision routine on the pipe's top against the rule, and the bound at 367 and 368
+  pipe-change-check                  the change from the vertical pipe to the bonus room, as a program
+  takeoff-check                      the fast takeoff search in the bonus room, as a program
   jump-table                         what every jump from the ground and from a block does
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
@@ -1637,6 +1720,9 @@ def main (args : List String) : IO UInt32 := do
   | ["tas-then", fm2, a, hex] => tasThen sy rom fm2 a.toNat! hex
   | ["pot-bound", fm2, a, n] => potBound sy rom fm2 a.toNat! n.toNat!
   | ["pole-check"] => poleCheckProg sy rom
+  | ["pipe-check"] => pipeCheckProg sy rom
+  | ["pipe-change-check"] => pipeChangeProg sy rom
+  | ["takeoff-check"] => takeoffCheck sy rom
   | ["jump-table"] => jumpTable sy rom
   | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
     flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!

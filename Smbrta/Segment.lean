@@ -38,4 +38,19 @@ def adders (sy : Syms) (m : Machine) : List (UInt8 × UInt8) :=
 def amax (sy : Syms) (m : Machine) : Int :=
   ((adders sy m).map fun (lo, hi) => (256 * hi.toNat + lo.toNat : Int)).foldl max 0
 
+/-- RAM without the bytes that only echo this frame's buttons (the A bit of the previous buttons
+is kept: it decides whether A is a new press) -/
+def ramKey (sy : Syms) (m : Machine) : Array UInt8 := Id.run do
+  let mut r := m.ram.toList.toArray
+  for a in [sy.SavedJoypadBits, sy.SavedJoypadBits + 1, sy.A_B_Buttons, sy.Left_Right_Buttons,
+      sy.Up_Down_Buttons] do
+    r := r.set! (a &&& 0x7FF).toNat 0
+  let pa := (sy.PreviousA_B_Buttons &&& 0x7FF).toNat
+  r := r.set! pa (r[pa]! &&& 0x80)
+  -- read only for the Start/Select bits
+  for a in [sy.JoypadBitMask, sy.JoypadBitMask + 1] do
+    let j := (a &&& 0x7FF).toNat
+    r := r.set! j (r[j]! &&& 0x30)
+  return r
+
 end Smbrta

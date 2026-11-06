@@ -28,11 +28,8 @@ to the TAS (pixels, or 1/256 px); no ROM addresses or table values.
 - Up to frame 32 the distance is at most the TAS's, by [The opening](../Theorems/Opening.md); after
   that at most 2.5 px per frame, by [Top speed bound](../Theorems/TopSpeed.md). The TAS runs exactly
   at both bounds (exactly at the bound every frame from 32 to 362).
-- The pipe can be entered only with both feet on the pipe top (a 9-pixel range), on a falling or
-  landing frame, with Down held (from the code). By the bounds, at frame 367 Mario is still 0.44 px
-  short of the range. So no entry before 368.
-- Status: the bounds are Lean theorems; the entry condition is read from the code (an assumption);
-  combining them is arithmetic, not done in Lean.
+- The pipe can be entered only with both feet on the pipe's top, with Down held, on a frame that runs the landing code: falling or standing on the top ([Entering the vertical pipe](../Theorems/PipeEntry.md)). Down with Left or Right on the ground does not count: the frame code clears it. By the bounds, at frame 367 Mario is still 112/256 px (0.44 px) short of the range. So no entry before 368.
+- Status: the bounds, the entry rule against the collision routine on every state near the pipe's top, and joining them are Lean theorems about frames that follow the rule. Assumed: real frames follow the rule and the bounds (the routine is checked alone). The entry at 368 itself is the TAS on the emulator.
 
 ### 2, 4. Pipes and area changes: fixed lengths (emulator check)
 
@@ -44,6 +41,13 @@ control above ground       = side pipe entry frame + 282
 They depend on no input, no position or speed on the pipe, and not on the 21-frame grid (each routine
 ignores or overrides the input; the routines that wait on the 21-frame grid are skipped in these two
 changes). Inserting idle frames delays them by exactly that many frames; pausing only makes them longer.
+
+Status of part 2: [The change into the bonus room](../Theorems/PipeTransition.md) is a Lean theorem for the entry states it lists.
+From one entry of a real run, every input except Start and Select on every frame gives control exactly on frame 91, under the
+hypothesis `Merge` (states equal except for the bytes echoing the buttons behave the same). With no input and no hypothesis, the
+same holds for the other pixels of the window, other speeds, a big Mario, and 21 consecutive entry frames from real runs. That every
+entry state of every run behaves the same is not proved. A Start press pauses the game, except on some frames of the change, where it
+is ignored (read from the code and tried on the emulator). Part 4 (+282) stays an emulator check.
 
 ### 3. The bonus room (459 → 570): not before 570
 
@@ -77,16 +81,16 @@ The bound at frame 557, over all inputs:
    (504, 511), which is the TAS, and (505, 510); the others land later. The theorem gives at most
    121.75 px from `s` to 557. So at 557 Mario is at most 527/256 px ahead of the TAS: 65/256 px
    (0.25 px) short.
-4. Takeoff at 1.5625 px/frame or more: he rises faster, but `s` is still at least 8 frames after the
-   takeoff. A takeoff after 500 is too late even at top speed from the corner. For takeoffs by 500, a
-   program follows the horizontal frame `hstep` from 459 with every input: none of them stays left of
-   the corner for the 8 frames.
+4. Takeoff at 1.5625 px/frame or more: he rises faster, but `s` is still at least 8 frames after the takeoff.
+   [A fast takeoff](../Theorems/FastTakeoff.md) follows the horizontal frame `hstep` from 459 with every input. Moving right, no
+   takeoff by 500 stays left of the corner for the 8 frames. Moving left, takeoffs by 500 exist in the model, but he is so far back
+   that at 557 he is short of the goal whatever he does next. A takeoff after 500 is too late even at top speed from the corner.
 5. A hit at the corner on frame `s` leaves a speed of about 0, and Mario ends at least 8 px short. A hit
    on the floor just before a jump (the jump still counts as fast, because the stored absolute speed is
    not cleared) ends at least 3 px short.
 
-Status: step 3's bound and the jump table are Lean theorems; step 4 is a program on the model; the entry
-conditions are read from the code; combining them is arithmetic, not done in Lean. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
+Status: step 3's bound, step 4 and the jump table are Lean theorems on the model; the entry conditions are read from the code;
+combining them is arithmetic, not done in Lean. The room's left wall is not in the model of step 4. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
 the corner are at the same heights, so the bound is the same.
 
 ### 5a. Accelerating above ground (852 → 892): the pole is not reached early (emulator check)
@@ -209,6 +213,9 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta end-poke FM2 1084 Y DX FD 8      # one 5b case (Y height, DX shift, FD facing)
 .lake/build/bin/smbrta pole-check                      # the collision routine near the pole against the rules
 .lake/build/bin/smbrta jump-table                      # every jump from the ground and from a block
+.lake/build/bin/smbrta pipe-check                      # the routine on the pipe's top against the rule
+.lake/build/bin/smbrta pipe-change-check               # the change into the bonus room
+.lake/build/bin/smbrta takeoff-check                   # the fast takeoff search in the bonus room
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX

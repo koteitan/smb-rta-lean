@@ -98,3 +98,12 @@ FastJumpSpeed=byte:PlayerYSpdData+3
 # the movement routine: the jump, the fall, gravity
 PlayerMovementSubs
 FlagGrabY=byte:FlagpoleRoutine+31
+# the pipe into the bonus room, its level data and the room's block
+PipeRightTile=byte:HandlePipeEntry+9
+PipeLeftTile=byte:HandlePipeEntry+15
+EngVerticalPipe=byte:HandlePipeEntry+24
+PipeColumnByte=byte:L_GroundArea6+18
+RoomBlockLeftByte=byte:L_UndergroundArea3+6
+RoomBlockRightByte=byte:L_UndergroundArea3+14
+RoomStartX=byte:PlayerStarting_X_Pos+1
+L_GroundArea6
