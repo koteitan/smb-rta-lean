@@ -158,7 +158,10 @@ A detail of the TAS: pressing Left+Right next to the base block counts as Left (
 blocked), so the moving direction becomes left. The push from the block then goes right, and Mario stays
 in the range.
 
-Status: all of this is from the code and the emulator, not Lean. It assumes no enemy is near the pole.
+Status: the position bounds of steps 2 to 4 are Lean theorems about frames that follow the collision rules
+([Grabbing the pole from below](../Theorems/PoleGrab.md)), and the rules are checked against the game's collision routine
+on every state near the block. Step 1 and the condition of step 5 are read from the code, and the bound at 1085 comes from 5a
+(emulator). It assumes no enemy is near the pole.
 
 ### From the castle to 1-2: a formula (from the code)
 
@@ -195,6 +198,7 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta tas-insert FM2 AT K              # K idle frames inserted at AT
 .lake/build/bin/smbrta seg-search FM2 852 40            # the 5a search (over 10 minutes)
 .lake/build/bin/smbrta end-poke FM2 1084 Y DX FD 8      # one 5b case (Y height, DX shift, FD facing)
+.lake/build/bin/smbrta pole-check                      # the collision routine near the pole against the rules
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX

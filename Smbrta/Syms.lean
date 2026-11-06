@@ -79,6 +79,24 @@ structure Syms where
   RunSpeedMin : UInt16
   AirFastSpeed : UInt16
   MaxFallSpeed : UInt16
+  PlayerBGCollision : UInt16
+  Block_Buffer_1 : UInt16
+  MetatileBuffer : UInt16
+  FlagColumnByte : UInt16
+  FlagBallTile : UInt16
+  FlagShaftTile : UInt16
+  FlagBaseTile : UInt16
+  FlagBaseOperand : UInt16
+  GroundTile : UInt16
+  FeetAdderX : UInt16
+  SideAdderX : UInt16
+  FeetAdderY : UInt16
+  SideAdderY : UInt16
+  BlockBufferTopY : UInt16
+  LandDepth : UInt16
+  ClimbLowNybble : UInt16
+  ClimbHighNybble : UInt16
+  FastJumpSpeed : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -150,7 +168,25 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("RunTimerReset", fun s => s.RunTimerReset),
   ("RunSpeedMin", fun s => s.RunSpeedMin),
   ("AirFastSpeed", fun s => s.AirFastSpeed),
-  ("MaxFallSpeed", fun s => s.MaxFallSpeed)]
+  ("MaxFallSpeed", fun s => s.MaxFallSpeed),
+  ("PlayerBGCollision", fun s => s.PlayerBGCollision),
+  ("Block_Buffer_1", fun s => s.Block_Buffer_1),
+  ("MetatileBuffer", fun s => s.MetatileBuffer),
+  ("FlagColumnByte", fun s => s.FlagColumnByte),
+  ("FlagBallTile", fun s => s.FlagBallTile),
+  ("FlagShaftTile", fun s => s.FlagShaftTile),
+  ("FlagBaseTile", fun s => s.FlagBaseTile),
+  ("FlagBaseOperand", fun s => s.FlagBaseOperand),
+  ("GroundTile", fun s => s.GroundTile),
+  ("FeetAdderX", fun s => s.FeetAdderX),
+  ("SideAdderX", fun s => s.SideAdderX),
+  ("FeetAdderY", fun s => s.FeetAdderY),
+  ("SideAdderY", fun s => s.SideAdderY),
+  ("BlockBufferTopY", fun s => s.BlockBufferTopY),
+  ("LandDepth", fun s => s.LandDepth),
+  ("ClimbLowNybble", fun s => s.ClimbLowNybble),
+  ("ClimbHighNybble", fun s => s.ClimbHighNybble),
+  ("FastJumpSpeed", fun s => s.FastJumpSpeed)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -231,6 +267,24 @@ def Syms.parse (text : String) : Except String Syms := do
     RunSpeedMin := ← get "RunSpeedMin"
     AirFastSpeed := ← get "AirFastSpeed"
     MaxFallSpeed := ← get "MaxFallSpeed"
+    PlayerBGCollision := ← get "PlayerBGCollision"
+    Block_Buffer_1 := ← get "Block_Buffer_1"
+    MetatileBuffer := ← get "MetatileBuffer"
+    FlagColumnByte := ← get "FlagColumnByte"
+    FlagBallTile := ← get "FlagBallTile"
+    FlagShaftTile := ← get "FlagShaftTile"
+    FlagBaseTile := ← get "FlagBaseTile"
+    FlagBaseOperand := ← get "FlagBaseOperand"
+    GroundTile := ← get "GroundTile"
+    FeetAdderX := ← get "FeetAdderX"
+    SideAdderX := ← get "SideAdderX"
+    FeetAdderY := ← get "FeetAdderY"
+    SideAdderY := ← get "SideAdderY"
+    BlockBufferTopY := ← get "BlockBufferTopY"
+    LandDepth := ← get "LandDepth"
+    ClimbLowNybble := ← get "ClimbLowNybble"
+    ClimbHighNybble := ← get "ClimbHighNybble"
+    FastJumpSpeed := ← get "FastJumpSpeed"
   }
 
 def Syms.load (path : String) : IO Syms := do

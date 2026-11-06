@@ -142,7 +142,8 @@ ROM の番地や表の値は書きません。
 TAS の細かい技: 土台の横で左右同時押しをすると、右がふさがっているので左を押した扱いになり、進む向きが左に
 なる。すると土台からの押し戻しが右向きになり、旗の範囲にとどまれる。
 
-状況: ここは全部コードとエミュレータからで、Lean ではない。旗の近くに敵がいないことを前提にしている。
+状況: 2〜4 の位置の上限は、当たり判定の規則に従うフレームについての Lean の定理（[旗を下からつかむ](../Theorems/PoleGrab-ja.md)）で、規則は土台の近くの
+全部の状態でゲームのルーチンと比べて確かめた。1 と 5 の条件はコードから読んだもの、1085 の上限は 5a（エミュレータ）から。旗の近くに敵がいないことを前提にしている。
 
 ### 城から 1-2 まで: 式で分かった（コードから）
 
@@ -179,6 +180,7 @@ TAS の映像ファイル（fm2）を用意して、`git/` で:
 .lake/build/bin/smbrta tas-insert FM2 AT K              # AT に何もしないフレームを K 個はさむ
 .lake/build/bin/smbrta seg-search FM2 852 40            # 5a の探索（10 分以上）
 .lake/build/bin/smbrta end-poke FM2 1084 Y DX FD 8      # 5b の 1 通り（Y: 高さ、DX: 横のずれ、FD: 向き）
+.lake/build/bin/smbrta pole-check                      # 旗の近くの当たり判定のルーチンと規則の比較
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # 上に速さと落下の速さを足し、全部の入力で（GY: つかむ高さ）
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # 地下の部屋: ジャンプの表と 557 の上限。CX, CY: 角（y ≥ CY のあいだ x ≥ CX で当たる）。WLO..WHI: 落ちてきて

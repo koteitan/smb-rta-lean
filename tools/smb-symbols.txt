@@ -75,3 +75,23 @@ RunTimerReset=byte:SetRTmr+1
 RunSpeedMin=byte:GetPlayerAnimSpeed+6
 AirFastSpeed=byte:X_Physics+12
 MaxFallSpeed=byte:MovePlayerVertically+18
+# the collision routine, the block buffer, and the flagpole as the level data and its object code write it
+PlayerBGCollision
+Block_Buffer_1
+MetatileBuffer
+FlagColumnByte=byte:L_GroundArea6+96
+FlagBallTile=byte:FlagpoleObject+1
+FlagShaftTile=byte:FlagpoleObject+10
+FlagBaseTile=byte:FlagpoleObject+15
+FlagBaseOperand=byte:FlagpoleObject+17
+GroundTile=byte:TerrainMetatiles+1
+# operands and table bytes of the collision code for a small Mario
+FeetAdderX=byte:BlockBuffer_X_Adder+16
+SideAdderX=byte:BlockBuffer_X_Adder+19
+FeetAdderY=byte:BlockBuffer_Y_Adder+16
+SideAdderY=byte:BlockBuffer_Y_Adder+19
+BlockBufferTopY=byte:BlockBufferCollision+39
+LandDepth=byte:ContChk+13
+ClimbLowNybble=byte:HandleClimbing+3
+ClimbHighNybble=byte:HandleClimbing+7
+FastJumpSpeed=byte:PlayerYSpdData+3

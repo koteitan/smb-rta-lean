@@ -7,6 +7,7 @@ import Theorems.Reach
 import Theorems.Potential
 import Theorems.Opening
 import Theorems.AirCap
+import Theorems.PoleGrab
 
 open Smbrta
 
@@ -300,7 +301,17 @@ theorem air_cap_room (s : HS) (hD : inD sy s = true) (hc : capped sy s = true) (
     rw [h1, h2] at h
     exact Int.le_trans h (by native_decide)
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean"
+  -- the flagpole: the collision routine against the rules
+  IO.FS.writeFile s!"{dir}/PoleGrab.lean" (head ["PoleGrab"] ++ s!"
+open Smbrta.PoleGrab in
+/-- `PlayerBGCollision` follows the rules on every state near the base block, a blocked Left button does not
+start a stopped Mario moving left, and the frame theorems' numbers hold -/
+theorem pole_rules :
+    poleCheck sy ctx = true ∧ maskCheck sy ctx = true ∧
+      16 ≤ (TopSpeed.top sy : Int) ∧ amax sy ctx ≤ 512 := by
+  refine ⟨by native_decide, by native_decide, by native_decide, by native_decide⟩
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -1398,6 +1409,20 @@ def flagPoke (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (v vy
   IO.println s!"y {y} dx {dx} v {v} vy {vy} fd {fd}: direct {direct}, any touch {any}; {runs} frames"
   return 0
 
+/-- the collision routine near the flagpole against the rules, as a program -/
+def poleCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let mp := PoleGrab.withPole sy m0
+  let cs := PoleGrab.cases sy
+  IO.println s!"column x {PoleGrab.colX sy}, top y {PoleGrab.topY sy}, {cs.length} cases"
+  let bad := cs.filter fun c => !PoleGrab.ruleOk sy mp c
+  IO.println s!"{bad.length} differ"
+  for c in bad.take 30 do
+    let r := PoleGrab.collide sy mp c
+    IO.println s!"x {c.x} y {c.y} v {sbyte c.v} md {c.md} vy {sbyte c.vy} st {c.st} fd {c.fd} -> x {peek r sy.Player_X_Position} y {peek r sy.Player_Y_Position} v {sbyte (peek r sy.Player_X_Speed)} st {peek r sy.Player_State} eng {peek r sy.GameEngineSubroutine} bits {peek r sy.Player_CollisionBits}"
+  IO.println s!"mask check: {PoleGrab.maskCheck sy m0}"
+  return 0
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1472,6 +1497,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   tas-then-end FM2 A HEX D           as tas-then, then the earliest castle over 8 inputs for D frames
   end-poke FM2 A Y DX FD D           a movie's state at A with y, x+DX and facing overwritten: the earliest castle
   flag-poke FM2 A Y DX V VY FD D GY  a movie's state at A overwritten: the first touches of the pole over all inputs
+  pole-check                         the collision routine near the flagpole against the rules, as a program
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
   trace HEX                          play inputs (hex bytes) from the 1-1 start, print the state per frame
@@ -1546,6 +1572,7 @@ def main (args : List String) : IO UInt32 := do
   | "tas-peek" :: fm2 :: a :: b :: names => tasPeek sy rom fm2 a.toNat! b.toNat! names
   | ["tas-then", fm2, a, hex] => tasThen sy rom fm2 a.toNat! hex
   | ["pot-bound", fm2, a, n] => potBound sy rom fm2 a.toNat! n.toNat!
+  | ["pole-check"] => poleCheckProg sy rom
   | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
     flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!
   | ["room-bound", fm2, a, f, n, cx, cy, wlo, whi, tx] =>
