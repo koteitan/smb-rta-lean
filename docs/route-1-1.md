@@ -151,8 +151,8 @@ for any speed, any fall speed and any input):
    | more | | 1.5 px less per frame |
 
    All are short of `x₀`. The TAS has `e` = 1086, `k` = 3, `L` = 1089, `g` = 1092: exactly one frame later.
-5. **The fast jump.** It needs the stored absolute speed still high, so no Left or Right from `e` to `L`, and
-   `T = L + 1`. Then every frame pushes him back, and `x(g) < x₀ − 0.4`.
+5. **The fast jump** ([The fast hop beside the flagpole](../Theorems/FastHop.md)). It needs the stored absolute speed still high, so no
+   Left or Right from `e` to `L`, and `T = L + 1`. Then every frame pushes him back, and `x(g) < x₀ − 0.4`.
 
 Checked on the emulator:
 
@@ -173,7 +173,7 @@ in the range.
 Status: the position bounds of steps 2 to 4 are Lean theorems about frames that follow the collision rules
 ([Grabbing the pole from below](../Theorems/PoleGrab.md)), and the rules are checked against the game's collision routine
 on every state near the block. The frames of step 1 are a Lean theorem on the movement routine
-([The height of a jump](../Theorems/Jump.md)). The condition of step 5 is read from the code, and the bound at 1085 comes from
+([The height of a jump](../Theorems/Jump.md)). Step 5 is a Lean theorem on frames that follow the movement routine. The bound at 1085 comes from
 5a (emulator). It assumes no enemy is near the pole.
 
 ### From the castle to 1-2: a formula (from the code)
@@ -217,6 +217,7 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta pipe-change-check               # the change into the bonus room
 .lake/build/bin/smbrta takeoff-check                   # the fast takeoff search in the bonus room
 .lake/build/bin/smbrta side-check                      # the routine at the side pipe's mouth against the rule
+.lake/build/bin/smbrta abs-check                       # what updates the stored speed
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX

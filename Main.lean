@@ -13,6 +13,7 @@ import Theorems.PipeEntry
 import Theorems.PipeTransition
 import Theorems.FastTakeoff
 import Theorems.SidePipe
+import Theorems.FastHop
 
 open Smbrta
 
@@ -446,7 +447,13 @@ open Smbrta.SidePipe in
 /-- `PlayerBGCollision` follows the rule on every state near the side pipe's mouth -/
 theorem side_rules : sideCheck sy ctx = true := by native_decide
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean, SidePipe.lean"
+  -- the fast hop: what updates the stored speed
+  IO.FS.writeFile s!"{dir}/FastHop.lean" (head ["FastHop"] ++ s!"
+open Smbrta.FastHop in
+/-- from a stopped Mario with a high stored speed, only a frame in the air with no Left or Right keeps it -/
+theorem fast_hop_rules : absCheck sy ctx = true := by native_decide
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean, SidePipe.lean, FastHop.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -1586,6 +1593,18 @@ def sideCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
     IO.println s!"x {c.x} y {c.y} v {sbyte c.v} md {c.md} vy {sbyte c.vy} st {c.st} fd {c.fd} -> eng {peek r sy.GameEngineSubroutine} y {peek r sy.Player_Y_Position} st {peek r sy.Player_State} rule {SidePipe.rule sy c}"
   return if bad.isEmpty then 0 else 1
 
+/-- the movement routine from a stopped Mario with a high stored speed, as a program -/
+def absCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let cs := FastHop.cases sy
+  IO.println s!"{cs.length} cases"
+  let bad := cs.filter fun c => !FastHop.caseOk sy m0 c
+  IO.println s!"{bad.length} differ"
+  for c in bad.take 20 do
+    let r := FastHop.move sy m0 c
+    IO.println s!"abs {c.abs} f {c.f} lr {c.lr} bits {c.bits} st {c.st} md {c.md} rs {c.rs} -> abs {peek r sy.Player_XSpeedAbsolute} v {sbyte (peek r sy.Player_X_Speed)} md {peek r sy.Player_MovingDir}"
+  return if bad.isEmpty then 0 else 1
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1665,6 +1684,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   pipe-change-check                  the change from the vertical pipe to the bonus room, as a program
   takeoff-check                      the fast takeoff search in the bonus room, as a program
   side-check                         the collision routine at the side pipe's mouth against the rule, as a program
+  abs-check                          the movement routine from a stopped Mario with a high stored speed, as a program
   jump-table                         what every jump from the ground and from a block does
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
@@ -1745,6 +1765,7 @@ def main (args : List String) : IO UInt32 := do
   | ["pipe-change-check"] => pipeChangeProg sy rom
   | ["takeoff-check"] => takeoffCheck sy rom
   | ["side-check"] => sideCheckProg sy rom
+  | ["abs-check"] => absCheckProg sy rom
   | ["jump-table"] => jumpTable sy rom
   | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
     flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!

@@ -62,7 +62,7 @@ by `16·v_top` per frame, more than he gains.
   an earlier `e`.
 * `L ≤ t + 3` and `m ≥ 2` come from the jump: rising at the height of a direct grab happens only on the third frame of a jump
   (`m = 2`), or on the second frame of a fast jump (`m = 1`); this is [The height of a jump](Jump.md). A fast jump needs no Left or
-  Right after `e`, because pressing them updates the stored absolute speed: this is read from the code.
+  Right after `e`, because pressing them updates the stored absolute speed: [The fast hop beside the flagpole](FastHop.md).
 * The bound `B` is an input. [The 1-1 route](../docs/route-1-1.md) takes it from an emulator search.
 
 **Files.** `Theorems/PoleGrab.lean`, private `Proof/PoleGrab.lean`.
