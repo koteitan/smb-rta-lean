@@ -45,18 +45,41 @@ They depend on no input, no position or speed on the pipe, and not on the 21-fra
 ignores or overrides the input; the routines that wait on the 21-frame grid are skipped in these two
 changes). Inserting idle frames delays them by exactly that many frames; pausing only makes them longer.
 
-### 3. The bonus room (459 → 570): open
+### 3. The bonus room (459 → 570): not before 570
 
-- The side pipe is entered on the frame Mario lands on the floor at the pipe's mouth. Hitting the upper
-  part of the pipe in the air stops him.
-- Entering at 569 needs Mario 2.31 px ahead of the TAS at frame 557.
-- The corner of the brick block binds tightly. The TAS presses Left for 3 frames first, so that it lands
-  as far right as possible while still clearing the corner (just before clearing it, it is 15/256 px left
-  of the position that hits it). With 2 Left frames or fewer, Mario hits the corner and loses his speed.
-- From the TAS's state just after landing on the block (frame 511), the potential bound of
-  [Reach](../Theorems/Reach.md) keeps frame 557 0.38 px short. It remains to bound the position and
-  speed at the block landing over all inputs, including a variant that presses Right+B once on the
-  floor-landing frame to break the air speed cap before jumping.
+What entering takes (from the code):
+
+- The side pipe is entered on the floor at the pipe's mouth, on the frame Mario lands there at the
+  earliest. Hitting the upper part of the pipe in the air stops him.
+- To get to that floor he passes the right end of the brick block from above and falls. He falls at
+  most 4 px per frame, so he lands at least 12 frames after the first frame he is past the end. The
+  TAS is past it at 558 and enters at 570. So entering at 569 needs Mario past the end at 557, which
+  is 592/256 px (2.31 px) ahead of the TAS.
+
+The bound at frame 557, over all inputs:
+
+1. The fall from the ceiling does not depend on the input, so he lands on the floor at 493. The first
+   jump is at 494.
+2. While his feet are below the top of the block, he has to stay left of its corner, or he hits it
+   and his speed drops to about 0. Call `s` the last such frame before he lands on the block. The
+   TAS has `s` = 504, 15/256 px left of hitting.
+3. Takeoff below 1.5625 px/frame: [The air speed cap](../Theorems/AirCap.md) applies from `s`. Over all
+   takeoff speeds and all holds of A (measured), the earliest pairs (`s`, landing on the block) are
+   (504, 511), which is the TAS, and (505, 510); the others land later. The theorem gives at most
+   121.75 px from `s` to 557. So at 557 Mario is at most 527/256 px ahead of the TAS: 65/256 px
+   (0.25 px) short.
+4. Takeoff at 1.5625 px/frame or more: he rises faster, but `s` is still at least 8 frames after the
+   takeoff. A takeoff after 500 is too late even at top speed from the corner. For takeoffs by 500, a
+   program follows the horizontal frame `hstep` from 459 with every input: none of them stays left of
+   the corner for the 8 frames.
+5. A hit at the corner on frame `s` leaves a speed of about 0, and Mario ends at least 8 px short. A hit
+   on the floor just before a jump (the jump still counts as fast, because the stored absolute speed is
+   not cleared) ends at least 3 px short.
+
+Status: step 3's bound is a Lean theorem; the jump table is measured on the emulator; step 4 is a
+program on the model; the entry conditions are read from the code; combining them is arithmetic, not
+done in Lean. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
+the corner are at the same heights, so the bound is the same.
 
 ### 5a. Accelerating above ground (852 → 892): the pole is not reached early (emulator check)
 
@@ -116,12 +139,13 @@ frames. A castle entry at 1218 gives 1748; at 1217 it gives 1727 (21 frames earl
 1-2 starts ≥ 1748
   ⟸ castle entry ≥ 1218                         (the castle-to-1-2 formula)
   ⟸ control above ground ≥ 852, plus 5a and 5b
-  ⟸ side pipe entry ≥ 570 (+282)                ← segment 3: open
+  ⟸ side pipe entry ≥ 570 (+282)                 (segment 3)
   ⟸ control in the bonus room ≥ 459 (+91)
   ⟸ pipe entry ≥ 368                             (segment 1)
 ```
 
-It is also assumed that arriving later at any step never helps later on.
+It is also assumed that arriving later at any step never helps later on. What remains open is the
+part of 5b listed as not covered.
 
 ## Reproduce
 
@@ -133,5 +157,8 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta tas-insert FM2 AT K              # K idle frames inserted at AT
 .lake/build/bin/smbrta seg-search FM2 852 40            # the 5a search (over 10 minutes)
 .lake/build/bin/smbrta end-poke FM2 1084 Y DX FD 8      # one 5b case (Y height, DX shift, FD facing)
-.lake/build/bin/smbrta pot-bound FM2 511 46             # bonus room: the bound from the block
+.lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
+    # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX
+    # while y ≥ CY); WLO..WHI: the heights where he lands on the block when falling; TX: the x past
+    # the block's right end. All are read from the room's blocks and the collision code.
 ```

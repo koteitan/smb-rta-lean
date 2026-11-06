@@ -6,6 +6,7 @@ import Theorems.TopSpeed
 import Theorems.Reach
 import Theorems.Potential
 import Theorems.Opening
+import Theorems.AirCap
 
 open Smbrta
 
@@ -272,7 +273,34 @@ theorem opening :
   have h : optCheck sy ctx (jumpLens sy ctx) {D} {N} = true := by native_decide
   exact ⟨opt_of_check opening_facts h, opt_after opening_facts (by native_decide) h, by native_decide⟩
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean"
+  -- the air speed cap: the two earliest ways onto a block in the movie's room
+  let capA : Int := (sy.AirFastSpeed.toNat : Int) - 1
+  let capB (K n : Nat) : Int := 16 * capA * K + AirCap.capDist sy m0 n
+  IO.FS.writeFile s!"{dir}/AirCap.lean" ("import Proof.ReachOpen\nimport Theorems.AirCap" ++ s!"
+/-! {privateNote} -/
+open Smbrta Smbrta.Rom
+
+open Smbrta.Potential Smbrta.AirCap in
+theorem air_cap_facts : CFacts sy ctx :=
+  ⟨pot_facts, by native_decide, by native_decide, by native_decide, by native_decide⟩
+
+open Smbrta.Potential Smbrta.AirCap in
+/-- from a state below the air threshold, `K` air frames then any frames, `K + n` frames in all:
+the two cases the bonus room needs -/
+theorem air_cap_room (s : HS) (hD : inD sy s = true) (hc : capped sy s = true) (a b : List HIn)
+    (ha : ∀ i ∈ a, i ∈ inputs ∧ isAir i = true) (hb : ∀ i ∈ b, i ∈ inputs) :
+    (a.length = 7 → b.length = 46 → hdist sy ctx s (a ++ b) ≤ {capB 7 46}) ∧
+    (a.length = 5 → b.length = 47 → hdist sy ctx s (a ++ b) ≤ {capB 5 47}) := by
+  have h := landing_bound air_cap_facts s hD hc a b ha hb
+  constructor
+  · intro h1 h2
+    rw [h1, h2] at h
+    exact Int.le_trans h (by native_decide)
+  · intro h1 h2
+    rw [h1, h2] at h
+    exact Int.le_trans h (by native_decide)
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -1173,6 +1201,167 @@ def potBound (sy : Syms) (romPath fm2Path : String) (a n : Nat) : IO UInt32 := d
   IO.println s!"frame {a}: phi {Potential.phi sy m0 hs}; bound at {a + n}: P {b} (x {(b / 256) % 256} + {b % 256}/256); movie: P {posP sy mt} (x {peek mt sy.Player_X_Position}); bound - movie = {b - posP sy mt}"
   return 0
 
+/-- the jump arcs from the ground at a movie's frame `f`, for takeoff speed `v` and A held `h`
+frames: `(h, s, l)` with `l` the first frame after the takeoff frame count at which Mario falls
+inside the landing window `[wlo, whi]`, and `s` the last frame before it with `y ≥ cy`
+(frames counted so that `1` is the first frame after `f`) -/
+def jumpArcs (sy : Syms) (m0 : Machine) (v : Nat) (cy wlo whi : Nat) (maxHold : Nat := 36) :
+    List (Nat × Nat × Nat) := Id.run do
+  let x0 := peek m0 sy.Player_X_Position
+  let m1 := poke (poke m0 sy.Player_X_Speed v.toUInt8) sy.Player_XSpeedAbsolute v.toUInt8
+  let mut out : List (Nat × Nat × Nat) := []
+  for h in [1:maxHold + 1] do
+    let mut m := m1
+    let mut s := 0
+    let mut l : Option Nat := none
+    for k in [1:90] do
+      if l.isNone then
+        m := runFrame m (smbToPad (if k ≤ h then 0x80 else 0))
+        m := poke m sy.Player_X_Position x0
+        let y := (peek m sy.Player_Y_Position).toNat
+        let vy := peek m sy.Player_Y_Speed
+        if vy < 0x80 && wlo ≤ y && y ≤ whi && k > 1 then l := some k
+        else if y ≥ cy then s := k
+        if peek m sy.Player_State == 0 then break
+    match l with
+    | some k => out := out ++ [(h, s, k)]
+    | none => pure ()
+  return out
+
+/-- experiment: an upper bound on `P` at frame `n` over all inputs from the first frame of a room,
+when Mario starts on the left of a block whose left edge he has to clear.
+`f`: the frame he lands on the floor. `cx`, `cy`: while `y ≥ cy`, `x < cx` or he hits the block.
+`[wlo, whi]`: the window where a falling Mario lands on the block. `tx`: the goal in pixels. -/
+def roomBound (sy : Syms) (romPath fm2Path : String) (a f n cx cy wlo whi tx : Nat) : IO UInt32 := do
+  let (ma, inputs, ka) ← movieAt sy romPath fm2Path a
+  let (mf, _, _) ← movieAt sy romPath fm2Path f
+  -- the theorems are about the frames in the context of the 1-1 start
+  let ctx ← smb11Start sy <$> loadCart romPath
+  let cp : Int := (cx : Int) * 256
+  let target : Int := (tx : Int) * 256
+  let fast : Int := sy.AirFastSpeed.toNat
+  let top' : Int := TopSpeed.top sy
+  let dB := Potential.dbound sy ctx
+  -- the arcs
+  let mut last : List (Nat × Nat × Nat) := []
+  let mut classes : Array (Nat × List (Nat × Nat × Nat)) := #[]
+  for v in [0:(TopSpeed.top sy) + 1] do
+    let arcs := jumpArcs sy mf v cy wlo whi
+    if arcs != last || v == 0 then
+      classes := classes.push (v, arcs)
+      IO.println s!"takeoff |v| ≥ {v}: (hold, s, L) = {arcs.take 14}"
+      (← IO.getStdout).flush
+    last := arcs
+  -- takeoff below the air threshold: `AirCap.landing_bound` from the last low frame
+  let cd := AirCap.capDist sy ctx
+  let mut best : Int := -1
+  let mut bestAt : String := ""
+  let mut sMin : Nat := 1000
+  for (v, arcs) in classes do
+    if (v : Int) < fast then
+      for (_, s, l) in arcs do
+        sMin := min sMin s
+        let b := cp - 1 + 16 * (fast - 1) * ((l : Int) - s) + cd (n - (f + l))
+        if b > best then
+          best := b
+          bestAt := s!"last low frame {f + s}, landing {f + l}"
+  IO.println s!"slow takeoff: bound at {n}: P {best} ({bestAt}); goal {target}; margin {target - best}"
+  -- a block hit on the last frame below the top: no speed left
+  let sHit := f + sMin
+  let g := cp + 16 * top' + dB (2560 : Int) (n - sHit)
+  IO.println s!"block hit at the last low frame (s ≥ {sHit}): P ≤ {g}; margin {target - g}"
+  -- takeoff at the air threshold or more: the frames from the takeoff until above the block
+  let fastArc := (classes.toList.filter fun c => (c.1 : Int) ≥ fast).flatMap fun c => c.2
+  let sFast := (fastArc.map fun t => t.2.1).foldl min 1000
+  let tLast : Nat := Id.run do
+    let mut t := f + 1
+    for k in [f + 1:n] do
+      if cp - 1 + 16 * top' * ((n : Int) - (k + sFast - 1)) ≥ target then t := k
+    return t
+  IO.println s!"fast takeoff: at least {sFast - 1} air frames after the takeoff frame; takeoff later than {tLast} misses the goal"
+  -- a block hit on the ground leaves the stored absolute speed: a jump right after it counts as
+  -- fast, from a speed near 0. The speed cannot reach the threshold before `f + 4` (`hitT`).
+  let hitT := f + 5
+  let hitS := hitT + sFast - 1
+  let g2 := cp + 16 * top' + dB (255 + Potential.gFast sy ctx * ((sFast : Int))) (n - hitS)
+  IO.println s!"hit on the ground, jump at {hitT} or later: P ≤ {g2}; margin {target - g2}"
+  let air : List Potential.HIn := Potential.inputsN.filter fun i => i.st == 1 && !i.jump
+  let gnd : List Potential.HIn := Potential.inputsN.filter fun i => i.st == 0 && !i.jump
+  let jmp : List Potential.HIn := Potential.inputsN.filter fun i => i.st == 0 && i.jump
+  let addMin (l : Std.HashMap Potential.HS Int) (s : Potential.HS) (p : Int) :=
+    match l[s]? with
+    | some q => if p < q then l.insert s p else l
+    | none => l.insert s p
+  let mut layer : Std.HashMap Potential.HS Int := {}
+  layer := layer.insert (Potential.startHS sy ma) (posP sy ma)
+  for _ in [a + 1:f + 1] do
+    let mut nx : Std.HashMap Potential.HS Int := {}
+    for (s, p) in layer.toList do
+      for i in air do
+        let t := Potential.hstep sy ctx s i
+        nx := addMin nx t (p + 16 * sbyte t.v)
+    layer := nx
+  IO.println s!"floor frame {f}: {layer.size} horizontal states; max speed {(layer.toList.map fun q => Potential.V q.1).foldl max 0}; TAS P {posP sy mf}"
+  let mut worst : Int := -1
+  let mut worstAt : String := "none"
+  for t in [f + 1:tLast + 1] do
+    -- jump at frame t from the ground state of t-1
+    let mut airL : Std.HashMap Potential.HS Int := {}
+    for (s, p) in layer.toList do
+      if (sbyte s.v).natAbs ≥ fast.toNat then
+        for i in jmp do
+          let u := Potential.hstep sy ctx s i
+          let q := p + 16 * sbyte u.v
+          if q < cp then airL := addMin airL u q
+    IO.println s!"takeoff {t}: {layer.size} ground states, {airL.size} fast takeoffs"
+    (← IO.getStdout).flush
+    for k in [1:sFast] do
+      let mut nx : Std.HashMap Potential.HS Int := {}
+      for (s, p) in airL.toList do
+        for i in air do
+          let u := Potential.hstep sy ctx s i
+          let q := p + 16 * sbyte u.v
+          if q < cp then nx := addMin nx u q
+      airL := nx
+      if k + 1 == sFast then
+        for (s, _) in airL.toList do
+          let b := cp - 1 + dB (Opening.pOf sy ctx s) (n - (t + k))
+          if b > worst then
+            worst := b
+            worstAt := s!"takeoff {t}, s {t + k}, v {sbyte s.v}"
+    -- the ground frame t
+    let mut nx : Std.HashMap Potential.HS Int := {}
+    for (s, p) in layer.toList do
+      if p < cp && Potential.V s + Potential.gFast sy ctx * ((tLast : Int) - t + 1) ≥ 256 * fast then
+        for i in gnd do
+          let u := Potential.hstep sy ctx s i
+          nx := addMin nx u (p + 16 * sbyte u.v)
+    layer := nx
+  IO.println s!"fast takeoff by {tLast}: worst bound P {worst} ({worstAt}); margin {target - worst}"
+  -- the movie, for comparison; and the model against its frames
+  let mut mt := ma
+  let mut bad : Nat := 0
+  for j in [0:n - a] do
+    let pad := inputs[ka + 1 + j]!
+    let p := PState.read sy mt
+    let hs : Potential.HS := ⟨p.speed, p.fricMF, p.faceDir, p.movDir,
+      if p.runSpd == 0 then 0 else sy.RunSpeedMin.toUInt8⟩
+    let mn := runFrame mt pad
+    let st := peek mt sy.Player_State
+    let jump := st == 0 && peek mn sy.Player_State == 1
+    let saved := peek mn sy.SavedJoypadBits
+    let i : Potential.HIn := { st := if st == 0 then 0 else 1, jump, joy := saved &&& 0x7F,
+                               rt := if p.runTmr == 0 then 0 else 1 }
+    let u := Potential.hstep sy ctx hs i
+    let q := PState.read sy mn
+    if u.v != q.speed || u.f != q.fricMF || u.fd != q.faceDir || u.md != q.movDir then
+      bad := bad + 1
+      IO.println s!"model differs at {a + j + 1}: model {sbyte u.v} {u.f} {u.fd} {u.md}, movie {sbyte q.speed} {q.fricMF} {q.faceDir} {q.movDir}"
+    mt := mn
+  IO.println s!"model against the movie, frames {a + 1}..{n}: {bad} differ"
+  IO.println s!"movie at {n}: P {posP sy mt}"
+  return 0
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1247,6 +1436,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   tas-then-end FM2 A HEX D           as tas-then, then the earliest castle over 8 inputs for D frames
   end-poke FM2 A Y DX FD D           a movie's state at A with y, x+DX and facing overwritten: the earliest castle
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
+  room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
   trace HEX                          play inputs (hex bytes) from the 1-1 start, print the state per frame
   phi-explore pad|lr DEPTH           experiment: abstract transitions and the smallest potential gain
   check-witness [pad|lr]             play a theorem's witness on the full emulator
@@ -1319,6 +1509,8 @@ def main (args : List String) : IO UInt32 := do
   | "tas-peek" :: fm2 :: a :: b :: names => tasPeek sy rom fm2 a.toNat! b.toNat! names
   | ["tas-then", fm2, a, hex] => tasThen sy rom fm2 a.toNat! hex
   | ["pot-bound", fm2, a, n] => potBound sy rom fm2 a.toNat! n.toNat!
+  | ["room-bound", fm2, a, f, n, cx, cy, wlo, whi, tx] =>
+    roomBound sy rom fm2 a.toNat! f.toNat! n.toNat! cx.toNat! cy.toNat! wlo.toNat! whi.toNat! tx.toNat!
   | ["tas-then-end", fm2, a, hex, d] => tasThenEnd sy rom fm2 a.toNat! hex d.toNat!
   | ["end-poke", fm2, a, y, dx, fd, d] => endPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! fd.toNat! d.toNat!
   | ["end-poke-trace", fm2, a, y, dx, fd, d] => endPokeTrace sy rom fm2 a.toNat! y.toNat! dx.toInt! fd.toNat! d.toNat!
