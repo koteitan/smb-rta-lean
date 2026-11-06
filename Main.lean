@@ -773,6 +773,445 @@ def jumpCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   IO.println s!"jump lengths checked, {bad} outside the range"
   return if bad == 0 then 0 else 1
 
+/-- play a movie; from its first controllable frame in 1-1, compare the distance with the bound
+`16·top·n − loss` (`loss` from the opening) until the player control routine ends -/
+def tasTrace (sy : Syms) (romPath fm2Path : String) (skip : Nat) : IO UInt32 := do
+  let movie := parseFm2 (← IO.FS.readFile fm2Path)
+  let inputs := alignInputs movie skip
+  let mut m := powerOn (← loadCart romPath) 0
+  let top := (sy.RunTopSpeed.toNat : Int)
+  let n0 := TasFastAccel.witness.length
+  let m1 ← smb11Start sy <$> loadCart romPath
+  let loss := 16 * top * n0 - TopSpeed.walkDist sy m1 (TopSpeed.reachWitness n0)
+  let mut start : Option (Nat × Int) := none
+  let mut behind := 0
+  let mut ended := false
+  let mut lastEng : UInt8 := 255
+  let mut lastArea : UInt8 := 255
+  for h : k in [0:inputs.size] do
+    m := runFrame m inputs[k]
+    match start with
+    | none =>
+      if controllable sy m then start := some (k, posP sy m)
+    | some (k0, p0) =>
+      let n := k - k0
+      let d := posP sy m - p0
+      let eng := peek m sy.GameEngineSubroutine
+      let area := peek m sy.AreaType
+      if eng != lastEng || area != lastArea then
+        IO.println s!"frame {n}: engine routine {eng}, area type {area}, x {peek m sy.Player_X_Position} page {peek m sy.Player_PageLoc}, distance {d}, speed {(PState.read sy m).speedInt}"
+        lastEng := eng
+        lastArea := area
+      if eng.toUInt16 != sy.Eng_PlayerCtrl && !ended then
+        IO.println s!"frames {n0}..{n}: behind the bound in {behind} frames"
+        ended := true
+      if eng == 4 then return 0
+      if n ≥ n0 && !ended then
+        let b := 16 * top * n - loss
+        if d != b then
+          behind := behind + 1
+          if behind ≤ 20 then
+            IO.println s!"frame {n}: distance {d}, bound {b}, behind {b - d}, speed {(PState.read sy m).speedInt}, x {peek m sy.Player_X_Position} page {peek m sy.Player_PageLoc}"
+  IO.println "player control did not end"
+  return 1
+
+/-- a movie from its first controllable frame: frames `a..b` (counted from there), the distance
+from frame `a` against `16·top·n − loss` -/
+def tasSeg (sy : Syms) (romPath fm2Path : String) (a b : Nat) : IO UInt32 := do
+  let movie := parseFm2 (← IO.FS.readFile fm2Path)
+  let inputs := alignInputs movie fceuxSkip
+  let mut m := powerOn (← loadCart romPath) 0
+  let top := (sy.RunTopSpeed.toNat : Int)
+  let n0 := TasFastAccel.witness.length
+  let m1 ← smb11Start sy <$> loadCart romPath
+  let loss := 16 * top * n0 - TopSpeed.walkDist sy m1 (TopSpeed.reachWitness n0)
+  let mut k0 : Option Nat := none
+  let mut pa : Int := 0
+  for h : k in [0:inputs.size] do
+    m := runFrame m inputs[k]
+    if k0.isNone && controllable sy m then k0 := some k
+    match k0 with
+    | none => pure ()
+    | some c =>
+      let n := k - c
+      if n == a then pa := posP sy m
+      if n ≥ a && n ≤ b then
+        let p := PState.read sy m
+        let d := posP sy m - pa
+        let j : Int := (n - a : Nat)
+        let bd := if j ≥ n0 then s!"{16 * top * j - loss}" else "-"
+        IO.println s!"{n} (+{j}): in {hex2 (smbToPad inputs[k])} v {p.speedInt} f {p.fricMF} st {peek m sy.Player_State} fd {p.faceDir} md {p.movDir} x {peek m sy.Player_X_Position} pg {peek m sy.Player_PageLoc} y {peek m sy.Player_Y_Position} dist {d} bound {bd}"
+      if n > b then return 0
+  return 0
+
+/-- a movie with `k` empty frames inserted at frame `at` (from its first controllable frame), or
+`del` frames deleted there: the frame of the flag (end-level routine) and of the level change -/
+def tasInsert (sy : Syms) (romPath fm2Path : String) (at_ k : Nat) (del : Nat := 0) : IO UInt32 := do
+  let movie := parseFm2 (← IO.FS.readFile fm2Path)
+  let inputs := alignInputs movie fceuxSkip
+  -- find the first controllable frame
+  let mut m := powerOn (← loadCart romPath) 0
+  let mut c := 0
+  for h : j in [0:inputs.size] do
+    m := runFrame m inputs[j]
+    if controllable sy m then c := j; break
+  let cut := c + at_
+  let ins := inputs.extract 0 cut ++ Array.replicate k (0 : UInt8) ++ inputs.extract (cut + del) inputs.size
+  let mut m2 := powerOn (← loadCart romPath) 0
+  let mut flag := false
+  for h : j in [0:ins.size] do
+    m2 := runFrame m2 ins[j]
+    let eng := peek m2 sy.GameEngineSubroutine
+    if !flag && j > c + at_ && (eng == 4 || eng == 5) then
+      flag := true
+      IO.println s!"k {k} del {del}: flag (routine {eng}) after frame {j - c}, y {peek m2 sy.Player_Y_Position}"
+    if peek m2 sy.LevelNumber != 0 || peek m2 sy.WorldNumber != 0 then
+      IO.println s!"k {k} del {del}: level changes after frame {j - c}"
+      return 0
+  IO.println s!"k {k}: no level change"
+  return 1
+
+/-- RAM without the bytes that only echo this frame's buttons (the A bit of the previous buttons
+is kept: it decides whether A is a new press) -/
+def ramKey (sy : Syms) (m : Machine) : Array UInt8 := Id.run do
+  let mut r := m.ram.toList.toArray
+  for a in [sy.SavedJoypadBits, sy.SavedJoypadBits + 1, sy.A_B_Buttons, sy.Left_Right_Buttons,
+      sy.Up_Down_Buttons] do
+    r := r.set! (a &&& 0x7FF).toNat 0
+  let pa := (sy.PreviousA_B_Buttons &&& 0x7FF).toNat
+  r := r.set! pa (r[pa]! &&& 0x80)
+  -- read only for the Start/Select bits
+  for a in [sy.JoypadBitMask, sy.JoypadBitMask + 1] do
+    let j := (a &&& 0x7FF).toNat
+    r := r.set! j (r[j]! &&& 0x30)
+  return r
+
+/-- the machine of a movie at frame `n` (from its first controllable frame), and the inputs -/
+def movieAt (sy : Syms) (romPath fm2Path : String) (n : Nat) : IO (Machine × Array UInt8 × Nat) := do
+  let movie := parseFm2 (← IO.FS.readFile fm2Path)
+  let inputs := alignInputs movie fceuxSkip
+  let mut m := powerOn (← loadCart romPath) 0
+  let mut c : Option Nat := none
+  for h : k in [0:inputs.size] do
+    m := runFrame m inputs[k]
+    if c.isNone && controllable sy m then c := some k
+    if c == some (k - n) && k ≥ n then return (m, inputs, k)
+  throw (IO.userError "movie too short")
+
+/-- experiment: from a movie's frame `a`, can any input sequence of `d` frames move `P` further
+than the movie does? A search on the full emulator (states merged by RAM), pruned by the
+potential bound. -/
+def segSearch (sy : Syms) (romPath fm2Path : String) (a d : Nat) (goal : Option Int := none) : IO UInt32 := do
+  let (m0, inputs, k0) ← movieAt sy romPath fm2Path a
+  -- the movie's distance after d frames, or the distance to `goal - 1` (an absolute position)
+  let mut mt := m0
+  for j in [0:d] do mt := runFrame mt inputs[k0 + 1 + j]!
+  let target := match goal with
+    | some g => g - 1 - posP sy m0
+    | none => posP sy mt - posP sy m0
+  IO.println s!"movie: distance {target} in {d} frames"; flush
+  let ins : List UInt8 := (List.range 64).map fun (n : Nat) =>
+    let i := n.toUInt8
+    ((i &&& 16) <<< 2) ||| ((i &&& 32) <<< 2) ||| (i &&& 15)
+  let toHS := fun (m : Machine) =>
+    let p := PState.read sy m
+    (Potential.HS.mk p.speed p.fricMF p.faceDir p.movDir (if p.runSpd == 0 then 0 else sy.RunSpeedMin.toUInt8))
+  let p0 := posP sy m0
+  let mut layer : Array Machine := #[m0]
+  let t0 ← IO.monoMsNow
+  let mut best : Int := 0
+  for k in [0:d] do
+    let left := d - k - 1
+    let mut nxt : Std.HashMap (Array UInt8) Machine := {}
+    best := -1000000
+    for m in layer do
+      for i in ins do
+        let m' := runFrame m (smbToPad i)
+        let eng := peek m' sy.GameEngineSubroutine
+        if eng.toUInt16 == sy.Eng_PlayerCtrl then
+          let dist := posP sy m' - p0
+          let hs := toHS m'
+          let opt := Potential.dbound sy m0 (Opening.pOf sy m0 hs) left
+          if dist + opt > target then
+            nxt := nxt.insert (ramKey sy m') m'
+            best := max best dist
+        else if eng == 4 || eng == 5 then
+          IO.println s!"frame {k + 1}: the flag!"; flush
+    layer := nxt.valuesArray
+    let t1 ← IO.monoMsNow
+    IO.println s!"frame {k + 1}: {layer.size} states, best {best} ({t1 - t0} ms)"; flush
+  IO.println s!"after {d} frames: {layer.size} states beat the movie (best {best}, movie {target})"
+  return 0
+
+/-- frames until the castle entry (`StarFlagTaskControl` set), with no input -/
+def toCastle (sy : Syms) (m : Machine) (limit : Nat := 600) : Option Nat := Id.run do
+  let mut m := m
+  for k in [0:limit] do
+    if peek m sy.StarFlagTaskControl != 0 then return some k
+    m := runFrame m 0
+  return none
+
+/-- experiment: from a movie's frame `a`, every input for `d` frames (emulator, states merged by
+RAM); the earliest castle entry over the states that touch the flag -/
+def endSearch (sy : Syms) (romPath fm2Path : String) (a d : Nat) : IO UInt32 := do
+  let (m0, inputs, k0) ← movieAt sy romPath fm2Path a
+  -- the movie's castle entry
+  let mut mt := m0
+  let mut tas : Nat := 0
+  for j in [0:2000] do
+    if peek mt sy.StarFlagTaskControl != 0 then tas := a + j; break
+    mt := runFrame mt inputs[k0 + 1 + j]!
+  IO.println s!"movie: castle entry after frame {tas}"; flush
+  let ins : List UInt8 := (List.range 64).map fun (n : Nat) =>
+    let i := n.toUInt8
+    ((i &&& 16) <<< 2) ||| ((i &&& 32) <<< 2) ||| (i &&& 15)
+  let mut layer : Array Machine := #[m0]
+  let mut best : Option Nat := none
+  let mut bestTouch : Nat := 0
+  let t0 ← IO.monoMsNow
+  for k in [0:d] do
+    let mut nxt : Std.HashMap (Array UInt8) Machine := {}
+    let mut touched : Std.HashMap (Array UInt8) Machine := {}
+    for m in layer do
+      for i in ins do
+        let m' := runFrame m (smbToPad i)
+        let eng := peek m' sy.GameEngineSubroutine
+        if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m') m'
+        else if eng == 4 || eng == 5 then touched := touched.insert (ramKey sy m') m'
+    for m in touched.valuesArray do
+      match toCastle sy m with
+      | some c =>
+        let f := a + k + 1 + c
+        let better : Bool := match best with
+          | some b => decide (f < b)
+          | none => true
+        if better then
+          best := some f
+          bestTouch := a + k + 1
+      | none => pure ()
+    layer := nxt.valuesArray
+    let t1 ← IO.monoMsNow
+    IO.println s!"frame {a + k + 1}: {layer.size} states in control, {touched.size} touched, best castle {best} (touch {bestTouch}) ({t1 - t0} ms)"; flush
+  return 0
+
+/-- experiment: which RAM bytes differ after one frame from a movie's frame `a`, over the inputs -/
+def ramDiff (sy : Syms) (romPath fm2Path : String) (a : Nat) : IO UInt32 := do
+  let (m0, _, _) ← movieAt sy romPath fm2Path a
+  let ins : List UInt8 := (List.range 64).map fun (n : Nat) =>
+    let i := n.toUInt8
+    ((i &&& 16) <<< 2) ||| ((i &&& 32) <<< 2) ||| (i &&& 15)
+  let rams := ins.map fun i => ramKey sy (runFrame m0 (smbToPad i))
+  for k in [0:2048] do
+    let vals := (rams.map (·[k]!)).eraseDups
+    if vals.length > 1 then IO.println s!"${hex4 k.toUInt16}: {vals.length} values {vals.take 8}"
+  return 0
+
+/-- a RAM address by symbol name, `NAME+N`, or `$hex` -/
+def parseAddr (sy : Syms) (nm : String) : Option UInt16 :=
+  if nm.startsWith "$" then
+    some ((nm.drop 1).toString.toList.foldl (fun (acc : Nat) ch =>
+      acc * 16 + (if ch.isDigit then ch.toNat - '0'.toNat else ch.toLower.toNat - 'a'.toNat + 10)) 0).toUInt16
+  else match nm.splitOn "+" with
+    | [base, off] => (Syms.fields.lookup base).map fun f => f sy + off.toNat!.toUInt16
+    | _ => (Syms.fields.lookup nm).map fun f => f sy
+
+/-- a movie's frames `a..b` (from its first controllable frame): the given RAM bytes, by symbol
+name (`tools/smb-symbols.txt`), name+offset (`Enemy_ID+5`), or hex address (`$0746`) -/
+def tasPeek (sy : Syms) (romPath fm2Path : String) (a b : Nat) (names : List String) : IO UInt32 := do
+  let parse := parseAddr sy
+  let addrs := names.map fun nm => (nm, parse nm)
+  for (nm, ad) in addrs do
+    if ad.isNone then throw (IO.userError s!"unknown name {nm}")
+  let movie := parseFm2 (← IO.FS.readFile fm2Path)
+  let inputs := alignInputs movie fceuxSkip
+  let mut m := powerOn (← loadCart romPath) 0
+  let mut c : Option Nat := none
+  for h : k in [0:inputs.size] do
+    m := runFrame m inputs[k]
+    if c.isNone && controllable sy m then c := some k
+    match c with
+    | none => pure ()
+    | some c0 =>
+      let n := k - c0
+      if n ≥ a && n ≤ b then
+        let vals := addrs.map fun (nm, ad) => s!"{nm} {peek m ad.get!}"
+        IO.println (s!"{n}: in {hex2 (smbToPad inputs[k])} " ++ " ".intercalate vals)
+      if n > b then return 0
+  return 0
+
+/-- a movie up to frame `a` (from its first controllable frame), then the given inputs (hex, game
+layout), then no input; per frame the state, until the castle entry or `limit` frames -/
+def tasThen (sy : Syms) (romPath fm2Path : String) (a : Nat) (hex : String) (limit : Nat := 200) : IO UInt32 := do
+  let (m0, _, _) ← movieAt sy romPath fm2Path a
+  let w := (hexDecode hex).toList
+  let mut m := m0
+  for k in [0:limit] do
+    let i := w.getD k 0
+    m := runFrame m (smbToPad i)
+    let p := PState.read sy m
+    IO.println s!"{a + k + 1}: in {hex2 i} v {p.speedInt} st {peek m sy.Player_State} x {peek m sy.Player_X_Position} pg {peek m sy.Player_PageLoc} y {peek m sy.Player_Y_Position} vy {peek m sy.Player_Y_Speed} eng {peek m sy.GameEngineSubroutine} castle {peek m sy.StarFlagTaskControl}"
+    if peek m sy.StarFlagTaskControl != 0 then return 0
+  return 0
+
+/-- the earliest castle entry from `m` over a few inputs for `d` frames (states merged by `ramKey`) -/
+def earliestCastle (sy : Syms) (m0 : Machine) (d : Nat) : Option Nat := Id.run do
+  let ins : List UInt8 := [0x41, 0xC1, 0x01, 0x81, 0x03, 0x83, 0x00, 0x80]
+  let mut layer : Array Machine := #[m0]
+  let mut best : Option Nat := none
+  for k in [0:d] do
+    let mut nxt : Std.HashMap (Array UInt8) Machine := {}
+    for m in layer do
+      for i in ins do
+        let m' := runFrame m (smbToPad i)
+        let eng := peek m' sy.GameEngineSubroutine
+        if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m') m'
+        else if eng == 4 || eng == 5 then
+          match toCastle sy m' with
+          | some c =>
+            let f := k + 1 + c
+            best := some (match best with | some b => min b f | none => f)
+          | none => pure ()
+    layer := nxt.valuesArray
+  return best
+
+/-- experiment: from a movie's frame `a`, every jump pattern (Right+B with or without A) that stays
+within one pixel of the movie's position, until frame `b`; then the earliest castle entry from
+each state reached -/
+def stairSearch (sy : Syms) (romPath fm2Path : String) (a b : Nat) (shift : Nat := 0) : IO UInt32 := do
+  let (m0, inputs, k0) ← movieAt sy romPath fm2Path a
+  -- move the player `shift` subpixels to the right (page, x, fraction)
+  let p := posP sy m0 + shift
+  let m0 := poke m0 sy.SprObject_X_MoveForce (p % 256).toNat.toUInt8
+  let m0 := poke m0 sy.Player_X_Position ((p / 256) % 256).toNat.toUInt8
+  let m0 := poke m0 sy.Player_PageLoc ((p / 65536) % 256).toNat.toUInt8
+  -- the movie's positions
+  let mut mt := m0
+  let mut pt : Array Int := #[posP sy m0]
+  for j in [0:b - a] do
+    mt := runFrame mt inputs[k0 + 1 + j]!
+    pt := pt.push (posP sy mt)
+  let mut layer : Array Machine := #[m0]
+  let t0 ← IO.monoMsNow
+  let mut touchBest : Option Nat := none
+  for k in [0:b - a] do
+    let mut nxt : Std.HashMap (Array UInt8) Machine := {}
+    let mut touched : Std.HashMap (Array UInt8) Machine := {}
+    for m in layer do
+      for i in [(0x41 : UInt8), 0xC1, 0x42, 0xC2, 0x00, 0x80] do
+        let m' := runFrame m (smbToPad i)
+        let eng := peek m' sy.GameEngineSubroutine
+        if eng.toUInt16 == sy.Eng_PlayerCtrl && posP sy m' ≥ pt[k + 1]! - 768 then
+          nxt := nxt.insert (ramKey sy m') m'
+        else if eng == 4 || eng == 5 then touched := touched.insert (ramKey sy m') m'
+    for m in touched.valuesArray do
+      match toCastle sy m with
+      | some c =>
+        let f := a + k + 1 + c
+        if (match touchBest with | some t => decide (f < t) | none => true) then
+          touchBest := some f
+          IO.println s!"touch at {a + k + 1} (y {peek m sy.Player_Y_Position}, eng {peek m sy.GameEngineSubroutine}): castle {f}"; flush
+      | none => pure ()
+    layer := nxt.valuesArray
+    if (k + 1) % 10 == 0 then
+      let t1 ← IO.monoMsNow
+      IO.println s!"frame {a + k + 1}: {layer.size} states ({t1 - t0} ms)"; flush
+  -- the states at frame b
+  let mut seen : Std.HashSet (Int × UInt8 × UInt8 × UInt8 × UInt8) := {}
+  let mut best : Option Nat := none
+  for m in layer do
+    let key := (posP sy m / 256, peek m sy.Player_Y_Position, peek m sy.Player_Y_Speed,
+      peek m sy.Player_Y_MoveForce, peek m sy.Player_State)
+    if !seen.contains key then
+      seen := seen.insert key
+      let c := (earliestCastle sy m 10).map (b + ·)
+      IO.println s!"at {b}: x {peek m sy.Player_X_Position} pg {peek m sy.Player_PageLoc} y {peek m sy.Player_Y_Position} vy {peek m sy.Player_Y_Speed} st {peek m sy.Player_State}: earliest castle {c}"; flush
+      match c with
+      | some f => best := some (match best with | some x => min x f | none => f)
+      | none => pure ()
+  IO.println s!"{layer.size} states at frame {b}; earliest castle over them: {best}; over the touches on the way: {touchBest}"
+  return 0
+
+/-- a movie up to frame `a`, then the inputs HEX; from there, the earliest castle entry over 8 inputs
+for `d` frames (states merged by `ramKey`) -/
+def tasThenEnd (sy : Syms) (romPath fm2Path : String) (a : Nat) (hex : String) (d : Nat) : IO UInt32 := do
+  let (m0, _, _) ← movieAt sy romPath fm2Path a
+  let w := (hexDecode hex).toList
+  let m := w.foldl (fun m i => runFrame m (smbToPad i)) m0
+  let p := PState.read sy m
+  IO.println s!"after frame {a + w.length}: x {peek m sy.Player_X_Position} pg {peek m sy.Player_PageLoc} y {peek m sy.Player_Y_Position} vy {peek m sy.Player_Y_Speed} v {p.speedInt} st {peek m sy.Player_State}"
+  let c := earliestCastle sy m d
+  IO.println s!"earliest castle entry: {c.map (a + w.length + ·)}"
+  return 0
+
+/-- a movie's state at frame `a`, with y, the x position (shifted by `dx` subpixels) and the facing
+direction overwritten (falling at the top fall speed, fraction 0); the earliest
+castle entry over 8 inputs for `d` frames -/
+def endPoke (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
+  let (m0, _, _) ← movieAt sy romPath fm2Path a
+  let p := posP sy m0 + dx
+  let m := poke m0 sy.SprObject_X_MoveForce (p % 256).toNat.toUInt8
+  let m := poke m sy.Player_X_Position ((p / 256) % 256).toNat.toUInt8
+  let m := poke m sy.Player_PageLoc ((p / 65536) % 256).toNat.toUInt8
+  let m := poke m sy.Player_Y_Position y.toUInt8
+  let m := poke m sy.Player_Y_Speed sy.MaxFallSpeed.toUInt8
+  let m := poke m sy.Player_Y_MoveForce 0
+  let m := poke m sy.PlayerFacingDir fd.toUInt8
+  let c := earliestCastle sy m d
+  IO.println s!"y {y} dx {dx} fd {fd}: earliest castle {c.map (a + ·)}"
+  return 0
+
+/-- a movie's state at frame `a`: the potential bound on its position `n` frames later, against the
+movie's own position then -/
+def potBound (sy : Syms) (romPath fm2Path : String) (a n : Nat) : IO UInt32 := do
+  let (m0, inputs, k0) ← movieAt sy romPath fm2Path a
+  let p := PState.read sy m0
+  let hs : Potential.HS := ⟨p.speed, p.fricMF, p.faceDir, p.movDir,
+    if p.runSpd == 0 then 0 else sy.RunSpeedMin.toUInt8⟩
+  let b := posP sy m0 + Potential.dbound sy m0 (Opening.pOf sy m0 hs) n
+  let mut mt := m0
+  for j in [0:n] do mt := runFrame mt inputs[k0 + 1 + j]!
+  IO.println s!"frame {a}: phi {Potential.phi sy m0 hs}; bound at {a + n}: P {b} (x {(b / 256) % 256} + {b % 256}/256); movie: P {posP sy mt} (x {peek mt sy.Player_X_Position}); bound - movie = {b - posP sy mt}"
+  return 0
+
+/-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
+def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
+  let (m0, _, _) ← movieAt sy romPath fm2Path a
+  let p := posP sy m0 + dx
+  let m := poke m0 sy.SprObject_X_MoveForce (p % 256).toNat.toUInt8
+  let m := poke m sy.Player_X_Position ((p / 256) % 256).toNat.toUInt8
+  let m := poke m sy.Player_PageLoc ((p / 65536) % 256).toNat.toUInt8
+  let m := poke m sy.Player_Y_Position y.toUInt8
+  let m := poke m sy.Player_Y_Speed sy.MaxFallSpeed.toUInt8
+  let m := poke m sy.Player_Y_MoveForce 0
+  let m1 := poke m sy.PlayerFacingDir fd.toUInt8
+  let ins : List UInt8 := [0x41, 0xC1, 0x01, 0x81, 0x03, 0x83, 0x00, 0x80]
+  let mut layer : Array (Machine × List UInt8) := #[(m1, [])]
+  let mut best : Option (Nat × List UInt8) := none
+  for k in [0:d] do
+    let mut nxt : Std.HashMap (Array UInt8) (Machine × List UInt8) := {}
+    for (m, path) in layer do
+      for i in ins do
+        let m' := runFrame m (smbToPad i)
+        let eng := peek m' sy.GameEngineSubroutine
+        if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m') (m', path ++ [i])
+        else if eng == 4 || eng == 5 then
+          match toCastle sy m' with
+          | some c =>
+            let f := k + 1 + c
+            if (match best with | some (b, _) => decide (f < b) | none => true) then best := some (f, path ++ [i])
+          | none => pure ()
+    layer := nxt.valuesArray
+  match best with
+  | none => IO.println "no castle entry"
+  | some (f, path) =>
+    IO.println s!"castle after {f} frames, inputs {path.map hex2}"
+    let mut mm := m1
+    for i in path ++ List.replicate 140 (0 : UInt8) do
+      mm := runFrame mm (smbToPad i)
+      IO.println s!"  in {hex2 i} x {peek mm sy.Player_X_Position} pg {peek mm sy.Player_PageLoc} y {peek mm sy.Player_Y_Position} st {peek mm sy.Player_State} eng {peek mm sy.GameEngineSubroutine} castle {peek mm sy.StarFlagTaskControl}"
+      if peek mm sy.StarFlagTaskControl != 0 then break
+  return 0
+
 /-! ## main -/
 
 def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMMAND
@@ -797,6 +1236,17 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   reach-opt N T                      experiment: the largest distance, keeping the best per state
   open-check N T                     the opening search: no N-frame input moves P past T, as a program
   jump-check                         every A hold length gives a jump between a tap and a full hold
+  tas-trace FM2                      a movie's distance in 1-1 against the bound, until the player control ends
+  tas-seg FM2 A B                    a movie's frames A..B (from its first controllable frame), distance from A
+  tas-insert FM2 AT K                a movie with K empty frames inserted at AT: when the level changes
+  seg-search FM2 A D                 experiment: from a movie's frame A, can D frames move P further? (emulator)
+  end-search FM2 A D                 experiment: from a movie's frame A, the earliest castle entry (emulator)
+  tas-peek FM2 A B NAME...           a movie's frames A..B: RAM bytes by symbol name, NAME+N, or $hex
+  tas-then FM2 A HEX                 a movie up to frame A, then the inputs HEX; the state per frame until the castle
+  stair-search FM2 A B               experiment: jump patterns at top speed from A to B, then the earliest castle
+  tas-then-end FM2 A HEX D           as tas-then, then the earliest castle over 8 inputs for D frames
+  end-poke FM2 A Y DX FD D           a movie's state at A with y, x+DX and facing overwritten: the earliest castle
+  pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   trace HEX                          play inputs (hex bytes) from the 1-1 start, print the state per frame
   phi-explore pad|lr DEPTH           experiment: abstract transitions and the smallest potential gain
   check-witness [pad|lr]             play a theorem's witness on the full emulator
@@ -858,6 +1308,22 @@ def main (args : List String) : IO UInt32 := do
   | ["fast-check"] => fastCheck sy rom
   | ["reach-check"] => reachCheck sy rom
   | ["trace", hex] => traceInputs sy rom hex
+  | ["tas-trace", fm2] => tasTrace sy rom fm2 fceuxSkip
+  | ["tas-seg", fm2, a, b] => tasSeg sy rom fm2 a.toNat! b.toNat!
+  | ["seg-search", fm2, a, d] => segSearch sy rom fm2 a.toNat! d.toNat!
+  | ["seg-search", fm2, a, d, g] => segSearch sy rom fm2 a.toNat! d.toNat! (some g.toInt!)
+  | ["end-search", fm2, a, d] => endSearch sy rom fm2 a.toNat! d.toNat!
+  | ["stair-search", fm2, a, b] => stairSearch sy rom fm2 a.toNat! b.toNat!
+  | ["stair-search", fm2, a, b, sh] => stairSearch sy rom fm2 a.toNat! b.toNat! sh.toNat!
+  | ["ram-diff", fm2, a] => ramDiff sy rom fm2 a.toNat!
+  | "tas-peek" :: fm2 :: a :: b :: names => tasPeek sy rom fm2 a.toNat! b.toNat! names
+  | ["tas-then", fm2, a, hex] => tasThen sy rom fm2 a.toNat! hex
+  | ["pot-bound", fm2, a, n] => potBound sy rom fm2 a.toNat! n.toNat!
+  | ["tas-then-end", fm2, a, hex, d] => tasThenEnd sy rom fm2 a.toNat! hex d.toNat!
+  | ["end-poke", fm2, a, y, dx, fd, d] => endPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! fd.toNat! d.toNat!
+  | ["end-poke-trace", fm2, a, y, dx, fd, d] => endPokeTrace sy rom fm2 a.toNat! y.toNat! dx.toInt! fd.toNat! d.toNat!
+  | ["tas-insert", fm2, a, k] => tasInsert sy rom fm2 a.toNat! k.toNat!
+  | ["tas-delete", fm2, a, k] => tasInsert sy rom fm2 a.toNat! 0 k.toNat!
   | ["open-check", n, t] => openCheck sy rom n.toNat! t.toInt!
   | ["jump-check"] => jumpCheck sy rom
   | ["reach-opt", n, t] => reachOpt sy rom n.toNat! t.toInt!

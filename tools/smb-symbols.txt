@@ -52,6 +52,9 @@ SwimmingFlag
 PlayerChangeSizeFlag
 JumpspringAnimCtrl
 TimerControl
+Up_Down_Buttons
+JoypadBitMask
+StarFlagTaskControl
 # player physics segments and their variables and tables
 X_Physics
 ImposeFriction
@@ -67,7 +70,8 @@ MaxLeftXSpdData
 FrictionData
 GetPlayerAnimSpeed
 # operands read from the code: the running timer reset value, the running-speed threshold,
-# the speed from which X_Physics uses the running adder in the air
+# the speed from which X_Physics uses the running adder in the air, the top fall speed
 RunTimerReset=byte:SetRTmr+1
 RunSpeedMin=byte:GetPlayerAnimSpeed+6
 AirFastSpeed=byte:X_Physics+12
+MaxFallSpeed=byte:MovePlayerVertically+18

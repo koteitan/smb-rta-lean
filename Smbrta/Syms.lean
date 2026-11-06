@@ -59,6 +59,9 @@ structure Syms where
   PlayerChangeSizeFlag : UInt16
   JumpspringAnimCtrl : UInt16
   TimerControl : UInt16
+  Up_Down_Buttons : UInt16
+  JoypadBitMask : UInt16
+  StarFlagTaskControl : UInt16
   X_Physics : UInt16
   ImposeFriction : UInt16
   MoveObjectHorizontally : UInt16
@@ -75,6 +78,7 @@ structure Syms where
   RunTimerReset : UInt16
   RunSpeedMin : UInt16
   AirFastSpeed : UInt16
+  MaxFallSpeed : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -127,6 +131,9 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("PlayerChangeSizeFlag", fun s => s.PlayerChangeSizeFlag),
   ("JumpspringAnimCtrl", fun s => s.JumpspringAnimCtrl),
   ("TimerControl", fun s => s.TimerControl),
+  ("Up_Down_Buttons", fun s => s.Up_Down_Buttons),
+  ("JoypadBitMask", fun s => s.JoypadBitMask),
+  ("StarFlagTaskControl", fun s => s.StarFlagTaskControl),
   ("X_Physics", fun s => s.X_Physics),
   ("ImposeFriction", fun s => s.ImposeFriction),
   ("MoveObjectHorizontally", fun s => s.MoveObjectHorizontally),
@@ -142,7 +149,8 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("GetPlayerAnimSpeed", fun s => s.GetPlayerAnimSpeed),
   ("RunTimerReset", fun s => s.RunTimerReset),
   ("RunSpeedMin", fun s => s.RunSpeedMin),
-  ("AirFastSpeed", fun s => s.AirFastSpeed)]
+  ("AirFastSpeed", fun s => s.AirFastSpeed),
+  ("MaxFallSpeed", fun s => s.MaxFallSpeed)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -203,6 +211,9 @@ def Syms.parse (text : String) : Except String Syms := do
     PlayerChangeSizeFlag := ← get "PlayerChangeSizeFlag"
     JumpspringAnimCtrl := ← get "JumpspringAnimCtrl"
     TimerControl := ← get "TimerControl"
+    Up_Down_Buttons := ← get "Up_Down_Buttons"
+    JoypadBitMask := ← get "JoypadBitMask"
+    StarFlagTaskControl := ← get "StarFlagTaskControl"
     X_Physics := ← get "X_Physics"
     ImposeFriction := ← get "ImposeFriction"
     MoveObjectHorizontally := ← get "MoveObjectHorizontally"
@@ -219,6 +230,7 @@ def Syms.parse (text : String) : Except String Syms := do
     RunTimerReset := ← get "RunTimerReset"
     RunSpeedMin := ← get "RunSpeedMin"
     AirFastSpeed := ← get "AirFastSpeed"
+    MaxFallSpeed := ← get "MaxFallSpeed"
   }
 
 def Syms.load (path : String) : IO Syms := do
