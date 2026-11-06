@@ -54,7 +54,7 @@ is ignored (read from the code and tried on the emulator). Part 4 (+282) stays a
 What entering takes (from the code):
 
 - The side pipe is entered on the floor at the pipe's mouth, on the frame Mario lands there at the
-  earliest. Hitting the upper part of the pipe in the air stops him.
+  earliest, facing right ([Entering the side pipe](../Theorems/SidePipe.md)). In the air the pipe stops him.
 - To get to that floor he passes the right end of the brick block from above. Let `t` be the first frame he
   is past the end. How long the fall takes depends on how he left the block
   ([The height of a jump](../Theorems/Jump.md)):
@@ -89,8 +89,8 @@ The bound at frame 557, over all inputs:
    on the floor just before a jump (the jump still counts as fast, because the stored absolute speed is
    not cleared) ends at least 3 px short.
 
-Status: step 3's bound, step 4 and the jump table are Lean theorems on the model; the entry conditions are read from the code;
-combining them is arithmetic, not done in Lean. The room's left wall is not in the model of step 4. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
+Status: step 3's bound, step 4, the jump table and the entry rule are Lean theorems; the arithmetic of the fall is a Lean lemma
+too, but joining all of these into one statement is not done in Lean. The room's left wall is not in the model of step 4. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
 the corner are at the same heights, so the bound is the same.
 
 ### 5a. Accelerating above ground (852 → 892): the pole is not reached early (emulator check)
@@ -216,6 +216,7 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta pipe-check                      # the routine on the pipe's top against the rule
 .lake/build/bin/smbrta pipe-change-check               # the change into the bonus room
 .lake/build/bin/smbrta takeoff-check                   # the fast takeoff search in the bonus room
+.lake/build/bin/smbrta side-check                      # the routine at the side pipe's mouth against the rule
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX

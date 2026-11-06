@@ -12,6 +12,7 @@ import Theorems.Jump
 import Theorems.PipeEntry
 import Theorems.PipeTransition
 import Theorems.FastTakeoff
+import Theorems.SidePipe
 
 open Smbrta
 
@@ -439,7 +440,13 @@ theorem fast_takeoff_goal \{p0 : Int} (hp0 : takeoffRoom.P0 ≤ p0) (hp1 : p0 �
     (go sy ctx (takeoffRoom.s0, p0) (a ++ g ++ j :: (k ++ b))).2 < takeoffRoom.goal :=
   fast_takeoff_short fast_takeoff_facts fast_takeoff_check fast_takeoff_late hp0 hp1 T hb hN hfast hlow
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean"
+  -- the side pipe: the collision routine against the rule
+  IO.FS.writeFile s!"{dir}/SidePipe.lean" (head ["SidePipe"] ++ s!"
+open Smbrta.SidePipe in
+/-- `PlayerBGCollision` follows the rule on every state near the side pipe's mouth -/
+theorem side_rules : sideCheck sy ctx = true := by native_decide
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean, SidePipe.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -1566,6 +1573,19 @@ def takeoffCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   IO.println s!"later takeoffs short of the goal by the top speed: {FastTakeoff.lateOk sy R}"
   return if r && FastTakeoff.lateOk sy R then 0 else 1
 
+/-- the collision routine at the side pipe's mouth against the rule, as a program -/
+def sideCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let mp := SidePipe.withPipe sy m0
+  let cs := SidePipe.cases sy
+  IO.println s!"{cs.length} cases"
+  let bad := cs.filter fun c => !SidePipe.ruleOk sy mp c
+  IO.println s!"{bad.length} differ"
+  for c in bad.take 30 do
+    let r := SidePipe.collide sy mp c
+    IO.println s!"x {c.x} y {c.y} v {sbyte c.v} md {c.md} vy {sbyte c.vy} st {c.st} fd {c.fd} -> eng {peek r sy.GameEngineSubroutine} y {peek r sy.Player_Y_Position} st {peek r sy.Player_State} rule {SidePipe.rule sy c}"
+  return if bad.isEmpty then 0 else 1
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1644,6 +1664,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   pipe-check                         the collision routine on the pipe's top against the rule, and the bound at 367 and 368
   pipe-change-check                  the change from the vertical pipe to the bonus room, as a program
   takeoff-check                      the fast takeoff search in the bonus room, as a program
+  side-check                         the collision routine at the side pipe's mouth against the rule, as a program
   jump-table                         what every jump from the ground and from a block does
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
@@ -1723,6 +1744,7 @@ def main (args : List String) : IO UInt32 := do
   | ["pipe-check"] => pipeCheckProg sy rom
   | ["pipe-change-check"] => pipeChangeProg sy rom
   | ["takeoff-check"] => takeoffCheck sy rom
+  | ["side-check"] => sideCheckProg sy rom
   | ["jump-table"] => jumpTable sy rom
   | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
     flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!

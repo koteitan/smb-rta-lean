@@ -107,3 +107,8 @@ RoomBlockLeftByte=byte:L_UndergroundArea3+6
 RoomBlockRightByte=byte:L_UndergroundArea3+14
 RoomStartX=byte:PlayerStarting_X_Pos+1
 L_GroundArea6
+# the side pipe: its tiles and routine number in the collision code, its column in the room's level data
+SidePipeTile=byte:ChkPBtm+16
+SidePipeTopTile=byte:SideCheckLoop+19
+EngSidePipe=byte:ChkGERtn+11
+RoomPipeByte=byte:L_UndergroundArea3+16

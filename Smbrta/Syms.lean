@@ -107,6 +107,10 @@ structure Syms where
   RoomBlockRightByte : UInt16
   RoomStartX : UInt16
   L_GroundArea6 : UInt16
+  SidePipeTile : UInt16
+  SidePipeTopTile : UInt16
+  EngSidePipe : UInt16
+  RoomPipeByte : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -206,7 +210,11 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("RoomBlockLeftByte", fun s => s.RoomBlockLeftByte),
   ("RoomBlockRightByte", fun s => s.RoomBlockRightByte),
   ("RoomStartX", fun s => s.RoomStartX),
-  ("L_GroundArea6", fun s => s.L_GroundArea6)]
+  ("L_GroundArea6", fun s => s.L_GroundArea6),
+  ("SidePipeTile", fun s => s.SidePipeTile),
+  ("SidePipeTopTile", fun s => s.SidePipeTopTile),
+  ("EngSidePipe", fun s => s.EngSidePipe),
+  ("RoomPipeByte", fun s => s.RoomPipeByte)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -315,6 +323,10 @@ def Syms.parse (text : String) : Except String Syms := do
     RoomBlockRightByte := ← get "RoomBlockRightByte"
     RoomStartX := ← get "RoomStartX"
     L_GroundArea6 := ← get "L_GroundArea6"
+    SidePipeTile := ← get "SidePipeTile"
+    SidePipeTopTile := ← get "SidePipeTopTile"
+    EngSidePipe := ← get "EngSidePipe"
+    RoomPipeByte := ← get "RoomPipeByte"
   }
 
 def Syms.load (path : String) : IO Syms := do
