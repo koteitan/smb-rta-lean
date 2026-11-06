@@ -22,6 +22,7 @@ and how it follows from a computation), `Name.md`, `Name-ja.md`.
 
 * [Setup](docs/setup.md) — write `smbrta.json`, put the ROM in place, run `python3 prove.py` (the ROM is not included).
 * [Emulator](docs/emulator.md) — the NES in Lean and how it was checked.
+* [The 1-1 route](docs/route-1-1.md) — work in progress toward a lower bound on the frame 1-2 starts (per segment: theorem, emulator check, open).
 * [Method](docs/method.md) — models that run the game code, reachability certificates,
   relaxed models, pruned exact search.
 
