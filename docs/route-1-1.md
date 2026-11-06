@@ -91,36 +91,74 @@ the corner are at the same heights, so the bound is the same.
 - Reaching the range where the pole can be grabbed at frame 1085 needs 528/256 px. So not by 1085.
 - Assumption: that the dropped states cannot catch up rests on the open-area potential bound.
 
-### 5b. Grabbing the pole and entering the castle: not before 1218 (emulator check)
+### 5b. Grabbing the pole and entering the castle: not before 1218
 
 How the pole works (from the code):
 
 - The pole is touched in a 4-pixel range where Mario's right side is 3..6 px into the pole's column,
-  above the height of the base block. Running
-  in at ground level, Mario is stopped by the base block before that range.
+  above the height of the base block. Running in at ground level, Mario is stopped by the base block
+  before that range. Call `x₀` the left end of the range.
 - Touching it while rising, close to the base block's height, skips the slide: the end routine starts at
   once, and the castle entry is **the touch frame + 126**. Any other touch waits for the flag to come
-  down, about 39 frames later.
+  down, about 39 frames later. By 5a no touch comes before 1086, so that way enters the castle at 1251
+  or later.
 
-Necessary conditions for a castle entry by 1217 (by formulas):
+So a castle entry by 1217 needs this direct grab by frame `g ≤ 1091`. Why it cannot happen (from the code,
+for any speed, any fall speed and any input):
 
-1. By frame 1091, enter the range while rising and still close to the base block's height.
-2. That happens only 2 or 3 frames after a jump from the ground. A jump at 1.5625 px/frame or more is
-   impossible, because on the ground next to the base block the speed is set to 0. So Mario has to come
-   down onto the ground next to the block from above and then hop.
-3. That needs a landing by 1087. At the top fall speed Mario falls exactly 4 px per frame (the fraction
-   is cleared at the cap), so at frame 1084 he must be within 12 px of the ground.
+1. **Only rising counts.** A falling Mario at that height either lands on top of the base block, or is
+   stopped before the side check runs. Rising there comes only from a jump off the ground at frame `T`, so
+   `g = T + 2` (`g = T + 1` for a jump at 1.5625 px/frame or more). With `L` the frame he lands on the ground,
+   `T ≥ L + 1`, so `L ≤ 1088`.
+2. **The hop gains nothing.** Beside the base block, while still below its top, moving right or stopped sets
+   the speed to 0 and pushes him 1 px left; moving left does nothing. From further left he stops before
+   `x₀`. So `x(g) ≤ x(L)`, and he has to land with `x(L) ≥ x₀`, already past the block's left edge. He can only
+   get there from above.
+3. **Getting past the edge.** Let `e` be the last frame he moves over the block (`x ≥ x₀ − 2`) before `L`, and
+   `k = L − e`. The frame before, he is left of that, so before the hit `x(e) < x₀ + 0.5`.
+   - Frame `e`: 1 px back, speed 0.
+   - Frames between `e` and `L`: at most 1 px forward each. This takes Left, which turns the push to the
+     right (the TAS's detail below).
+   - Frame `L`: 1 px back, after at most 1/8 px forward (Right, as the TAS does at 1089). The push to the
+     right blocks the Left button on the next frame, so he is not moving left. Only with `k ≤ 1` can he avoid
+     this push.
 
-Checked: from the state at frame 1084 (not yet touching the block), with the height (13 values), the
-horizontal position (from 1 px behind the TAS to 160/256 px ahead, 10 values) and the facing direction
-(3 values) changed, 390 cases, every sequence of 8 inputs over 8 frames. None enters the castle by 1217.
+   ```
+   x(L) ≤ x(e) + k − 3 + 1/8   (k ≥ 2)
+   x(L) ≤ x(e) − 1             (k ≤ 1)
+   ```
+4. **Too early.** `L ≤ 1088` gives `e ≤ 1088 − k`. By 5a, `x(1085) ≤ x₀ − 1.44`, and each frame before is
+   2.5 px less.
+
+   | k | e at most | x(L) at most |
+   |---|---|---|
+   | 0, 1 | any | `x₀ − 0.5` |
+   | 2 | any | `x₀ − 0.375` |
+   | 3 | 1085 | `x₀ − 1.31` |
+   | 4 | 1084 | `x₀ − 2.81` |
+   | more | | 1.5 px less per frame |
+
+   All are short of `x₀`. The TAS has `e` = 1086, `k` = 3, `L` = 1089, `g` = 1092: exactly one frame later.
+5. **The fast jump.** It needs the stored absolute speed still high, so no Left or Right from `e` to `L`, and
+   `T = L + 1`. Then every frame pushes him back, and `x(g) < x₀ − 0.4`.
+
+Checked on the emulator:
+
+- From frame 1084 (not yet touching the block), the height (13 values), the horizontal position (from 1 px
+  behind the TAS to 160/256 px ahead, 10 values) and the facing direction (3 values) changed, 390 cases, 8
+  inputs over 8 frames: none enters the castle by 1217.
+- Slower fall, slower speed, and Left alone: 135 cases at 160/256 px ahead (one family at 0), the height (15
+  values), speed 2.5 or 1.5 px/frame, fall speed 4, 2 or 0 px/frame, every left/right, A and B input up to frame
+  1091: no direct grab.
+- The formula is close to exact. With Mario 4 px lower than the TAS at 1084 and every input, moving him forward
+  by 544/256 px gives a direct grab at 1091; by 540/256 px, none. The formula says it needs at least 496/256 px (the
+  Left frame and the hop cost the other 48/256 px), and 5a allows at most 160/256 px.
 
 A detail of the TAS: pressing Left+Right next to the base block counts as Left (the right side is
 blocked), so the moving direction becomes left. The push from the block then goes right, and Mario stays
 in the range.
 
-Not covered: arrivals at 1084 falling slower than the top fall speed, horizontal speeds below the top
-speed, inputs with Left alone.
+Status: all of this is from the code and the emulator, not Lean. It assumes no enemy is near the pole.
 
 ### From the castle to 1-2: a formula (from the code)
 
@@ -144,8 +182,8 @@ frames. A castle entry at 1218 gives 1748; at 1217 it gives 1727 (21 frames earl
   ⟸ pipe entry ≥ 368                             (segment 1)
 ```
 
-It is also assumed that arriving later at any step never helps later on. What remains open is the
-part of 5b listed as not covered.
+It is also assumed that arriving later at any step never helps later on. Each step now has a reason; what
+remains is to move the parts that are not Lean theorems into Lean.
 
 ## Reproduce
 
@@ -157,6 +195,7 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta tas-insert FM2 AT K              # K idle frames inserted at AT
 .lake/build/bin/smbrta seg-search FM2 852 40            # the 5a search (over 10 minutes)
 .lake/build/bin/smbrta end-poke FM2 1084 Y DX FD 8      # one 5b case (Y height, DX shift, FD facing)
+.lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX
     # while y ≥ CY); WLO..WHI: the heights where he lands on the block when falling; TX: the x past

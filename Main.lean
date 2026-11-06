@@ -1362,6 +1362,42 @@ def roomBound (sy : Syms) (romPath fm2Path : String) (a f n cx cy wlo whi tx : N
   IO.println s!"movie at {n}: P {posP sy mt}"
   return 0
 
+/-- a movie's state at frame `a` with the height, position, speed, fall speed and facing overwritten:
+every left/right, A and B input for `d` frames; the first touch of the pole at a height `≥ gy`
+(the direct grab) and the first touch at any height -/
+def flagPoke (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (v vy fd d gy : Nat) : IO UInt32 := do
+  let (m0, _, _) ← movieAt sy romPath fm2Path a
+  let p := posP sy m0 + dx
+  let m := poke m0 sy.SprObject_X_MoveForce (p % 256).toNat.toUInt8
+  let m := poke m sy.Player_X_Position ((p / 256) % 256).toNat.toUInt8
+  let m := poke m sy.Player_PageLoc ((p / 65536) % 256).toNat.toUInt8
+  let m := poke m sy.Player_Y_Position y.toUInt8
+  let m := poke m sy.Player_Y_Speed vy.toUInt8
+  let m := poke m sy.Player_Y_MoveForce 0
+  let m := poke m sy.Player_X_Speed v.toUInt8
+  let m := poke m sy.Player_XSpeedAbsolute v.toUInt8
+  let m := poke m sy.PlayerFacingDir fd.toUInt8
+  let ins : List UInt8 := [0, 1, 2, 3].flatMap fun lr => [0, 0x40, 0x80, 0xC0].map fun ab => lr ||| ab
+  let mut layer : Array Machine := #[m]
+  let mut direct : Option Nat := none
+  let mut any : Option Nat := none
+  let mut runs := 0
+  for k in [0:d] do
+    let mut nxt : Std.HashMap (Array UInt8) Machine := {}
+    for m1 in layer do
+      for i in ins do
+        let m2 := runFrame m1 (smbToPad i)
+        runs := runs + 1
+        let eng := peek m2 sy.GameEngineSubroutine
+        if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m2) m2
+        else if eng == 4 || eng == 5 then
+          if any.isNone then any := some (a + k + 1)
+          if direct.isNone && eng == 5 then direct := some (a + k + 1)
+          if direct.isNone && (peek m2 sy.Player_Y_Position).toNat ≥ gy then direct := some (a + k + 1)
+    layer := nxt.valuesArray
+  IO.println s!"y {y} dx {dx} v {v} vy {vy} fd {fd}: direct {direct}, any touch {any}; {runs} frames"
+  return 0
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1435,6 +1471,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   stair-search FM2 A B               experiment: jump patterns at top speed from A to B, then the earliest castle
   tas-then-end FM2 A HEX D           as tas-then, then the earliest castle over 8 inputs for D frames
   end-poke FM2 A Y DX FD D           a movie's state at A with y, x+DX and facing overwritten: the earliest castle
+  flag-poke FM2 A Y DX V VY FD D GY  a movie's state at A overwritten: the first touches of the pole over all inputs
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
   trace HEX                          play inputs (hex bytes) from the 1-1 start, print the state per frame
@@ -1509,6 +1546,8 @@ def main (args : List String) : IO UInt32 := do
   | "tas-peek" :: fm2 :: a :: b :: names => tasPeek sy rom fm2 a.toNat! b.toNat! names
   | ["tas-then", fm2, a, hex] => tasThen sy rom fm2 a.toNat! hex
   | ["pot-bound", fm2, a, n] => potBound sy rom fm2 a.toNat! n.toNat!
+  | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
+    flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!
   | ["room-bound", fm2, a, f, n, cx, cy, wlo, whi, tx] =>
     roomBound sy rom fm2 a.toNat! f.toNat! n.toNat! cx.toNat! cy.toNat! wlo.toNat! whi.toNat! tx.toNat!
   | ["tas-then-end", fm2, a, hex, d] => tasThenEnd sy rom fm2 a.toNat! hex d.toNat!
