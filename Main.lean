@@ -8,6 +8,7 @@ import Theorems.Potential
 import Theorems.Opening
 import Theorems.AirCap
 import Theorems.PoleGrab
+import Theorems.Jump
 
 open Smbrta
 
@@ -311,7 +312,26 @@ theorem pole_rules :
       16 ≤ (TopSpeed.top sy : Int) ∧ amax sy ctx ≤ 512 := by
   refine ⟨by native_decide, by native_decide, by native_decide, by native_decide⟩
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean"
+  -- jumps: the pole's height, and blocks of a few rows above the ground
+  let summary (h : Nat) := Jump.summary sy m0 h
+  let lit (l : List (Nat × Nat)) : String := "[" ++ ", ".intercalate (l.map fun p => s!"({p.1}, {p.2})") ++ "]"
+  let blocks := "\n".intercalate ([1, 2, 3, 4].map fun h =>
+    let r := summary h
+    s!"
+open Smbrta.Jump in
+/-- from the ground, the frames on a block {h} rows up; from that block, the frames to the ground -/
+theorem jump_block{h} :
+    arcCheck sy ctx (groundY sy) {h} (windowOk sy {h} {lit r.slow} {lit r.fast}) = true ∧
+    arcCheck sy ctx (standY sy {h}) {h} (dropOk sy {r.aboveS} {r.aboveF} {r.airS}) = true ∧
+    walkOk sy ctx {h} {r.walk} = true := by
+  refine ⟨by native_decide, by native_decide, by native_decide⟩
+")
+  IO.FS.writeFile s!"{dir}/Jump.lean" (head ["Jump"] ++ s!"
+open Smbrta.Jump in
+/-- rising at the height of a direct grab: only on the third frame of a slow jump, the second of a fast one -/
+theorem jump_grab : arcCheck sy ctx (groundY sy) 1 (riseOk sy 1 2 1) = true := by native_decide
+" ++ blocks)
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -1277,6 +1297,21 @@ def roomBound (sy : Syms) (romPath fm2Path : String) (a f n cx cy wlo whi tx : N
           best := b
           bestAt := s!"last low frame {f + s}, landing {f + l}"
   IO.println s!"slow takeoff: bound at {n}: P {best} ({bestAt}); goal {target}; margin {target - best}"
+  -- the last takeoff from the block is slow: at most the capped speed in the air, for a long time
+  let hRoom := (Jump.groundY sy - wlo) / 16
+  let rs := Jump.summary sy ctx hRoom
+  let boundAt (t : Nat) : Int := Id.run do
+    let mut b : Int := -1
+    for (v, arcs) in classes do
+      if (v : Int) < fast then
+        for (_, s, l) in arcs do
+          if f + l ≤ t then
+            b := max b (cp - 1 + 16 * (fast - 1) * ((l : Int) - s) + cd (t - (f + l)))
+    return b
+  let en := n + 12
+  let tk := en - rs.airS
+  let slowEnd := boundAt (tk - 1) + 16 * (fast - 1) * (rs.airS + 1 : Nat)
+  IO.println s!"a slow takeoff from the block ({rs.airS} air frames or more): at {en} P ≤ {slowEnd}; to the ground after the last frame above the block: slow {rs.aboveS}, fast {rs.aboveF}; stepping off {rs.walk}"
   -- a block hit on the last frame below the top: no speed left
   let sHit := f + sMin
   let g := cp + 16 * top' + dB (2560 : Int) (n - sHit)
@@ -1352,6 +1387,8 @@ def roomBound (sy : Syms) (romPath fm2Path : String) (a f n cx cy wlo whi tx : N
   -- the movie, for comparison; and the model against its frames
   let mut mt := ma
   let mut bad : Nat := 0
+  let mut vbad : Nat := 0
+  let mut vframes : Nat := 0
   for j in [0:n - a] do
     let pad := inputs[ka + 1 + j]!
     let p := PState.read sy mt
@@ -1368,8 +1405,19 @@ def roomBound (sy : Syms) (romPath fm2Path : String) (a f n cx cy wlo whi tx : N
     if u.v != q.speed || u.f != q.fricMF || u.fd != q.faceDir || u.md != q.movDir then
       bad := bad + 1
       IO.println s!"model differs at {a + j + 1}: model {sbyte u.v} {u.f} {u.fd} {u.md}, movie {sbyte q.speed} {q.fricMF} {q.faceDir} {q.movDir}"
+    -- the vertical model, on the frames that do not land
+    let vs : Jump.VS := ⟨peek mt sy.Player_Y_Position, peek mt sy.Player_Y_MoveForce, peek mt sy.Player_Y_Speed,
+      peek mt sy.Player_YMF_Dummy, peek mt sy.VerticalForce, peek mt sy.VerticalForceDown,
+      peek mt sy.JumpOrigin_Y_Position, st, (peek mt sy.A_B_Buttons &&& 0x80) != 0⟩
+    let w := Jump.vstep sy ctx vs ((saved &&& 0x80) != 0) p.absSpd
+    if (peek mn sy.Player_State != 0 && st != 0) || jump then
+      vframes := vframes + 1
+      if w.y != peek mn sy.Player_Y_Position || w.vy != peek mn sy.Player_Y_Speed
+          || w.mf != peek mn sy.Player_Y_MoveForce || w.dummy != peek mn sy.Player_YMF_Dummy then
+        vbad := vbad + 1
+        IO.println s!"vertical model differs at {a + j + 1}: model y {w.y} vy {sbyte w.vy} mf {w.mf} dummy {w.dummy}, movie y {peek mn sy.Player_Y_Position} vy {sbyte (peek mn sy.Player_Y_Speed)} mf {peek mn sy.Player_Y_MoveForce} dummy {peek mn sy.Player_YMF_Dummy}"
     mt := mn
-  IO.println s!"model against the movie, frames {a + 1}..{n}: {bad} differ"
+  IO.println s!"model against the movie, frames {a + 1}..{n}: {bad} differ; vertical model on {vframes} frames in the air: {vbad} differ"
   IO.println s!"movie at {n}: P {posP sy mt}"
   return 0
 
@@ -1421,6 +1469,21 @@ def poleCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
     let r := PoleGrab.collide sy mp c
     IO.println s!"x {c.x} y {c.y} v {sbyte c.v} md {c.md} vy {sbyte c.vy} st {c.st} fd {c.fd} -> x {peek r sy.Player_X_Position} y {peek r sy.Player_Y_Position} v {sbyte (peek r sy.Player_X_Speed)} st {peek r sy.Player_State} eng {peek r sy.GameEngineSubroutine} bits {peek r sy.Player_CollisionBits}"
   IO.println s!"mask check: {PoleGrab.maskCheck sy m0}"
+  return 0
+
+open Jump in
+/-- the jump table: for blocks `h` rows above the ground, what every jump from the ground and from the block does -/
+def jumpTable (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  for h in [1, 2, 3, 4] do
+    let r := summary sy m0 h
+    IO.println s!"h {h}: stand {standY sy h}, corner {cornerY sy h}; from the ground, (last low frame, frame on the block): slow {r.slow} fast {r.fast}"
+    IO.println s!"     from the block, to the ground after the last frame above it: slow {r.aboveS} fast {r.aboveF}; air frames when slow: {r.airS}; stepping off: {r.walk}"
+    IO.println s!"     checks: {arcCheck sy m0 (groundY sy) h (windowOk sy h r.slow r.fast)} {arcCheck sy m0 (standY sy h) h (dropOk sy r.aboveS r.aboveF r.airS)} {walkOk sy m0 h r.walk}"
+    (← IO.getStdout).flush
+  let pole := arcAll sy m0 (groundY sy) 1
+  let rise := pole.filter fun x => !falling x.s && sy.FlagGrabY.toNat ≤ x.s.y.toNat && x.s.y.toNat < cornerY sy 1
+  IO.println s!"rising at the height of a direct grab: {(rise.map fun x => (x.fast, x.k, x.s.y)).eraseDups}; check {arcCheck sy m0 (groundY sy) 1 (riseOk sy 1 2 1)}"
   return 0
 
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
@@ -1498,6 +1561,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   end-poke FM2 A Y DX FD D           a movie's state at A with y, x+DX and facing overwritten: the earliest castle
   flag-poke FM2 A Y DX V VY FD D GY  a movie's state at A overwritten: the first touches of the pole over all inputs
   pole-check                         the collision routine near the flagpole against the rules, as a program
+  jump-table                         what every jump from the ground and from a block does
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
   trace HEX                          play inputs (hex bytes) from the 1-1 start, print the state per frame
@@ -1573,6 +1637,7 @@ def main (args : List String) : IO UInt32 := do
   | ["tas-then", fm2, a, hex] => tasThen sy rom fm2 a.toNat! hex
   | ["pot-bound", fm2, a, n] => potBound sy rom fm2 a.toNat! n.toNat!
   | ["pole-check"] => poleCheckProg sy rom
+  | ["jump-table"] => jumpTable sy rom
   | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
     flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!
   | ["room-bound", fm2, a, f, n, cx, cy, wlo, whi, tx] =>

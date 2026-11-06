@@ -97,6 +97,8 @@ structure Syms where
   ClimbLowNybble : UInt16
   ClimbHighNybble : UInt16
   FastJumpSpeed : UInt16
+  PlayerMovementSubs : UInt16
+  FlagGrabY : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -186,7 +188,9 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("LandDepth", fun s => s.LandDepth),
   ("ClimbLowNybble", fun s => s.ClimbLowNybble),
   ("ClimbHighNybble", fun s => s.ClimbHighNybble),
-  ("FastJumpSpeed", fun s => s.FastJumpSpeed)]
+  ("FastJumpSpeed", fun s => s.FastJumpSpeed),
+  ("PlayerMovementSubs", fun s => s.PlayerMovementSubs),
+  ("FlagGrabY", fun s => s.FlagGrabY)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -285,6 +289,8 @@ def Syms.parse (text : String) : Except String Syms := do
     ClimbLowNybble := ← get "ClimbLowNybble"
     ClimbHighNybble := ← get "ClimbHighNybble"
     FastJumpSpeed := ← get "FastJumpSpeed"
+    PlayerMovementSubs := ← get "PlayerMovementSubs"
+    FlagGrabY := ← get "FlagGrabY"
   }
 
 def Syms.load (path : String) : IO Syms := do

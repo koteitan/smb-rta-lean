@@ -95,3 +95,6 @@ LandDepth=byte:ContChk+13
 ClimbLowNybble=byte:HandleClimbing+3
 ClimbHighNybble=byte:HandleClimbing+7
 FastJumpSpeed=byte:PlayerYSpdData+3
+# the movement routine: the jump, the fall, gravity
+PlayerMovementSubs
+FlagGrabY=byte:FlagpoleRoutine+31

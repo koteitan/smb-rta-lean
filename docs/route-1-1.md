@@ -51,10 +51,19 @@ What entering takes (from the code):
 
 - The side pipe is entered on the floor at the pipe's mouth, on the frame Mario lands there at the
   earliest. Hitting the upper part of the pipe in the air stops him.
-- To get to that floor he passes the right end of the brick block from above and falls. He falls at
-  most 4 px per frame, so he lands at least 12 frames after the first frame he is past the end. The
-  TAS is past it at 558 and enters at 570. So entering at 569 needs Mario past the end at 557, which
-  is 592/256 px (2.31 px) ahead of the TAS.
+- To get to that floor he passes the right end of the brick block from above. Let `t` be the first frame he
+  is past the end. How long the fall takes depends on how he left the block
+  ([The height of a jump](../Theorems/Jump.md)):
+
+  | he left the block by | the floor comes |
+  |---|---|
+  | a jump at 1.5625 px/frame or more | at least 12 frames after `t` |
+  | a slower jump | after at least 32 frames in the air at 1.5 px/frame or less: at 569 he is 25 px short of the mouth |
+  | stepping off | at least 16 frames after `t` |
+
+  (A fast jump falls exactly 4 px per frame; a slower one falls about 4.2 px per frame, which is why it needs its own line.)
+  The TAS is past the end at 558 and enters at 570. So entering at 569 needs Mario past the end at 557, which is
+  592/256 px (2.31 px) ahead of the TAS.
 
 The bound at frame 557, over all inputs:
 
@@ -64,7 +73,7 @@ The bound at frame 557, over all inputs:
    and his speed drops to about 0. Call `s` the last such frame before he lands on the block. The
    TAS has `s` = 504, 15/256 px left of hitting.
 3. Takeoff below 1.5625 px/frame: [The air speed cap](../Theorems/AirCap.md) applies from `s`. Over all
-   takeoff speeds and all holds of A (measured), the earliest pairs (`s`, landing on the block) are
+   takeoff speeds and all ways of pressing A ([The height of a jump](../Theorems/Jump.md)), the earliest pairs (`s`, landing on the block) are
    (504, 511), which is the TAS, and (505, 510); the others land later. The theorem gives at most
    121.75 px from `s` to 557. So at 557 Mario is at most 527/256 px ahead of the TAS: 65/256 px
    (0.25 px) short.
@@ -76,9 +85,8 @@ The bound at frame 557, over all inputs:
    on the floor just before a jump (the jump still counts as fast, because the stored absolute speed is
    not cleared) ends at least 3 px short.
 
-Status: step 3's bound is a Lean theorem; the jump table is measured on the emulator; step 4 is a
-program on the model; the entry conditions are read from the code; combining them is arithmetic, not
-done in Lean. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
+Status: step 3's bound and the jump table are Lean theorems; step 4 is a program on the model; the entry
+conditions are read from the code; combining them is arithmetic, not done in Lean. `hstep` agrees with the TAS on every frame from 460 to 557. For a big Mario the checks at
 the corner are at the same heights, so the bound is the same.
 
 ### 5a. Accelerating above ground (852 → 892): the pole is not reached early (emulator check)
@@ -160,8 +168,9 @@ in the range.
 
 Status: the position bounds of steps 2 to 4 are Lean theorems about frames that follow the collision rules
 ([Grabbing the pole from below](../Theorems/PoleGrab.md)), and the rules are checked against the game's collision routine
-on every state near the block. Step 1 and the condition of step 5 are read from the code, and the bound at 1085 comes from 5a
-(emulator). It assumes no enemy is near the pole.
+on every state near the block. The frames of step 1 are a Lean theorem on the movement routine
+([The height of a jump](../Theorems/Jump.md)). The condition of step 5 is read from the code, and the bound at 1085 comes from
+5a (emulator). It assumes no enemy is near the pole.
 
 ### From the castle to 1-2: a formula (from the code)
 
@@ -199,6 +208,7 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta seg-search FM2 852 40            # the 5a search (over 10 minutes)
 .lake/build/bin/smbrta end-poke FM2 1084 Y DX FD 8      # one 5b case (Y height, DX shift, FD facing)
 .lake/build/bin/smbrta pole-check                      # the collision routine near the pole against the rules
+.lake/build/bin/smbrta jump-table                      # every jump from the ground and from a block
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX
