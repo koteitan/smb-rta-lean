@@ -41,22 +41,22 @@ def regs (m : Machine) : List Nat :=
     if m.vblank then 1 else 0, if m.sprite0 then 1 else 0, if m.nmiPending then 1 else 0,
     if m.padStrobe then 1 else 0, if m.halted then 1 else 0]
 
-/-- what the check compares -/
-def key (sy : Syms) (m : Machine) : Array UInt8 × List Nat × Bool :=
-  (ramEcho sy m, regs m, controllable sy m)
+/-- what the check compares; `done` is the event the check waits for -/
+def gkey (done : Machine → Bool) (sy : Syms) (m : Machine) : Array UInt8 × List Nat × Bool :=
+  (ramEcho sy m, regs m, done m)
 
 /-! ## The check: one state per frame -/
 
-/-- `chain sy ins goal n m`: for `n` frames from `m`, each input of `ins` gives the key that no input
+/-- `gchain done sy ins goal n m`: for `n` frames from `m`, each input of `ins` gives the key that no input
 gives; the state after no input is controllable only on the last frame; `goal` holds at the end.
 With `ins = []` it only follows no input. -/
-def chain (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) : Nat → Machine → Bool
+def gchain (done : Machine → Bool) (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) : Nat → Machine → Bool
   | 0, m => goal m
   | n + 1, m =>
     let m' := frame m 0
-    let k := key sy m'
-    ins.all (fun i => decide (key sy (frame m i) = k)) &&
-      controllable sy m' == (n == 0) && chain sy ins goal n m'
+    let k := gkey done sy m'
+    ins.all (fun i => decide (gkey done sy (frame m i) = k)) &&
+      done m' == (n == 0) && gchain done sy ins goal n m'
 
 /-- `k` frames of no input -/
 def zeros (k : Nat) : List UInt8 := List.replicate k 0
@@ -73,13 +73,13 @@ theorem run_zeros_cons (m : Machine) (k : Nat) : run m (zeros (k + 1)) = run (fr
 
 /-- what `chain` says: along no input, on frame `k + 1`, every input gives the key of no input, and
 control comes exactly on the last frame -/
-theorem chain_spec (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) :
-    ∀ (n : Nat) (m : Machine), chain sy ins goal n m = true → ∀ k, k < n →
-      (∀ i ∈ ins, key sy (frame (run m (zeros k)) i) = key sy (run m (zeros (k + 1)))) ∧
-        controllable sy (run m (zeros (k + 1))) = decide (k + 1 = n)
+theorem chain_spec {done : Machine → Bool} (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) :
+    ∀ (n : Nat) (m : Machine), gchain done sy ins goal n m = true → ∀ k, k < n →
+      (∀ i ∈ ins, gkey done sy (frame (run m (zeros k)) i) = gkey done sy (run m (zeros (k + 1)))) ∧
+        done (run m (zeros (k + 1))) = decide (k + 1 = n)
   | 0, _, _, k, hk => absurd hk (Nat.not_lt_zero k)
   | n + 1, m, h, k, hk => by
-    simp only [chain, Bool.and_eq_true, List.all_eq_true, decide_eq_true_eq, beq_iff_eq] at h
+    simp only [gchain, Bool.and_eq_true, List.all_eq_true, decide_eq_true_eq, beq_iff_eq] at h
     obtain ⟨⟨h1, h2⟩, h3⟩ := h
     cases k with
     | zero =>
@@ -88,7 +88,7 @@ theorem chain_spec (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) :
         rw [run_zeros_succ]
         exact h1 i hi
       · rw [run_zeros_succ]
-        show controllable sy (frame m 0) = _
+        show done (frame m 0) = _
         rw [h2]
         by_cases hn : n = 0 <;> simp [hn]
     | succ j =>
@@ -100,18 +100,18 @@ theorem chain_spec (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) :
       simp
 
 /-- the goal holds after `n` frames of no input -/
-theorem chain_goal (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) :
-    ∀ (n : Nat) (m : Machine), chain sy ins goal n m = true → goal (run m (zeros n)) = true
+theorem chain_goal {done : Machine → Bool} (sy : Syms) (ins : List UInt8) (goal : Machine → Bool) :
+    ∀ (n : Nat) (m : Machine), gchain done sy ins goal n m = true → goal (run m (zeros n)) = true
   | 0, _, h => h
   | n + 1, m, h => by
-    simp only [chain, Bool.and_eq_true] at h
+    simp only [gchain, Bool.and_eq_true] at h
     rw [run_zeros_cons]
     exact chain_goal sy ins goal n (frame m 0) h.2
 
 /-- With no input nothing else is needed: control comes exactly on frame `n`. -/
-theorem no_input_of_chain {sy : Syms} {ins : List UInt8} {goal : Machine → Bool} {n : Nat} {m : Machine}
-    (h : chain sy ins goal n m = true) :
-    ∀ k, 1 ≤ k → k ≤ n → controllable sy (run m (zeros k)) = decide (k = n) := by
+theorem no_input_of_chain {done : Machine → Bool} {sy : Syms} {ins : List UInt8} {goal : Machine → Bool} {n : Nat} {m : Machine}
+    (h : gchain done sy ins goal n m = true) :
+    ∀ k, 1 ≤ k → k ≤ n → done (run m (zeros k)) = decide (k = n) := by
   intro k h1 h2
   obtain ⟨j, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
   exact (chain_spec sy ins goal n m h j (by omega)).2
@@ -121,21 +121,21 @@ theorem no_input_of_chain {sy : Syms} {ins : List UInt8} {goal : Machine → Boo
 /-- The hypothesis: two states reached from `m` after the same number of frames, with equal keys, go
 on to equal keys under the same input. Such states differ only in `SavedJoypadBits`, in the bits of
 `JoypadBitMask` other than Start and Select, and in `pad`. The check does not prove this. -/
-def Merge (sy : Syms) (ins : List UInt8) (n : Nat) (m : Machine) : Prop :=
+def GMerge (done : Machine → Bool) (sy : Syms) (ins : List UInt8) (n : Nat) (m : Machine) : Prop :=
   ∀ a b : List UInt8, (∀ i ∈ a, i ∈ ins) → (∀ i ∈ b, i ∈ ins) → a.length = b.length → a.length < n →
-    key sy (run m a) = key sy (run m b) →
-      ∀ i ∈ ins, key sy (frame (run m a) i) = key sy (frame (run m b) i)
+    gkey done sy (run m a) = gkey done sy (run m b) →
+      ∀ i ∈ ins, gkey done sy (frame (run m a) i) = gkey done sy (frame (run m b) i)
 
 section
-variable {sy : Syms} {ins : List UInt8} {goal : Machine → Bool} {n : Nat} {m : Machine}
+variable {done : Machine → Bool} {sy : Syms} {ins : List UInt8} {goal : Machine → Bool} {n : Nat} {m : Machine}
 
 /-- every input sequence of at most `n` frames ends at the key of no input -/
-theorem key_of_chain (hc : chain sy ins goal n m = true) (h0 : (0 : UInt8) ∈ ins)
-    (hM : Merge sy ins n m) :
+theorem key_of_chain (hc : gchain done sy ins goal n m = true) (h0 : (0 : UInt8) ∈ ins)
+    (hM : GMerge done sy ins n m) :
     ∀ w : List UInt8, (∀ i ∈ w, i ∈ ins) → w.length ≤ n →
-      key sy (run m w) = key sy (run m (zeros w.length)) := by
+      gkey done sy (run m w) = gkey done sy (run m (zeros w.length)) := by
   suffices h : ∀ (L : Nat) (w : List UInt8), w.length = L → (∀ i ∈ w, i ∈ ins) → w.length ≤ n →
-      key sy (run m w) = key sy (run m (zeros w.length)) from fun w => h w.length w rfl
+      gkey done sy (run m w) = gkey done sy (run m (zeros w.length)) from fun w => h w.length w rfl
   intro L
   induction L with
   | zero =>
@@ -163,22 +163,22 @@ theorem key_of_chain (hc : chain sy ins goal n m = true) (h0 : (0 : UInt8) ∈ i
     exact h1.trans h2
 
 /-- control comes exactly on frame `n`, for every input sequence of `ins` -/
-theorem control_of_chain (hc : chain sy ins goal n m = true) (h0 : (0 : UInt8) ∈ ins)
-    (hM : Merge sy ins n m) (w : List UInt8) (hw : ∀ i ∈ w, i ∈ ins) (h1 : 1 ≤ w.length)
+theorem control_of_chain (hc : gchain done sy ins goal n m = true) (h0 : (0 : UInt8) ∈ ins)
+    (hM : GMerge done sy ins n m) (w : List UInt8) (hw : ∀ i ∈ w, i ∈ ins) (h1 : 1 ≤ w.length)
     (h2 : w.length ≤ n) :
-    controllable sy (run m w) = decide (w.length = n) := by
+    done (run m w) = decide (w.length = n) := by
   have hk := key_of_chain hc h0 hM w hw h2
-  have hc' : controllable sy (run m w) = controllable sy (run m (zeros w.length)) :=
+  have hc' : done (run m w) = done (run m (zeros w.length)) :=
     congrArg (fun x : Array UInt8 × List Nat × Bool => x.2.2) hk
   rw [hc']
   exact no_input_of_chain hc w.length h1 h2 |>.trans (by simp)
 
 /-- the same for a sequence of exactly `n` frames: not on its proper prefixes, on the whole of it -/
-theorem first_control (hc : chain sy ins goal n m = true) (h0 : (0 : UInt8) ∈ ins)
-    (hM : Merge sy ins n m) (w : List UInt8) (hw : ∀ i ∈ w, i ∈ ins) (hl : w.length = n)
+theorem first_control (hc : gchain done sy ins goal n m = true) (h0 : (0 : UInt8) ∈ ins)
+    (hM : GMerge done sy ins n m) (w : List UInt8) (hw : ∀ i ∈ w, i ∈ ins) (hl : w.length = n)
     (hn : 1 ≤ n) :
-    controllable sy (run m w) = true ∧
-      ∀ k, 1 ≤ k → k < n → controllable sy (run m (w.take k)) = false := by
+    done (run m w) = true ∧
+      ∀ k, 1 ≤ k → k < n → done (run m (w.take k)) = false := by
   refine ⟨?_, ?_⟩
   · rw [control_of_chain hc h0 hM w hw (by omega) (by omega), hl]
     simp
@@ -192,6 +192,11 @@ theorem first_control (hc : chain sy ins goal n m = true) (h0 : (0 : UInt8) ∈ 
     omega
 
 end
+
+/-- the change into the room waits for control -/
+abbrev key (sy : Syms) := gkey (controllable sy) sy
+abbrev chain (sy : Syms) := gchain (controllable sy) sy
+abbrev Merge (sy : Syms) := GMerge (controllable sy) sy
 
 theorem zero_mem_inputs : (0 : UInt8) ∈ inputs :=
   List.mem_map.2 ⟨0, List.mem_range.2 (by decide), by decide⟩

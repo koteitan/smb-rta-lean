@@ -110,10 +110,11 @@ How the pole works (from the code):
 - The pole is touched in a 4-pixel range where Mario's right side is 3..6 px into the pole's column,
   above the height of the base block. Running in at ground level, Mario is stopped by the base block
   before that range. Call `x₀` the left end of the range.
-- Touching it while rising, close to the base block's height, skips the slide: the end routine starts at
-  once, and the castle entry is **the touch frame + 126**. Any other touch waits for the flag to come
-  down, about 39 frames later. By 5a no touch comes before 1086, so that way enters the castle at 1251
-  or later.
+- Touching it while rising, close to the base block's height, in the left 2 px of the range, skips the slide: the end routine
+  starts at once, and the castle entry is **the touch frame + 126**, or + 127 if the position's fraction is under 80/256 px
+  ([From touching the pole to the castle](../Theorems/CastleWalk.md)). It is never earlier. The TAS's fraction is exactly 80/256 px.
+  Any other touch waits for the flag to come down and takes at least 160 frames. By 5a no touch comes before 1086, so that way enters
+  the castle at 1246 or later.
 
 So a castle entry by 1217 needs this direct grab by frame `g ≤ 1091`. Why it cannot happen (from the code,
 for any speed, any fall speed and any input):
@@ -173,8 +174,8 @@ in the range.
 Status: the position bounds of steps 2 to 4 are Lean theorems about frames that follow the collision rules
 ([Grabbing the pole from below](../Theorems/PoleGrab.md)), and the rules are checked against the game's collision routine
 on every state near the block. The frames of step 1 are a Lean theorem on the movement routine
-([The height of a jump](../Theorems/Jump.md)). Step 5 is a Lean theorem on frames that follow the movement routine. The bound at 1085 comes from
-5a (emulator). It assumes no enemy is near the pole.
+([The height of a jump](../Theorems/Jump.md)). Step 5 is a Lean theorem on frames that follow the movement routine. The delay to the castle is a Lean theorem on real frames from
+one route. The bound at 1085 comes from 5a (emulator). It assumes no enemy is near the pole.
 
 ### From the castle to 1-2: a formula (from the code)
 
@@ -218,6 +219,7 @@ With the TAS movie (fm2), in `git/`:
 .lake/build/bin/smbrta takeoff-check                   # the fast takeoff search in the bonus room
 .lake/build/bin/smbrta side-check                      # the routine at the side pipe's mouth against the rule
 .lake/build/bin/smbrta abs-check                       # what updates the stored speed
+.lake/build/bin/smbrta castle-check                    # from the frame of the touch to the castle
 .lake/build/bin/smbrta flag-poke FM2 1084 Y DX V VY FD 7 GY   # as above with speed and fall speed, all inputs (GY: grab height)
 .lake/build/bin/smbrta room-bound FM2 459 493 557 CX CY WLO WHI TX
     # bonus room: the jump table and the bound at 557. CX, CY: the corner (he hits it at x ≥ CX

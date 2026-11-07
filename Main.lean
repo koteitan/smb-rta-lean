@@ -14,6 +14,7 @@ import Theorems.PipeTransition
 import Theorems.FastTakeoff
 import Theorems.SidePipe
 import Theorems.FastHop
+import Theorems.CastleWalk
 
 open Smbrta
 
@@ -453,7 +454,17 @@ open Smbrta.FastHop in
 /-- from a stopped Mario with a high stored speed, only a frame in the air with no Left or Right keeps it -/
 theorem fast_hop_rules : absCheck sy ctx = true := by native_decide
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean, SidePipe.lean, FastHop.lean"
+  -- from the touch to the castle
+  IO.FS.writeFile s!"{dir}/CastleWalk.lean" (head ["CastleWalk"] ++ s!"
+open Smbrta.CastleWalk in
+/-- the checks on the emulator -/
+theorem castle_checks : allCheck sy ctx 126 160 = true := by native_decide
+
+open Smbrta.CastleWalk in
+/-- the castle entry comes at least 126 frames after a direct grab -/
+theorem castle_walk : Statement sy (beside ctx) (beforeGrab sy ctx) 126 160 := statement_of_check (by decide) castle_checks
+")
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, PipeEntry.lean, PipeTransition.lean, FastTakeoff.lean, SidePipe.lean, FastHop.lean, CastleWalk.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -885,7 +896,7 @@ def traceInputs (sy : Syms) (romPath : String) (hex : String) : IO UInt32 := do
   for h : k in [0:w.length] do
     m := runFrame m (smbToPad w[k])
     let p := PState.read sy m
-    IO.println s!"{k + 1}: in {hex2 w[k]} v {p.speedInt} f {p.fricMF} st {peek m sy.Player_State} fd {p.faceDir} md {p.movDir} y {peek m sy.Player_Y_Position}"
+    IO.println s!"{k + 1}: in {hex2 w[k]} v {p.speedInt} f {p.fricMF} st {peek m sy.Player_State} fd {p.faceDir} md {p.movDir} y {peek m sy.Player_Y_Position} x {peek m sy.Player_X_Position} pg {peek m sy.Player_PageLoc} eng {peek m sy.GameEngineSubroutine}"
   return 0
 
 /-- experiment: the largest distance in `n` frames of `hstep` with jumps of the measured lengths -/
@@ -1605,6 +1616,25 @@ def absCheckProg (sy : Syms) (romPath : String) : IO UInt32 := do
     IO.println s!"abs {c.abs} f {c.f} lr {c.lr} bits {c.bits} st {c.st} md {c.md} rs {c.rs} -> abs {peek r sy.Player_XSpeedAbsolute} v {sbyte (peek r sy.Player_X_Speed)} md {peek r sy.Player_MovingDir}"
   return if bad.isEmpty then 0 else 1
 
+open CastleWalk in
+/-- from the frame of the touch to the castle, as a program -/
+def castleCheck (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 ← smb11Start sy <$> loadCart romPath
+  let b := beside m0
+  IO.println s!"route {route.length} frames: x {peek b sy.Player_X_Position} pg {peek b sy.Player_PageLoc} y {peek b sy.Player_Y_Position} st {peek b sy.Player_State}"
+  let vs := beforeGrab sy m0
+  let v0 := vs.headD default
+  for fr in fracs do
+    IO.println s!"fraction {fr}: castle after {framesToCastle sy (touchAt sy b (firstX sy) fr v0)}"
+  for y in otherYs sy do
+    let t := touchAt sy b (PoleGrab.colX sy - 9).toUInt8 bigFrac { v0 with y := y + 3 }
+    IO.println s!"touch at {peek t sy.Player_Y_Position}: castle after {framesToCastle sy t}"
+  let t0 ← IO.monoMsNow
+  let ok ← IO.lazyPure fun _ => checkOn sy b vs 126 160
+  let t1 ← IO.monoMsNow
+  IO.println s!"check: {ok} ({t1 - t0} ms)"
+  return if ok then 0 else 1
+
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
 def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (fd d : Nat) : IO UInt32 := do
   let (m0, _, _) ← movieAt sy romPath fm2Path a
@@ -1685,6 +1715,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   takeoff-check                      the fast takeoff search in the bonus room, as a program
   side-check                         the collision routine at the side pipe's mouth against the rule, as a program
   abs-check                          the movement routine from a stopped Mario with a high stored speed, as a program
+  castle-check                       from the frame of the touch to the castle, as a program
   jump-table                         what every jump from the ground and from a block does
   pot-bound FM2 A N                  a movie's state at A: the potential bound on P after N frames vs the movie
   room-bound FM2 A F N CX CY WLO WHI TX  room start A, floor landing F: a bound on P at N over all inputs (see the route page)
@@ -1766,6 +1797,7 @@ def main (args : List String) : IO UInt32 := do
   | ["takeoff-check"] => takeoffCheck sy rom
   | ["side-check"] => sideCheckProg sy rom
   | ["abs-check"] => absCheckProg sy rom
+  | ["castle-check"] => castleCheck sy rom
   | ["jump-table"] => jumpTable sy rom
   | ["flag-poke", fm2, a, y, dx, v, vy, fd, d, gy] =>
     flagPoke sy rom fm2 a.toNat! y.toNat! dx.toInt! v.toNat! vy.toNat! fd.toNat! d.toNat! gy.toNat!
