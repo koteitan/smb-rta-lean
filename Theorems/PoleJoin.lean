@@ -813,10 +813,10 @@ theorem no_push {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (C : 
 theorem side_of_sideRule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (hx : 1 ≤ c.x.toNat) (C : Collides sy mp f c)
     (h : (if 0 ≤ sbyte c.v then
         peek (collide sy mp c) sy.Player_X_Position == c.x - 1 && peek (collide sy mp c) sy.Player_X_Speed == 0 &&
-          peek (collide sy mp c) sy.Player_CollisionBits == 254
+          peek (collide sy mp c) sy.Player_CollisionBits == sy.noRight
       else
         peek (collide sy mp c) sy.Player_X_Position == c.x && peek (collide sy mp c) sy.Player_X_Speed == c.v &&
-          peek (collide sy mp c) sy.Player_CollisionBits == 254) = true) :
+          peek (collide sy mp c) sy.Player_CollisionBits == sy.noRight) = true) :
     PoleGrab.Side f := by
   have hv := C.v₂
   by_cases h0 : 0 ≤ sbyte c.v
