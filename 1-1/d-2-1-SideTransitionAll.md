@@ -114,7 +114,7 @@ Read from the code and measured on real runs. None of this is in Lean.
 * The game timer at 000 with Mario alive: the change then gives no control. This is an exception to the +282, on the later side.
 * No input only. All inputs were run only from `E`, with the hypothesis `GMerge`, on [The change out of the side pipe](d-1-SideTransition.md). Start and Select are not covered.
 * Overwritten states are not shown reachable.
-* The field `change₂` of [the whole route](0-1-Route.md) is still a hypothesis. `every_entry` and `no_control_before` give it for a run that satisfies (H1) to (H4), and nothing here shows that every run does.
+* [The whole route](0-1-Route.md) does not use this theorem: its `change₂` comes from [the first frames](d-2-2-SideChangeBound.md) and [the last frames](d-2-3-SideChangeEnd.md) of the change. `every_entry` and `no_control_before` give the exact length for a run that satisfies (H1) to (H4), and nothing here shows that every run does.
 * Frames are the emulator's frames. See [Emulator](../docs/emulator.md).
 
 **Files.** `Theorems/SideTransitionAll.lean`, private `Proof/SideTransitionAll.lean`.

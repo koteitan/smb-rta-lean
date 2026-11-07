@@ -36,6 +36,7 @@ path = "{rel}"
 [[lean_lib]]
 name = "Proof"
 globs = ["Proof.+"]
+platformIndependent = true
 '''
 
 def main():

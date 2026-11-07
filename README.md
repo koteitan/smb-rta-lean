@@ -44,7 +44,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
 - 🚨 1-1-0 The whole stage (0 → 1748)
   - ✅ 1-1-0-1 The theorem from the assumptions to 1748
   - ✅ 1-1-0-2 The timer and the grid from the rule on one frame
-  - 🚨 1-1-0-3 The fireworks and the level change from the rule on one frame
+  - ✅ 1-1-0-3 The fireworks and the level change from the rule on one frame
   - 🚨 1-1-0-4 Joining the assumptions of the parts
   - 🚨 1-1-0-5 Assumptions of the whole
     - 🚨 1-1-0-5-1 Each frame follows the rule of its kind (`step`)
@@ -54,30 +54,36 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-0-6-1 Runs that do not go through the two pipes
     - 🚨 1-1-0-6-2 Runs with a power-up
     - 🚨 1-1-0-6-3 Runs that die and start again
+    - 🚨 1-1-0-6-4 Runs with the hurry-up music
 - 🚨 1-1-a To the pipe (0 → 368)
   - ✅ 1-1-a-1 Fast accel
   - ✅ 1-1-a-2 TAS fast accel
   - ✅ 1-1-a-3 The opening
   - ✅ 1-1-a-4 The condition to enter the pipe
   - 🚨 1-1-a-5 Assumptions of part a
-    - 🚨 1-1-a-5-1 The entry frame follows the routine (`rule`)
-    - 🚨 1-1-a-5-2 Only that routine and that tile start the pipe
-    - 🚨 1-1-a-5-3 The block map is the one written by hand
+    - ✅ 1-1-a-5-1 The entry on real frames: one pass of the foot check
+    - 🚨 1-1-a-5-2 Only that instruction writes the routine, at the end of a pass (`Pass`)
+    - 🚨 1-1-a-5-3 The pipe's right tile is only at its place (`TilesOK`)
     - 🚨 1-1-a-5-4 The bound on the opening's position (`openP`, `openB`)
     - 🚨 1-1-a-5-5 The frames after it follow each other (`speed`, `next`)
     - 🚨 1-1-a-5-6 Open flat ground, in the air only during a jump
     - 🚨 1-1-a-5-7 A jump's length depends only on the takeoff speed
     - 🚨 1-1-a-5-8 The gain bound of the relaxed model (`GainBound`)
+    - 🚨 1-1-a-5-9 The position at the foot check is the frame's (`pos`)
 - 🚨 1-1-b Into the room (368 → 459)
   - ✅ 1-1-b-1 The length of the change (listed entry states)
   - ✅ 1-1-b-2-1 The bytes that decide the last 43 frames
-  - 🚨 1-1-b-2-2 The hypothesis `fall` on the frames after the entry (every entry state)
+  - ✅ 1-1-b-2-2 No control on the first 90 frames after the entry (under `fall`, any inputs)
   - ✅ 1-1-b-2-3 The last 41 frames, for the bytes that differ from run to run
   - 🚨 1-1-b-3 Assumptions of part b
-    - 🚨 1-1-b-3-1 The change takes at least 91 frames (`change₁`)
-    - 🚨 1-1-b-3-2 The same for every input (`Merge`)
-    - 🚨 1-1-b-3-3 The bytes, size and timer at frame 50 (`Cond`)
-    - 🚨 1-1-b-3-4 Six objects do not gather close together
+    - ✅ 1-1-b-3-1 `change₁` proved from `chg`
+    - 🚨 1-1-b-3-2 The frames left fall by at most one per frame (`chg.fall₁`)
+    - 🚨 1-1-b-3-3 A `lag` frame keeps the frames left (`chg.keep₁`)
+    - 🚨 1-1-b-3-4 A real entry meets the condition (`chg.entry₁`)
+  - 🚨 1-1-b-4 Assumptions of the exact lengths (the route does not need them)
+    - 🚨 1-1-b-4-1 The same for every input (`Merge`)
+    - 🚨 1-1-b-4-2 The bytes, size and timer at frame 50 (`Cond`)
+    - 🚨 1-1-b-4-3 Six objects do not gather close together
 - 🚨 1-1-c The bonus room (459 → 570)
   - ✅ 1-1-c-1 The air speed cap
   - ✅ 1-1-c-2 The height of a jump
@@ -104,15 +110,19 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-d-1 The length of the change (listed entry states)
   - ✅ 1-1-d-2-1 The bytes that decide the last 122 frames
   - ✅ 1-1-d-2-2 The first 160 frames (under the condition at the entry, any inputs)
-  - 🚨 1-1-d-2-3 The bytes that differ from run to run
+  - ✅ 1-1-d-2-3 The last 122 frames (under the condition at the exit, no Start on the game core's frames)
   - 🚨 1-1-d-2-4 The screen stays on the first page
-  - 🚨 1-1-d-2-5 A real entry meets the condition
+  - 🚨 1-1-d-2-5 A real entry meets the condition (`chg.entry₂`)
   - 🚨 1-1-d-3 Assumptions of part d
-    - 🚨 1-1-d-3-1 The change takes at least 282 frames (`change₂`)
-    - 🚨 1-1-d-3-2 The same for every input (`GMerge`)
-    - 🚨 1-1-d-3-3 The bytes when the timer has run out (H3)
-    - 🚨 1-1-d-3-4 `x` at the entry is not a multiple of 16
-    - 🚨 1-1-d-3-5 Six objects do not gather close together
+    - ✅ 1-1-d-3-1 `change₂` proved from `chg`
+    - 🚨 1-1-d-3-2 A `lag` frame keeps the frames left (`chg.keep₂`)
+    - 🚨 1-1-d-3-3 No pause after the pipe (`chg.noStart₂`)
+    - 🚨 1-1-d-3-4 No pause sound at the exit (`chg.quiet₂`)
+  - 🚨 1-1-d-4 Assumptions of the exact lengths (the route does not need them)
+    - 🚨 1-1-d-4-1 The same for every input (`GMerge`)
+    - 🚨 1-1-d-4-2 The bytes when the timer has run out (H3)
+    - 🚨 1-1-d-4-3 `x` at the entry is not a multiple of 16
+    - 🚨 1-1-d-4-4 Six objects do not gather close together
 - 🚨 1-1-e Speeding up above ground (852 → 1085)
   - ✅ 1-1-e-1 The bound on the speed-up
   - 🚨 1-1-e-2 Assumptions of part e
@@ -148,9 +158,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
 - 🚨 1-1-g From the castle to 1-2 (1218 → 1748)
   - ✅ 1-1-g-1 The timer and the grid
   - 🚨 1-1-g-2 Assumptions of part g
-    - 🚨 1-1-g-2-1 The flag and fireworks take at least 33 frames (`hD`)
-    - 🚨 1-1-g-2-2 The formula of the level change (`hL`)
+    - 🚨 1-1-g-2-1 Each frame follows the star flag's rule (`step`)
+    - 🚨 1-1-g-2-2 Task and flag height at the entry (`task_E`, `y_E`)
     - 🚨 1-1-g-2-3 The same for every input (`GMerge`)
+    - 🚨 1-1-g-2-4 The level changes on a frame with task 5 (`task_L`)
 - 🚨 0-0-0 Common
   - ✅ 0-0-0-1 The top speed bound
   - ✅ 0-0-0-2 Reach

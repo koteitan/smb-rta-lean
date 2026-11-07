@@ -47,13 +47,13 @@ ChangeRun.bound :  for a run with the fields of `ChangeRun` :  cnt(a) + 282 ≤ 
 
 `no_input` is `(H1)` of `SideTransitionAll.every_entry`. `(H2)` and `(H3)` do not follow: the pause bytes are free, so the timer can be later than the frame count, and the condition does not fix the place of the state at frame 160. The route does not need them for a lower bound.
 
-Lean: `Theorems/SideChangeBound.lean` (`frame_of_walk`, `inv_step`, `inv_seq`, `state_seq`, `fall_of_inv`, `no_control_first`, `no_control_all`, `inv_of_entry`, `entryCond_of_ok`, `Statement`, `statement_of_check`, `Statement.no_input`, `change_counted`, `ChangeRun`, `ChangeRun.bound`), private `side_bound_checks` (`native_decide`), `side_bound`, `side_no_control`, `side_change_bound`. The theorems with no ROM use only `propext`, `Classical.choice` and `Quot.sound`.
+Lean: `Theorems/TaintRun.lean` (`frame_of_walk`, `inv_step`), `Theorems/SideChangeBound.lean` (`inv_seq`, `state_seq`, `fall_of_inv`, `no_control_first`, `no_control_all`, `inv_of_entry`, `entryCond_of_ok`, `Statement`, `statement_of_check`, `Statement.no_input`, `change_counted`, `ChangeRun`, `ChangeRun.bound`), private `side_bound_checks` (`native_decide`), `side_bound`, `side_no_control`, `side_change_bound`. The theorems with no ROM use only `propext`, `Classical.choice` and `Quot.sound`.
 
 ## How it works
 
-**The abstract machine.** It is the machine of [A run with unknown bytes](b-2-3-TaintRun.md), copied into this file with three changes. The pad is a byte with unknown bits. The pipe's timer is a followed counter: its value is not known, but `Sim` says that it has fallen by at most one in this frame, and no instruction other than its `DEC` may write it. A byte can be read in pieces by some of its bits: the frame counter is read by its low 3 bits, because `ColorRotation` uses them as an index.
+**The abstract machine.** It is the machine of [A run with unknown bytes](b-2-3-TaintRun.md). This page uses three of its parts. The pad is a byte with unknown bits. The pipe's timer is a followed counter: its value is not known, but `Sim` says that it has fallen by at most one in this frame, and no instruction other than its `DEC` may write it. A byte can be read in pieces by some of its bits: the frame counter is read by its low 3 bits, because `ColorRotation` uses them as an index.
 
-**One frame.** From the start states, one frame of the abstract machine ends only in the start states. So every frame of the pipe stays in `During`. With the timer at 1, the frame ends in `During` (a pause) or in `Exit`. The check follows 106,824 abstract steps with the timer free and 52,701 with the timer at 1. The tables have 4,584 and 2,519 states. The program takes about 1 s; the private proof takes about 33 s to build, because `Theorems` is not precompiled.
+**One frame.** From the start states, one frame of the abstract machine ends only in the start states. So every frame of the pipe stays in `During`. With the timer at 1, the frame ends in `During` (a pause) or in `Exit`. The check follows 106,824 abstract steps with the timer free and 52,701 with the timer at 1. The tables have 4,584 and 2,519 states. The program takes about 4 s (with 44 entries); the private proof takes about 3 s to build.
 
 **Why it closes here.** In the pipe's routine the code does not run the collision with the level (`PlayerBGCollision` leaves on this routine) and does not run the game timer (`RunGameTimer` leaves). So the timer is not written again, and no hurry-up music can start in these frames. The room's song has no square-1 part (`MusicOffset_Square1` says so), so the music loop that can hang on zeros does not run.
 
@@ -88,9 +88,9 @@ The program ran real frames from these entries.
   * `Player_Y_Position` is the floor's, because the mouth's tile is only at the floor.
   * The object bytes are as above. `Block_State` needs that no brick breaks just before the entry.
   * The music bytes do not hold while the hurry-up music plays, that is, when the game timer has just passed 100. Such a run has used far more than 1748 frames.
-* On the frames out of `During`, `left` falls by at most one (`fallAfter` of `ChangeRun`, the hypothesis of `noAll`). This is the last 122 frames.
+* On the frames out of `During`, `left` falls by at most one (`fallAfter` of `ChangeRun`, the hypothesis of `noAll`). This is the last 122 frames. It is false on an overwritten state, and [The last frames of the change](d-2-3-SideChangeEnd.md) replaces it.
 * A lag frame takes nothing off `left` (`lagKeeps` of `ChangeRun`). On real runs measured, the one frame where the timers do not run and `left` falls is the `setup` frame of the change.
-* `Route` does not use this theorem yet. `ChangeRun` lists the fields that make `change₂` a consequence.
+* [The whole route](0-1-Route.md) uses `Statement` of this theorem, through `EndRun` of [The last frames of the change](d-2-3-SideChangeEnd.md). It does not use `ChangeRun`.
 
 **Files.** `Theorems/SideChangeBound.lean`, private `Proof/SideChangeBound.lean`.
 

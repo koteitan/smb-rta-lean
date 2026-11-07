@@ -24,21 +24,21 @@ How the theorems join:
 
 ```
 P₁ ≥ 368                                                       pipe_no_entry (part a)
-X₁ ≥ 91                                                        assumed (part b)
+X₁ ≥ 91                                                        Run.change₁ (part b, from single frames)
 P₂ ≥ 111                                                       room_join (part c)
-X₂ ≥ 282                                                       assumed (part d)
+X₂ ≥ 282                                                       Run.change₂ (part d, from single frames)
 (g ≥ 234 ∧ W ≥ 132) ∨ (240 ≤ g ≤ 241 ∧ W ≥ 126) ∨ (g ≥ 242 ∧ W ≥ 125)    pole_touch_castle (parts e, f)
 E = P₁ + X₁ + P₂ + X₂ + P₃ + W + j                             Run.hE (from the rule of clock)
 401 ≤ T + ⌈P₁/24⌉ + ⌈P₂/24⌉ + ⌈P₃/24⌉                          Run.hT (from the rule of clock)
 ─────────────────────────────────────────
 E + T ≥ 1588 + j                                               sum_ge
 (c_E + E) mod 21 = (3 + j) mod 21                              Run.hc (from the rule of clock)
-E + T + D + 107 + ((c_E − T − D) mod 21) ≤ L,  D ≥ 33          assumed
+E + T + D + 107 + ((c_E − T − D) mod 21) ≤ L,  D ≥ 33          Run.hD, Run.hL (from the rule of flag)
 ─────────────────────────────────────────
 L ≥ 1748 + j                                                   level_ge_of_parts
 ```
 
-Lean: `Run`, `Run.hE`, `Run.hT`, `Run.hc` and `level_ge_of_parts` in `Theorems/Route.lean`, and the private `route_1_1`. `#print axioms route_1_1` shows no `sorryAx`; it shows the axioms of `native_decide`.
+Lean: `Run`, `Changes`, `Run.change₁`, `Run.change₂`, `Run.hE`, `Run.hT`, `Run.hc`, `Run.hD`, `Run.hL` and `level_ge_of_parts` in `Theorems/Route.lean`, and the private `route_1_1`. `#print axioms route_1_1` shows no `sorryAx`; it shows the axioms of `native_decide`.
 
 ## The assumptions
 
@@ -46,23 +46,78 @@ All are fields of `Run`, so none is hidden. The page of each part explains its f
 
 | part | field | what it says | checked on |
 |---|---|---|---|
-| a | `pipe.rule` | an entry follows the collision routine | the routine on every state near the pipe; the link to frames is assumed |
+| a | `pipe.fm`, `inp`, `pass`, `pos` | the frame of an entry is on real machines: its write ends one pass of the foot check, and `P₂` is the position at the foot check | 68,311 real frames with 177 entries ([Entering the pipe on real frames](a-5-1-PipeEntryRule.md)). The pass itself is proved; `pos` is checked only against the frame's end |
 | a | `pipe.openP`, `openB`, `speed`, `next` | the bound of the opening and the frames after it | [Entering the vertical pipe](a-4-PipeEntry.md) |
-| b | `change₁` | the change takes at least 91 frames | 77 entry states; every entry state only under four assumptions ([What decides the change into the bonus room](b-2-1-PipeTransitionAll.md)) |
-| b | | every entry state, the last 41 frames | for every value of the bytes that differ, under conditions at frame 50 ([A run with unknown bytes](b-2-3-TaintRun.md)). Not joined to `change₁` |
+| b | `chg.a₁`, `b₁`, `order₁`, `ha₁`, `hb₁`, `ctl₁` | which machines of `chg.seq` are the entry and control | `route-check` on the two runs below |
+| b | `chg.entry₁` | the pipe's routine runs, and its timer is at least 48 | 75 entries ([A bound from single frames](b-2-2-PipeChangeBound.md)) |
+| b | `chg.fall₁` | a frame takes at most one off `left₁` | 140,160 real frames ([A bound from single frames](b-2-2-PipeChangeBound.md)); the runs in the section below. Not proved |
+| b | `chg.keep₁` | a `lag` frame takes nothing off `left₁` | the runs in the section below. Not proved |
+| b | | every entry state, the last 41 frames | for every value of the bytes that differ, under conditions at frame 50 ([A run with unknown bytes](b-2-3-TaintRun.md)). Not joined to `chg` |
 | c | `room` | the frames in the room | the TAS and 4501 real runs ([Joining the bonus room](c-5-RoomJoin.md)) |
-| d | `change₂` | the change takes at least 282 frames | first 160 frames for any inputs under a condition on the entry ([The first frames of the change out of the side pipe](d-2-2-SideChangeBound.md)); the last 122 on single-frame hypotheses. Not yet joined to `Run` |
+| d | `chg.a₂`, `b₂`, `order₂`, `ha₂`, `hb₂`, `ctl₂` | which machines of `chg.seq` are the entry and control | `route-check` on the two runs below |
+| d | `chg.entry₂` | the condition on the state at the entry: 90 bytes, the screen buffer, the timer at least 160, the frame ended in the idle loop | 76 of 80 sampled entries ([The first frames of the change out of the side pipe](d-2-2-SideChangeBound.md)), and the 8 bytes more on 44 entries ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)). The ones that fail are listed below |
+| d | `chg.noStart₂` | no Start on the frames of the game core after the pipe | a condition on the inputs; true on the TAS |
+| d | `chg.quiet₂` | no pause sound running at the exit | fails after Start on the pipe's frames ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)); true on the runs with no Start there |
+| d | `chg.keep₂` | a `lag` frame takes nothing off `left₂` | the runs in the section below. Not proved |
 | e, f | `pole` | the frames above ground, the collisions near the base, the castle flag | the TAS and 4 real runs ([From control to the castle](f-5-PoleJoin.md)) |
 | all | `clock`, `z₁`, `z₂` | the kind and the counters of every frame: the rule on one frame, and which frame is in which part | every frame of 7 runs, one with pauses, and of the TAS ([From the castle to 1-2](g-1-CastleToLevel.md)) |
-| all | `hD`, `hL` | the fireworks, the frame of the level change. These still state results about the whole run | real frames of the listed states |
+| all | `chg.seq`, `inp`, `next` | one sequence of real machines for both changes, numbered as `clock` numbers the frames | holds for any run by how the sequence is made |
+| all | `flag`, `L` | the counters of every frame after the castle entry: the rule on one frame, the flag's height at the entry, task 5 at the level change | every frame of the TAS, the run 1089 02808080, real fireworks and pauses ([From the castle to 1-2](g-1-CastleToLevel.md)) |
 
-`E = C_s + c + j`, the timer's formula and the grid's formula are no longer fields of `Run`. They are proved from `clock` (`Run.hE`, `Run.hT`, `Run.hc`). `level_ge_of_parts` also uses `2 ≤ q ≤ 90`, computed from the game's value.
+`E = C_s + c + j`, the timer's formula and the grid's formula are no longer fields of `Run`. They are proved from `clock` (`Run.hE`, `Run.hT`, `Run.hc`). `D ≥ 33` and the formula of the level change are proved from `flag` (`Run.hD`, `Run.hL`). `change₁` and `change₂` are no longer fields either. They are proved from `chg` (`Run.change₁`, `Run.change₂`). `level_ge_of_parts` also uses `2 ≤ q ≤ 90`, computed from the game's value, and three checks on the ROM, `pipe_bound_keys`, `side_bound` and `side_end`, and that the star flag's delay is at least 6, which are private theorems and not assumptions.
+
+`route_1_1` does not use `Merge`, `GMerge`, `Cond` or H3: they are neither fields of `Run` nor arguments of the theorem. It does not use that six objects stay apart either: a frame that runs over is a `lag` frame, which `keep₁` and `keep₂` cover. These belong to the theorems on the exact length.
 
 By the form of `Run`, these runs are not in the theorem:
 
 * A run that does not take the two pipes. That walking is slower is outside this theorem.
 * A big Mario, or a run with a power-up. A power-up stops the game for 59 frames, and the arithmetic is in `level_ge_of_late`; it is not joined yet.
 * A run with an enemy near the pole, or one that goes over the pole and comes back.
+* A run with Start on the frames of the game core after the side pipe (`chg.noStart₂`), or with a pause sound running at its exit (`chg.quiet₂`). A pause there only delays control on the runs measured, but that is not in Lean.
+* A run that does not meet `chg.entry₂` at the side pipe: the hurry-up music plays, a fireball is alive, a block object is alive, or the entry frame runs over. By the timer, the music means far more than 1748 frames, and 1-1 has only one power-up before this pipe, but neither is in Lean.
+
+## The two changes (`chg`)
+
+`chg` has one sequence of real machines. `seq n` is the machine when frame `n` begins, so `seq (n + 1)` is what frame `n` leaves, as in `clock`. `r(n)` counts the frames before `n` that are not `lag` frames (`seen`).
+
+```
+seq(n + 1) = frame(seq n, inp n)
+r(a₁) = E_a + 1,   r(b₁) = C_r + 1,   r(a₂) = E_b + 1,   r(b₂) = C_s + 1
+entry₁ : EntryCond(seq a₁)                 ctl₁ : ctl(seq b₁)
+entry₂ : Entry2(seq a₂)                    ctl₂ : ctl(seq b₂)
+keep₁ : a₁ ≤ n < b₁ ∧ kind(n) = lag  →  left₁(seq n) ≤ left₁(seq(n + 1))
+fall₁ : a₁ ≤ n < b₁ ∧ kind(n) ≠ lag  →  left₁(seq n) ≤ left₁(seq(n + 1)) + 1
+keep₂ : a₂ ≤ n < b₂ ∧ kind(n) = lag  →  left₂(seq n) ≤ left₂(seq(n + 1))
+noStart₂ : a₂ ≤ n < b₂ ∧ coreFrame(seq n)  →  inp n has no Start
+quiet₂ : a₂ ≤ n ≤ b₂ ∧ ExitAt(seq n)  →  Quiet(seq n)
+```
+
+From these:
+
+```
+r(a) + left(seq a) ≤ r(b) + left(seq b)                      counted_ge, from keep and fall
+left₁(seq b₁) = 0,  91 ≤ left₁(seq a₁)                       left_zero_of_ctl with pipe_bound_keys, left_of_entry
+─────────────────────────────────────────
+E_a + 91 ≤ C_r                                               Run.change₁
+─────────────────────────────────────────
+E_b + 282 ≤ C_s                                              Run.change₂, by EndRun.bound with side_bound and side_end
+```
+
+`left` is read at the frame boundary. A frame whose routine runs over ends in the middle of the routine, and the next frame is the `lag` frame.
+
+**What a `lag` frame does to `left`: nothing.** In each change, among the frames where the interval timer's phase stays, `left` falls on one frame only, and that frame is `setup`. It is counted, and `z₁`, `z₂` are its number. On every other such frame `left` stays. `change-scenes` shows this from real entries, for no input, random inputs, Start pressed twice, and six objects written at a frame so that frames run over:
+
+| change | runs | frames | runs that ran over | `lag` frames | `lag` frames where `left` falls | frames where `left` falls by 2 or more | least frames to control, without `lag` |
+|---|---|---|---|---|---|---|---|
+| into the room | 237 | 24,767 | 67 | 3,200 | 0 | 0 | 91 |
+| out of the side pipe | 356 | 125,628 | 54 | 26,176 | 0 | 0 | 282 |
+
+Not covered:
+
+* Frames ran over only on states with objects written in. On the runs without written states, the only such frame in a change is `setup`, apart from pauses.
+* Six objects written during the last 122 frames of the change out of the side pipe did not make a frame run over. There the `lag` rule was seen only with pauses.
+
+These fields are hypotheses on single frames, and they are not proved. `seq` is tied to `pipe`, `room` and `pole` by frame numbers only.
 
 ## The assumptions are not empty
 
@@ -73,7 +128,7 @@ By the form of `Run`, these runs are not in the theorem:
 | the TAS | 368, 459, 570, 852 | 1092 | 1218 | 370 | 1588 | 1748 |
 | the TAS to 1089, then Left, A, A, A | 368, 459, 570, 852 | 1093 | 1219 | 369 | 1588 | 1748 |
 
-Both satisfy every numeric assumption, and `L` equals the formula. The rule of `clock` holds on every frame of both (a working program). The structure above ground was checked on these runs by `pole-join-check`. The room's structure was checked on the TAS by a working program that is not in the repository. No Lean term of every field was built from the TAS.
+Both satisfy every numeric assumption, and `L` equals the formula. `route-check` also reads `chg`: `a₁, b₁, a₂, b₂` = 369, 460, 571, 853; without `lag`, less one, they are 368, 459, 570, 852; `left` at the entries is 91 and 282, and both conditions hold; `z₁, z₂` = 418, 732; no other frame has the phase still; no frame takes 2 or more off `left`. `changes-check FM2 pause F D` gives the same counts for pauses at 380, 416, 450, 575, 730 and 845, with 50 or 60 `lag` frames. Start is ignored on some frames of a change; there the movie goes out of step, and the check ends with exit 1 before the second change is done. The rule of `clock` holds on every frame of both (a working program). The structure above ground was checked on these runs by `pole-join-check`. The room's structure was checked on the TAS by a working program that is not in the repository. No Lean term of every field was built from the TAS.
 
 ## The closest case
 
@@ -95,6 +150,11 @@ From the TAS's state at 1085 with the position moved by 16/256 to 160/256 px in 
 python3 prove.py                                      # checks every theorem
 .lake/build/bin/smbrta route-check FM2                # the whole route's numbers
 .lake/build/bin/smbrta route-check FM2 1089 02808080  # a touch one frame later
+.lake/build/bin/smbrta changes-check FM2 pause 380 60 # the fields of chg with a pause
+.lake/build/bin/smbrta change-scenes FM2              # left with random inputs, pauses and frames that run over
+.lake/build/bin/smbrta frames-check FM2                # the rules of clock and flag on every frame
+.lake/build/bin/smbrta pipe-rule-check FM2             # the fields of pipe on real frames
+.lake/build/bin/smbrta side-end-check FM2              # the condition at the exit and left after it, on real frames
 .lake/build/bin/smbrta pole-join-check FM2 1089 02808080
 .lake/build/bin/smbrta touch-search-at FM2 1085 80 8  # the position moved: touch to castle per frame
 ```

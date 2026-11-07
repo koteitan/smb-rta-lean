@@ -5,8 +5,8 @@ import Theorems.PipeTransitionAll
 # From the castle entry to the level change
 
 Two parts. The arithmetic part has no machine in it: from the lengths of the parts of a run, the game timer's rule, the 21-frame grid and a lower bound on the
-level change's frame, it concludes that the level does not change before frame 1748 (`level_ge`). `Frames` states the timer's rule and the grid on single frames, and proves from them the
-facts about the whole run that `level_ge` takes. The check part runs real frames, on a castle entry reached by the route of `CastleWalk`, and compares them with the rules that the arithmetic
+level change's frame, it concludes that the level does not change before frame 1748 (`level_ge`). `Frames` states the timer's rule and the grid on single frames up to the castle entry, `Flag` states the rule on single
+frames from there to the level change, and from them follow the facts about the whole run that `level_ge` takes. The check part runs real frames, on a castle entry reached by the route of `CastleWalk`, and compares them with the rules that the arithmetic
 part takes as hypotheses. The checks cover the listed states only. Page: `1-1/g-1-CastleToLevel.md`.
 
 Values of the game do not appear here: the timer's period `q`, its first value `t0` and the names read from the disassembly are parameters.
@@ -768,10 +768,335 @@ def Frames.noLag (q t0 : Nat) (S : Segs) : Frames q t0 S.last S where
   runs_E := S.kind_ne_lag _
   seen_E := seen_noLag S _
 
+/-! ## The frames after the castle entry
+
+The sequence of frames goes on past `E`, up to the level change `L`, with the counters that the last wait depends on. The rule is again on one frame at a time (`FlagRun`). What the level change
+needs from the whole of these frames follows from it: `Flag.hD`, `Flag.hL`. Music and fireworks can only keep a task going, so `hL` is an inequality. -/
+
+/-- the counters when a frame after the castle entry begins -/
+structure FC where
+  /-- the task of the star flag -/
+  task : Nat
+  /-- the game timer's digits -/
+  t : Nat
+  /-- the star flag's height on the screen. It falls as the flag rises. -/
+  y : Nat
+  /-- the star flag's interval timer -/
+  w : Nat
+  /-- the phase of the interval timers -/
+  ph : Nat
+  deriving Repr, DecidableEq
+
+/-- the interval timer after a frame that runs: it falls when the phase wraps, down to 0 -/
+def FC.tick (a : FC) : Nat := if a.ph = 0 then a.w - 1 else a.w
+
+theorem FC.tick_cases (a : FC) : (a.ph = 0 ∧ a.tick = a.w - 1) ∨ (a.ph ≠ 0 ∧ a.tick = a.w) := by
+  unfold FC.tick
+  split
+  · exact Or.inl ⟨by assumption, rfl⟩
+  · exact Or.inr ⟨by assumption, rfl⟩
+
+/-- the rule of one frame that runs after the castle entry, from the counters before it to the counters after it. `lim`: the flag rises while `lim ≤ y`. `w₀`: the value the flag's task sets.
+Task 2 counts the digits down. Task 3 raises the flag; when it is up, the task sets the interval timer, or stays (the fireworks). Task 4 ends when the interval timer is 0, or stays (the music).
+A frame that runs with task 5 changes the level: it is the frame `L`, which this rule does not cover. -/
+def FlagRun (lim w₀ : Nat) (a b : FC) : Prop :=
+  b.ph = (a.ph + 20) % 21 ∧
+    match a.task with
+    | 2 => b.y = a.y ∧ b.w = a.tick ∧ if a.t = 0 then b.task = 3 ∧ b.t = 0 else b.task = 2 ∧ b.t = a.t - 1
+    | 3 =>
+      b.t = a.t ∧ if lim ≤ a.y then b.task = 3 ∧ b.y = a.y - 1 ∧ b.w = a.tick
+        else b.y = a.y ∧ ((b.task = 3 ∧ b.w = a.tick) ∨ (b.task = 4 ∧ b.w = w₀))
+    | 4 => b.t = a.t ∧ b.y = a.y ∧ b.w = a.tick ∧ (b.task = 4 ∨ (b.task = 5 ∧ b.w = 0))
+    | _ => False
+
+instance (lim w₀ : Nat) (a b : FC) : Decidable (FlagRun lim w₀ a b) := by
+  unfold FlagRun
+  split <;> exact inferInstance
+
+/-- a frame after the castle entry: a frame on which nothing runs leaves the counters as they are -/
+def FlagStep (lim w₀ : Nat) (lag : Bool) (a b : FC) : Prop :=
+  if lag then b = a else FlagRun lim w₀ a b
+
+instance (lim w₀ : Nat) (lag : Bool) (a b : FC) : Decidable (FlagStep lim w₀ lag a b) := by
+  unfold FlagStep
+  exact inferInstance
+
+/-- the frames after the castle entry `E`, up to the level change `L`. `T` and `c` are what the frames up to `E` leave: `Frames.T`, `Frames.c`. `x n` are the counters when frame `n` begins, so `x (E + 1)` is what the castle
+entry leaves. `lag n`: the frame does not run. These are the `lag` frames of `Frames`, past `E`. -/
+structure Flag (lim w₀ E T c L : Nat) where
+  lag : Nat → Bool
+  x : Nat → FC
+  /-- what the castle entry leaves: the timer and the phase of the frames before it, task 2, and the flag's height -/
+  t_E : (x (E + 1)).t = T
+  ph_E : (x (E + 1)).ph = c
+  task_E : (x (E + 1)).task = 2
+  y_E : lim + 30 ≤ (x (E + 1)).y
+  /-- the level changes after the castle entry -/
+  after : E < L
+  /-- each frame follows the rule -/
+  step : ∀ n, E < n → n < L → FlagStep lim w₀ (lag n) (x n) (x (n + 1))
+  /-- the level changes on a frame that begins with task 5 -/
+  task_L : (x L).task = 5
+
+namespace Flag
+
+variable {lim w₀ E T c L : Nat} (G : Flag lim w₀ E T c L)
+
+/-- the frames that run, after the castle entry and before `n`, with a task up to 3 -/
+def early : Nat → Nat
+  | 0 => 0
+  | n + 1 => early n + if E < n ∧ G.lag n = false ∧ (G.x n).task ≤ 3 then 1 else 0
+
+theorem early_E : ∀ n, n ≤ E + 1 → G.early n = 0
+  | 0, _ => rfl
+  | n + 1, h => by
+    have ih := early_E n (by omega)
+    simp only [early, ih]
+    rw [if_neg (by omega)]
+
+/-- `D`: the frames from the castle entry to the frame that sets the interval timer, other than those that count the digits -/
+def D : Nat := G.early L - T
+
+/-- what stays true from frame to frame -/
+structure Inv (n : Nat) : Prop where
+  task : (G.x n).task = 2 ∨ (G.x n).task = 3 ∨ (G.x n).task = 4 ∨ (G.x n).task = 5
+  /-- up to task 3 every frame that runs is counted: the phase follows the count, and the count is at most the frames -/
+  ph : (G.x n).task ≤ 3 → ((G.x n).ph + G.early n) % 21 = c % 21 ∧ E + 1 + G.early n ≤ n
+  /-- the frames that task 2 still needs -/
+  two : (G.x n).task = 2 → T + 33 ≤ G.early n + (G.x n).t + ((G.x n).y + 1 - lim) + 2
+  /-- the frames that task 3 still needs -/
+  three : (G.x n).task = 3 → T + 33 ≤ G.early n + ((G.x n).y + 1 - lim) + 1
+  late : 4 ≤ (G.x n).task → T + 33 ≤ G.early n
+  /-- in task 4, `21 w + ph` falls by at most 1 per frame -/
+  four : (G.x n).task = 4 → (G.x n).ph < 21 ∧
+    E + 1 + G.early n + 21 * w₀ + wait c (G.early n) ≤ n + (21 * (G.x n).w + (G.x n).ph)
+  five : (G.x n).task = 5 → E + 1 + G.early n + 21 * w₀ + wait c (G.early n) ≤ n + 20
+
+theorem inv_zero : G.Inv (E + 1) := by
+  have h0 := G.early_E (E + 1) (by omega)
+  have t := G.t_E
+  have p := G.ph_E
+  have k := G.task_E
+  have y := G.y_E
+  refine ⟨Or.inl k, fun _ => ?_, fun _ => ?_, fun h => by omega, fun h => by omega, fun h => by omega, fun h => by omega⟩
+  · rw [h0, p]; omega
+  · rw [h0, t]; omega
+
+theorem inv_step (n : Nat) (h1 : E < n) (h2 : n < L) (ih : G.Inv n) : G.Inv (n + 1) := by
+  have hs := G.step n h1 h2
+  unfold FlagStep at hs
+  have ie : G.early (n + 1) = G.early n + if E < n ∧ G.lag n = false ∧ (G.x n).task ≤ 3 then 1 else 0 := rfl
+  obtain ⟨i1, i2, i3, i4, i5, i6, i7⟩ := ih
+  cases hl : G.lag n with
+  | true =>
+    simp only [hl, if_true] at hs
+    have e1 : G.early (n + 1) = G.early n := by rw [ie, if_neg (by simp [hl]), Nat.add_zero]
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> simp only [e1, hs]
+    · exact i1
+    · exact fun h => ⟨(i2 h).1, by have := (i2 h).2; omega⟩
+    · exact i3
+    · exact i4
+    · exact i5
+    · exact fun h => ⟨(i6 h).1, by have := (i6 h).2; omega⟩
+    · exact fun h => by have := i7 h; omega
+  | false =>
+    simp only [hl, Bool.false_eq_true, if_false] at hs
+    obtain ⟨hp, hs⟩ := hs
+    rcases i1 with hk | hk | hk | hk
+    · rw [hk] at hs
+      obtain ⟨a1, a2, a3⟩ := hs
+      have e1 : G.early (n + 1) = G.early n + 1 := by rw [ie, if_pos ⟨h1, hl, by omega⟩]
+      have j2 := i2 (by omega)
+      have j3 := i3 hk
+      clear i2 i3 i4 i5 i6 i7 ie
+      by_cases ht : (G.x n).t = 0
+      · rw [if_pos ht] at a3
+        refine ⟨by omega, fun _ => ?_, fun h => by omega, fun _ => by omega, fun h => by omega, fun h => by omega, fun h => by omega⟩
+        exact ⟨by omega, by omega⟩
+      · rw [if_neg ht] at a3
+        refine ⟨by omega, fun _ => ?_, fun _ => by omega, fun h => by omega, fun h => by omega, fun h => by omega, fun h => by omega⟩
+        exact ⟨by omega, by omega⟩
+    · rw [hk] at hs
+      obtain ⟨a1, a2⟩ := hs
+      have e1 : G.early (n + 1) = G.early n + 1 := by rw [ie, if_pos ⟨h1, hl, by omega⟩]
+      have j2 := i2 (by omega)
+      have j3 := i4 hk
+      clear i2 i3 i4 i5 i6 i7 ie
+      by_cases hy : lim ≤ (G.x n).y
+      · rw [if_pos hy] at a2
+        obtain ⟨b1, b2, _⟩ := a2
+        refine ⟨by omega, fun _ => ?_, fun h => by omega, fun _ => by omega, fun h => by omega, fun h => by omega, fun h => by omega⟩
+        exact ⟨by omega, by omega⟩
+      · rw [if_neg hy] at a2
+        obtain ⟨b1, ⟨b2, _⟩ | ⟨b2, b3⟩⟩ := a2
+        · refine ⟨by omega, fun _ => ?_, fun h => by omega, fun _ => by omega, fun h => by omega, fun h => by omega, fun h => by omega⟩
+          exact ⟨by omega, by omega⟩
+        · refine ⟨by omega, fun h => by omega, fun h => by omega, fun h => by omega, fun _ => by omega, fun _ => ⟨by omega, ?_⟩, fun h => by omega⟩
+          rw [e1, b3]
+          unfold wait
+          omega
+    · rw [hk] at hs
+      obtain ⟨a1, a2, a3, a4⟩ := hs
+      have e1 : G.early (n + 1) = G.early n := by
+        rw [ie, if_neg (by omega), Nat.add_zero]
+      have j5 := i5 (by omega)
+      have j6 := i6 hk
+      have hT := (G.x n).tick_cases
+      clear i2 i3 i4 i5 i6 i7 ie
+      rcases a4 with a4 | ⟨a4, a5⟩
+      · refine ⟨by omega, fun h => by omega, fun h => by omega, fun h => by omega, fun _ => by omega, fun _ => ⟨by omega, ?_⟩, fun h => by omega⟩
+        rw [e1, a3]
+        rcases hT with ⟨h0, h3⟩ | ⟨h0, h3⟩ <;> omega
+      · refine ⟨by omega, fun h => by omega, fun h => by omega, fun h => by omega, fun _ => by omega, fun h => by omega, fun _ => ?_⟩
+        rw [e1]
+        rcases hT with ⟨h0, h3⟩ | ⟨h0, h3⟩ <;> omega
+    · rw [hk] at hs
+      exact hs.elim
+
+theorem inv : ∀ d, E + 1 + d ≤ L → G.Inv (E + 1 + d)
+  | 0, _ => G.inv_zero
+  | d + 1, h => G.inv_step (E + 1 + d) (by omega) (by omega) (inv d (by omega))
+
+/-- the invariant at the level change -/
+theorem inv_L : G.Inv L := by
+  have h := G.inv (L - (E + 1)) (by have := G.after; omega)
+  rwa [show E + 1 + (L - (E + 1)) = L by have := G.after; omega] at h
+
+/-- **`hD`.** At least 33 frames that run are not counting the digits. -/
+theorem hD : 33 ≤ G.D := by
+  have h := G.inv_L.late (by have := G.task_L; omega)
+  unfold D
+  omega
+
+/-- **`hL`.** The level change: the frame that sets the interval timer is at least `T + D` frames after the castle entry, and the phase there is `wait`. From there `21 w + ph` falls by at most 1 per frame.
+The first value of the interval timer gives the 107 frames. -/
+theorem hL (hw : 6 ≤ w₀) : E + T + G.D + 107 + wait c (T + G.D) ≤ L := by
+  have h := G.inv_L.five G.task_L
+  have h4 := G.inv_L.late (by have := G.task_L; omega)
+  have e : T + G.D = G.early L := by unfold D; omega
+  rw [e]
+  omega
+
+end Flag
+
+/-! The fields of `Flag` hold together: for any numbers there is a sequence with no `lag` frames. -/
+
+/-- one frame with no delay: the flag's task sets the interval timer when the flag is up, and the last task ends when the interval timer is 0 -/
+def FC.next (lim w₀ : Nat) (a : FC) : FC :=
+  let ph := (a.ph + 20) % 21
+  match a.task with
+  | 2 => if a.t = 0 then ⟨3, 0, a.y, a.tick, ph⟩ else ⟨2, a.t - 1, a.y, a.tick, ph⟩
+  | 3 => if lim ≤ a.y then ⟨3, a.t, a.y - 1, a.tick, ph⟩ else ⟨4, a.t, a.y, w₀, ph⟩
+  | 4 => if a.tick = 0 then ⟨5, a.t, a.y, 0, ph⟩ else ⟨4, a.t, a.y, a.tick, ph⟩
+  | _ => a
+
+theorem FC.next_run (lim w₀ : Nat) {a : FC} (h : a.task = 2 ∨ a.task = 3 ∨ a.task = 4) : FlagRun lim w₀ a (a.next lim w₀) := by
+  rcases h with h | h | h
+  · by_cases h1 : a.t = 0 <;> simp [FlagRun, FC.next, h, h1]
+  · by_cases h1 : lim ≤ a.y <;> simp [FlagRun, FC.next, h, h1]
+  · by_cases h1 : a.tick = 0 <;> simp [FlagRun, FC.next, h, h1]
+
+/-- the frames a sequence with no delay still has -/
+def FC.left (lim w₀ : Nat) (a : FC) : Nat :=
+  match a.task with
+  | 2 => a.t + (a.y + 1 - lim) + 2 + (21 * w₀ + 21)
+  | 3 => (a.y + 1 - lim) + 1 + (21 * w₀ + 21)
+  | 4 => 21 * a.w + a.ph + 1
+  | _ => 0
+
+/-- each frame before task 5 takes at least one off -/
+theorem FC.next_left {lim : Nat} (w₀ : Nat) (hlim : 1 ≤ lim) {a : FC} (h : a.task = 2 ∨ a.task = 3 ∨ (a.task = 4 ∧ a.ph < 21)) :
+    (a.next lim w₀).left lim w₀ < a.left lim w₀ ∧
+      ((a.next lim w₀).task = 2 ∨ (a.next lim w₀).task = 3 ∨ ((a.next lim w₀).task = 4 ∧ (a.next lim w₀).ph < 21) ∨ (a.next lim w₀).task = 5) := by
+  have hp' : (a.ph + 20) % 21 < 21 := by omega
+  rcases h with h | h | ⟨h, hp⟩
+  · have e : a.left lim w₀ = a.t + (a.y + 1 - lim) + 2 + (21 * w₀ + 21) := by simp [FC.left, h]
+    by_cases h1 : a.t = 0
+    · have n : a.next lim w₀ = ⟨3, 0, a.y, a.tick, (a.ph + 20) % 21⟩ := by simp [FC.next, h, h1]
+      rw [n, e]
+      exact ⟨show (a.y + 1 - lim) + 1 + (21 * w₀ + 21) < _ by omega, Or.inr (Or.inl rfl)⟩
+    · have n : a.next lim w₀ = ⟨2, a.t - 1, a.y, a.tick, (a.ph + 20) % 21⟩ := by simp [FC.next, h, h1]
+      rw [n, e]
+      exact ⟨show (a.t - 1) + (a.y + 1 - lim) + 2 + (21 * w₀ + 21) < _ by omega, Or.inl rfl⟩
+  · have e : a.left lim w₀ = (a.y + 1 - lim) + 1 + (21 * w₀ + 21) := by simp [FC.left, h]
+    by_cases h1 : lim ≤ a.y
+    · have n : a.next lim w₀ = ⟨3, a.t, a.y - 1, a.tick, (a.ph + 20) % 21⟩ := by simp [FC.next, h, h1]
+      rw [n, e]
+      exact ⟨show (a.y - 1 + 1 - lim) + 1 + (21 * w₀ + 21) < _ by omega, Or.inr (Or.inl rfl)⟩
+    · have n : a.next lim w₀ = ⟨4, a.t, a.y, w₀, (a.ph + 20) % 21⟩ := by simp [FC.next, h, h1]
+      rw [n, e]
+      exact ⟨show 21 * w₀ + (a.ph + 20) % 21 + 1 < _ by omega, Or.inr (Or.inr (Or.inl ⟨rfl, hp'⟩))⟩
+  · have e : a.left lim w₀ = 21 * a.w + a.ph + 1 := by simp [FC.left, h]
+    have hT := a.tick_cases
+    by_cases h1 : a.tick = 0
+    · have n : a.next lim w₀ = ⟨5, a.t, a.y, 0, (a.ph + 20) % 21⟩ := by simp [FC.next, h, h1]
+      rw [n, e]
+      exact ⟨show 0 < _ by omega, Or.inr (Or.inr (Or.inr rfl))⟩
+    · have n : a.next lim w₀ = ⟨4, a.t, a.y, a.tick, (a.ph + 20) % 21⟩ := by simp [FC.next, h, h1]
+      rw [n, e]
+      refine ⟨?_, Or.inr (Or.inr (Or.inl ⟨rfl, hp'⟩))⟩
+      show 21 * a.tick + (a.ph + 20) % 21 + 1 < _
+      rcases hT with ⟨h0, h3⟩ | ⟨h0, h3⟩ <;> omega
+
+/-- `d` frames with no delay -/
+def FC.iter (lim w₀ : Nat) (a : FC) : Nat → FC
+  | 0 => a
+  | d + 1 => (a.iter lim w₀ d).next lim w₀
+
+theorem FC.iter_next (lim w₀ : Nat) (a : FC) : ∀ d, (a.next lim w₀).iter lim w₀ d = a.iter lim w₀ (d + 1)
+  | 0 => rfl
+  | d + 1 => by
+    show ((a.next lim w₀).iter lim w₀ d).next lim w₀ = (a.iter lim w₀ (d + 1)).next lim w₀
+    rw [FC.iter_next lim w₀ a d]
+
+/-- a sequence with no delay reaches task 5, and it has no task 5 before -/
+theorem FC.reach {lim : Nat} (w₀ : Nat) (hlim : 1 ≤ lim) : ∀ (m : Nat) (a : FC), (a.task = 2 ∨ a.task = 3 ∨ (a.task = 4 ∧ a.ph < 21) ∨ a.task = 5) → a.left lim w₀ ≤ m →
+    ∃ d, (a.iter lim w₀ d).task = 5 ∧ ∀ i, i < d → (a.iter lim w₀ i).task = 2 ∨ (a.iter lim w₀ i).task = 3 ∨ ((a.iter lim w₀ i).task = 4 ∧ (a.iter lim w₀ i).ph < 21)
+  | m, a, h, hl => by
+    by_cases h5 : a.task = 5
+    · exact ⟨0, h5, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
+    · have h' : a.task = 2 ∨ a.task = 3 ∨ (a.task = 4 ∧ a.ph < 21) := by omega
+      obtain ⟨n1, n2⟩ := FC.next_left w₀ hlim h'
+      cases m with
+      | zero => omega
+      | succ m =>
+        obtain ⟨d, d1, d2⟩ := FC.reach w₀ hlim m (a.next lim w₀) n2 (by omega)
+        refine ⟨d + 1, by rw [← FC.iter_next]; exact d1, fun i hi => ?_⟩
+        cases i with
+        | zero => exact h'
+        | succ i =>
+          rw [← FC.iter_next]
+          exact d2 i (by omega)
+
+/-- the numbers of `Flag` hold together: a sequence with no `lag` frames, for any numbers -/
+theorem Flag.noLag {lim : Nat} (hlim : 1 ≤ lim) (w₀ E T c : Nat) : ∃ L, Nonempty (Flag lim w₀ E T c L) := by
+  let a : FC := ⟨2, T, lim + 30, 0, c⟩
+  obtain ⟨d, d1, d2⟩ := FC.reach w₀ hlim _ a (Or.inl rfl) (Nat.le_refl _)
+  have hx : ∀ n, E < n → (a.iter lim w₀ (n + 1 - (E + 1))) = (a.iter lim w₀ (n - (E + 1))).next lim w₀ := by
+    intro n hn
+    rw [show n + 1 - (E + 1) = (n - (E + 1)) + 1 by omega]
+    rfl
+  refine ⟨E + 1 + d, ⟨⟨fun _ => false, fun n => a.iter lim w₀ (n - (E + 1)), ?_, ?_, ?_, ?_, by omega, ?_, ?_⟩⟩⟩
+  · simp [FC.iter, a]
+  · simp [FC.iter, a]
+  · simp [FC.iter, a]
+  · simp [FC.iter, a]
+  · intro n h1 h2
+    simp only [FlagStep, Bool.false_eq_true, if_false]
+    rw [hx n h1]
+    apply FC.next_run
+    rcases d2 (n - (E + 1)) (by omega) with h | h | h
+    · exact Or.inl h
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr h.1)
+  · show (a.iter lim w₀ (E + 1 + d - (E + 1))).task = 5
+    rw [Nat.add_sub_cancel_left]
+    exact d1
+
 /-! ## Real frames: the names and the states -/
 
 /-- the names of the disassembly this file reads -/
-def nameList : List String := ["GameTimerDisplay", "GameTimerCtrlTimer", "IntervalTimerControl", "EventMusicBuffer"]
+def nameList : List String := ["GameTimerDisplay", "GameTimerCtrlTimer", "IntervalTimerControl", "EventMusicBuffer", "Enemy_ID", "Enemy_Y_Position", "EnemyIntervalTimer", "StarFlagObject"]
 
 /-- the names above, from the text of the disassembly -/
 def namesFrom (text : String) : Names :=
@@ -1009,6 +1334,90 @@ def timerCheck (sy : Syms) (nm : Names) (p : Params) (cart m0 : Machine) : Bool 
     startsT.all (startOK sy nm p cart) &&
     (p.c0 + 2) % 21 == p.grid % 21
 
+/-! ## Real frames: after the castle entry -/
+
+/-- the star flag's enemy slot: the first that holds it. The disassembly's loop over the enemy slots has this length. -/
+def flagSlot (nm : Names) (m : Machine) : UInt16 :=
+  (((List.range 6).find? fun k => peek m (nm.ad "Enemy_ID" + k.toUInt16) == nm.vl "StarFlagObject").getD 0).toUInt16
+
+/-- the counters of `FC` on a real machine -/
+def flagOf (sy : Syms) (nm : Names) (m : Machine) : FC :=
+  let k := flagSlot nm m
+  ⟨(peek m sy.StarFlagTaskControl).toNat, timerOf nm m, (peek m (nm.ad "Enemy_Y_Position" + k)).toNat,
+    (peek m (nm.ad "EnemyIntervalTimer" + k)).toNat, phaseOf nm m⟩
+
+/-- the real frame from `m` to `m2` does not run: its phase stays, as in `kindOf` -/
+def flagLag (nm : Names) (m m2 : Machine) : Bool := phaseOf nm m2 == phaseOf nm m
+
+/-- the rule `FlagStep` on a real frame from `m` to `m2` -/
+def flagRuleOK (sy : Syms) (nm : Names) (m m2 : Machine) : Bool :=
+  decide (FlagStep sy.StarFlagTopY.toNat sy.StarFlagDelay.toNat (flagLag nm m m2) (flagOf sy nm m) (flagOf sy nm m2))
+
+/-- what the frames after a castle entry are scanned for -/
+structure FlagScan where
+  m : Machine
+  /-- each frame before the level change follows the rule, and the frame of the level change begins with task 5 -/
+  ok : Bool
+  /-- `Flag.early`, counted from the castle entry -/
+  early : Nat
+  /-- the frames so far -/
+  frames : Nat
+  /-- the level has changed -/
+  done : Bool
+
+def flagScanStep (sy : Syms) (nm : Names) (s : FlagScan) (i : UInt8) : FlagScan :=
+  if s.done then s
+  else
+    let y := frame s.m i
+    let a := flagOf sy nm s.m
+    if level sy y then
+      { m := y, ok := s.ok && a.task == 5, early := s.early, frames := s.frames + 1, done := true }
+    else
+      { m := y, ok := s.ok && flagRuleOK sy nm s.m y,
+        early := s.early + (if !flagLag nm s.m y && decide (a.task ≤ 3) then 1 else 0),
+        frames := s.frames + 1, done := false }
+
+/-- the frames after the castle entry `e`, on the inputs `w`, up to the level change -/
+def flagScan (sy : Syms) (nm : Names) (e : Machine) (w : List UInt8) : FlagScan :=
+  w.foldl (flagScanStep sy nm) ⟨e, true, 0, 0, false⟩
+
+/-- the frames after the castle entry `e` follow `Flag`, with the `D` of `fireD`, and the level change is not before the formula -/
+def flagOK (sy : Syms) (nm : Names) (e : Machine) (w : List UInt8) : Bool :=
+  let a := flagOf sy nm e
+  let r := flagScan sy nm e w
+  a.task == 2 && decide (sy.StarFlagTopY.toNat + 30 ≤ a.y) && r.ok && r.done && r.early == a.t + fireD a.t &&
+    decide (formula a.ph a.t (fireD a.t) ≤ r.frames)
+
+/-- no input, up to the frame of the formula -/
+def flagInputs (nm : Names) (e : Machine) : List UInt8 :=
+  zeros (formula (phaseOf nm e) (timerOf nm e) (fireD (timerOf nm e)))
+
+/-- the castle entries of the check: every phase, the real timer, another value, the digits with fireworks -/
+def flagStates (sy : Syms) (nm : Names) (p : Params) (m0 : Machine) : List Machine :=
+  let b := beside m0
+  let v0 := (beforeGrab sy m0).headD default
+  (List.range 21).map (fun d => entryState sy nm p v0 (run b (zeros d)) (some phaseT)) ++ [entryState sy nm p v0 b none] ++
+    (valuesT ++ fireT).map (fun v => entryState sy nm p v0 b (some v))
+
+/-- the castle entry of the check with pauses -/
+def flagPauseState (sy : Syms) (nm : Names) (p : Params) (m0 : Machine) : Machine := entryAt sy nm p m0 0 (some phaseT)
+
+/-- a pause in each task of the castle entry with the timer `phaseT`, the frame of the level change being `n`: in task 2, in task 3, in task 4, and on the frame of the level change. The position of the input and the pause's length. -/
+def flagPausesT (n : Nat) : List (Nat × Nat) := [(50, 45), (140, 46), (200, 66), (n - 1, 50)]
+
+/-- the inputs of a pause: no input but the pause, more frames than the level change takes -/
+def flagPauseInputs (nm : Names) (e : Machine) (x : Nat × Nat) : List UInt8 :=
+  withPause x.1 x.2 ((flagInputs nm e) ++ zeros 100)
+
+/-- the frame of the level change in the check with pauses -/
+def flagPauseN (nm : Names) (e : Machine) : Nat := (flagInputs nm e).length
+
+/-- the check of the frames after the castle entry -/
+def flagCheck (sy : Syms) (nm : Names) (p : Params) (m0 : Machine) : Bool :=
+  (flagStates sy nm p m0).all (fun e => flagOK sy nm e (flagInputs nm e)) &&
+    (let e := flagPauseState sy nm p m0
+     (flagPausesT (flagPauseN nm e)).all (fun x => flagOK sy nm e (flagPauseInputs nm e x)))
+
 /-! ## What the checks give -/
 
 /-- what the check of one run gives -/
@@ -1021,6 +1430,19 @@ structure RunProp (sy : Syms) (nm : Names) (p : Params) (m0 : Machine) (w : List
   timer : timerOf nm (scan sy nm p.q (segsOf areas) m0 w).m + (areas.map (ticks p.q)).sum = p.t0
   lag : (scan sy nm p.q (segsOf areas) m0 w).lag = 2 + j
   grid : (phaseOf nm (scan sy nm p.q (segsOf areas) m0 w).m + w.length) % 21 = (p.c0 + (2 + j)) % 21
+
+/-- what the check of the frames after one castle entry `e` gives, on the inputs `w`. In `Flag`, `T` and `c` are the counters that `e` holds, and `L` is `E` plus the frames of the scan. -/
+structure FlagProp (sy : Syms) (nm : Names) (e : Machine) (w : List UInt8) : Prop where
+  /-- what the castle entry leaves: `Flag.task_E`, `Flag.y_E` -/
+  task_E : (flagOf sy nm e).task = 2
+  y_E : sy.StarFlagTopY.toNat + 30 ≤ (flagOf sy nm e).y
+  /-- `FlagStep` on every frame before the level change, and task 5 on the frame of the level change: `Flag.step`, `Flag.task_L` -/
+  rule : (flagScan sy nm e w).ok = true
+  done : (flagScan sy nm e w).done = true
+  /-- `T + D`, with the `D` of `fireD` -/
+  early : (flagScan sy nm e w).early = (flagOf sy nm e).t + fireD (flagOf sy nm e).t
+  /-- `Flag.hL` -/
+  level : formula (flagOf sy nm e).ph (flagOf sy nm e).t (fireD (flagOf sy nm e).t) ≤ (flagScan sy nm e w).frames
 
 /-- what the checks give on the machine `m0`, the 1-1 start, and `cart`, the machine at power-on -/
 structure Statement (sy : Syms) (nm : Names) (p : Params) (cart m0 : Machine) (slideN d t N : Nat) : Prop where
@@ -1047,6 +1469,16 @@ structure Statement (sy : Syms) (nm : Names) (p : Params) (cart m0 : Machine) (s
   /-- frame 0 does not depend on the Start press, and the counters before frame 0 are those of `Frames.s_zero`, `Frames.ph_zero` -/
   starts : ∀ kk ∈ startsT, phaseOf nm (startAt sy cart kk) = p.c0 ∧ timerOf nm (startAt sy cart kk) + 1 = p.t0 ∧
     timerOf nm (beforeStart sy cart kk) = p.t0 ∧ subOf nm (beforeStart sy cart kk) = 0 ∧ phaseOf nm (beforeStart sy cart kk) = 2
+  /-- the frames after the castle entry follow `Flag`: every phase, the real timer, another value, the digits with fireworks -/
+  flags : ∀ e ∈ flagStates sy nm p m0, FlagProp sy nm e (flagInputs nm e)
+  /-- the same with a pause in each task -/
+  flagPauses : ∀ x ∈ flagPausesT (flagPauseN nm (flagPauseState sy nm p m0)),
+    FlagProp sy nm (flagPauseState sy nm p m0) (flagPauseInputs nm (flagPauseState sy nm p m0) x)
+
+theorem flagProp_of_ok {sy : Syms} {nm : Names} {e : Machine} {w : List UInt8} (h : flagOK sy nm e w = true) : FlagProp sy nm e w := by
+  simp only [flagOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨⟨⟨a, b⟩, c⟩, d⟩, f⟩, g⟩ := h
+  exact ⟨a, b, c, d, f, g⟩
 
 theorem runProp_of_ok {sy : Syms} {nm : Names} {p : Params} {m0 : Machine} {w : List UInt8} {areas : List Nat} {j : Nat}
     (h : runOK sy nm p m0 w areas j = true) : RunProp sy nm p m0 w areas j := by
@@ -1058,12 +1490,15 @@ theorem runProp_of_ok {sy : Syms} {nm : Names} {p : Params} {m0 : Machine} {w : 
 
 theorem statement_of_check {sy : Syms} {nm : Names} {p : Params} {cart m0 : Machine} {slideN d t N : Nat} (hN : 1 ≤ N)
     (h1 : formulaCheck sy nm m0 p slideN = true) (h2 : inputCheck sy nm p m0 d t N = true)
-    (h3 : timerCheck sy nm p cart m0 = true) : Statement sy nm p cart m0 slideN d t N := by
+    (h3 : timerCheck sy nm p cart m0 = true) (h4 : flagCheck sy nm p m0 = true) : Statement sy nm p cart m0 slideN d t N := by
   simp only [formulaCheck, Bool.and_eq_true, List.all_eq_true, List.mem_range, beq_iff_eq] at h1
   obtain ⟨⟨⟨⟨h1a, h1b⟩, h1d⟩, h1e⟩, h1s⟩ := h1
   simp only [timerCheck, Bool.and_eq_true, List.all_eq_true, beq_iff_eq] at h3
   obtain ⟨⟨⟨h3a, h3p⟩, h3b⟩, h3c⟩ := h3
-  refine ⟨?_, ⟨caseProp_of_ok h1b.1, h1b.2⟩, fun v hv => caseProp_of_ok (h1d v hv), fun v hv => caseProp_of_ok (h1e v hv), caseProp_of_ok h1s, ?_, ?_, runProp_of_ok h3p, ?_⟩
+  simp only [flagCheck, Bool.and_eq_true, List.all_eq_true] at h4
+  obtain ⟨h4a, h4b⟩ := h4
+  refine ⟨?_, ⟨caseProp_of_ok h1b.1, h1b.2⟩, fun v hv => caseProp_of_ok (h1d v hv), fun v hv => caseProp_of_ok (h1e v hv), caseProp_of_ok h1s, ?_, ?_, runProp_of_ok h3p, ?_,
+    fun e he => flagProp_of_ok (h4a e he), fun x hx => flagProp_of_ok (h4b x hx)⟩
   · intro dl hd
     exact ⟨caseProp_of_ok (h1a dl hd).1, (h1a dl hd).2⟩
   · intro hM w hw hl

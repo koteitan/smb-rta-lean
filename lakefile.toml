@@ -2,8 +2,13 @@ name = "smbrta"
 version = "0.1.0"
 defaultTargets = ["smbrta"]
 
+# `precompileModules`: `native_decide` runs the code of these libraries natively, not in the interpreter.
+# `roots = []`: lake loads each library as a plain shared library, in the order of the imports. With a root it would load it
+# as a plugin, which needs one module that imports all the others.
 [[lean_lib]]
 name = "Smbrta"
+roots = []
+globs = ["Smbrta.*"]
 precompileModules = true
 
 # paths of the files outside the repository (smbrta.json)
@@ -13,7 +18,9 @@ name = "Config"
 # theorem statements and how they follow from computations (no game data)
 [[lean_lib]]
 name = "Theorems"
+roots = []
 globs = ["Theorems.+"]
+precompileModules = true
 
 [[lean_exe]]
 name = "smbrta"

@@ -104,6 +104,14 @@ structure Syms where
   EngVerticalPipe : UInt16
   EngFlagpole : UInt16
   EngEndLevel : UInt16
+  DoFootCheck : UInt16
+  DoPlayerSideCheck : UInt16
+  AwardTouchedCoin : UInt16
+  HandleAxeMetatile : UInt16
+  BlockBufferCollision : UInt16
+  HandlePipeEntry : UInt16
+  BlockBufferAdderData : UInt16
+  Block_Buffer_2 : UInt16
   Left_Dir : UInt16
   Right_Dir : UInt16
   PipeColumnByte : UInt16
@@ -115,6 +123,8 @@ structure Syms where
   SidePipeTopTile : UInt16
   EngSidePipe : UInt16
   RoomPipeByte : UInt16
+  StarFlagTopY : UInt16
+  StarFlagDelay : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -212,6 +222,14 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("EngVerticalPipe", fun s => s.EngVerticalPipe),
   ("EngFlagpole", fun s => s.EngFlagpole),
   ("EngEndLevel", fun s => s.EngEndLevel),
+  ("DoFootCheck", fun s => s.DoFootCheck),
+  ("DoPlayerSideCheck", fun s => s.DoPlayerSideCheck),
+  ("AwardTouchedCoin", fun s => s.AwardTouchedCoin),
+  ("HandleAxeMetatile", fun s => s.HandleAxeMetatile),
+  ("BlockBufferCollision", fun s => s.BlockBufferCollision),
+  ("HandlePipeEntry", fun s => s.HandlePipeEntry),
+  ("BlockBufferAdderData", fun s => s.BlockBufferAdderData),
+  ("Block_Buffer_2", fun s => s.Block_Buffer_2),
   ("Left_Dir", fun s => s.Left_Dir),
   ("Right_Dir", fun s => s.Right_Dir),
   ("PipeColumnByte", fun s => s.PipeColumnByte),
@@ -222,7 +240,9 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("SidePipeTile", fun s => s.SidePipeTile),
   ("SidePipeTopTile", fun s => s.SidePipeTopTile),
   ("EngSidePipe", fun s => s.EngSidePipe),
-  ("RoomPipeByte", fun s => s.RoomPipeByte)]
+  ("RoomPipeByte", fun s => s.RoomPipeByte),
+  ("StarFlagTopY", fun s => s.StarFlagTopY),
+  ("StarFlagDelay", fun s => s.StarFlagDelay)]
 
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
@@ -328,6 +348,14 @@ def Syms.parse (text : String) : Except String Syms := do
     EngVerticalPipe := ← get "EngVerticalPipe"
     EngFlagpole := ← get "EngFlagpole"
     EngEndLevel := ← get "EngEndLevel"
+    DoFootCheck := ← get "DoFootCheck"
+    DoPlayerSideCheck := ← get "DoPlayerSideCheck"
+    AwardTouchedCoin := ← get "AwardTouchedCoin"
+    HandleAxeMetatile := ← get "HandleAxeMetatile"
+    BlockBufferCollision := ← get "BlockBufferCollision"
+    HandlePipeEntry := ← get "HandlePipeEntry"
+    BlockBufferAdderData := ← get "BlockBufferAdderData"
+    Block_Buffer_2 := ← get "Block_Buffer_2"
     Left_Dir := ← get "Left_Dir"
     Right_Dir := ← get "Right_Dir"
     PipeColumnByte := ← get "PipeColumnByte"
@@ -339,6 +367,8 @@ def Syms.parse (text : String) : Except String Syms := do
     SidePipeTopTile := ← get "SidePipeTopTile"
     EngSidePipe := ← get "EngSidePipe"
     RoomPipeByte := ← get "RoomPipeByte"
+    StarFlagTopY := ← get "StarFlagTopY"
+    StarFlagDelay := ← get "StarFlagDelay"
   }
 
 def Syms.load (path : String) : IO Syms := do

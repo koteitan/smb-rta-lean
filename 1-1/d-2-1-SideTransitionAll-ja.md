@@ -114,7 +114,7 @@ Lean: `Theorems/SideTransitionAll.lean`（`Statement`、`statement_of_check`、`
 * ゲームタイマーが 000 でマリオが生きている場合: 切り替えのあと操作できません。+282 の例外で、遅くなる側です。
 * 入力なしだけです。すべての入力は `E` からだけ、仮定 `GMerge` のもとで動かしました（[横の土管から地上への切り替え](d-1-SideTransition-ja.md)）。Start と Select は含みません。
 * 書き換えた状態がそのままたどり着けることは示していません。
-* [1-1 全体](0-1-Route-ja.md)のフィールド `change₂` はまだ仮定です。`every_entry` と `no_control_before` は (H1) から (H4) を満たす走りについてこれを出します。すべての走りが満たすことは、ここでは示していません。
+* [1-1 全体](0-1-Route-ja.md) はこの定理を使いません。その `change₂` は切り替えの[はじめのフレーム](d-2-2-SideChangeBound-ja.md)と[最後のフレーム](d-2-3-SideChangeEnd-ja.md)から出します。`every_entry` と `no_control_before` は (H1) から (H4) を満たす走りについてちょうどの長さを出します。すべての走りが満たすことは、ここでは示していません。
 * フレームはエミュレータのフレームです。[エミュレータ](../docs/emulator.md)を見てください。
 
 **ファイル.** `Theorems/SideTransitionAll.lean`、非公開の `Proof/SideTransitionAll.lean`。

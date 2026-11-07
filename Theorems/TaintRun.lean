@@ -7,8 +7,18 @@ import Std.Data.TreeMap
 
 `PipeTransitionAll` decides a run by the bytes it reads. Bytes that differ from run to run and are read stay outside it. Here an abstract
 machine follows a set of machines at once: some bits of registers and RAM are known, the others not, and the dot in the frame is an interval.
-A branch on a flag that is not known is followed both ways. A table of abstract states closed under one step (`walk`) proves that every
-machine of a start state gets control on the same frame (`ctl_of_check`). The proof goes through every instruction of the CPU. There is no ROM in this file.
+A branch on a flag that is not known is followed both ways. A table of abstract states closed under one step proves what every machine of a start state does. The proof goes through every
+instruction of the CPU. There is no ROM in this file.
+
+The machine has these parts that a check may use or not.
+* The pad is a byte with bits that may not be known (`Env.pad`, `AS.padShift`).
+* A counter: `Env.rkI` is a RAM byte that is not known, but the instruction `DEC abs` of it is followed: `AS.rk`, `AS.spent`, `Sim.rkv`, `arkOp`. No other instruction may write it.
+* A byte can be read in pieces, by some of its bits (`Env.splits`, `splitRead`).
+* `Sim` takes the pair of the frame and the counter's value at the start of the frame.
+
+The walk stops at the end of a frame and asks a test on the state there (`walkF`). Two results come from it:
+* `ctl_of_check`: with the test `finCtl`, every machine of a start state gets control on the same frame.
+* `inv_step`: with a counter and the tests `finRk`, `finOne`, one frame of a state with the counter at any value goes on to such a state, and the counter falls by at most one.
 
 Only frames that end in the idle loop `JMP *` are covered: a step that may cross the end of a frame by another instruction is not decided. Page: `1-1/b-2-3-TaintRun.md`.
 -/
@@ -81,8 +91,13 @@ def AAd.exact (a : UInt16) : AAd := ⟨a, a⟩
 structure Env where
   prg : ByteArray
   mask : UInt16
-  pad : UInt8
+  /-- the buttons of a frame: some bits may not be known -/
+  pad : AB
   D : List Nat
+  /-- the counter, as a RAM index -/
+  rkI : Nat := 4096
+  /-- bytes to be read in pieces, with the bits that decide the pieces -/
+  splits : List (Nat × UInt8) := []
   /-- keep a list of the bytes read that are not known: only for the search of the set of known bytes -/
   track : Bool := false
 
@@ -101,13 +116,17 @@ structure AS where
   nmi : Bool
   lo : Nat
   hi : Nat
-  padShift : UInt8
+  padShift : AB
   strobe : Bool
   dg : Bool
   /-- frames that have ended -/
   k : Nat
   /-- bytes read that are not known, if `track` -/
   log : List Nat := []
+  /-- the counter is followed: only its fall is known, see `Sim` -/
+  rk : Bool := false
+  /-- the counter has fallen in this frame -/
+  spent : Bool := false
   deriving Inhabited
 
 abbrev AM := StateT AS Option
@@ -141,8 +160,8 @@ def appuRead (reg : UInt16) : AM AB := fun A =>
   else some (AB.known 0, A)
 
 def apadRead (E : Env) : AM AB := fun A =>
-  if A.strobe then some (AB.known (0x40 ||| (E.pad &&& 1)), A)
-  else some (AB.known (0x40 ||| (A.padShift &&& 1)), { A with padShift := (A.padShift >>> 1) ||| 0x80 })
+  if A.strobe then some ((AB.known 0x40).or (E.pad.and (AB.known 1)), A)
+  else some ((AB.known 0x40).or (A.padShift.and (AB.known 1)), { A with padShift := A.padShift.shr.or (AB.known 0x80) })
 
 /-- note a byte read, if asked -/
 @[inline] def AS.note (E : Env) (A : AS) (i : Nat) : AS :=
@@ -196,6 +215,7 @@ def awr (E : Env) (ad : AAd) (v : AB) : AM Unit := fun A =>
     let addr := ad.lo
     if addr < 0x2000 then
       let i := (addr &&& 0x7FF).toNat
+      if A.rk && i == E.rkI then none else
       some ((), { A.setK i v with dg := A.dg && !E.D.contains i })
     else if addr < 0x4000 then appuWrite (addr &&& 7) v A
     else if addr == 0x4014 then atick 513 514 A
@@ -539,12 +559,31 @@ def isIdle (E : Env) (pc : UInt16) (op : UInt8) : Bool :=
 
 def cycOf (op : UInt8) : Nat := (cycTable.get! op.toNat).toNat
 
+/-- the instruction `DEC abs` of the counter -/
+def isRkDec (E : Env) (pc : UInt16) (op : UInt8) : Bool :=
+  op == 0xCE && decide (E.rkI < 2048) &&
+    (let lo := E.prg.get! ((pc + 1) &&& E.mask).toNat
+     let hi := E.prg.get! ((pc + 2) &&& E.mask).toNat
+     let ad : UInt16 := lo.toUInt16 ||| (hi.toUInt16 <<< 8)
+     decide (ad < 0x2000) && (ad &&& 0x7FF).toNat == E.rkI)
+
+/-- the flags after a fall of the counter: it was at least 2, so the result is not 0 -/
+def rkFlags (p : AB) : AB := ((p.and (AB.known 0x7D)).or (AB.known 0)).or (AB.top.and (AB.known 0x80))
+
+/-- `DEC abs` of the counter: it falls by one, at most once in a frame -/
+def arkOp (E : Env) : AM Unit :=
+  afetch16 E >>= fun ad A =>
+    if A.rk && !A.spent && decide (ad < 0x2000) && (ad &&& 0x7FF).toNat == E.rkI then
+      some ((), { A.setK E.rkI AB.top with spent := true, dg := A.dg && !E.D.contains E.rkI, p := rkFlags A.p })
+    else none
+
 /-- the abstract successors of a state: each is a state or a failure -/
 def astep1 (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) :=
   if A.nmi then [((anmi E) A).map (·.2)]
   else if 0x8000 ≤ A.pc then
     let op := E.prg.get! (A.pc &&& E.mask).toNat
     if isIdle E A.pc op then aidle A
+    else if A.rk && isRkDec E A.pc op then [((arkOp E >>= fun _ => atick 6 6) { A with pc := A.pc + 1 }).map (·.2)]
     else
       let c := cycOf op
       if c == 0 then [none]
@@ -591,11 +630,37 @@ def readsDg (E : Env) (pc : UInt16) (op : UInt8) : Bool :=
      let ad : UInt16 := lo.toUInt16 ||| (hi.toUInt16 <<< 8)
      ad < 0x2000 && E.D.head? == some (ad &&& 0x7FF).toNat)
 
+/-- the bit `b` of the byte `d` is set, or not -/
+def splitBit (d : Nat) (b : UInt8) (A : AS) : List AS :=
+  match (A.getK d).bit b with
+  | some _ => [A]
+  | none => [A.setK d ((A.getK d).or (AB.known b)), A.setK d ((A.getK d).and (AB.known (~~~b)))]
+
+/-- the byte an instruction `LDA` reads, in zero page or absolute -/
+def ldaAddr (E : Env) (pc : UInt16) (op : UInt8) : Option Nat :=
+  if op == 0xA5 then some (E.prg.get! ((pc + 1) &&& E.mask).toNat).toNat
+  else if op == 0xAD then
+    let lo := E.prg.get! ((pc + 1) &&& E.mask).toNat
+    let hi := E.prg.get! ((pc + 2) &&& E.mask).toNat
+    let ad : UInt16 := lo.toUInt16 ||| (hi.toUInt16 <<< 8)
+    if ad < 0x2000 then some (ad &&& 0x7FF).toNat else none
+  else none
+
+/-- a byte of `splits` that is read here: one piece for each value of the listed bits -/
+def splitRead (E : Env) (A : AS) (op : UInt8) : List AS :=
+  match ldaAddr E A.pc op with
+  | none => [A]
+  | some d =>
+    match E.splits.find? (fun p => p.1 == d) with
+    | none => [A]
+    | some p =>
+      if d < 2048 then (bitList.filter (fun b => b &&& p.2 != 0)).foldl (fun l b => l.flatMap (splitBit d b)) [A] else [A]
+
 /-- which pieces this step needs -/
 def pieces (E : Env) (A : AS) : List AS :=
   if A.nmi || A.pc < 0x8000 then [A] else
   let op := E.prg.get! (A.pc &&& E.mask).toNat
-  let l1 := if readsDg E A.pc op then splitDg E A else [A]
+  let l1 := if readsDg E A.pc op then splitDg E A else splitRead E A op
   let l2 :=
     if readsPPU E A.pc op || isIdle E A.pc op then
       ((l1.flatMap (splitDot dotVblSet)).flatMap (splitDot dotVblClr)).flatMap (splitDot dotSpr0)
@@ -614,10 +679,10 @@ def ramLeFrom (a b : AS) : Nat → Nat → Bool
 
 /-- every machine of `a` is one of `b` -/
 def AS.le (a b : AS) : Bool :=
-  a.pc == b.pc && a.s == b.s && a.k == b.k && a.vb == b.vb && a.nmi == b.nmi && a.padShift == b.padShift && a.strobe == b.strobe &&
+  a.pc == b.pc && a.s == b.s && a.k == b.k && a.vb == b.vb && a.nmi == b.nmi && a.padShift.le b.padShift && a.strobe == b.strobe &&
   a.a.le b.a && a.x.le b.x && a.y.le b.y && a.p.le b.p && a.ppuCtrl.le b.ppuCtrl && a.ppuMask.le b.ppuMask &&
   decide (b.lo ≤ a.lo) && decide (a.hi ≤ b.hi) && decide (b.hi < dotsPerFrame) && (!b.dg || a.dg) &&
-  b.ram.size == 2048 && b.kn.size == 2048 && ramLeFrom a b 2048 0
+  b.ram.size == 2048 && b.kn.size == 2048 && ramLeFrom a b 2048 0 && a.rk == b.rk && a.spent == b.spent
 
 /-! ## Control, and the walk -/
 
@@ -660,7 +725,7 @@ def keyOf (E : Env) (keep : List Nat) (A : AS) : Nat :=
   let n := n * 65536 + num A.x
   let n := n * 65536 + num A.y
   let n := n * 65536 + (if useA then num A.a else 0)
-  let n := n * 4 + (if A.nmi then 1 else 0) + (if A.vb then 2 else 0)
+  let n := n * 16 + (if A.nmi then 1 else 0) + (if A.vb then 2 else 0) + (if A.rk then 4 else 0) + (if A.spent then 8 else 0)
   let n := keep.foldl (fun n i => n * 65536 + (A.getK i).k.toNat * 256 + ((A.getK i).v &&& (A.getK i).k).toNat) n
   -- the pieces of `splitDg` stay apart while the bytes `D` are put together and tested
   let useD := op == 0x0D || op == 0xF0
@@ -688,15 +753,22 @@ def coverIn (C : Cfg) (B : AS) : Bool :=
     | some D => B.le D
     | none => false
 
-/-- from `A`, step by step until every path ends in a state of the table or in the last frame boundary -/
-def walk (C : Cfg) : Nat → AS → Bool
+/-- from `A`, step by step until every path ends in a state of the table, or at the frame's end in a state that `fin` accepts -/
+def walkF (C : Cfg) (fin : AS → Bool) : Nat → AS → Bool
   | 0, _ => false
   | n + 1, A => (succs C.E C.ops A).all fun r =>
     match r with
     | none => false
     | some B =>
-      if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverIn C B) || walk C n B
-      else B.k == A.k + 1 && actl C.sy B == some (B.k == C.K) && (B.k == C.K || coverIn C B || walk C n B)
+      if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverIn C B) || walkF C fin n B
+      else B.k == A.k + 1 && fin B
+
+/-- at the frame's end: control is known and it comes on frame `K`; before that the state is in the table -/
+def finCtl (C : Cfg) (B : AS) : Bool :=
+  actl C.sy B == some (B.k == C.K) && (B.k == C.K || coverIn C B)
+
+/-- from `A`, step by step until every path ends in a state of the table or in the last frame boundary -/
+abbrev walk (C : Cfg) : Nat → AS → Bool := walkF C (finCtl C)
 
 /-- the whole check: every state of the table and every start state goes on to states of the table -/
 def check (C : Cfg) (F : Nat) (starts : List AS) : Bool :=
@@ -747,6 +819,8 @@ structure Search where
   firstFail : Option AS := none
   /-- bytes read that were not known -/
   unk : Std.HashMap Nat Unit := {}
+  /-- the states at the frame's end -/
+  ends : Array AS := #[]
 
 /-- a new state goes to the waiting list: it is joined with a state that waits with the same key -/
 def route (E : Env) (keep : List Nat) (X : Search) (B : AS) : Search :=
@@ -787,10 +861,12 @@ partial def runFrom (E : Env) (ops : Array (AM Unit)) (keep : List Nat) (K : Nat
       else pure ()
     | _ => pure ()
     for b in good do
-      if b.k != cur.k && b.k ≥ K then pure ()
+      if b.k != cur.k && b.k ≥ K then X := { X with ends := X.ends.push b }
       else
         X := { X with leaders := X.leaders.insert b.pc.toNat () }
         X := route E keep X b
+        -- the walk stops at the end of a frame, so the state there must be in the table
+        if b.k != cur.k then X := { X with inN := X.inN.insert (keyOf E keep b) 2 }
     break
   return X
 
@@ -804,7 +880,7 @@ partial def searchLoop (E : Env) (ops : Array (AM Unit)) (keep : List Nat) (K : 
       let n := X.inN.getD key 1
       -- a state that one path came into needs no entry: the walk goes through it, unless the path was long
       X := { X with pending := X.pending.erase key, inN := X.inN.erase key }
-      if n ≥ 2 || A.k == 0 || X.steps % 8 == 0 then X := { X with out := X.out.push A }
+      if n ≥ 2 || A.k == 0 && (X.out.size % 16 == 0) then X := { X with out := X.out.push A }
       if isSpin E A then X := { X with done := X.done.insert key A }
       X := runFrom E ops keep K X A
   return X
@@ -1181,7 +1257,7 @@ theorem TR_eqSub {r v : AB} {x y : UInt8} (h1 : r.mem x) (h2 : v.mem y) : TR (ae
 /-! ## The relation between the abstract machine and machines -/
 
 /-- `A` covers the machine `m` -/
-structure Sim (E : Env) (F : Nat) (A : AS) (m : Machine) : Prop where
+structure Sim (E : Env) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop where
   a : A.a.mem m.a
   x : A.x.mem m.x
   y : A.y.mem m.y
@@ -1198,8 +1274,8 @@ structure Sim (E : Env) (F : Nat) (A : AS) (m : Machine) : Prop where
   lo : A.lo ≤ m.fdot
   hi : m.fdot ≤ A.hi
   lim : A.hi < dotsPerFrame
-  pad : m.pad = E.pad
-  padShift : m.padShift = A.padShift
+  pad : E.pad.mem m.pad
+  padShift : A.padShift.mem m.padShift
   strobe : m.padStrobe = A.strobe
   halted : m.halted = false
   trk : m.trk = false
@@ -1208,8 +1284,10 @@ structure Sim (E : Env) (F : Nat) (A : AS) (m : Machine) : Prop where
   dg : A.dg = true → E.D.any (fun i => m.ram.get! i != 0) = true
   szR : A.ram.size = 2048
   szK : A.kn.size = 2048
-  /-- `F` is the frame of the machine at the start -/
-  fr : m.frame = F + A.k
+  /-- `F.1` is the frame of the machine at the start -/
+  fr : m.frame = F.1 + A.k
+  /-- `F.2` is the value of the counter at the start of the frame -/
+  rkv : A.rk = true → m.ram.get! E.rkI = (if A.spent then F.2 - 1 else F.2)
 
 /-- what an action inside a frame does to the clock -/
 def Adv (m m' : Machine) : Prop := m'.frame = m.frame ∧ m.fdot ≤ m'.fdot
@@ -1219,14 +1297,14 @@ theorem Adv.tr {a b c : Machine} (h : Adv a b) (g : Adv b c) : Adv a c :=
   ⟨g.1.trans h.1, Nat.le_trans h.2 g.2⟩
 
 /-- `af` follows `f` on every machine it covers, as long as it does not fail -/
-def Snd (E : Env) (F : Nat) {α β : Type} (R : α → β → Prop) (af : AM α) (f : M β) : Prop :=
+def Snd (E : Env) (F : Nat × UInt8) {α β : Type} (R : α → β → Prop) (af : AM α) (f : M β) : Prop :=
   ∀ A m, Sim E F A m → ∀ a A', af A = some (a, A') → R a (go f m).1 ∧ Sim E F A' (go f m).2 ∧ Adv m (go f m).2
 
 /-- no relation on the values -/
 abbrev TT {α β : Type} : α → β → Prop := fun _ _ => True
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 theorem abind_some {α β : Type} {af : AM α} {ag : α → AM β} {A : AS} {b : β} {B : AS}
     (h : (af >>= ag) A = some (b, B)) : ∃ a A1, af A = some (a, A1) ∧ ag a A1 = some (b, B) := by
@@ -1328,7 +1406,7 @@ end
 /-! ## Time -/
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 theorem vc : dotVblClr = 6821 := rfl
 theorem vs : dotSpr0 = 17732 := rfl
@@ -1390,15 +1468,15 @@ theorem s_tick {c1 c2 c : Nat} (h1 : c1 ≤ c) (h2 : c ≤ c2) : Snd E F TT (ati
         (go (tick c) m).2.vblank = B.vb → Sim E F B (go (tick c) m).2 := by
       intro B hB hv
       have hB1 : B.a = A.a ∧ B.x = A.x ∧ B.y = A.y ∧ B.p = A.p ∧ B.s = A.s ∧ B.pc = A.pc ∧ B.ppuCtrl = A.ppuCtrl ∧ B.ppuMask = A.ppuMask ∧ B.nmi = A.nmi ∧
-          B.lo = A.lo + 3 * c1 ∧ B.hi = A.hi + 3 * c2 ∧ B.padShift = A.padShift ∧ B.strobe = A.strobe ∧ B.ram = A.ram ∧ B.kn = A.kn ∧ B.dg = A.dg ∧ B.k = A.k := by
+          B.lo = A.lo + 3 * c1 ∧ B.hi = A.hi + 3 * c2 ∧ B.padShift = A.padShift ∧ B.strobe = A.strobe ∧ B.ram = A.ram ∧ B.kn = A.kn ∧ B.dg = A.dg ∧ B.k = A.k ∧ B.rk = A.rk ∧ B.spent = A.spent := by
         rcases hB with rfl | rfl <;> simp
-      obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17⟩ := hB1
+      obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18, b19⟩ := hB1
       have hk : ∀ i, B.getK i = A.getK i := by
         intro i
         simp only [AS.getK, b14, b15]
       rw [ht] at hv ⊢
       refine ⟨b1 ▸ hs.a, b2 ▸ hs.x, b3 ▸ hs.y, b4 ▸ hs.p, b5 ▸ hs.s, b6 ▸ hs.pc, hs.prg, hs.mask, b7 ▸ hs.ppuCtrl, b8 ▸ hs.ppuMask, hv,
-        b9 ▸ hs.nmi, s0f_step _ _ h4 _ hs.s0, ?_, ?_, ?_, hs.pad, b12 ▸ hs.padShift, b13 ▸ hs.strobe, hs.halted, hs.trk, hs.size, ?_, ?_, b14 ▸ hs.szR, b15 ▸ hs.szK, b17 ▸ hs.fr⟩
+        b9 ▸ hs.nmi, s0f_step _ _ h4 _ hs.s0, ?_, ?_, ?_, hs.pad, b12 ▸ hs.padShift, b13 ▸ hs.strobe, hs.halted, hs.trk, hs.size, ?_, ?_, b14 ▸ hs.szR, b15 ▸ hs.szK, b17 ▸ hs.fr, ?_⟩
       · show B.lo ≤ m.fdot + 3 * c
         omega
       · show m.fdot + 3 * c ≤ B.hi
@@ -1412,6 +1490,9 @@ theorem s_tick {c1 c2 c : Nat} (h1 : c1 ≤ c) (h2 : c ≤ c2) : Snd E F TT (ati
       · intro hg
         rw [b16] at hg
         exact hs.dg hg
+      · intro hr
+        rw [b19]
+        exact hs.rkv (b18 ▸ hr)
     split at he
     · rename_i hc
       obtain ⟨_, rfl⟩ := some_pair he
@@ -1453,14 +1534,14 @@ theorem s_tick0 {c2 : Nat} : Snd E F TT (atick 0 c2) (Pure.pure ()) := by
         m.vblank = B.vb → Sim E F B m := by
       intro B hB hv
       have hB1 : B.a = A.a ∧ B.x = A.x ∧ B.y = A.y ∧ B.p = A.p ∧ B.s = A.s ∧ B.pc = A.pc ∧ B.ppuCtrl = A.ppuCtrl ∧ B.ppuMask = A.ppuMask ∧ B.nmi = A.nmi ∧
-          B.lo = A.lo ∧ B.hi = A.hi + 3 * c2 ∧ B.padShift = A.padShift ∧ B.strobe = A.strobe ∧ B.ram = A.ram ∧ B.kn = A.kn ∧ B.dg = A.dg ∧ B.k = A.k := by
+          B.lo = A.lo ∧ B.hi = A.hi + 3 * c2 ∧ B.padShift = A.padShift ∧ B.strobe = A.strobe ∧ B.ram = A.ram ∧ B.kn = A.kn ∧ B.dg = A.dg ∧ B.k = A.k ∧ B.rk = A.rk ∧ B.spent = A.spent := by
         rcases hB with rfl | rfl <;> simp
-      obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17⟩ := hB1
+      obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18, b19⟩ := hB1
       have hk : ∀ i, B.getK i = A.getK i := by
         intro i
         simp only [AS.getK, b14, b15]
       refine ⟨b1 ▸ hs.a, b2 ▸ hs.x, b3 ▸ hs.y, b4 ▸ hs.p, b5 ▸ hs.s, b6 ▸ hs.pc, hs.prg, hs.mask, b7 ▸ hs.ppuCtrl, b8 ▸ hs.ppuMask, hv,
-        b9 ▸ hs.nmi, hs.s0, by omega, by omega, ?_, hs.pad, b12 ▸ hs.padShift, b13 ▸ hs.strobe, hs.halted, hs.trk, hs.size, ?_, ?_, b14 ▸ hs.szR, b15 ▸ hs.szK, b17 ▸ hs.fr⟩
+        b9 ▸ hs.nmi, hs.s0, by omega, by omega, ?_, hs.pad, b12 ▸ hs.padShift, b13 ▸ hs.strobe, hs.halted, hs.trk, hs.size, ?_, ?_, b14 ▸ hs.szR, b15 ▸ hs.szK, b17 ▸ hs.fr, ?_⟩
       · rw [b11]
         have := vd
         omega
@@ -1470,6 +1551,9 @@ theorem s_tick0 {c2 : Nat} : Snd E F TT (atick 0 c2) (Pure.pure ()) := by
       · intro hg
         rw [b16] at hg
         exact hs.dg hg
+      · intro hr
+        rw [b19]
+        exact hs.rkv (b18 ▸ hr)
     split at he
     · rename_i hc
       have hc' : A.hi < dotVblClr ∧ dotVblClr ≤ A.lo := by simpa using hc
@@ -1485,7 +1569,7 @@ end
 /-! ## The bus -/
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 open PipeTransitionAll (mask_lt ba_size_set ba_get_set_self ba_get_set_ne)
 
@@ -1589,8 +1673,8 @@ theorem s_padRead : Snd E F AB.mem (apadRead E) padRead := by
       | mk a x y s p pc cyc ram prg prgMask ppuCtrl ppuMask vblank sprite0 nmiPending fdot frame pad padShift padStrobe halted trk trkRead trkWrite trkIO =>
         cases hst
         rfl
-    rw [hc, hs.pad]
-    exact ⟨mem_known_self _, hs, rfl, rfl⟩
+    rw [hc]
+    exact ⟨mem_or (mem_known_self _) (mem_and hs.pad (mem_known_self _)), hs, rfl, rfl⟩
   | false =>
     rw [if_neg (by simp [hb])] at he
     obtain ⟨rfl, rfl⟩ := some_pair he
@@ -1601,14 +1685,10 @@ theorem s_padRead : Snd E F AB.mem (apadRead E) padRead := by
       | mk a x y s p pc cyc ram prg prgMask ppuCtrl ppuMask vblank sprite0 nmiPending fdot frame pad padShift padStrobe halted trk trkRead trkWrite trkIO =>
         cases hst
         rfl
-    have hps := hs.padShift
     rw [hc]
     refine ⟨?_, { hs with padShift := ?_ }, rfl, rfl⟩
-    · show (AB.known _).mem ((0x40 : UInt8) ||| (m.padShift &&& 1))
-      rw [hps]
-      exact mem_known_self _
-    · show (((m.padShift >>> 1) ||| 0x80 : UInt8)) = ((A.padShift >>> 1) ||| 0x80 : UInt8)
-      rw [hps]
+    · exact mem_or (mem_known_self _) (mem_and hs.padShift (mem_known_self _))
+    · exact mem_or (mem_shr hs.padShift) (mem_known_self _)
 
 /-- the note changes nothing else -/
 theorem sim_note {A : AS} {m : Machine} (hs : Sim E F A m) (i : Nat) : Sim E F (A.note E i) m := by
@@ -1932,14 +2012,15 @@ theorem s_padWrite {v : AB} {x : UInt8} (h : v.mem x) : Snd E F TT (apadWrite E 
       exact ⟨trivial, hs, rfl, rfl⟩
   · cases he
 
-theorem sim_setK {A : AS} {m : Machine} (hs : Sim E F A m) {i : Nat} {v : AB} {x : UInt8} (hi : i < 2048) (h : v.mem x) :
+theorem sim_setK {A : AS} {m : Machine} (hs : Sim E F A m) {i : Nat} {v : AB} {x : UInt8} (hi : i < 2048) (h : v.mem x) (hrk : A.rk = true → i ≠ E.rkI) :
     Sim E F { A.setK i v with dg := A.dg && !E.D.contains i } { m with ram := m.ram.set! i x } := by
   refine { hs with
     size := by show (m.ram.set! i x).size = 2048; rw [ba_size_set]; exact hs.size
     szR := by show (A.ram.set! i v.v).size = 2048; rw [ba_size_set]; exact hs.szR
     szK := by show (A.kn.set! i v.k).size = 2048; rw [ba_size_set]; exact hs.szK
     ram := ?_
-    dg := ?_ }
+    dg := ?_
+    rkv := ?_ }
   · intro j hj
     show AB.mem ⟨(A.ram.set! i v.v).get! j, (A.kn.set! i v.k).get! j⟩ ((m.ram.set! i x).get! j)
     by_cases hij : i = j
@@ -1963,6 +2044,10 @@ theorem sim_setK {A : AS} {m : Machine} (hs : Sim E F A m) {i : Nat} {v : AB} {x
     show ((m.ram.set! i x).get! d != 0) = true
     rw [ba_get_set_ne _ _ _ _ hne]
     exact hd2
+  · intro hr
+    show (m.ram.set! i x).get! E.rkI = _
+    rw [ba_get_set_ne _ _ _ _ (hrk hr)]
+    exact hs.rkv hr
 
 theorem s_wr {ad : AAd} {addr : UInt16} {v : AB} {x : UInt8} (h : AdR ad addr) (hv : v.mem x) : Snd E F TT (awr E ad v) (wr addr x) := by
   intro A m hs a A' he
@@ -1975,9 +2060,16 @@ theorem s_wr {ad : AAd} {addr : UInt16} {v : AB} {x : UInt8} (h : AdR ad addr) (
     rw [← hadr] at he
     by_cases h1 : addr < 0x2000
     · rw [if_pos h1] at he
-      obtain ⟨rfl, rfl⟩ := some_pair he
-      rw [wr_ram x h1 hs.trk]
-      exact ⟨trivial, sim_setK hs (mask_lt addr) hv, rfl, Nat.le_refl _⟩
+      split at he
+      · cases he
+      · rename_i hg
+        obtain ⟨rfl, rfl⟩ := some_pair he
+        rw [wr_ram x h1 hs.trk]
+        have hrk : A.rk = true → (addr &&& 0x7FF).toNat ≠ E.rkI := by
+          intro hr hq
+          apply hg
+          simp [hr, hq]
+        exact ⟨trivial, sim_setK hs (mask_lt addr) hv hrk, rfl, Nat.le_refl _⟩
     · rw [if_neg h1] at he
       by_cases h2 : addr < 0x4000
       · rw [if_pos h2] at he
@@ -2021,7 +2113,7 @@ end
 /-! ## The instructions -/
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 theorem s_fetch : Snd E F Eq (afetch E) fetch := by
   refine snd_leaf fun A m hs a A' he => ?_
@@ -2276,7 +2368,7 @@ theorem s_setPC (t : UInt16) : Snd E F TT (asetPC t) (setPC t) := by
 end
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 theorem mem_iteN (c : Prop) [Decidable c] (t e : UInt8) : (AB.ite none t e).mem (if c then t else e) := by
   by_cases h : c
@@ -2587,7 +2679,7 @@ theorem s_nmi : Snd E F TT (anmi E) nmi := by
 /-! ## The table of opcodes -/
 
 /-- two tables of the same length, entry by entry -/
-def AllS (E : Env) (F : Nat) : List (AM Unit) → List (M Unit) → Prop
+def AllS (E : Env) (F : Nat × UInt8) : List (AM Unit) → List (M Unit) → Prop
   | [], [] => True
   | a :: l, f :: r => Snd E F TT a f ∧ AllS E F l r
   | _, _ => False
@@ -2650,7 +2742,7 @@ end
 /-! ## One step of a machine -/
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 theorem tick_adv {A B : AS} {m : Machine} {c : Nat} {u : Unit} (hs : Sim E F A m) (he : atick c c A = some (u, B)) :
     (go (tick c) m).2.fdot = m.fdot + 3 * c := by
@@ -2981,12 +3073,12 @@ theorem s_idle {A : AS} {m : Machine} (hs : Sim E F A m) :
     generalize hm' : (go (tick c) m).2 = m' at f1 f2 f3 fa fx fy fp fs fpc fram fprg fmask fctrl fmask2 fpad fps fstr fh ftrk fv ⊢
     have common : ∀ B : AS, B.a = A.a → B.x = A.x → B.y = A.y → B.p = A.p → B.s = A.s → B.pc = A.pc → B.ppuCtrl = A.ppuCtrl → B.ppuMask = A.ppuMask →
         B.padShift = A.padShift → B.strobe = A.strobe → B.ram = A.ram → B.kn = A.kn → B.dg = A.dg → B.lo ≤ d → d ≤ B.hi → B.hi < dotsPerFrame →
-        m'.vblank = B.vb → m'.nmiPending = B.nmi → B.k = A.k + 1 → Sim E F B m' := by
-      intro B b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 l1 l2 l3 l4 l5 l6
+        m'.vblank = B.vb → m'.nmiPending = B.nmi → B.k = A.k + 1 → B.rk = A.rk → B.spent = A.spent → Sim E F B m' := by
+      intro B b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 l1 l2 l3 l4 l5 l6 l7 l8
       have hk : ∀ i, B.getK i = A.getK i := by
         intro i
         simp only [AS.getK, b11, b12]
-      refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, l4, l5, ?_, ?_, ?_, l3, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, l4, l5, ?_, ?_, ?_, l3, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
       · rw [fa, b1]; exact hs.a
       · rw [fx, b2]; exact hs.x
       · rw [fy, b3]; exact hs.y
@@ -3016,18 +3108,21 @@ theorem s_idle {A : AS} {m : Machine} (hs : Sim E F A m) :
       · rw [b11]; exact hs.szR
       · rw [b12]; exact hs.szK
       · rw [f2, l6, hs.fr]; omega
+      · intro hr
+        rw [fram, l8]
+        exact hs.rkv (l7 ▸ hr)
     by_cases hd1 : 1 ≤ d
     · rw [if_pos hd1] at fv
       refine ⟨_, List.mem_cons_of_mem _ (List.mem_singleton.2 rfl), fun B hB => ?_⟩
       obtain rfl := Option.some.inj hB
-      refine ⟨common _ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl hd1 hd9 ?_ fv.1 ?_ rfl, Or.inr ⟨rfl, f2⟩⟩
+      refine ⟨common _ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl hd1 hd9 ?_ fv.1 ?_ rfl rfl rfl, Or.inr ⟨rfl, f2⟩⟩
       · show 9 < dotsPerFrame
         omega
       · rw [fv.2, hs.nmi, hb']
     · rw [if_neg hd1] at fv
       refine ⟨_, List.mem_cons_self, fun B hB => ?_⟩
       obtain rfl := Option.some.inj hB
-      refine ⟨common _ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl (Nat.zero_le _) (by show d ≤ 0; omega) ?_ ?_ ?_ rfl, Or.inr ⟨rfl, f2⟩⟩
+      refine ⟨common _ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl (Nat.zero_le _) (by show d ≤ 0; omega) ?_ ?_ ?_ rfl rfl rfl, Or.inr ⟨rfl, f2⟩⟩
       · show 0 < dotsPerFrame
         omega
       · rw [fv.1]; exact hs.vb
@@ -3053,8 +3148,98 @@ theorem steprel_same {A B : AS} {m m' : Machine} (h1 : Sim E F A m) (h2 : Sim E 
   have a2 := h2.fr
   exact Or.inl ⟨by omega, hf, hd⟩
 
+theorem go_dec {m : Machine} {ad : UInt16} (h1 : ad < 0x2000) (ht : m.trk = false) :
+    go (rd ad >>= fun v => decV v >>= fun r => wr ad r) m = ((), { m with
+      p := (m.p &&& 0x7D) ||| (if (m.ram.get! (ad &&& 0x7FF).toNat - 1) == 0 then 0x02 else 0) ||| ((m.ram.get! (ad &&& 0x7FF).toNat - 1) &&& 0x80)
+      ram := m.ram.set! (ad &&& 0x7FF).toNat (m.ram.get! (ad &&& 0x7FF).toNat - 1) }) := by
+  rw [PipeTransitionAll.go_bind, rd_ram h1 ht]
+  exact wr_ram (m := { m with p := (m.p &&& 0x7D) ||| (if (m.ram.get! (ad &&& 0x7FF).toNat - 1) == 0 then 0x02 else 0) ||| ((m.ram.get! (ad &&& 0x7FF).toNat - 1) &&& 0x80) }) _ h1 ht
+
+theorem u8_sub_one {T : UInt8} (h : 2 ≤ T.toNat) : (T - 1).toNat = T.toNat - 1 := by
+  rw [UInt8.toNat_sub]
+  have h1 : (1 : UInt8).toNat = 1 := rfl
+  rw [h1]
+  have := UInt8.toNat_lt T
+  show (256 - 1 + T.toNat) % 256 = _
+  omega
+
+open PipeTransitionAll (mask_lt ba_size_set ba_get_set_self ba_get_set_ne) in
+/-- `DEC abs` of the counter -/
+theorem s_rkOp (hT : 2 ≤ F.2.toNat) : Snd E F TT (arkOp E) (opDEC mAbs) := by
+  refine Snd.congr (g := fetch16 >>= fun ad => rd ad >>= fun v => decV v >>= fun r => wr ad r) (fun _ => rfl) ?_
+  refine Snd.bind s_fetch16 fun ad ad2 h => ?_
+  subst h
+  refine snd_leaf fun A m hs a A' he => ?_
+  have he2 : (if A.rk && !A.spent && decide (ad < 0x2000) && (ad &&& 0x7FF).toNat == E.rkI then
+      some ((), { A.setK E.rkI AB.top with spent := true, dg := A.dg && !E.D.contains E.rkI, p := rkFlags A.p }) else none) = some (a, A') := he
+  split at he2
+  · rename_i hc
+    obtain ⟨rfl, rfl⟩ := some_pair he2
+    simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq, beq_iff_eq] at hc
+    obtain ⟨⟨⟨hr, hsp⟩, h1⟩, hi⟩ := hc
+    rw [go_dec h1 hs.trk]
+    have hlt : E.rkI < 2048 := by
+      rw [← hi]
+      exact mask_lt ad
+    have hv : m.ram.get! (ad &&& 0x7FF).toNat = F.2 := by
+      rw [hi, hs.rkv hr, hsp]
+      rfl
+    rw [hv, hi]
+    have hne : (F.2 - 1) ≠ 0 := by
+      intro h0
+      have := u8_sub_one hT
+      rw [h0] at this
+      have h00 : (0 : UInt8).toNat = 0 := rfl
+      omega
+    refine ⟨trivial, { hs with
+      p := ?_
+      size := by show (m.ram.set! E.rkI (F.2 - 1)).size = 2048; rw [ba_size_set]; exact hs.size
+      szR := by show (A.ram.set! E.rkI AB.top.v).size = 2048; rw [ba_size_set]; exact hs.szR
+      szK := by show (A.kn.set! E.rkI AB.top.k).size = 2048; rw [ba_size_set]; exact hs.szK
+      ram := ?_
+      dg := ?_
+      rkv := ?_ }, rfl, rfl⟩
+    · have e0 : ((F.2 - 1) == 0) = false := beq_eq_false_iff_ne.2 hne
+      simp only [e0]
+      exact mem_or (mem_or (mem_and hs.p (mem_known_self _)) (mem_ite (TR_some false) 0x02 0)) (mem_and (mem_top _) (mem_known_self _))
+    · intro j hj
+      show AB.mem ⟨(A.ram.set! E.rkI AB.top.v).get! j, (A.kn.set! E.rkI AB.top.k).get! j⟩ ((m.ram.set! E.rkI (F.2 - 1)).get! j)
+      by_cases hij : E.rkI = j
+      · subst hij
+        rw [ba_get_set_self _ _ _ (by rw [hs.szR]; exact hj), ba_get_set_self _ _ _ (by rw [hs.szK]; exact hj)]
+        exact mem_top _
+      · rw [ba_get_set_ne _ _ _ _ hij, ba_get_set_ne _ _ _ _ hij, ba_get_set_ne _ _ _ _ hij]
+        exact hs.ram j hj
+    · intro hg
+      have hg' : A.dg = true ∧ E.D.contains E.rkI = false := by simpa using hg
+      have hany := hs.dg hg'.1
+      obtain ⟨d, hd, hd2⟩ := List.any_eq_true.1 hany
+      refine List.any_eq_true.2 ⟨d, hd, ?_⟩
+      have hne2 : E.rkI ≠ d := by
+        intro he3
+        subst he3
+        have : E.D.contains E.rkI = true := by simpa using hd
+        rw [this] at hg'
+        simp at hg'
+      show ((m.ram.set! E.rkI (F.2 - 1)).get! d != 0) = true
+      rw [ba_get_set_ne _ _ _ _ hne2]
+      exact hd2
+    · intro _
+      show (m.ram.set! E.rkI (F.2 - 1)).get! E.rkI = (if true = true then F.2 - 1 else F.2)
+      rw [ba_get_set_self _ _ _ (by rw [hs.size]; exact hlt)]
+      rfl
+  · cases he2
+
+set_option maxRecDepth 100000 in
+theorem op_CE : opTable[(0xCE : UInt8).toNat]?.getD opJAM = opDEC mAbs := by
+  rw [PipeTransitionAll.opTable_eq]
+  rfl
+
+set_option maxRecDepth 100000 in
+theorem cyc_CE : (cycTable.get! (0xCE : UInt8).toNat).toNat = 6 := by decide
+
 /-- a step of the machine is followed by a step of the abstract machine -/
-theorem s_astep1 {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (aRows E).toArray) (hs : Sim E F A m) :
+theorem s_astep1 {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) (hs : Sim E F A m) :
     ∃ r ∈ astep1 E ops A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 := by
   unfold astep1
   by_cases hn : A.nmi = true
@@ -3108,6 +3293,32 @@ theorem s_astep1 {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (a
         rw [e1, e2]
         exact s_idle hs
       · rw [if_neg hi, if_neg hi]
+        by_cases hd : (A.rk && isRkDec E A.pc op) = true
+        · rw [if_pos hd]
+          refine ⟨_, List.mem_singleton.2 rfl, fun B hB => ?_⟩
+          have hop : op = 0xCE := by
+            simp only [isRkDec, Bool.and_eq_true, beq_iff_eq] at hd
+            exact hd.2.1.1
+          subst hop
+          cases he : (arkOp E >>= fun _ => atick 6 6) { A with pc := A.pc + 1 } with
+          | none =>
+            rw [he] at hB
+            cases hB
+          | some p =>
+            rw [he] at hB
+            obtain ⟨u, B1⟩ := p
+            have hB1 : B1 = B := Option.some.inj hB
+            subst hB1
+            have hs1 : Sim E F { A with pc := A.pc + 1 } { m with pc := m.pc + 1 } := { hs with
+              pc := by
+                show m.pc + 1 = A.pc + 1
+                rw [hs.pc] }
+            rw [op_CE, cyc_CE]
+            obtain ⟨g1, g2, g3⟩ := snd_then_tick (s_rkOp hT) hs1 he
+            refine ⟨g1, steprel_same hs g1 g2 ?_⟩
+            have g3' : m.fdot + 3 * 6 ≤ (go (opDEC mAbs >>= fun _ => tick 6) { m with pc := m.pc + 1 }).2.fdot := g3
+            omega
+        rw [if_neg hd]
         by_cases hc : (cycOf op == 0) = true
         · rw [if_pos hc]
           exact ⟨none, List.mem_singleton.2 rfl, fun B hB => by cases hB⟩
@@ -3148,12 +3359,12 @@ end
 /-! ## Pieces -/
 
 section
-variable {E : Env} {F : Nat}
+variable {E : Env} {F : Nat × UInt8}
 
 open PipeTransitionAll (ba_size_set ba_get_set_self ba_get_set_ne)
 
 /-- every machine of a state is in one of its pieces -/
-def Cov (E : Env) (F : Nat) (f : AS → List AS) : Prop := ∀ A m, Sim E F A m → ∃ B ∈ f A, Sim E F B m ∧ B.k = A.k
+def Cov (E : Env) (F : Nat × UInt8) (f : AS → List AS) : Prop := ∀ A m, Sim E F A m → ∃ B ∈ f A, Sim E F B m ∧ B.k = A.k
 
 theorem cov_flat {f : AS → List AS} (hf : Cov E F f) {l : List AS} {m : Machine} {k : Nat} (h : ∃ B ∈ l, Sim E F B m ∧ B.k = k) :
     ∃ B ∈ l.flatMap f, Sim E F B m ∧ B.k = k := by
@@ -3281,6 +3492,69 @@ theorem cov_dg : Cov E F (splitDg E) := by
       rw [ba_size_set]
       exact hs.szK
 
+theorem bit_of_list : ∀ b ∈ bitList, ∃ j : Fin 8, ∀ i : Fin 8, bt b i.1 = decide (i.1 = j.1) := by decide
+
+theorem cov_bit {d : Nat} {b : UInt8} (hd : d < 2048) (hb : b ∈ bitList) : Cov E F (splitBit d b) := by
+  intro A m hs
+  unfold splitBit
+  cases e : (A.getK d).bit b with
+  | some x => exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+  | none =>
+    simp only
+    obtain ⟨j, hj⟩ := bit_of_list b hb
+    have hbb : ∀ i, i < 8 → bt b i = decide (i = j.1) := fun i hi => hj ⟨i, hi⟩
+    have base : ∀ v : AB, v.mem (m.ram.get! d) → Sim E F (A.setK d v) m := by
+      intro v hv
+      refine { hs with
+        ram := ?_
+        szR := ?_
+        szK := ?_ }
+      · intro i hi
+        show AB.mem ⟨(A.ram.set! d v.v).get! i, (A.kn.set! d v.k).get! i⟩ (m.ram.get! i)
+        by_cases hdi : d = i
+        · subst hdi
+          rw [ba_get_set_self _ _ _ (by rw [hs.szR]; exact hi), ba_get_set_self _ _ _ (by rw [hs.szK]; exact hi)]
+          exact hv
+        · rw [ba_get_set_ne _ _ _ _ hdi, ba_get_set_ne _ _ _ _ hdi]
+          exact hs.ram i hi
+      · show (A.ram.set! d _).size = 2048
+        rw [ba_size_set]
+        exact hs.szR
+      · show (A.kn.set! d _).size = 2048
+        rw [ba_size_set]
+        exact hs.szK
+    by_cases hx : m.ram.get! d &&& b = 0
+    · refine ⟨_, List.mem_cons_of_mem _ (List.mem_singleton.2 rfl), base _ ?_, rfl⟩
+      have := mem_and (hs.ram d hd) (mem_known_self (~~~b))
+      rwa [and_not_self_of hx] at this
+    · refine ⟨_, List.mem_cons_self, base _ ?_, rfl⟩
+      have := mem_or (hs.ram d hd) (mem_known_self b)
+      rwa [or_self_of hbb (bit_of_ne hbb hx)] at this
+
+theorem cov_read (op : UInt8) : Cov E F (fun A => splitRead E A op) := by
+  intro A m hs
+  show ∃ B ∈ splitRead E A op, Sim E F B m ∧ B.k = A.k
+  unfold splitRead
+  split
+  · exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+  · rename_i d _
+    split
+    · exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+    · rename_i p _
+      by_cases hd : d < 2048
+      · rw [if_pos hd]
+        have key : ∀ (L : List UInt8) (l : List AS), (∀ b ∈ L, b ∈ bitList) → (∃ B ∈ l, Sim E F B m ∧ B.k = A.k) →
+            ∃ B ∈ L.foldl (fun l b => l.flatMap (splitBit d b)) l, Sim E F B m ∧ B.k = A.k := by
+          intro L
+          induction L with
+          | nil => exact fun l _ h => h
+          | cons b L ih =>
+            intro l hL h
+            exact ih _ (fun x hx => hL x (List.mem_cons_of_mem _ hx)) (cov_flat (cov_bit hd (hL b List.mem_cons_self)) h)
+        exact key _ _ (fun x hx => (List.mem_filter.1 hx).1) ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+      · rw [if_neg hd]
+        exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+
 theorem branchMask_cases (op : UInt8) : branchMask op = 0 ∨ branchMask op = 0x80 ∨ branchMask op = 0x40 ∨ branchMask op = 0x01 ∨ branchMask op = 0x02 := by
   unfold branchMask
   split <;> simp
@@ -3294,11 +3568,11 @@ theorem cov_pieces : Cov E F (pieces E) := by
   · rw [if_neg h]
     simp only
     generalize E.prg.get! (A.pc &&& E.mask).toNat = op
-    have h1 : ∃ B ∈ (if readsDg E A.pc op then splitDg E A else [A]), Sim E F B m ∧ B.k = A.k := by
+    have h1 : ∃ B ∈ (if readsDg E A.pc op then splitDg E A else splitRead E A op), Sim E F B m ∧ B.k = A.k := by
       split
       · exact cov_dg A m hs
-      · exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
-    generalize (if readsDg E A.pc op then splitDg E A else [A]) = l1 at h1
+      · exact cov_read op A m hs
+    generalize (if readsDg E A.pc op then splitDg E A else splitRead E A op) = l1 at h1
     have h2 : ∃ B ∈ (if readsPPU E A.pc op || isIdle E A.pc op then
         ((l1.flatMap (splitDot dotVblSet)).flatMap (splitDot dotVblClr)).flatMap (splitDot dotSpr0) else l1), Sim E F B m ∧ B.k = A.k := by
       split
@@ -3323,10 +3597,10 @@ theorem cov_pieces : Cov E F (pieces E) := by
       exact h2
 
 /-- a step of the machine, with the pieces -/
-theorem s_succs {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (aRows E).toArray) (hs : Sim E F A m) :
+theorem s_succs {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) (hs : Sim E F A m) :
     ∃ r ∈ succs E ops A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 := by
   obtain ⟨P, hP, h1, h2⟩ := cov_pieces A m hs
-  obtain ⟨r, hr, h3⟩ := s_astep1 hops h1
+  obtain ⟨r, hr, h3⟩ := s_astep1 hops hT h1
   refine ⟨r, List.mem_flatMap.2 ⟨P, hP, hr⟩, fun B hB => ?_⟩
   obtain ⟨h4, h5⟩ := h3 B hB
   refine ⟨h4, ?_⟩
@@ -3352,10 +3626,10 @@ theorem ramLeFrom_spec {a b : AS} : ∀ (n i : Nat), ramLeFrom a b n i = true �
 
 theorem sim_le {B D : AS} {m : Machine} (h : B.le D = true) (hs : Sim E F B m) : Sim E F D m := by
   simp only [AS.le, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Bool.or_eq_true, Bool.not_eq_true'] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩ := h
   refine ⟨le_mem h8 hs.a, le_mem h9 hs.x, le_mem h10 hs.y, le_mem h11 hs.p, hs.s.trans h2, hs.pc.trans h1, hs.prg, hs.mask,
     le_mem h12 hs.ppuCtrl, le_mem h13 hs.ppuMask, hs.vb.trans h4, hs.nmi.trans h5, hs.s0, Nat.le_trans h14 hs.lo, Nat.le_trans hs.hi h15, h16,
-    hs.pad, hs.padShift.trans h6, hs.strobe.trans h7, hs.halted, hs.trk, hs.size, ?_, ?_, h18, h19, ?_⟩
+    hs.pad, le_mem h6 hs.padShift, hs.strobe.trans h7, hs.halted, hs.trk, hs.size, ?_, ?_, h18, h19, ?_, ?_⟩
   · intro i hi
     exact le_mem (ramLeFrom_spec 2048 0 h20 i (Nat.zero_le _) (by omega)) (hs.ram i hi)
   · intro hg
@@ -3364,6 +3638,9 @@ theorem sim_le {B D : AS} {m : Machine} (h : B.le D = true) (hs : Sim E F B m) :
       cases hg
     · exact hs.dg h0
   · rw [hs.fr, h3]
+  · intro hr
+    rw [← h22]
+    exact hs.rkv (h21 ▸ hr)
 
 theorem TR_eqTri {b : AB} {x : UInt8} (c : UInt16) (h : b.mem x) : TR (eqTri b c) (x.toUInt16 == c) := by
   unfold eqTri
@@ -3383,16 +3660,17 @@ theorem actl_ok (sy : Syms) {B : AS} {m : Machine} {r : Bool} (hs : Sim E F B m)
 
 end
 
-/-! ## The walk gives whole frames -/
+
+/-! ## One frame, from a table -/
 
 section
-variable {C : Cfg} {Fu : Nat} {F : Nat}
+variable {C : Cfg} {Fu : Nat} {F : Nat × UInt8} {fin : AS → Bool}
 
 /-- `A` covers `m`, and a walk from `A` succeeds -/
-def Live (C : Cfg) (F : Nat) (A : AS) (m : Machine) : Prop := Sim C.E F A m ∧ ∃ n, walk C n A = true
+def LiveF (C : Cfg) (fin : AS → Bool) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop := Sim C.E F A m ∧ ∃ n, walkF C fin n A = true
 
-theorem cover_live (ht : C.t.all (walk C Fu) = true) {B : AS} {m : Machine} (hs : Sim C.E F B m) (h : coverIn C B = true) :
-    ∃ D, Live C F D m ∧ D.k = B.k := by
+theorem cover_liveF (ht : C.t.all (walkF C fin Fu) = true) {B : AS} {m : Machine} (hs : Sim C.E F B m) (h : coverIn C B = true) :
+    ∃ D, LiveF C fin F D m ∧ D.k = B.k := by
   unfold coverIn at h
   obtain ⟨i, _, h2⟩ := List.any_eq_true.1 h
   split at h2
@@ -3400,23 +3678,22 @@ theorem cover_live (ht : C.t.all (walk C Fu) = true) {B : AS} {m : Machine} (hs 
     have hle : B.le D = true := h2
     have hk : D.k = B.k := by
       simp only [AS.le, Bool.and_eq_true, beq_iff_eq] at hle
-      exact hle.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2.symm
+      exact hle.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2.symm
     obtain ⟨hi, he⟩ := Array.getElem?_eq_some_iff.1 e
     have hall := (Array.all_eq_true.1 ht) i hi
     rw [he] at hall
     exact ⟨D, ⟨sim_le hle hs, Fu, hall⟩, hk⟩
   · cases h2
 
-theorem live_step (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E).toArray) {A : AS} {m : Machine} (hl : Live C F A m) :
-    (∃ A', Live C F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
-    ((go step m).2.frame = m.frame + 1 ∧ controllable C.sy (go step m).2 = decide (A.k + 1 = C.K) ∧
-      (A.k + 1 = C.K ∨ ∃ A', Live C F A' (go step m).2 ∧ A'.k = A.k + 1)) := by
+theorem live_stepF (ht : C.t.all (walkF C fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine} (hl : LiveF C fin F A m) :
+    (∃ A', LiveF C fin F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
+    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, fin B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
   obtain ⟨hs, n, hw⟩ := hl
   cases n with
-  | zero => simp [walk] at hw
+  | zero => simp [walkF] at hw
   | succ n =>
-    obtain ⟨r, hr, hB⟩ := s_succs hops hs
-    simp only [walk, List.all_eq_true] at hw
+    obtain ⟨r, hr, hB⟩ := s_succs hops hT hs
+    simp only [walkF, List.all_eq_true] at hw
     have hw2 := hw r hr
     cases r with
     | none => simp at hw2
@@ -3428,36 +3705,24 @@ theorem live_step (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E).
         rw [if_pos (by simp [k1])] at hw2
         simp only [Bool.or_eq_true, Bool.and_eq_true] at hw2
         rcases hw2 with ⟨_, h3⟩ | h3
-        · obtain ⟨D, hD, hk⟩ := cover_live ht h1 h3
+        · obtain ⟨D, hD, hk⟩ := cover_liveF ht h1 h3
           exact ⟨D, hD, hk.trans k1, k2, k3⟩
         · exact ⟨B, ⟨h1, n, h3⟩, k1, k2, k3⟩
       · right
         rw [if_neg (by simp [k1])] at hw2
-        simp only [Bool.or_eq_true, Bool.and_eq_true, beq_iff_eq] at hw2
-        obtain ⟨⟨_, h3⟩, h4⟩ := hw2
-        have hctl := actl_ok C.sy h1 h3
-        rw [k1] at hctl
-        refine ⟨k2, ?_, ?_⟩
-        · rw [hctl]
-          by_cases hh : A.k + 1 = C.K <;> simp [hh]
-        · rw [k1] at h4
-          rcases h4 with (h4 | h4) | h4
-          · exact Or.inl h4
-          · obtain ⟨D, hD, hk⟩ := cover_live ht h1 h4
-            exact Or.inr ⟨D, hD, hk.trans k1⟩
-          · exact Or.inr ⟨B, ⟨h1, n, h4⟩, k1⟩
+        simp only [Bool.and_eq_true, beq_iff_eq] at hw2
+        exact ⟨k2, B, hw2.2, k1, h1⟩
 
-theorem ruf_done {t : Nat} {m : Machine} (h : m.frame ≥ t) : ∀ n, (go (runUntilFrame t n) m).2 = m := by
+theorem ruf_doneF {t : Nat} {m : Machine} (h : m.frame ≥ t) : ∀ n, (go (runUntilFrame t n) m).2 = m := by
   intro n
   cases n with
   | zero => rfl
   | succ n =>
     rw [PipeTransitionAll.ruf_eq, if_pos (by simp [h])]
 
-theorem frame_run (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E).toArray) {f : Nat} :
-    ∀ (n : Nat) (A : AS) (m : Machine), Live C F A m → m.frame = f → dotsPerFrame ≤ m.fdot + 3 * n →
-      (go (runUntilFrame (f + 1) n) m).2.frame = f + 1 ∧ controllable C.sy (go (runUntilFrame (f + 1) n) m).2 = decide (A.k + 1 = C.K) ∧
-      (A.k + 1 = C.K ∨ ∃ A', Live C F A' (go (runUntilFrame (f + 1) n) m).2 ∧ A'.k = A.k + 1) := by
+theorem frame_runF (ht : C.t.all (walkF C fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {f : Nat} :
+    ∀ (n : Nat) (A : AS) (m : Machine), LiveF C fin F A m → m.frame = f → dotsPerFrame ≤ m.fdot + 3 * n →
+      (go (runUntilFrame (f + 1) n) m).2.frame = f + 1 ∧ ∃ B, fin B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go (runUntilFrame (f + 1) n) m).2 := by
   intro n
   induction n with
   | zero =>
@@ -3469,21 +3734,213 @@ theorem frame_run (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E).
     intro A m hl hf hd
     have hh := hl.1.halted
     rw [PipeTransitionAll.ruf_eq, if_neg (by simp [hf, hh])]
-    rcases live_step ht hops hl with ⟨A', h1, h2, h3, h4⟩ | ⟨h1, h2, h3⟩
+    rcases live_stepF ht hops hT hl with ⟨A', h1, h2, h3, h4⟩ | ⟨h1, B, h2, h3, h4⟩
     · have := ih A' _ h1 (h3.trans hf) (by omega)
       rw [h2] at this
       exact this
-    · rw [ruf_done (by rw [h1, hf]; exact Nat.le_refl _) n]
-      exact ⟨by rw [h1, hf], h2, h3⟩
+    · rw [ruf_doneF (by rw [h1, hf]; exact Nat.le_refl _) n]
+      exact ⟨by rw [h1, hf], B, h2, h3, h4⟩
 
-theorem sim_pad {E : Env} {F : Nat} {A : AS} {m : Machine} (h : Sim E F A m) : Sim E F A { m with pad := E.pad } := { h with pad := rfl }
+/-- **One frame.** A state that covers `m`, with a walk that succeeds, goes on to a state that covers the frame of `m`, for an input that the pad allows. -/
+theorem frame_of_live (ht : C.t.all (walkF C fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {i : UInt8} (hp : C.E.pad.mem (smbToPad i))
+    {S : AS} {m : Machine} (hl : LiveF C fin F S m) :
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
+  have hs1 : Sim C.E F S { m with pad := smbToPad i } := { hl.1 with pad := hp }
+  rw [PipeTransitionAll.frame_eq]
+  have hf : dotsPerFrame ≤ ({ m with pad := smbToPad i } : Machine).fdot + 3 * fuelPerFrame := by
+    have : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
+    show dotsPerFrame ≤ m.fdot + 3 * fuelPerFrame
+    omega
+  exact frame_runF ht hops hT (f := m.frame) fuelPerFrame S _ ⟨hs1, hl.2⟩ rfl hf
 
-theorem fuel_ok : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
+/-- **One frame, with the pad not known.** A walk from `S` that succeeds covers the frame of every machine of `S`, with any input. -/
+theorem frame_of_walk (ht : C.t.all (walkF C fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
+    {S : AS} {m : Machine} (hw : walkF C fin Fu S = true) (hs : Sim C.E F S m) (i : UInt8) :
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) :=
+  frame_of_live ht hops hT (by rw [hp]; exact mem_top _) ⟨hs, Fu, hw⟩
+
+end
+
+/-! ## The counter: a rank on the frames -/
+
+/-- the fuel of a walk: more than any path between states of the table -/
+def walkFuel : Nat := 100000
+
+/-- the value of the counter -/
+def tm (E : Env) (m : Machine) : UInt8 := m.ram.get! E.rkI
+
+/-- the state `S` with the counter known to be 1, so that the frame on which it runs out can be followed -/
+def toOne (E : Env) (S : AS) : AS := { S.setK E.rkI (AB.known 1) with rk := false }
+
+/-- at the frame's end, with the counter followed: a start state -/
+def finRk (starts : List AS) (B : AS) : Bool := B.rk && starts.any fun S => ({ B with k := 0, spent := false } : AS).le S
+
+/-- `B` knows that the byte `p.1` has the value `p.2` -/
+def knownIs (B : AS) (p : Nat × UInt8) : Bool := decide (p.1 < 2048) && (B.getK p.1).isK && (B.getK p.1).v == p.2
+
+/-- at the frame's end, with the counter at 1 before it: the counter has not moved, or the bytes `xb` have these values -/
+def finOne (ones : List AS) (xb : List (Nat × UInt8)) (B : AS) : Bool :=
+  !B.rk && (ones.any (fun S => ({ B with k := 0 } : AS).le S) || xb.all (knownIs B))
+
+/-- **The state during the pipe.** The counter is at least 2 and it is followed, or it is 1 and known. -/
+def InvAt (E : Env) (starts : List AS) (m : Machine) : Prop :=
+  ∃ S ∈ starts, (2 ≤ (tm E m).toNat ∧ Sim E (m.frame, tm E m) S m) ∨ (tm E m = 1 ∧ Sim E (m.frame, 2) (toOne E S) m)
+
+/-- **The state after the pipe.** The listed bytes have the listed values. -/
+def ExitAt (xb : List (Nat × UInt8)) (m : Machine) : Prop := ∀ p ∈ xb, m.ram.get! p.1 = p.2
+
+/-- the two tables: the frames with the counter followed, and the frames with the counter at 1 -/
+def cfgR (E : Env) (sy : Syms) (keep : List Nat) (starts : List AS) : Cfg := Cfg.of E sy 1 keep starts
+def cfgO (E : Env) (sy : Syms) (keep : List Nat) (starts : List AS) : Cfg := Cfg.of E sy 1 keep (starts.map (toOne E))
+
+/-- what the check of one frame says -/
+structure FrameOK (E : Env) (sy : Syms) (keep : List Nat) (starts : List AS) (xb : List (Nat × UInt8)) : Prop where
+  ti : E.rkI < 2048
+  rkStarts : ∀ S ∈ starts, S.k = 0 ∧ S.rk = true ∧ S.spent = false
+  tr : (cfgR E sy keep starts).t.all (walkF (cfgR E sy keep starts) (finRk starts) walkFuel) = true
+  sr : ∀ S ∈ starts, walkF (cfgR E sy keep starts) (finRk starts) walkFuel S = true
+  to : (cfgO E sy keep starts).t.all (walkF (cfgO E sy keep starts) (finOne (starts.map (toOne E)) xb) walkFuel) = true
+  so : ∀ S ∈ starts, walkF (cfgO E sy keep starts) (finOne (starts.map (toOne E)) xb) walkFuel (toOne E S) = true
+
+/-- the check of one frame -/
+def frameCheck (E : Env) (sy : Syms) (keep : List Nat) (starts : List AS) (xb : List (Nat × UInt8)) : Bool :=
+  let ones := starts.map (toOne E)
+  let Cr := cfgR E sy keep starts
+  let Co := cfgO E sy keep starts
+  let fr := finRk starts
+  let fo := finOne ones xb
+  decide (E.rkI < 2048) && starts.all (fun S => S.k == 0 && S.rk && !S.spent) &&
+    Cr.t.all (walkF Cr fr walkFuel) && starts.all (walkF Cr fr walkFuel) &&
+    Co.t.all (walkF Co fo walkFuel) && starts.all (fun S => walkF Co fo walkFuel (toOne E S))
+
+theorem frameOK_of_check {E : Env} {sy : Syms} {keep : List Nat} {starts : List AS} {xb : List (Nat × UInt8)} (h : frameCheck E sy keep starts xb = true) :
+    FrameOK E sy keep starts xb := by
+  simp only [frameCheck, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq, Bool.not_eq_true'] at h
+  obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := h
+  refine ⟨h1, fun S hS => ?_, h3, h4, h5, h6⟩
+  have := h2 S hS
+  exact ⟨this.1.1, this.1.2, this.2⟩
+
+section
+variable {E : Env} {sy : Syms} {keep : List Nat} {starts : List AS} {xb : List (Nat × UInt8)}
+
+open PipeTransitionAll (ba_get_set_self ba_get_set_ne ba_size_set)
+
+theorem sim_known {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E F A m) {p : Nat × UInt8} (h : knownIs A p = true) : m.ram.get! p.1 = p.2 := by
+  simp only [knownIs, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at h
+  obtain ⟨⟨h1, h2⟩, h3⟩ := h
+  rw [isK_eq h2 (hs.ram p.1 h1), h3]
+
+/-- the counter at 1 is known -/
+theorem sim_toOne {F : Nat × UInt8} {A : AS} {m : Machine} (hi : E.rkI < 2048) (hs : Sim E F A m) (h1 : m.ram.get! E.rkI = 1) (G : Nat × UInt8) (hG : G.1 = F.1) :
+    Sim E G (toOne E A) m := by
+  refine { hs with
+    ram := ?_
+    szR := ?_
+    szK := ?_
+    fr := ?_
+    rkv := ?_ }
+  · intro i hh
+    show AB.mem ⟨(A.ram.set! E.rkI (AB.known 1).v).get! i, (A.kn.set! E.rkI (AB.known 1).k).get! i⟩ (m.ram.get! i)
+    by_cases hdi : E.rkI = i
+    · subst hdi
+      rw [ba_get_set_self _ _ _ (by rw [hs.szR]; exact hh), ba_get_set_self _ _ _ (by rw [hs.szK]; exact hh), h1]
+      exact mem_known_self _
+    · rw [ba_get_set_ne _ _ _ _ hdi, ba_get_set_ne _ _ _ _ hdi]
+      exact hs.ram i hh
+  · show (A.ram.set! _ _).size = 2048
+    rw [ba_size_set]
+    exact hs.szR
+  · show (A.kn.set! _ _).size = 2048
+    rw [ba_size_set]
+    exact hs.szK
+  · show m.frame = G.1 + A.k
+    rw [hG]
+    exact hs.fr
+  · intro hr
+    cases hr
+
+/-- the counter in `toOne` -/
+theorem one_of_sim {F : Nat × UInt8} {S : AS} {m : Machine} (hi : E.rkI < 2048) (hs : Sim E F (toOne E S) m) : m.ram.get! E.rkI = 1 := by
+  have hm := hs.ram E.rkI hi
+  have h1 : (toOne E S).getK E.rkI = AB.known 1 := by
+    show (⟨(S.ram.set! E.rkI (AB.known 1).v).get! E.rkI, (S.kn.set! E.rkI (AB.known 1).k).get! E.rkI⟩ : AB) = AB.known 1
+    have hR : (S.ram.set! E.rkI (AB.known 1).v).size = 2048 := hs.szR
+    have hK : (S.kn.set! E.rkI (AB.known 1).k).size = 2048 := hs.szK
+    rw [ba_size_set] at hR hK
+    rw [ba_get_set_self _ _ _ (by rw [hR]; exact hi), ba_get_set_self _ _ _ (by rw [hK]; exact hi)]
+  rw [h1] at hm
+  exact known_eq hm
+
+/-- **One frame of the pipe, for any input.** The counter falls by at most one. When it was 1, the frame may also leave the pipe. -/
+theorem inv_step (hc : FrameOK E sy keep starts xb) (hp : E.pad = AB.top) {m : Machine} (h : InvAt E starts m) (i : UInt8) :
+    (InvAt E starts (frame m i) ∧ (tm E m).toNat ≤ (tm E (frame m i)).toNat + 1) ∨ (tm E m = 1 ∧ ExitAt xb (frame m i)) := by
+  obtain ⟨S, hS, (⟨h2, hs⟩ | ⟨h1, hs⟩)⟩ := h
+  · -- the counter is at least 2: the first table
+    obtain ⟨k0, _, _⟩ := hc.rkStarts S hS
+    obtain ⟨g1, B, g2, g3, g4⟩ := frame_of_walk (C := cfgR E sy keep starts) (F := (m.frame, tm E m)) hc.tr rfl h2 hp (hc.sr S hS) hs i
+    simp only [finRk, Bool.and_eq_true, List.any_eq_true] at g2
+    obtain ⟨hr, S', hS', hle⟩ := g2
+    have hv : (frame m i).ram.get! E.rkI = if B.spent then tm E m - 1 else tm E m := g4.rkv hr
+    have hbase : Sim E ((frame m i).frame, tm E (frame m i)) ({ B with k := 0, spent := false } : AS) (frame m i) := by
+      refine { g4 with fr := ?_, rkv := ?_ }
+      · show (frame m i).frame = (frame m i).frame + 0
+        rfl
+      · intro _
+        rfl
+    have hs' := sim_le hle hbase
+    have hle2 : (tm E m).toNat ≤ (tm E (frame m i)).toNat + 1 := by
+      show (tm E m).toNat ≤ ((frame m i).ram.get! E.rkI).toNat + 1
+      rw [hv]
+      split
+      · rw [u8_sub_one h2]
+        omega
+      · omega
+    left
+    refine ⟨?_, hle2⟩
+    refine ⟨S', hS', ?_⟩
+    have hge : 1 ≤ (tm E (frame m i)).toNat := by omega
+    by_cases h3 : 2 ≤ (tm E (frame m i)).toNat
+    · exact Or.inl ⟨h3, hs'⟩
+    · have he : tm E (frame m i) = 1 := by
+        apply UInt8.toNat_inj.1
+        have : (1 : UInt8).toNat = 1 := rfl
+        omega
+      exact Or.inr ⟨he, sim_toOne hc.ti hs' he _ rfl⟩
+  · -- the counter is 1: the second table
+    have hS1 : toOne E S ∈ starts.map (toOne E) := List.mem_map.2 ⟨S, hS, rfl⟩
+    obtain ⟨g1, B, g2, g3, g4⟩ := frame_of_walk (C := cfgO E sy keep starts) (F := (m.frame, 2)) hc.to rfl (Nat.le_refl _) hp (hc.so S hS) hs i
+    simp only [finOne, Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true, List.any_eq_true, List.all_eq_true] at g2
+    obtain ⟨hr, (⟨S', hS', hle⟩ | hx)⟩ := g2
+    · obtain ⟨S2, hS2, rfl⟩ := List.mem_map.1 hS'
+      have hbase : Sim E ((frame m i).frame, 2) ({ B with k := 0 } : AS) (frame m i) := by
+        refine { g4 with fr := ?_, rkv := ?_ }
+        · show (frame m i).frame = (frame m i).frame + 0
+          rfl
+        · intro hr2
+          rw [hr] at hr2
+          cases hr2
+      have hs' := sim_le hle hbase
+      have he := one_of_sim hc.ti hs'
+      left
+      refine ⟨⟨S2, hS2, Or.inr ⟨he, hs'⟩⟩, ?_⟩
+      show (tm E m).toNat ≤ ((frame m i).ram.get! E.rkI).toNat + 1
+      rw [he, h1]
+      decide
+    · right
+      exact ⟨h1, fun p hq => sim_known g4 (hx p hq)⟩
+
+end
+
+/-! ## The walk gives whole frames -/
+
+section
+variable {C : Cfg} {Fu : Nat} {F : Nat}
 
 /-- control after `K` frames, not before -/
-theorem ctl_frames (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hpad : C.E.pad = smbToPad 0) :
-    ∀ (r j : Nat) (A : AS) (m : Machine), Live C F A m → A.k = j → j + r = C.K →
-      ∀ i, 1 ≤ i → i ≤ r → controllable C.sy (run { m with pad := C.E.pad } (zeros i)) = decide (i = r) := by
+theorem ctl_frames (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hpad : C.E.pad = AB.known (smbToPad 0)) :
+    ∀ (r j : Nat) (A : AS) (m : Machine), LiveF C (finCtl C) (F, 2) A m → A.k = j → j + r = C.K →
+      ∀ i, 1 ≤ i → i ≤ r → controllable C.sy (run m (zeros i)) = decide (i = r) := by
   intro r
   induction r with
   | zero =>
@@ -3492,28 +3949,25 @@ theorem ctl_frames (ht : C.t.all (walk C Fu) = true) (hops : C.ops = (aRows C.E)
   | succ r ih =>
     intro j A m hl hk hj i h1 h2
     obtain ⟨i', rfl⟩ : ∃ i', i = i' + 1 := ⟨i - 1, by omega⟩
-    have hfr : frame { m with pad := C.E.pad } 0 = (go (runUntilFrame (m.frame + 1) fuelPerFrame) { m with pad := C.E.pad }).2 := by
-      rw [PipeTransitionAll.frame_eq, hpad]
-    rw [PipeTransition.run_zeros_cons, hfr]
-    have hl2 : Live C F A { m with pad := C.E.pad } := ⟨sim_pad hl.1, hl.2⟩
-    obtain ⟨g1, g2, g3⟩ := frame_run ht hops (F := F) (f := m.frame) fuelPerFrame A { m with pad := C.E.pad } hl2 rfl (by
-      have := fuel_ok
-      show dotsPerFrame ≤ m.fdot + 3 * fuelPerFrame
-      omega)
-    generalize (go (runUntilFrame (m.frame + 1) fuelPerFrame) { m with pad := C.E.pad }).2 = m' at g1 g2 g3 ⊢
+    rw [PipeTransition.run_zeros_cons]
+    obtain ⟨_, B, g2, g3, g4⟩ := frame_of_live (i := 0) ht hops (Nat.le_refl _) (by rw [hpad]; exact mem_known_self _) hl
+    simp only [finCtl, Bool.and_eq_true, Bool.or_eq_true, beq_iff_eq] at g2
+    obtain ⟨g5, g6⟩ := g2
+    have hctl := actl_ok C.sy g4 g5
     cases i' with
     | zero =>
-      show controllable C.sy m' = _
-      rw [g2]
-      simp only [decide_eq_decide]
-      omega
+      show controllable C.sy (frame m 0) = _
+      rw [hctl, g3, hk]
+      by_cases hh : j + 1 = C.K
+      · have : r = 0 := by omega
+        simp [hh, this]
+      · have : r ≠ 0 := by omega
+        simp [hh, this]
     | succ i2 =>
-      rcases g3 with g3 | ⟨A', h3, h4⟩
+      rcases g6 with g6 | g6
       · omega
-      · have hm : { m' with pad := C.E.pad } = m' := by
-          rw [← h3.1.pad]
-        have := ih (j + 1) A' m' h3 (by omega) (by omega) (i2 + 1) (by omega) (by omega)
-        rw [hm] at this
+      · obtain ⟨D, hD, hDk⟩ := cover_liveF ht g4 g6
+        have := ih (j + 1) D _ hD (by omega) (by omega) (i2 + 1) (by omega) (by omega)
         rw [this]
         simp only [decide_eq_decide]
         omega
@@ -3522,16 +3976,16 @@ theorem frame_pad (m : Machine) (p i : UInt8) : frame { m with pad := p } i = fr
 
 /-- **Soundness.** If the check holds, then every machine of a start state gets control after `K` frames, not before. -/
 theorem ctl_of_check {C : Cfg} {Fu : Nat} {starts : List AS} (hc : check C Fu starts = true) (hops : C.ops = (aRows C.E).toArray)
-    (hpad : C.E.pad = smbToPad 0) (M : Machine) {S : AS} (hS : S ∈ starts) (hs : Sim C.E M.frame S { M with pad := C.E.pad }) :
+    (hpad : C.E.pad = AB.known (smbToPad 0)) (M : Machine) {S : AS} (hS : S ∈ starts) (hs : Sim C.E (M.frame, 2) S { M with pad := smbToPad 0 }) :
     ∀ i, 1 ≤ i → i ≤ C.K → controllable C.sy (run M (zeros i)) = decide (i = C.K) := by
   simp only [check, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq] at hc
   obtain ⟨⟨h0, ht⟩, h2⟩ := hc
   obtain ⟨hk, hw⟩ := h2 S hS
-  have hl : Live C M.frame S { M with pad := C.E.pad } := ⟨hs, Fu, hw⟩
+  have hl : LiveF C (finCtl C) (M.frame, 2) S { M with pad := smbToPad 0 } := ⟨hs, Fu, hw⟩
   intro i h1 h3
   obtain ⟨i', rfl⟩ : ∃ i', i = i' + 1 := ⟨i - 1, by omega⟩
   have := ctl_frames ht hops hpad C.K 0 S _ hl hk (by omega) (i' + 1) h1 h3
-  rw [PipeTransition.run_zeros_cons, frame_pad, frame_pad] at this
+  rw [PipeTransition.run_zeros_cons, frame_pad] at this
   rw [PipeTransition.run_zeros_cons]
   exact this
 
@@ -3545,7 +3999,7 @@ open PipeTransitionAll (Names SameCore phaseOf atPhase cutOf entries noneThen no
 
 /-- the environment of a reference state: `D` are RAM indices that are not all zero -/
 def envOf (T : Machine) (D : List Nat) : Env :=
-  { prg := T.prg, mask := T.prgMask, pad := smbToPad 0, D }
+  { prg := T.prg, mask := T.prgMask, pad := AB.known (smbToPad 0), D }
 
 /-- the masks of the known bytes: `mir` is the PPU control mirror, in which one bit may differ -/
 def knOf (known : List Nat) (mir : Nat) : ByteArray :=
@@ -3556,7 +4010,7 @@ def startOf (T : Machine) (kn : ByteArray) (sz : Nat) (s : UInt8) (low : Bool) :
   { a := ⟨T.a, 0xFB⟩, x := AB.known T.x, y := AB.known T.y, s := T.s, p := AB.known T.p, pc := T.pc,
     ram := T.ram.set! sz s, kn := kn.set! sz 0xFF, ppuCtrl := ⟨T.ppuCtrl, 0xFB⟩, ppuMask := AB.known T.ppuMask,
     vb := !low, nmi := !low, lo := if low then 0 else 1, hi := if low then 0 else 9,
-    padShift := T.padShift, strobe := T.padStrobe, dg := true, k := 0 }
+    padShift := AB.known T.padShift, strobe := T.padStrobe, dg := true, k := 0 }
 
 /-- the two values of `sz`, the two kinds of dots -/
 def startsOf (T : Machine) (kn : ByteArray) (sz : Nat) : List AS :=
@@ -3571,7 +4025,7 @@ theorem memB_mem {b : AB} {x : UInt8} (h : memB b x = true) : b.mem x := by
 def regOK (S : AS) (v : Machine) : Bool :=
   memB S.a v.a && memB S.x v.x && memB S.y v.y && memB S.p v.p && v.s == S.s && v.pc == S.pc && memB S.ppuCtrl v.ppuCtrl &&
   memB S.ppuMask v.ppuMask && v.vblank == S.vb && v.nmiPending == S.nmi && v.sprite0 == s0f v.fdot && decide (S.lo ≤ v.fdot) && decide (v.fdot ≤ S.hi) &&
-  decide (S.hi < dotsPerFrame) && v.padShift == S.padShift && v.padStrobe == S.strobe && !v.halted
+  decide (S.hi < dotsPerFrame) && memB S.padShift v.padShift && v.padStrobe == S.strobe && !v.halted
 
 /-- the bytes known in `S` are those of `v`, and they are listed in `kn` -/
 def ramOK (kn : ByteArray) (sz : Nat) (s : UInt8) (S : AS) (v : Machine) : Bool :=
@@ -3586,15 +4040,15 @@ def posCheck (T : Machine) (nm : Names) (kn : ByteArray) (sz : Nat) : Bool :=
       (fd != 0 || (ramOK kn sz s (startOf T kn sz s true) (atPhase T nm 0 0 0 b) && ramOK kn sz s (startOf T kn sz s false) (atPhase T nm 0 0 0 b)))
 
 theorem sim_start {E : Env} {kn : ByteArray} {sz : Nat} {s : UInt8} {S : AS} {v t : Machine} (hreg : regOK S v = true) (hram : ramOK kn sz s S v = true)
-    (hk : S.k = 0) (hprg : v.prg = E.prg) (hmask : v.prgMask = E.mask)
+    (hk : S.k = 0) (hr : S.rk = false) (hprg : v.prg = E.prg) (hmask : v.prgMask = E.mask) (hp : E.pad = AB.known (smbToPad 0))
     (hc : SameCore v t) (hf : ∀ i ∈ flagged kn, t.ram.get! i = v.ram.get! i) (hsz : t.ram.get! sz = s)
-    (hd : E.D.any (fun i => t.ram.get! i != 0) = true) : Sim E t.frame S { t with pad := E.pad } := by
+    (hd : E.D.any (fun i => t.ram.get! i != 0) = true) : Sim E (t.frame, 2) S { t with pad := smbToPad 0 } := by
   simp only [regOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Bool.not_eq_true'] at hreg
   obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩ := hreg
   simp only [ramOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, List.all_eq_true] at hram
   obtain ⟨⟨⟨⟨⟨r1, r2⟩, r3⟩, r4⟩, r5⟩, r6⟩ := hram
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, rfl, ?_, ?_, ?_, hc.trk, hc.size, ?_, fun _ => hd, r1, r2, ?_⟩
-  · rw [show ({ t with pad := E.pad } : Machine).a = t.a from rfl, hc.a]; exact memB_mem h1
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, by rw [hp]; exact mem_known_self _, ?_, ?_, ?_, hc.trk, hc.size, ?_, fun _ => hd, r1, r2, ?_, ?_⟩
+  · rw [show ({ t with pad := smbToPad 0 } : Machine).a = t.a from rfl, hc.a]; exact memB_mem h1
   · show S.x.mem t.x
     rw [hc.x]; exact memB_mem h2
   · show S.y.mem t.y
@@ -3624,8 +4078,8 @@ theorem sim_start {E : Env} {kn : ByteArray} {sz : Nat} {s : UInt8} {S : AS} {v 
   · show t.fdot ≤ S.hi
     rw [hc.fdot]; exact h13
   · exact h14
-  · show t.padShift = S.padShift
-    rw [hc.padShift]; exact h15
+  · show S.padShift.mem t.padShift
+    rw [hc.padShift]; exact memB_mem h15
   · show t.padStrobe = S.strobe
     rw [hc.padStrobe]; exact h16
   · show t.halted = false
@@ -3653,6 +4107,9 @@ theorem sim_start {E : Env} {kn : ByteArray} {sz : Nat} {s : UInt8} {S : AS} {v 
   · show t.frame = t.frame + S.k
     rw [hk]
     rfl
+  · intro h
+    rw [hr] at h
+    cases h
 
 /-- the conditions on the state at the cut. `sz` is the byte of Mario's size, `D` the digits of the game timer. -/
 structure Cond (T : Machine) (nm : Names) (kn : ByteArray) (sz : Nat) (D : List Nat) (t : Machine) : Prop where
@@ -3680,9 +4137,6 @@ theorem cond_of_ok {T : Machine} {nm : Names} {kn : ByteArray} {sz : Nat} {D : L
 /-- the configuration of the check -/
 def cfgOf (sy : Syms) (T : Machine) (kn : ByteArray) (sz : Nat) (D : List Nat) (B : Nat) : Cfg :=
   Cfg.of (envOf T D) sy B [sz] (startsOf T kn sz)
-
-/-- the fuel of a walk: more than any path between states of the table -/
-def walkFuel : Nat := 100000
 
 /-- the whole check for `T`, without the entries -/
 def runCheck (sy : Syms) (nm : Names) (T : Machine) (kn : ByteArray) (sz : Nat) (D : List Nat) (B : Nat) : Bool :=
@@ -3718,7 +4172,7 @@ theorem decided_of_run {sy : Syms} {nm : Names} {T : Machine} {kn : ByteArray} {
     cases hz : (t.fdot == 0)
     · exact hR3
     · exact hR1
-  have hsim := sim_start (E := envOf T D) (kn := kn) (sz := sz) (s := s) hA.1 hram rfl rfl rfl hcore hc.fixed hsz hc.digits
+  have hsim := sim_start (E := envOf T D) (kn := kn) (sz := sz) (s := s) hA.1 hram rfl rfl rfl rfl rfl hcore hc.fixed hsz hc.digits
   exact ctl_of_check (C := cfgOf sy T kn sz D B) hch rfl rfl t hS hsim
 
 /-- what the theorem says -/

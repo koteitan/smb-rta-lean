@@ -51,7 +51,7 @@ playN_t       :  p frames of play from sub-counter 0:  timer falls by ⌈p/q⌉
 level_ge_of_late :  E = P1 + X1 + P2 + X2 + P3 + W + F,  20 ≤ F,  and hq ... hP3, hT, hD, hL  ⟹  1748 ≤ L    (no grid needed)
 ```
 
-`hE`, `hT` and `hc` are proved from a rule on one frame: see the next section.
+`hE`, `hT`, `hc`, `hD` and `hL` are proved from rules on one frame: see the next two sections.
 
 What the checks prove on real frames, for the listed states only (private `castle_to_level`, by `native_decide`). `0^k` is `k` frames of no input, `I` the 64 inputs of [the castle walk](f-4-CastleWalk.md):
 
@@ -67,11 +67,14 @@ runs      :  6 real runs with idle frames in the three areas:  every frame follo
 pauses    :  a real run with a pause in each of the 5 segments:  the same, with j = 252 and 2 + j frames without timers
 starts    :  Start pressed on 5 different frames of the title:  the same phase, timer and sub-counter at frame 0;
              before frame 0, s(0) = (t0, 0) and ph(0) = 2
+flags     :  the castle entries of phases, real, values, fireworks:  every frame up to the level change follows FlagStep,
+             task(E + 1) = 2,  lim + 30 ≤ y(E + 1),  task(L) = 5,  early(L) = T + D
+flagPauses:  T = 125, a pause in task 2, in task 3, in task 4, and on the frame of the level change:  the same,  L not before the formula
 ```
 
 `E*` is a real castle entry, with the timer overwritten to 8 and the music stopped, so that the chain is short.
 
-Lean: `Theorems/CastleToLevel.lean` (`level_ge`, `Frames`), private `level_ge_rom`, `castle_to_level`, `castle_level_formula`, `castle_level_inputs`, `castle_level_timer`.
+Lean: `Theorems/CastleToLevel.lean` (`level_ge`, `Frames`, `Flag`), private `level_ge_rom`, `castle_to_level`, `castle_level_formula`, `castle_level_inputs`, `castle_level_timer`, `castle_level_flag`.
 
 ## The rule on one frame
 
@@ -124,13 +127,76 @@ On real frames the kind is read from the phase and from control (`kindOf`). A ph
 
 The fields hold together: for any segments there is a sequence with no `lag` frames (`Frames.noLag`).
 
-The TAS, the run that touches one frame later, and the TAS with a pause of 45 to 66 frames put in at 36 places also follow the rule on every frame, and the three formulas hold on them (a working program, not in the repository). A run with a death does not follow `plan`.
+The TAS, the run that touches one frame later, and the TAS with a pause of 45 to 66 frames put in at 36 places also follow the rule on every frame, and the three formulas hold on them (`frames-check`). A run with a death does not follow `plan`.
 
 **Frames that run over.** With five Hammer Brothers overwritten close by, the routine can run into the next frame. Read at the frame boundary, a tick of the timer is split over two frames: `(t, 1) → (t, 0) → (t − 1, q)` or `(t, 1) → (t, q) → (t − 1, q)`. The phase does not move on the second. A frame that moves together with the frames that do not move after it follows the rule. In 3 tests of 1500 frames, 28 frames read at the boundary break the rule, and 0 taken together do. So `s(n)` is the value when the routine of the frame before has ended. On a run with nothing overwritten this equals the value read at the boundary.
 
+## The frames after the castle entry
+
+The sequence of frames goes on past `E`, up to the level change `L` (`Flag`). `Frames` does not change. `x(n) = (task, t, y, w, ph)` are the counters when frame `n` begins: the star flag's task, the game timer, the flag's height on the screen, its interval timer, the phase. `y` falls as the flag rises. `lim` is the height the flag rises to and `w₀` the value its task sets; both are read from the code of the ROM.
+
+A frame that does not run leaves all the counters. A frame that runs has `ph' = (ph − 1) mod 21`. The interval timer falls when the phase wraps: `tick = w − 1` if `ph = 0` (it stops at 0), and `tick = w` otherwise.
+
+```
+task 2,  t ≠ 0      task' = 2,  t' = t − 1,  y' = y,      w' = tick
+task 2,  t = 0      task' = 3,  t' = 0,      y' = y,      w' = tick
+task 3,  lim ≤ y    task' = 3,  t' = t,      y' = y − 1,  w' = tick
+task 3,  y < lim    t' = t,  y' = y,  (task' = 3 ∧ w' = tick) ∨ (task' = 4 ∧ w' = w₀)
+task 4              t' = t,  y' = y,  w' = tick,  task' = 4 ∨ (task' = 5 ∧ w' = 0)
+```
+
+A frame with task 3 and `y < lim` can stay in task 3: the fireworks. A frame with task 4 can stay in task 4: the music. So these two only delay. A frame that runs with task 5 changes the level. It is frame `L`, which the rule does not cover.
+
+Every frame `n` with `E < n < L` follows this rule (`FlagStep`). The other fields:
+
+```
+t(E + 1) = T,  ph(E + 1) = c       the T and c of Frames
+task(E + 1) = 2
+lim + 30 ≤ y(E + 1)                the flag's height at E
+E < L,  task(L) = 5
+```
+
+The theorems:
+
+```
+early(n) = #{i : E < i < n, frame i runs, task(i) ≤ 3}
+D        = early(L) − T
+
+Flag.hD :  33 ≤ D
+Flag.hL :  6 ≤ w₀  →  E + T + D + 107 + wait(c, T + D) ≤ L
+```
+
+The proofs (`Flag.Inv`, `inv_step`):
+
+* `hD`: let `r = t + (y + 1 − lim) + 2` in task 2 and `r = (y + 1 − lim) + 1` in task 3. A frame that runs takes at most 1 off `r`. At `E + 1`, `r ≥ T + 33`. In task 4 it is used up, so `early ≥ T + 33`.
+* `hL`: up to task 3 every frame that runs is counted, so `(ph + early) mod 21 = c mod 21`, and the frame that sets `w` leaves `ph = wait(c, T + D)`. That frame is at least `E + T + D`. In task 4, `21 w + ph` falls by at most 1 per frame. It starts at `21 w₀ + wait`, and task 5 needs `w = 0`, so it is then at most 20. With `w₀ ≥ 6` that is `106 + wait` frames, and frame `L` is one more.
+
+`D` does not count the frames that do not run, so a pause does not change it. A pause moves `L` and leaves `D` and `wait`.
+
+`6 ≤ w₀` is not a field: `route_1_1` computes it from the ROM (`by decide`).
+
+On real frames the counters are read from memory (`flagOf`). The star flag's enemy slot is found by its name. A frame whose phase stays does not run (`flagLag`).
+
+Real runs with nothing overwritten, by `frames-check`. All their frames follow the rule, and `hD` and `hL` are true. `lag` is the frames after `E` that do not run.
+
+```
+run                                       E     T    c   D    lag  L     L − (E + T + D + 107 + wait)
+TAS                                       1218  370  3   33   0    1748  0
+TAS, inputs 02 80 80 80 after frame 1089  1219  369  2   33   0    1748  0
+TAS, 96 idle frames first                 1314  366  12  194  0    2000  0
+TAS, 168 idle frames first                1386  363  3   98   0    1958  0
+TAS, 216 idle frames first                1434  361  18  34   0    1937  0
+```
+
+The last three have real fireworks. A pause of `d` frames after `E` gives `lag = d` and moves `L` by `d`, with the same `D`. This was run at frames 1219, 1300, 1450, 1590, 1600, 1625, 1700, 1747, 1748, with `d` from 45 to 66, so in tasks 2, 3, 4 and on the frame of the level change. A pause before `E`, at frames 100 and 1100, gives `j = 45`, `lag = 0`, `L = 1793`. Random inputs after `E`, with Start in them, also follow the rule: 6 runs, 751 to 788 frames that do not run on the 5 that reach the level change. The sixth is still paused when the inputs end. The 6 with no Start have `L = 1748`.
+
+With the timer overwritten at the entry, `T` = 0, 60, 100, 120, the music holds the level change back to `E + 265`. The rule and `hL` hold there too (`castle-level-check`).
+
+The fields hold together: for any numbers with `1 ≤ lim` there is a sequence with no `lag` frames (`Flag.noLag`). With `lim = 0`, `y − 1` stops at 0 and task 3 does not end.
+
 ## How
 
-**The frames after the entry** (from the code). On frame `E` the star flag's task reads the timer's last digit: 1, 3 or 6 sets fireworks. The next `T` frames take 1 off the timer each. One frame ends that task, and 31 frames raise the flag. The frame after that sets a timer that falls only when the interval timer runs out, so `D = 33`. Fireworks hold that frame back: one firework costs 1 frame, and each further one 32. Then 6 steps of the interval timer take 106 frames plus the delay to the next step, and on the following frame the level number changes. Together this is `L = E + T + D + 107 + wait`.
+**The frames after the entry** (from the code; `FlagStep` is its rule on one frame). On frame `E` the star flag's task reads the timer's last digit: 1, 3 or 6 sets fireworks. The next `T` frames take 1 off the timer each. One frame ends that task, and 31 frames raise the flag. The frame after that sets a timer that falls only when the interval timer runs out, so `D = 33`. Fireworks hold that frame back: one firework costs 1 frame, and each further one 32. Then 6 steps of the interval timer take 106 frames plus the delay to the next step, and on the following frame the level number changes. Together this is `L = E + T + D + 107 + wait`.
 
 **The music.** That last task also waits for the victory music to end. On this route, at all 21 phases, the music has ended by then when `T ≥ 125`. With a small `T` it has not, and the level changes off the grid, later than the formula, at `E + 265`. The formula is a lower bound in all the cases measured, so `hL` is an inequality.
 
@@ -159,9 +225,11 @@ No way was found to make `E + T + D + 107` smaller than the TAS's, or to move th
 * `hP1`, `hP2`, `hP3`: the parts of the route. They come from the other theorems of [the route](../docs/route-1-1.md), and they are joined in [The whole of 1-1](0-1-Route.md). A run that does not take these two pipes is not covered.
 * `hX1`, `hX2`: [the two changes](b-1-PipeTransition.md), proved for the entry states they list. A frame that runs over counts in `j`.
 * `hE`, `hT`, `hc`: in [The whole of 1-1](0-1-Route.md) these are proved from `Frames`. The assumptions are the fields of `Frames`: each frame follows `Step` and `plan`, `s(0)`, `ph(0)`, and the number of `E`. That a real run satisfies them is not proved. They are checked on every frame of 7 real runs of this page and on the TAS. Frames with a power-up, a hit or a death are not in this form; for a power-up use `level_ge_of_late`. A run restarted after a death is not covered.
-* `hD`: checked for the listed values. That the star flag starts at the same height in every run is read from the code. It is not in the form of `Frames`.
+* `hD`, `hL`: in [The whole of 1-1](0-1-Route.md) these are proved from `Flag`. The assumptions are the fields of `Flag`: each frame follows `FlagStep`, `task(E + 1) = 2`, the flag's height at `E`, `task(L) = 5`. That a real run satisfies them is not proved. They are checked on every frame of the listed runs. That the flag starts at the same height in every run is still read from the code; only these runs check it.
+* `T` and `c` link `Flag` to `Frames` by number. `L` is a frame that begins with task 5. That the level number changes on no other frame is read from the code and seen on the listed runs. It is not a field.
+* Frames that run over after `E`: measured only with five Hammer Brothers overwritten at the entry, with the flag in the first slot and in the last slot (26 and 66 such frames; a working program, not in the repository). No frame read at the boundary broke `FlagStep`. That is no proof for other frames that run over.
 * The counters before frame 0 are checked for 5 Start presses.
-* `hL`: not in the form of `Frames`. Checked with equality on the listed states, with no input, from one route. Every input ran from one state only, with `GMerge` as a hypothesis and with the timer and the music overwritten. From the real entry that is a program's result, not a theorem.
+* The formula as an equality: checked on the listed states, with no input, from one route. Every input ran from one state only, with `GMerge` as a hypothesis and with the timer and the music overwritten. From the real entry that is a program's result, not a theorem. The bound does not use it.
 * The states at the pole are overwritten at the end of a real run, as in [the castle walk](f-4-CastleWalk.md). Enemies, score and other bytes of other runs are not covered.
 * Start and Select are not in the input set of the theorem. Pausing is measured, not proved. Select held was measured to change nothing.
 
@@ -169,5 +237,6 @@ No way was found to make `E + T + D + 107` smaller than the TAS's, or to move th
 
 **Reproduce.**
 ```
-.lake/build/bin/smbrta castle-level-check     # the three checks (true, about 13 s), then small timers, fireworks, a pause, and every input on the real state (about 13 s more)
+.lake/build/bin/smbrta castle-level-check     # the four checks (true, about 20 s), then small timers, fireworks, a pause, and every input on the real state (about 13 s more)
+.lake/build/bin/smbrta frames-check FM2       # the rules of Frames and Flag on a movie's frames. Also: A HEX, pause F D, insert A K
 ```

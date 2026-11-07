@@ -102,6 +102,7 @@ def new(cfg, base, name):
 def listing(base):
     d = os.path.join(base, 'worktrees')
     for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if not os.path.isfile(os.path.join(d, name, 'base-tree')): continue
         p = Place(base, name)
         now = p.now()
         state = 'applied' if now == p.read('applied-tree') else f'{len(p.names())} files changed'

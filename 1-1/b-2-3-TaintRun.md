@@ -25,19 +25,21 @@ every_entry :  ∀ M,  (∀ k, 1 ≤ k ≤ 50 → ¬ctl(run(M, 0^k)))  ∧  Cond
 
 All bytes outside `K ∪ {sz, g, g+1, g+2}` are arbitrary in `decided`: frame timers, random bytes, digits, `PlayerStatus`, what is left of the music state, and all others. Only the three digits together have a condition.
 
-Lean: `Theorems/TaintRun.lean` (`ctl_of_check`, `decided_of_run`, `Statement`, `statement_of_check`, `every_entry`), private `taint_checks` (`native_decide`), `taint_run`, `taint_entries`. `ctl_of_check` and `every_entry` use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
+Lean: `Theorems/TaintRun.lean` (`ctl_of_check`, `decided_of_run`, `Statement`, `statement_of_check`, `every_entry`; also `frame_of_live`, `frame_of_walk`, `inv_step`, which [The first frames of the change out of the side pipe](d-2-2-SideChangeBound.md) uses), private `taint_checks` (`native_decide`), `taint_run`, `taint_entries`. `ctl_of_check` and `every_entry` use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
 ## How it works
 
 **The abstract machine.** It follows a set of machines. Each byte has known bits and unknown bits. The dot in the frame is an interval. A branch on a flag that is not known goes both ways. Two paths that reach the same place are joined: a bit that differs becomes unknown.
 
-**Soundness.** `Sim A m` says that the abstract state `A` covers the machine `m`. For each of the 256 opcodes, NMI, the PPU time, the bus, DMA and the controller there is a lemma: one abstract step follows one step of `m`. A *table* of abstract states is closed under steps (`walk`). `ctl_of_check` says: if the table is closed, every machine of a start state gets control on the same frame. There is no ROM in this proof.
+**Soundness.** `Sim A m` says that the abstract state `A` covers the machine `m`. For each of the 256 opcodes, NMI, the PPU time, the bus, DMA and the controller there is a lemma: one abstract step follows one step of `m`. A *table* of abstract states is closed under steps (`walkF`). A path stops at the end of a frame and tests the state there. The test here is that control is known and that the state is in the table (`finCtl`). `ctl_of_check` says: if the table is closed, every machine of a start state gets control on the same frame. There is no ROM in this proof.
 
 **Time.** Paths take different numbers of cycles. The sprite-0 flag is a function of the dot, so a read of the PPU status splits the state at the event. Then the flag is known in each part. So a wait for the flag ends with a small interval, whatever came before. Cycle parity and frame parity are not tracked. A frame may only end in the idle loop. The new dot is then in `0..9`, as in the places of `T`. Any other instruction near the end of a frame makes the check fail. Frames 51 to 91 have none.
 
 **The pieces.** A state may be cut into parts that cover it. The digits of the timer are cut in the last frame: one known bit is 1 in one digit. Mario's size is cut at the start, because big and small Mario have different collisions.
 
-**The check** follows 412,456 abstract steps and 3,350 forks, with 16,302 states in the table. It takes about 4 s as a program (with the 77 entries), and about 45 s in the proof build, because `Theorems` is not precompiled.
+**The parts not used here.** The same machine is used in [The first frames of the change out of the side pipe](d-2-2-SideChangeBound.md). That page uses three parts: a pad with unknown bits (here it is known: no buttons), a followed counter (not used here) and a byte read in pieces by some of its bits (none here).
+
+**The check** follows 412,456 abstract steps and 3,350 forks, with 1,352 states in the table. It takes about 3 s as a program (with the 77 entries), and about 4 s in the proof build.
 
 **Measured, not a theorem.** 300 random states with `Cond` give control after exactly 41 frames. The TAS entry state meets `Cond` and has no control for 50 frames. 22 of its bytes outside `K` differ from `T`.
 

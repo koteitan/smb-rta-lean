@@ -47,13 +47,13 @@ ChangeRun.bound :  `ChangeRun` のフィールドを持つ走りについて :  
 
 `no_input` は `SideTransitionAll.every_entry` の `(H1)` です。`(H2)` と `(H3)` は出ません。ポーズのバイトが自由なので、タイマーはフレーム数より遅れることがあり、条件はフレーム 160 の状態の位置を決めません。下限には要りません。
 
-Lean: `Theorems/SideChangeBound.lean`（`frame_of_walk`、`inv_step`、`inv_seq`、`state_seq`、`fall_of_inv`、`no_control_first`、`no_control_all`、`inv_of_entry`、`entryCond_of_ok`、`Statement`、`statement_of_check`、`Statement.no_input`、`change_counted`、`ChangeRun`、`ChangeRun.bound`）、非公開の `side_bound_checks`（`native_decide`）、`side_bound`、`side_no_control`、`side_change_bound`。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
+Lean: `Theorems/TaintRun.lean`（`frame_of_walk`、`inv_step`）、`Theorems/SideChangeBound.lean`（`inv_seq`、`state_seq`、`fall_of_inv`、`no_control_first`、`no_control_all`、`inv_of_entry`、`entryCond_of_ok`、`Statement`、`statement_of_check`、`Statement.no_input`、`change_counted`、`ChangeRun`、`ChangeRun.bound`）、非公開の `side_bound_checks`（`native_decide`）、`side_bound`、`side_no_control`、`side_change_bound`。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
 ## しくみ
 
-**抽象機械.** [一部のバイトがわからない走り](b-2-3-TaintRun-ja.md)の機械を、このファイルに写して 3 つ変えました。パッドは、わからないビットのあるバイトです。土管のタイマーは追うカウンタです。値はわかりませんが、`Sim` は、このフレームで高々 1 減ったことを言います。それを書いてよいのは、その `DEC` だけです。あるバイトは、いくつかのビットで分けて読めます。フレームカウンタは下の 3 ビットで分けて読みます。`ColorRotation` がそれを添字に使うからです。
+**抽象機械.** [一部のバイトがわからない走り](b-2-3-TaintRun-ja.md)の機械を使います。その 3 つの部品を使います。パッドは、わからないビットのあるバイトです。土管のタイマーは追うカウンタです。値はわかりませんが、`Sim` は、このフレームで高々 1 減ったことを言います。それを書いてよいのは、その `DEC` だけです。あるバイトは、いくつかのビットで分けて読めます。フレームカウンタは下の 3 ビットで分けて読みます。`ColorRotation` がそれを添字に使うからです。
 
-**1 フレーム.** 開始状態から抽象機械で 1 フレーム進めると、終わりは開始状態だけです。ですから土管のどのフレームも `During` のままです。タイマーが 1 のときは、終わりは `During`（ポーズ）か `Exit` です。確認はタイマーが自由な場合に 106,824 個、タイマーが 1 の場合に 52,701 個の抽象ステップを追います。表は 4,584 個と 2,519 個です。プログラムで約 1 秒、非公開の証明のビルドで約 33 秒です。`Theorems` はあらかじめコンパイルされないからです。
+**1 フレーム.** 開始状態から抽象機械で 1 フレーム進めると、終わりは開始状態だけです。ですから土管のどのフレームも `During` のままです。タイマーが 1 のときは、終わりは `During`（ポーズ）か `Exit` です。確認はタイマーが自由な場合に 106,824 個、タイマーが 1 の場合に 52,701 個の抽象ステップを追います。表は 4,584 個と 2,519 個です。プログラムで約 4 秒（44 個の入る状態を含む）、非公開の証明のビルドで約 3 秒です。
 
 **ここで閉じる理由.** 土管のルーチンでは、面との当たり判定（`PlayerBGCollision` はこのルーチンで抜けます）もゲームタイマー（`RunGameTimer` も抜けます）も動きません。ですからタイマーは書き直されず、このフレームでは急ぎの音楽は始まりません。部屋の曲には矩形波 1 の部分がありません（`MusicOffset_Square1` がそれを示します）。ですから 0 を読み続けて止まる繰り返しは動きません。
 
@@ -88,9 +88,9 @@ Lean: `Theorems/SideChangeBound.lean`（`frame_of_walk`、`inv_step`、`inv_seq`
   * `Player_Y_Position` は床の値です。土管の口のタイルは床の高さにしかないからです。
   * 物のバイトは上のとおりです。`Block_State` には、入る直前にレンガが壊れないことが要ります。
   * 音楽のバイトは、急ぎの音楽が鳴っているあいだ、つまりゲームタイマーが 100 を過ぎた直後には成り立ちません。そのような走りは 1748 フレームよりずっと多く使っています。
-* `During` の外のフレームで `left` が高々 1 しか減らないこと（`ChangeRun` の `fallAfter`、`noAll` の仮定）。最後の 122 フレームです。
+* `During` の外のフレームで `left` が高々 1 しか減らないこと（`ChangeRun` の `fallAfter`、`noAll` の仮定）。最後の 122 フレームです。書き換えた状態では偽で、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) がこれに代わります。
 * `lag` のフレームで `left` が減らないこと（`ChangeRun` の `lagKeeps`）。測った本物の走りでは、タイマーが動かず `left` が減るフレームは、切り替えの `setup` のフレーム 1 つだけです。
-* `Route` はこの定理をまだ使っていません。`ChangeRun` は、`change₂` を結論にするフィールドの一覧です。
+* [1-1 全体](0-1-Route-ja.md) はこの定理の `Statement` を、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の `EndRun` を通して使います。`ChangeRun` は使いません。
 
 **ファイル.** `Theorems/SideChangeBound.lean`、非公開の `Proof/SideChangeBound.lean`。
 

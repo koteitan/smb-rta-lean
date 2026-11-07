@@ -104,6 +104,15 @@ PipeLeftTile=byte:HandlePipeEntry+15
 EngVerticalPipe=byte:HandlePipeEntry+24
 EngFlagpole=byte:RunFR+1
 EngEndLevel=byte:GiveFPScr+16
+# the foot check of the collision routine, and the second block buffer
+DoFootCheck
+DoPlayerSideCheck
+AwardTouchedCoin
+HandleAxeMetatile
+BlockBufferCollision
+HandlePipeEntry
+BlockBufferAdderData
+Block_Buffer_2
 Left_Dir
 Right_Dir
 PipeColumnByte=byte:L_GroundArea6+18
@@ -116,3 +125,6 @@ SidePipeTile=byte:ChkPBtm+16
 SidePipeTopTile=byte:SideCheckLoop+19
 EngSidePipe=byte:ChkGERtn+11
 RoomPipeByte=byte:L_UndergroundArea3+16
+# the star flag's task: the height it rises to and the interval timer it sets
+StarFlagTopY=byte:RaiseFlagSetoffFWorks+3
+StarFlagDelay=byte:DrawFlagSetTimer+4
