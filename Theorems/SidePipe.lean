@@ -4,7 +4,7 @@ import Theorems.Jump
 # Entering the side pipe
 
 Mario enters the side pipe on a frame that lands on the ground (or stands on it) with his right side in the
-pipe's mouth, facing right. In the air the pipe stops him. Page: `SidePipe.md`.
+pipe's mouth, facing right. In the air the pipe stops him. Page: `1-1/c-4-SidePipe.md`.
 
 `sideCheck` runs `PlayerBGCollision` on every state near the mouth and compares with `rule`. The other theorems
 are about frames: an entry frame is a frame on the ground, at the mouth or past its left end, and the fall to that

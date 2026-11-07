@@ -14,7 +14,7 @@ Potential `Φ = |V| + w(facing, moving)` with `V = 256·v + subspeed`. The doubl
 (`facing ≠ moving`) needs a frame that sets the facing direction, so `w` charges for it.
 `potCheck` checks, for every state and input: `Φ' ≤ Φ + g_fast`, and `Φ' ≤ Φ + g_slow` while
 slow (`RunningSpeed = 0` and `|v|` below the air threshold of `X_Physics`).
-Page: `Reach.md`.
+Page: `0-0/0-2-Reach.md`.
 -/
 
 namespace Smbrta.Potential

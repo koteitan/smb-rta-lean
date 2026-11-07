@@ -5,7 +5,7 @@ import Theorems.PoleGrab
 
 The collision routine starts the vertical pipe routine when Mario stands on the pipe with both feet, on
 a frame he lands, with Down held. So he has to be at the window where both feet are on the pipe's top.
-If the position bounds keep him left of that window, he does not enter. Page: `PipeEntry.md`.
+If the position bounds keep him left of that window, he does not enter. Page: `1-1/a-4-PipeEntry.md`.
 
 `pipeCheck` runs `PlayerBGCollision` on every state near the pipe's top and compares with `rule`.
 The frame theorems are about frames (`TopSpeed.Frame`) whose collision follows `rule`.

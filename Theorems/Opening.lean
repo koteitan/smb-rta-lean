@@ -11,7 +11,7 @@ press and of a held A, measured on the emulator for the takeoff speed (`Lens`). 
 A search state is the horizontal state, the air frames left (0 on the ground), and the distance
 `P` has moved (`16·v` per frame). `optCheck` follows every input from the 1-1 start for `n`
 frames and drops the states that cannot get past `T` any more: the potential bound `dbound`
-(`dist_le`) of what is left is too small. Page: `Opening.md`.
+(`dist_le`) of what is left is too small. Page: `1-1/a-3-Opening.md`.
 -/
 
 namespace Smbrta.Opening

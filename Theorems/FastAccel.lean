@@ -9,7 +9,7 @@ From the first controllable frame of 1-1 (`ctx = smb11Start sy cart`).
   chosen freely), no sequence of at most `n` frames reaches it.
 Real controller: `Bounds sy ctx padInputsA relaxInputs 33 34`. With Left+Right
 (`Theorems/TasFastAccel.lean`): `Bounds sy ctx lrInputsA relaxInputsLR 30 32`.
-Page: `Theorems/FastAccel.md`.
+Page: `1-1/a-1-FastAccel.md`.
 -/
 
 namespace Smbrta.FastAccel

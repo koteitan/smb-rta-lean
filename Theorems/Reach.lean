@@ -12,7 +12,7 @@ frames move `P` by at most
   `reach(w, n) = adv(w) + adv(w + amax) + … + adv(w + amax·(n-1))`
 
 (`chain_reach`). Once `w + amax·k` reaches `256·top`, each later frame adds exactly `16·top`
-(`reach_top`), so `reach(w, K + m) = reach(w, K) + 16·top·m` (`reach_add`). Page: `Reach.md`.
+(`reach_top`), so `reach(w, K + m) = reach(w, K) + 16·top·m` (`reach_add`). Page: `0-0/0-2-Reach.md`.
 -/
 
 namespace Smbrta.TopSpeed

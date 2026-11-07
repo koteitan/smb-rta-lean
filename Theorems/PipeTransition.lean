@@ -6,7 +6,7 @@ import Smbrta.Segment
 From the machine at the frame Mario enters the pipe, every input of a set (`inputs`: all buttons
 except Start and Select) gives one state per frame, not controllable until frame `N`, controllable
 on frame `N`. The states are compared by `key`. That equal keys go on to equal keys (`Merge`) is a
-hypothesis of the theorem, not checked here. Page: `PipeTransition.md`.
+hypothesis of the theorem, not checked here. Page: `1-1/b-1-PipeTransition.md`.
 -/
 
 namespace Smbrta.PipeTransition

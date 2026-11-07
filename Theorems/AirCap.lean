@@ -6,7 +6,7 @@ import Theorems.Potential
 In the air, below the air threshold (`|v| < AirFastSpeed`) the speed stays below it. It can only
 reach the threshold on a ground frame, and that frame gains at most `a_max`. So from a state below
 the threshold, a run of air frames followed by any frames moves `P` by at most
-`16·(A − 1)·K + capDist m`. Page: `AirCap.md`.
+`16·(A − 1)·K + capDist m`. Page: `1-1/c-1-AirCap.md`.
 -/
 
 namespace Smbrta.AirCap

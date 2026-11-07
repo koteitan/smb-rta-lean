@@ -10,7 +10,7 @@ frame, not controllable until frame `N`, controllable on frame `N`. The states a
 
 With no input and no hypothesis: other pixels of the mouth (written on the frame before the entry, so the
 entry frame really runs), other fractions and speeds, a big Mario, real entries at other pixels, and real entries
-on `D` consecutive frames. The one pixel with low nybble zero takes longer. Page: `SideTransition.md`.
+on `D` consecutive frames. The one pixel with low nybble zero takes longer. Page: `1-1/d-1-SideTransition.md`.
 -/
 
 namespace Smbrta.SideTransition

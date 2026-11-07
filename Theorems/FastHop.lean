@@ -6,7 +6,7 @@ import Theorems.Jump
 A jump reads the stored absolute speed. A hit stops Mario but does not clear that byte, so a jump right after a hit can
 be fast with no speed left. The byte stays high only while nothing updates it: a ground frame or a press of Left or Right
 in the air writes `|v|` into it, and that is small after a hit. So a fast hop needs no Left or Right after the hit, and
-then every frame pushes him back. Page: `FastHop.md`.
+then every frame pushes him back. Page: `1-1/f-3-FastHop.md`.
 
 `absCheck` runs the game's movement routine from a stopped Mario with a high stored speed. The theorems are about frames
 that follow it.

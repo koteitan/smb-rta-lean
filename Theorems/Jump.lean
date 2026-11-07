@@ -4,7 +4,7 @@ import Theorems.PoleGrab
 # The height of a jump
 
 `vstep` is one frame of the vertical bytes, on the game's movement routine, without collisions.
-Page: `Jump.md`.
+Page: `1-1/c-2-Jump.md`.
 -/
 
 namespace Smbrta.Jump

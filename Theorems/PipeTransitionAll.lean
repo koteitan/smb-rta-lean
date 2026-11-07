@@ -9,7 +9,7 @@ runs the same frames, whatever its other bytes are.
 
 The second part applies this from the state `T` when the pipe's timer has run out, `A` frames after the entry: control comes `B` frames
 later for every machine that agrees with `T` on a set `R`. Frames `1..A` are not proved for every entry: `every_entry` takes them as
-hypotheses, and the check runs a list of entry states. Page: `PipeTransitionAll.md`.
+hypotheses, and the check runs a list of entry states. Page: `1-1/b-2-1-PipeTransitionAll.md`.
 -/
 
 namespace Smbrta.PipeTransitionAll

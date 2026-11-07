@@ -17,7 +17,7 @@ level entry, the left screen edge and death):
 
 Each routine is checked alone on every value of the bytes it reads, in their normal ranges
 (`*Check`). Together they give: `|v| ≤ v_top` is kept, and `P` grows by at most `16·v_top`
-per frame. Page: `TopSpeed.md`.
+per frame. Page: `0-0/0-1-TopSpeed.md`.
 -/
 
 namespace Smbrta.TopSpeed

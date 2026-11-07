@@ -6,7 +6,7 @@ import Theorems.Jump
 
 From the machine at the frame Mario grabs the pole from below, the castle entry (`StarFlagTaskControl` set) comes `N` frames later or
 one more, by the fraction of his position, and not earlier. A touch at another height takes longer. The states come from a real run up to
-the base block, overwritten at the end. Page: `CastleWalk.md`.
+the base block, overwritten at the end. Page: `1-1/f-4-CastleWalk.md`.
 -/
 
 namespace Smbrta.CastleWalk

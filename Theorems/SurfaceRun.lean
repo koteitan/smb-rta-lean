@@ -13,7 +13,7 @@ cannot get past `X`. Past `N` frames each frame adds at most `16·top`. So at fr
 
 A hit is outside `hstep`. A first hit at frame `j ≥ J` is treated by `hit_bound`: up to the hit `dbound`, after it any frames of
 `TopSpeed.Frame` (hits included) from a speed of at most 0, by `TopSpeed.chain_reach`. A hit before `J` does not happen: `noHitCheck`
-runs the collision routine on the real machine on the states around the start. Page: `SurfaceRun.md`.
+runs the collision routine on the real machine on the states around the start. Page: `1-1/e-1-SurfaceRun.md`.
 -/
 
 namespace Smbrta.SurfaceRun

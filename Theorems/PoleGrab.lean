@@ -7,7 +7,7 @@ import Theorems.Potential
 The direct grab needs Mario rising inside the pole's range, which lies past the left edge of the
 base block. Beside the block the collision routine pushes him back; moving left turns the push of
 his feet to the right, at most one pixel per frame. These facts bound where he can land, so where
-he can be when he hops. Page: `PoleGrab.md`.
+he can be when he hops. Page: `1-1/f-1-PoleGrab.md`.
 
 `poleCheck` runs `PlayerBGCollision` on every state near the block and compares with the rules below.
 The theorems are about frames (`TopSpeed.Frame`) whose collision part follows these rules.
@@ -131,8 +131,7 @@ The facing direction is read only when he lands on the ground. -/
 def cases (sy : Syms) : List Case :=
   (caseXs sy).flatMap fun x => (caseYs sy).flatMap fun y => (caseVs sy).flatMap fun v =>
     (Potential.mds v).flatMap fun md => (caseVyStates sy y).flatMap fun (vy, st) =>
-      (if topY sy + 16 ≤ y.toNat + sy.FeetAdderY.toNat then [(1 : UInt8), 2, 3] else [1]).map fun fd =>
-        { x, y, v, md, vy, st, fd }
+      ([1, 2, 3] : List UInt8).map fun fd => { x, y, v, md, vy, st, fd }
 
 def poleCheck (sy : Syms) (m : Machine) : Bool :=
   let mp := withPole sy m

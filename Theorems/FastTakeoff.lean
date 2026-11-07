@@ -18,7 +18,7 @@ Result, for a takeoff by the last frame searched:
 * moving right: `P` does not stay left of the corner (`no_right_takeoff`);
 * moving left: he is so far back that `P` is short of the goal frame's position (`left_short`).
 A later takeoff is short by the top speed alone (`late_short`). All together: `fast_takeoff_short`.
-Page: `FastTakeoff.md`.
+Page: `1-1/c-3-FastTakeoff.md`.
 -/
 
 namespace Smbrta.FastTakeoff

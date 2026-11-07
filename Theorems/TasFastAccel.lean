@@ -5,7 +5,7 @@ import Theorems.FastAccel
 
 `FastAccel.Bounds sy ctx lrInputsA relaxInputsLR 30 32`. The witness is the opening of the
 HappyLee TAS (tasvideos 1715M). That 31 frames is impossible was found by the pruned exact
-search (`smbrta realize ROM 31 lr`), not by Lean. Page: `Theorems/TasFastAccel.md`.
+search (`smbrta realize ROM 31 lr`), not by Lean. Page: `1-1/a-2-TasFastAccel.md`.
 -/
 
 namespace Smbrta.TasFastAccel
