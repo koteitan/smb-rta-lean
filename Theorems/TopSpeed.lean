@@ -30,7 +30,7 @@ def speedsB (sy : Syms) : List UInt8 :=
 def bytes : List UInt8 := (List.range 256).map (·.toUInt8)
 def upTo (n : Nat) : List UInt8 := (List.range (n + 1)).map (·.toUInt8)
 /-- collision bits: only the two low bits may be cleared -/
-def collBits : List UInt8 := [0xFC, 0xFD, 0xFE, 0xFF]
+def collBits (sy : Syms) : List UInt8 := [sy.noLeft &&& sy.noRight, sy.noLeft, sy.noRight, 0xFF]
 /-- `RunningSpeed` values: 0, or a speed from the routine's threshold up to the top -/
 def runSpds (sy : Syms) : List UInt8 :=
   0 :: ((List.range (top sy + 1)).filter (· ≥ sy.RunSpeedMin.toNat)).map (·.toUInt8)
@@ -56,7 +56,7 @@ speed with its fraction (`V = 256·v + fraction`) to at most `max(V, 0)` + the a
 raise a speed that is too far left up to the left cap, which is negative) -/
 def frictionCheck (sy : Syms) (m0 : Machine) : Bool :=
   (speedsB sy).all fun v => bytes.all fun fr => (adders sy m0).all fun (lo, hi) =>
-  (maxRs sy m0).all fun mr => (maxLs sy m0).all fun ml => (upTo 3).all fun a => collBits.all fun cb =>
+  (maxRs sy m0).all fun mr => (maxLs sy m0).all fun ml => (upTo 3).all fun a => (collBits sy).all fun cb =>
     let m := poke m0 sy.Player_X_Speed v
     let m := poke m sy.Player_X_MoveForce fr
     let m := poke m sy.FrictionAdderLow lo
@@ -108,7 +108,7 @@ def moverCheck (sy : Syms) (m0 : Machine) : Bool :=
 when the speed was at most 0 -/
 def impedeCheck (sy : Syms) (m0 : Machine) : Bool :=
   (upTo 3).all fun side => (speedsB sy).all fun v => bytes.all fun x => pages.all fun pg =>
-  collBits.all fun cb =>
+  (collBits sy).all fun cb =>
     let m := poke m0 sy.Player_X_Speed v
     let m := poke m sy.Player_X_Position x
     let m := poke m sy.Player_PageLoc pg
@@ -117,7 +117,7 @@ def impedeCheck (sy : Syms) (m0 : Machine) : Bool :=
     let m' := runSub m sy.ImpedePlayerMove 0 0 0
     let d := (posP sy m' - posP sy m) % 0x1000000
     let v' := peek m' sy.Player_X_Speed
-    (v' == 0 || v' == v) && collBits.contains (peek m' sy.Player_CollisionBits) &&
+    (v' == 0 || v' == v) && (collBits sy).contains (peek m' sy.Player_CollisionBits) &&
     (d == 0 || d == 0x1000000 - 256 || (d == 256 && sbyte v ≤ 0))
 
 /-- (e) `GetPlayerAnimSpeed`: speed and fraction unchanged, or both 0 (a stopped skid);

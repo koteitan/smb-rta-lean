@@ -102,6 +102,10 @@ structure Syms where
   PipeRightTile : UInt16
   PipeLeftTile : UInt16
   EngVerticalPipe : UInt16
+  EngFlagpole : UInt16
+  EngEndLevel : UInt16
+  Left_Dir : UInt16
+  Right_Dir : UInt16
   PipeColumnByte : UInt16
   RoomBlockLeftByte : UInt16
   RoomBlockRightByte : UInt16
@@ -206,6 +210,10 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("PipeRightTile", fun s => s.PipeRightTile),
   ("PipeLeftTile", fun s => s.PipeLeftTile),
   ("EngVerticalPipe", fun s => s.EngVerticalPipe),
+  ("EngFlagpole", fun s => s.EngFlagpole),
+  ("EngEndLevel", fun s => s.EngEndLevel),
+  ("Left_Dir", fun s => s.Left_Dir),
+  ("Right_Dir", fun s => s.Right_Dir),
   ("PipeColumnByte", fun s => s.PipeColumnByte),
   ("RoomBlockLeftByte", fun s => s.RoomBlockLeftByte),
   ("RoomBlockRightByte", fun s => s.RoomBlockRightByte),
@@ -318,6 +326,10 @@ def Syms.parse (text : String) : Except String Syms := do
     PipeRightTile := ← get "PipeRightTile"
     PipeLeftTile := ← get "PipeLeftTile"
     EngVerticalPipe := ← get "EngVerticalPipe"
+    EngFlagpole := ← get "EngFlagpole"
+    EngEndLevel := ← get "EngEndLevel"
+    Left_Dir := ← get "Left_Dir"
+    Right_Dir := ← get "Right_Dir"
     PipeColumnByte := ← get "PipeColumnByte"
     RoomBlockLeftByte := ← get "RoomBlockLeftByte"
     RoomBlockRightByte := ← get "RoomBlockRightByte"
@@ -337,5 +349,14 @@ def Syms.load (path : String) : IO Syms := do
 /-- Lean source of this symbol table (for generated proof files) -/
 def Syms.toLean (s : Syms) : String :=
   "{ " ++ ", ".intercalate (Syms.fields.map fun (k, f) => s!"{k} := {(f s).toNat}") ++ " }"
+
+/-- the collision bits with the Left side blocked -/
+def Syms.noLeft (s : Syms) : UInt8 := ~~~s.Left_Dir.toUInt8
+
+/-- the collision bits with the Right side blocked -/
+def Syms.noRight (s : Syms) : UInt8 := ~~~s.Right_Dir.toUInt8
+
+/-- the routine is the flagpole's slide or the end of the level -/
+def Syms.inFlag (s : Syms) (eng : UInt8) : Bool := eng == s.EngFlagpole.toUInt8 || eng == s.EngEndLevel.toUInt8
 
 end Smbrta

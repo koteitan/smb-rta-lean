@@ -1486,7 +1486,7 @@ def tasTrace (sy : Syms) (romPath fm2Path : String) (skip : Nat) : IO UInt32 := 
       if eng.toUInt16 != sy.Eng_PlayerCtrl && !ended then
         IO.println s!"frames {n0}..{n}: behind the bound in {behind} frames"
         ended := true
-      if eng == 4 then return 0
+      if eng == sy.EngFlagpole.toUInt8 then return 0
       if n ≥ n0 && !ended then
         let b := 16 * top * n - loss
         if d != b then
@@ -1543,7 +1543,7 @@ def tasInsert (sy : Syms) (romPath fm2Path : String) (at_ k : Nat) (del : Nat :=
   for h : j in [0:ins.size] do
     m2 := runFrame m2 ins[j]
     let eng := peek m2 sy.GameEngineSubroutine
-    if !flag && j > c + at_ && (eng == 4 || eng == 5) then
+    if !flag && j > c + at_ && sy.inFlag eng then
       flag := true
       IO.println s!"k {k} del {del}: flag (routine {eng}) after frame {j - c}, y {peek m2 sy.Player_Y_Position}"
     if peek m2 sy.LevelNumber != 0 || peek m2 sy.WorldNumber != 0 then
@@ -1601,7 +1601,7 @@ def segSearch (sy : Syms) (romPath fm2Path : String) (a d : Nat) (goal : Option 
           if dist + opt > target then
             nxt := nxt.insert (ramKey sy m') m'
             best := max best dist
-        else if eng == 4 || eng == 5 then
+        else if sy.inFlag eng then
           IO.println s!"frame {k + 1}: the flag!"; flush
     layer := nxt.valuesArray
     let t1 ← IO.monoMsNow
@@ -1643,7 +1643,7 @@ def endSearch (sy : Syms) (romPath fm2Path : String) (a d : Nat) : IO UInt32 := 
         let m' := runFrame m (smbToPad i)
         let eng := peek m' sy.GameEngineSubroutine
         if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m') m'
-        else if eng == 4 || eng == 5 then touched := touched.insert (ramKey sy m') m'
+        else if sy.inFlag eng then touched := touched.insert (ramKey sy m') m'
     for m in touched.valuesArray do
       match toCastle sy m with
       | some c =>
@@ -1800,7 +1800,7 @@ def earliestCastle (sy : Syms) (m0 : Machine) (d : Nat) : Option Nat := Id.run d
         let m' := runFrame m (smbToPad i)
         let eng := peek m' sy.GameEngineSubroutine
         if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m') m'
-        else if eng == 4 || eng == 5 then
+        else if sy.inFlag eng then
           match toCastle sy m' with
           | some c =>
             let f := k + 1 + c
@@ -1837,7 +1837,7 @@ def stairSearch (sy : Syms) (romPath fm2Path : String) (a b : Nat) (shift : Nat 
         let eng := peek m' sy.GameEngineSubroutine
         if eng.toUInt16 == sy.Eng_PlayerCtrl && posP sy m' ≥ pt[k + 1]! - 768 then
           nxt := nxt.insert (ramKey sy m') m'
-        else if eng == 4 || eng == 5 then touched := touched.insert (ramKey sy m') m'
+        else if sy.inFlag eng then touched := touched.insert (ramKey sy m') m'
     for m in touched.valuesArray do
       match toCastle sy m with
       | some c =>
@@ -2073,9 +2073,9 @@ def flagPoke (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (v vy
         runs := runs + 1
         let eng := peek m2 sy.GameEngineSubroutine
         if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m2) m2
-        else if eng == 4 || eng == 5 then
+        else if sy.inFlag eng then
           if any.isNone then any := some (a + k + 1)
-          if direct.isNone && eng == 5 then direct := some (a + k + 1)
+          if direct.isNone && eng == sy.EngEndLevel.toUInt8 then direct := some (a + k + 1)
           if direct.isNone && (peek m2 sy.Player_Y_Position).toNat ≥ gy then direct := some (a + k + 1)
     layer := nxt.valuesArray
   IO.println s!"y {y} dx {dx} v {v} vy {vy} fd {fd}: direct {direct}, any touch {any}; {runs} frames"
@@ -2517,8 +2517,8 @@ def surfaceCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   IO.println s!"allCheck: {ok} ({t1 - t0} ms)"
   IO.println s!"one less in the search: {SurfaceRun.runCheck sy m0 s0 (X - 1) 31}; one frame later: {SurfaceRun.allCheck sy m0 982 X 31 9 234 9 4 40}; a first hit from frame 8: {SurfaceRun.hitTable sy m0 (Opening.pOf sy m0 s0) X 31 9 8}"
   -- the model with hits: on every frame a side contact of any kind, and the buttons it blocks on the next frame. Dropped states: `TopSpeed.reach`.
-  let mFE := poke m0 sy.Player_CollisionBits 0xFE
-  let mFD := poke m0 sy.Player_CollisionBits 0xFD
+  let mNoR := poke m0 sy.Player_CollisionBits sy.noRight
+  let mNoL := poke m0 sy.Player_CollisionBits sy.noLeft
   let amax := Smbrta.amax sy m0
   let mut l : List ((Potential.HS × UInt8) × Int) := [((s0, 0xFF), 0)]
   let mut steps := 0
@@ -2530,7 +2530,7 @@ def surfaceCheck (sy : Syms) (romPath : String) : IO UInt32 := do
     let add := fun (m : Std.HashMap (Potential.HS × UInt8) Int) (s : Potential.HS × UInt8) (d : Int) =>
       if d ≤ m.getD s (d - 1) then m else m.insert s d
     for ((s, bits), d0) in l do
-      let mm := if bits == 0xFF then m0 else if bits == 0xFE then mFE else mFD
+      let mm := if bits == 0xFF then m0 else if bits == sy.noRight then mNoR else mNoL
       for i in Potential.inputsN do
         steps := steps + 1
         let t := Potential.hstep sy mm s i
@@ -2539,10 +2539,10 @@ def surfaceCheck (sy : Syms) (romPath : String) : IO UInt32 := do
         let keepC := decide (X40 + 1 ≤ d + TopSpeed.reach top amax (max (256 * vt + t.f.toNat) 0) r)
         let keepS := fun (x : Int) => decide (X40 + 1 ≤ x + TopSpeed.reach top amax 255 r)
         if keepC then nx := add nx (t, 0xFF) d
-        if vt ≥ 0 && keepS (d - 256) then nx := add nx ({ t with v := 0 }, 0xFE) (d - 256)
-        if vt ≤ 0 && keepS (d + 256) then nx := add nx ({ t with v := 0 }, 0xFD) (d + 256)
-        if vt < 0 && keepC then nx := add nx (t, 0xFE) d
-        if vt > 0 && keepC then nx := add nx (t, 0xFD) d
+        if vt ≥ 0 && keepS (d - 256) then nx := add nx ({ t with v := 0 }, sy.noRight) (d - 256)
+        if vt ≤ 0 && keepS (d + 256) then nx := add nx ({ t with v := 0 }, sy.noLeft) (d + 256)
+        if vt < 0 && keepC then nx := add nx (t, sy.noRight) d
+        if vt > 0 && keepC then nx := add nx (t, sy.noLeft) d
     l := nx.toList
     peak := max peak l.length
   let t3 ← IO.monoMsNow
@@ -2716,7 +2716,7 @@ def joinStep (sy : Syms) (m0 : Machine) (s : Potential.HS) (i : Potential.HIn) (
 
 /-- `PoleJoin.Imposes`, on one real frame -/
 def joinImposes (sy : Syms) (ctx : Machine) (fr : JoinFrame) : Bool :=
-  (TopSpeed.upTo 3).contains fr.lr && TopSpeed.collBits.contains fr.bitsPrev &&
+  (TopSpeed.upTo 3).contains fr.lr && (TopSpeed.collBits sy).contains fr.bitsPrev &&
   (adders sy ctx).contains (fr.lo, fr.hi) && (maxRs sy ctx).contains fr.mr && (maxLs sy ctx).contains fr.ml &&
   [fr.hs.v, 0].any fun v => (TopSpeed.speedsB sy).contains v && [fr.hs.f, 0].any fun f =>
     let r := PoleJoin.frictionRun sy ctx v f fr.lo fr.hi fr.mr fr.ml fr.lr fr.bitsPrev
@@ -2900,7 +2900,7 @@ def poleJoinCheck (sy : Syms) (romPath fm2Path : String) (c0 : Nat) (at_ : Nat :
       IO.println s!"  hop {L' + 1 + i}: x {fr.case.x} y {fr.case.y} vy {fr.case.vy} v {fr.case.v} md {fr.case.md} P₂−Ps {fr.P2 - Ps} P'−Ps {fr.P' - Ps} v' {fr.v'} incases {joinInCases sy fr.case} collides {joinCollides sy mp fr} low {PoleJoin.lowCase sy fr.case}"
     let fL := frs[L' - 1]!
     let fN := frs[L']!
-    IO.println s!"MaskStep: push to the right on L − 1: {decide (fL.P' = fL.P2 + 256)}; v₂(L) {fN.v2} = hstep with Left blocked {sbyte (Potential.hstep sy (poke ctx sy.Player_CollisionBits 0xFD) fN.hs fN.inp).v}; v(L) {fN.v}"
+    IO.println s!"MaskStep: push to the right on L − 1: {decide (fL.P' = fL.P2 + 256)}; v₂(L) {fN.v2} = hstep with Left blocked {sbyte (Potential.hstep sy (poke ctx sy.Player_CollisionBits sy.noLeft) fN.hs fN.inp).v}; v(L) {fN.v}"
     let rowsOk := (List.range (L' - q - 1)).all (fun i =>
       let e := q + 1 + i
       !(decide (e ≤ T + 1) && (List.range (L' - e)).all (fun d => decide (Pf ≤ frs[e + d]!.P2))) || decide (L' ≤ e + 3))
@@ -3043,7 +3043,7 @@ def endPokeTrace (sy : Syms) (romPath fm2Path : String) (a y : Nat) (dx : Int) (
         let m' := runFrame m (smbToPad i)
         let eng := peek m' sy.GameEngineSubroutine
         if eng.toUInt16 == sy.Eng_PlayerCtrl then nxt := nxt.insert (ramKey sy m') (m', path ++ [i])
-        else if eng == 4 || eng == 5 then
+        else if sy.inFlag eng then
           match toCastle sy m' with
           | some c =>
             let f := k + 1 + c

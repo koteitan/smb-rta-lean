@@ -960,7 +960,7 @@ def FallingCase (sy : Syms) (m0 : Machine) (Pf : Int) (d : UInt8) (s : Jump.VS) 
 def MaskStep (sy : Syms) (m0 : Machine) (f g : Frame tp am) : Prop :=
   f.P' = f.P₂ + 256 → ∃ (s : HS) (i : HIn), s.v = 0 ∧ s.f ∈ bytes ∧ s.fd ∈ facings ∧ s.md ∈ ([0, 1, 2, 3] : List UInt8) ∧
     s.rs ∈ rsVals sy ∧ i ∈ inputsN ∧ i.st = 1 ∧ i.jump = false ∧
-    g.v₂ = sbyte (hstep sy (poke m0 sy.Player_CollisionBits 0xFD) s i).v
+    g.v₂ = sbyte (hstep sy (poke m0 sy.Player_CollisionBits sy.noLeft) s i).v
 
 theorem maskL_of_step (hm : maskCheck sy m0 = true) {f g : Frame tp am} (h : MaskStep sy m0 f g) : MaskL f g := by
   intro hp
@@ -992,7 +992,7 @@ def frictionRun (sy : Syms) (m0 : Machine) (v fr lo hi mr ml a cb : UInt8) : Mac
 /-- The real frame `f` runs `ImposeFriction` on a state of `TopSpeed.frictionCheck`: its `v₂` and the stored speed `a` after it are what the routine leaves.
 A frame on the ground does this, and a frame in the air with Left or Right. -/
 def Imposes (sy : Syms) (m0 : Machine) (f : Frame tp am) (a : Nat) : Prop :=
-  ∃ v ∈ speedsB sy, ∃ fr ∈ bytes, ∃ lo hi, (lo, hi) ∈ adders sy m0 ∧ ∃ mr ∈ maxRs sy m0, ∃ ml ∈ maxLs sy m0, ∃ k ∈ upTo 3, ∃ cb ∈ collBits,
+  ∃ v ∈ speedsB sy, ∃ fr ∈ bytes, ∃ lo hi, (lo, hi) ∈ adders sy m0 ∧ ∃ mr ∈ maxRs sy m0, ∃ ml ∈ maxLs sy m0, ∃ k ∈ upTo 3, ∃ cb ∈ collBits sy,
     f.v₂ = sbyte (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_X_Speed) ∧
     a = (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_XSpeedAbsolute).toNat
 

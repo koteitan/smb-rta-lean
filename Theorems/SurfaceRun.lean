@@ -209,7 +209,7 @@ theorem hit_bound {sy : Syms} {m : Machine} {s0 : HS} {X : Int} {N E J : Nat} (F
 the same frame as without, or it stops him (Left on the ground at a low speed stops a skid, and the blocked Left does not start him moving
 left). A stop is a first hit for `hit_bound`: speed 0, and `P` does not move. Checked on these fractions. -/
 def maskSame (sy : Syms) (m : Machine) : Bool :=
-  let mb := poke m sy.Player_CollisionBits 0xFD
+  let mb := poke m sy.Player_CollisionBits sy.noLeft
   (List.range (top sy)).all fun v => [(0 : UInt8), 128, 255].all fun f => facings.all fun fd => (rsVals sy).all fun rs =>
     inputsN.all fun i =>
       let s : HS := { v := (v + 1).toUInt8, f, fd, md := 1, rs }

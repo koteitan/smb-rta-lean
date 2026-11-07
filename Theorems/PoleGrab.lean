@@ -82,9 +82,9 @@ def ruleOk (sy : Syms) (m : Machine) (c : Case) : Bool :=
   let keepF := peek r sy.SprObject_X_MoveForce == 0x5A && peek r sy.Player_PageLoc == 0
   let engSame := eng'.toUInt16 == sy.Eng_PlayerCtrl
   -- a hit on the right blocks the Right bit, a hit on the left the Left bit
-  let pushL := x' == c.x - 1 && v' == 0 && bits == 0xFE
-  let pushR := x' == c.x + 1 && v' == 0 && bits == 0xFD
-  let sideRule := if 0 ≤ sv then pushL else same && bits == 0xFE
+  let pushL := x' == c.x - 1 && v' == 0 && bits == sy.noRight
+  let pushR := x' == c.x + 1 && v' == 0 && bits == sy.noLeft
+  let sideRule := if 0 ≤ sv then pushL else same && bits == sy.noRight
   keepF &&
   (if 0 ≤ sbyte c.vy then
     if ty + sy.LandDepth.toNat ≤ foot && foot < ty + 16 && feet then
@@ -140,7 +140,7 @@ def poleCheck (sy : Syms) (m : Machine) : Bool :=
 /-- with the Left bit blocked (after a push to the right), a stopped Mario does not start moving left
 in the air -/
 def maskCheck (sy : Syms) (m : Machine) : Bool :=
-  let mb := poke m sy.Player_CollisionBits 0xFD
+  let mb := poke m sy.Player_CollisionBits sy.noLeft
   bytes.all fun f => Potential.facings.all fun fd => [(0 : UInt8), 1, 2, 3].all fun md =>
     (Potential.rsVals sy).all fun rs =>
       (Potential.inputsN.filter fun i => i.st == 1 && !i.jump).all fun i =>

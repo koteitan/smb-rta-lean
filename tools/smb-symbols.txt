@@ -102,6 +102,10 @@ FlagGrabY=byte:FlagpoleRoutine+31
 PipeRightTile=byte:HandlePipeEntry+9
 PipeLeftTile=byte:HandlePipeEntry+15
 EngVerticalPipe=byte:HandlePipeEntry+24
+EngFlagpole=byte:RunFR+1
+EngEndLevel=byte:GiveFPScr+16
+Left_Dir
+Right_Dir
 PipeColumnByte=byte:L_GroundArea6+18
 RoomBlockLeftByte=byte:L_UndergroundArea3+6
 RoomBlockRightByte=byte:L_UndergroundArea3+14

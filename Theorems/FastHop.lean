@@ -61,7 +61,7 @@ def caseOk (sy : Syms) (m : Machine) (c : Case) : Bool :=
 not; both running speeds -/
 def cases (sy : Syms) : List Case :=
   [sy.AirFastSpeed.toUInt8, (TopSpeed.top sy).toUInt8].flatMap fun abs => bytes.flatMap fun f =>
-    [(0 : UInt8), 1, 2, 3].flatMap fun lr => collBits.flatMap fun bits => [(0 : UInt8), 1, 2].flatMap fun st =>
+    [(0 : UInt8), 1, 2, 3].flatMap fun lr => (collBits sy).flatMap fun bits => [(0 : UInt8), 1, 2].flatMap fun st =>
       [(1 : UInt8), 2].flatMap fun md => (Potential.rsVals sy).map fun rs =>
         { abs, f, lr, bits, st, fd := 1, md, rs }
 
