@@ -79,12 +79,10 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 
 | hypothesis | says | evidence |
 |---|---|---|
-| `fr`, `next` | frames `1 .. g − 1` are `TopSpeed.Frame`s that follow each other; on `g`, only the fields up to `P₂` are real (the touch moves him) | as in [Top speed bound](../0-0/0-1-TopSpeed.md) |
-| `startP`, `startV` | stopped at `P_A` at control | `SurfaceRun.Statement.start`, one real run |
-| `surface` | frames before the first hit `h` follow `hstep`; a hit is of the kinds of `hit_bound` and leaves a speed of at most 0 | as in [Above ground](e-1-SurfaceRun.md) |
-| `surface.box` | frames before `J` run the collision routine as on a state in the box of `noHitCheck` | real runs below; that he stays in the box is assumed |
-| `surface.off` | he leaves the model because of the collision routine: it did something, or left a blocked button, on a frame up to `h` | real runs below |
-| `inRange` | `P₀ ≤ P₂(g)` | `poleCheck` on its states, and the code |
+| `fr`, `seq`, `frames.reads` | frames are read from the machines; on `g`, only the fields up to `P₂` are real (the touch moves him); `next` is a theorem | [Above ground: the frames from control, one by one](e-2-SurfaceFrames.md) |
+| `frames.step` | one frame from a clean state is a `OneFrame`; `model`, `hit`, `stop`, `off` are theorems | real runs on that page |
+| `frames.vert`, `frames.box` | frames before `J` follow `vstep`, and the collision routine does what it does on the machine at control; `box` is a theorem | real runs on that page |
+| `fm`, `inp`, `touches`, `pass`, `pos` | frame `g` is a touch on real machines; the write ends one pass of the side check; `P₂(g)` is the position when the page is read; `P₀ ≤ P₂(g)` is the theorem `Run.inRange` from these | [Touching the pole on real frames](f-6-1-PoleEntryRule.md) |
 | `atCastle`, `afterTouch` | the flag is set on `c`, after the touch | the code |
 | `other` | not a direct grab: for 131 frames the flag is that of a checked touch at another height | measured: at least the touch + 153 |
 | `path`, `atY`, `atRising` | the jump's frames are a path of `Jump.arcSucc` from the ground | `Jump.md`; the jump starts from the ground: no enemy to bounce off near the pole |
@@ -96,6 +94,8 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 | `stopped` | a fast jump on `L + 1`: a frame from speed 0 runs `ImposeFriction`, or the movement routine on a case of `keepCases` | real runs below |
 | `fall` | a slow jump: the fall began on `w ≤ q` by a start of `fallStarts`, or by stepping off the base; the frames follow `fallNext` | map facts below |
 | `flagAny`, `flagTight` | slow grab: for 124 frames the flag is that of a checked direct grab; for 125 frames if the frame before moved left and the fraction is below `F` | measured below |
+
+The state at control, `Start`, is an argument of the theorems. `Route.Run.start` gives it from the change's last row.
 
 The map facts in `fall`, with `rows = 8` in the private proof:
 

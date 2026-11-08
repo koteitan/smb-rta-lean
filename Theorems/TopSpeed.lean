@@ -157,7 +157,8 @@ speed `v`, subspeed `f` (`Player_X_MoveForce`) and position `P` only through the
 this order: `GetPlayerAnimSpeed` (`anim`), `X_Physics` + `ImposeFriction` (`friction`, `gain`;
 the adder is a table entry, so at most `amax`), `MoveObjectHorizontally` (`move`),
 `ImpedePlayerMove` (`impede*`). The subspeed is written only by the first two (and by the
-climbing code, which is not in a running frame). -/
+climbing code, which is not in a running frame). The third case of `impedeP` is a push out of a wall, and
+the screen's left edge, which holds him at its pixel: moving left, `P` ends at most 1 px past where it began. -/
 
 structure Frame (top amax : Int) where
   v : Int
@@ -178,7 +179,7 @@ structure Frame (top amax : Int) where
   move : P₂ = P + 16 * v₂
   impedeV : v' = v₂ ∨ v' = 0
   impedeF : f' = f₂
-  impedeP : P' = P₂ ∨ P' = P₂ - 256 ∨ (P' = P₂ + 256 ∧ v₂ ≤ 0)
+  impedeP : P' = P₂ ∨ P' = P₂ - 256 ∨ (P' ≤ P + 256 ∧ v₂ ≤ 0)
 
 /-- one frame keeps `|v| ≤ top` and moves `P` by at most `16·top` -/
 theorem Frame.bound {top amax : Int} (f : Frame top amax) (h16 : 16 ≤ top) (hv : -top ≤ f.v ∧ f.v ≤ top) :
@@ -189,7 +190,7 @@ theorem Frame.bound {top amax : Int} (f : Frame top amax) (h16 : 16 ≤ top) (hv
   have hm := f.move
   refine ⟨?_, ?_⟩
   · rcases f.impedeV with h | h <;> rw [h] <;> omega
-  · rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> rw [h] <;> omega
+  · rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
 
 /-- `GainBound` for one frame: `V' ≤ max(V, 0) + amax`, with `V = 256·v + f` -/
 theorem Frame.gain {top amax : Int} (f : Frame top amax) (h255 : 255 ≤ amax) :
@@ -217,7 +218,7 @@ theorem Frame.adv_le {top amax : Int} (f : Frame top amax) (w : Int) (hv : -top 
   have hm := f.move
   have hA : max (256 * f.v₁ + f.f₁) 0 ≤ max (256 * f.v + f.f) 0 := by
     rcases f.anim with ⟨h1, h2⟩ | ⟨h1, h2⟩ <;> rw [h1, h2] <;> omega
-  rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> rw [h] <;> omega
+  rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
 
 /-- frames that follow each other -/
 def Chain {top amax : Int} : List (Frame top amax) → Prop

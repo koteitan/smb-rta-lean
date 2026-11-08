@@ -160,7 +160,7 @@ moving left fast at the end of the fall :  backD: P(C + 34) is small; P(h) ≤ b
 
 Each is a field of `RoomRun` or of a structure in it. "One frame" below marks a fact about a single frame.
 
-* `frames`, `move_top`: every frame up to `t₀` follows `hstep` in the open area (`Follow`) or leaves him stopped (`Stop`), and moves at most the top speed.
+* `fm`, `pad`, `arr`, `next`, `read_hs`, `read_P`, `read_in`, `clean` (one frame): the frames are a sequence of real machines, and the state, the position and the input are read from the machines. Every frame up to `t₀` is `FrameModel.Clean`, or it leaves him stopped (`Stop`) and is `FrameModel.ReadFrame`. That a `Clean` frame follows `hstep` (`Follow`) and that every frame moves at most the top speed (`move_top`) are proved from the theorems of [A real frame and the horizontal model](../0-0/0-3-2-FrameModel.md). What `Clean` and `ReadFrame` assume is on that page.
 * `start`, `startP0`, `startP1`, `ab_start`: at first control he is stopped, facing right, moving direction 0, running speed 0, stored speed 0, at the start position with any fraction. Read from the TAS.
 * `wall` (one frame): a frame before `C + 37` that does not follow `hstep` is stopped by the left wall: `P ≤ P_w` before and after it, `RunningSpeed` 0. That this is the only case (he cannot reach the corner) is part of the assumption.
 * `late` (one frame): a frame from `C + 37` to `C + 41` that does not follow `hstep` is at the left wall, or `P + 16·v_top ≥ c_P`.

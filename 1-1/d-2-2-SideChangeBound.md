@@ -84,7 +84,7 @@ The program ran real frames from these entries.
 ## Assumptions (not proved in Lean)
 
 * `EntryCond` on the state at the entry of a real run. The bytes of `K` are constant in the room on the runs sampled. That they hold on every run is read from the code. In particular:
-  * `timer ≥ 160` means that the screen is on the first page on the entry frame ([item 1-1-d-2-4](../README.md)).
+  * `timer ≥ 160` means that the screen is on the first page on the entry frame. [The screen's page in the room, and the long timer](d-2-4-ScreenPage.md) derives it from the room's frames.
   * `Player_Y_Position` is the floor's, because the mouth's tile is only at the floor.
   * The object bytes are as above. `Block_State` needs that no brick breaks just before the entry.
   * The music bytes do not hold while the hurry-up music plays, that is, when the game timer has just passed 100. Such a run has used far more than 1748 frames.

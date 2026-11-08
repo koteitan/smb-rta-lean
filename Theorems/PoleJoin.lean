@@ -1,5 +1,6 @@
-import Theorems.SurfaceRun
+import Theorems.SurfaceFrames
 import Theorems.FastHop
+import Theorems.PoleEntryRule
 
 /-!
 # Above ground: the castle entry from control
@@ -527,95 +528,9 @@ section Surface
 
 open Potential (HIn inputs hdist startHS)
 open TopSpeed (top)
-open SurfaceRun (Statement poleP hit_bound noHitCheck noHitAt someSpeeds vyStates)
+open SurfaceRun (Statement poleP hit_bound noHitCheck)
 
 variable {sy : Syms} {m0 : Machine} {tp am : Int}
-
-/-- What the private proof fixes about the map above ground: the machine at control, how far around its position `SurfaceRun.noHitCheck` looked, and the highest row above the
-ground that he stands on near the flag. -/
-structure Box where
-  m : Machine
-  dx : Nat
-  dy : Nat
-  rows : Nat
-
-/-- the collision routine, as `SurfaceRun.noHitAt` runs it -/
-def noHitRun (sy : Syms) (m : Machine) (x y v vy st : UInt8) : Machine :=
-  let m1 := poke m sy.Player_X_Position x
-  let m1 := poke m1 sy.Player_Y_Position y
-  let m1 := poke m1 sy.Player_X_Speed v
-  let m1 := poke m1 sy.Player_MovingDir (if v < 0x80 then 1 else 2)
-  let m1 := poke m1 sy.Player_Y_Speed vy
-  let m1 := poke m1 sy.Player_State st
-  runSub m1 sy.PlayerBGCollision 0 0 0
-
-/-- a state of the box of `noHitCheck`: on the ground at the height of the machine, or in the air up to `dy` above it -/
-def InBox (sy : Syms) (B : Box) (x y v vy st : UInt8) : Prop :=
-  (∃ a, a < 2 * B.dx + 1 ∧ x = ((peek B.m sy.Player_X_Position).toNat + a - B.dx).toUInt8) ∧ v ∈ someSpeeds ∧
-    ((y = (peek B.m sy.Player_Y_Position).toNat.toUInt8 ∧ vy = 0 ∧ st = 0) ∨
-      ∃ b, b < B.dy + 1 ∧ y = ((peek B.m sy.Player_Y_Position).toNat - b).toUInt8 ∧ (vy, st) ∈ vyStates sy)
-
-/-- The real frame `f` runs the collision routine as on a state of the box, `v` standing for the speed's sign: what it does to the position's pixel and to the speed, and the
-collision bits `bit` it leaves, are the routine's. -/
-def BoxFrame (sy : Syms) (B : Box) (f : Frame tp am) (bit : UInt8) : Prop :=
-  ∃ x y v vy st : UInt8, InBox sy B x y v vy st ∧
-    (∃ base : Int, f.P₂ = base + 256 * (x.toNat : Int) ∧
-      f.P' = base + 256 * ((peek (noHitRun sy B.m x y v vy st) sy.Player_X_Position).toNat : Int)) ∧
-    f.v' - f.v₂ = sbyte (peek (noHitRun sy B.m x y v vy st) sy.Player_X_Speed) - sbyte v ∧
-    bit = peek (noHitRun sy B.m x y v vy st) sy.Player_CollisionBits
-
-/-- the collision routine did nothing on this frame: `bit` are the collision bits it leaves -/
-def Quiet (f : Frame tp am) (bit : UInt8) : Prop := f.P' = f.P₂ ∧ f.v' = f.v₂ ∧ bit = 0xFF
-
-/-- `noHitCheck` on the frames: a frame in the box is quiet -/
-theorem quiet_of_box {B : Box} (hc : noHitCheck sy B.m B.dx B.dy = true) {f : Frame tp am} {bit : UInt8} (h : BoxFrame sy B f bit) :
-    Quiet f bit := by
-  obtain ⟨x, y, v, vy, st, ⟨⟨a, ha, hx⟩, hv, hy⟩, ⟨base, h1, h2⟩, h3, h4⟩ := h
-  have hat : noHitAt sy B.m x y v vy st = true := by
-    simp only [noHitCheck, List.all_eq_true, List.mem_range, Bool.and_eq_true] at hc
-    have h5 := hc a ha
-    rw [← hx] at h5
-    rcases hy with ⟨hy, hvy, hst⟩ | ⟨b, hb, hy, hvs⟩
-    · rw [hy, hvy, hst]
-      exact h5.1 v hv
-    · rw [hy]
-      exact h5.2 b hb v hv (vy, st) hvs
-  simp only [noHitAt, Bool.and_eq_true, beq_iff_eq] at hat
-  obtain ⟨⟨h5, h6⟩, h7⟩ := hat
-  have e5 : peek (noHitRun sy B.m x y v vy st) sy.Player_X_Position = x := h5
-  have e6 : peek (noHitRun sy B.m x y v vy st) sy.Player_X_Speed = v := h6
-  have e7 : peek (noHitRun sy B.m x y v vy st) sy.Player_CollisionBits = 0xFF := h7
-  rw [e5] at h2
-  rw [e6] at h3
-  rw [e7] at h4
-  exact ⟨by omega, by omega, h4⟩
-
-/-- What a real run gives from control above ground (position `PA`, frame `fr 1` the first frame after control) up to frame `T`, in the model of
-`SurfaceRun`: `w` are the model's inputs, and the frames before the first hit `h` move as `hdist` says. A first hit is one of the kinds of `SurfaceRun.hit_bound`,
-and it leaves a speed of at most 0. If he hits nothing up to `T`, take any `h` past `T`. `bits j` are the collision bits frame `j` leaves. -/
-structure Surface (sy : Syms) (m0 : Machine) (PA : Int) (B : Box) (T J : Nat) (fr : Nat → Frame (top sy) (amax sy m0))
-    (w : List HIn) (h : Nat) (bits : Nat → UInt8) : Prop where
-  mem : ∀ i ∈ w, i ∈ inputs
-  long : T ≤ w.length
-  /-- the frames before `J` stay in the box of `SurfaceRun.noHitCheck` -/
-  box : ∀ j, 1 ≤ j → j < J → BoxFrame sy B (fr j) (bits j)
-  /-- he leaves the model because of the collision routine: it did something on a frame up to `h` -/
-  off : h ≤ T → ∃ j, 1 ≤ j ∧ j ≤ h ∧ ¬ Quiet (fr j) (bits j)
-  model : ∀ j, 1 ≤ j → j < h → j ≤ T → (fr j).P' ≤ PA + hdist sy m0 (startHS sy m0) (w.take j)
-  hit : h ≤ T → (fr h).P' ≤ PA + hdist sy m0 (startHS sy m0) (w.take h) - 256 ∨
-    (fr h).P' ≤ PA + hdist sy m0 (startHS sy m0) (w.take (h - 1)) + 256
-  stop : h ≤ T → (fr h).v' ≤ 0
-
-/-- No hit before `J`: the frames before it are in the box, and `noHitCheck` says nothing happens there. -/
-theorem first_of_surface {PA : Int} {B : Box} {T J : Nat} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h : Nat} {bits : Nat → UInt8}
-    (hc : noHitCheck sy B.m B.dx B.dy = true) (hJT : J ≤ T) (R : Surface sy m0 PA B T J fr w h bits) : J ≤ h := by
-  by_cases hT : h ≤ T
-  · by_cases hJ : J ≤ h
-    · exact hJ
-    · exfalso
-      obtain ⟨j, h1, h2, h3⟩ := R.off hT
-      exact h3 (quiet_of_box hc (R.box j h1 (by omega)))
-  · omega
 
 theorem speed_range (h16 : 16 ≤ (top sy : Int)) {fr : Nat → Frame (top sy) (amax sy m0)} {g : Nat}
     (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0) :
@@ -651,8 +566,8 @@ theorem take_snoc {α : Type} (w : List α) (k : Nat) (hk : k < w.length) : ∃ 
 theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m0) (hE : 1 ≤ E) (hJ : 1 ≤ J)
     {PA : Int} {B : Box} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat} {bits : Nat → UInt8}
-    (R : Surface sy m0 PA B T J fr w h bits) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
-    (j : Nat) (h1 : N + E ≤ j) (h2 : j ≤ T) (h3 : j ≤ g) :
+    (R : Surface sy m0 PA B T J g fr w h bits) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
+    (j : Nat) (h1 : N + E ≤ j) (h2 : j ≤ T) (h3 : j < g) :
     (fr j).P' ≤ PA + X + 16 * (top sy : Int) * ((j - N : Nat) : Int) := by
   have hs : (0 : Int) ≤ 16 * (top sy : Int) := by omega
   have hd : ∀ a, a ≤ T → N ≤ a → hdist sy m0 (startHS sy m0) (w.take a) ≤ X + 16 * (top sy : Int) * ((a - N : Nat) : Int) := by
@@ -661,7 +576,7 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
       (by simp; have := R.long; omega)
   have hj1 : 1 ≤ j := by omega
   by_cases hjh : j < h
-  · have := R.model j hj1 hjh h2
+  · have := R.model j hj1 hjh h2 h3
     have := hd j h2 (by omega)
     omega
   · by_cases hjh2 : j = h
@@ -706,7 +621,7 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
 theorem hB_of_line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m0) (hE : 1 ≤ E) (hJ : 1 ≤ J)
     {PA Pf : Int} {B : Box} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat} {bits : Nat → UInt8}
-    (R : Surface sy m0 PA B T J fr w h bits) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
+    (R : Surface sy m0 PA B T J g fr w h bits) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
     (hP : (fr 1).P = PA) (hearly : PA + 16 * (top sy : Int) * ((N + E : Nat) : Int) < Pf)
     (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ g) (hd : e + d = T) (hPf : Pf ≤ (fr e).P₂) :
     (fr e).P₂ + 16 * (top sy : Int) * (d : Int) ≤ PA + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
@@ -996,17 +911,6 @@ def Imposes (sy : Syms) (m0 : Machine) (f : Frame tp am) (a : Nat) : Prop :=
     f.v₂ = sbyte (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_X_Speed) ∧
     a = (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_XSpeedAbsolute).toNat
 
-theorem absB_natAbs (v : UInt8) : (absB v).toNat = (sbyte v).natAbs := by
-  have h1 := v.toNat_lt
-  simp only [absB, sbyte]
-  by_cases h : v < 0x80
-  · rw [if_pos h, if_pos h]
-    omega
-  · rw [if_neg h, if_neg h]
-    have h2 : ¬ v.toNat < 128 := fun h3 => h (UInt8.lt_iff_toNat_lt.2 h3)
-    rw [UInt8.toNat_sub, show (0 : UInt8).toNat = 0 from rfl]
-    omega
-
 /-- `frictionCheck` on a frame: `ImposeFriction` writes `|v₂|` into the stored speed -/
 theorem abs_of_imposes (hf : frictionCheck sy m0 = true) {f : Frame tp am} {a : Nat} (h : Imposes sy m0 f a) : a = f.v₂.natAbs := by
   obtain ⟨v, hv, fr, hfr, lo, hi, hp, mr, hmr, ml, hml, k, hk, cb, hcb, h1, h2⟩ := h
@@ -1015,7 +919,7 @@ theorem abs_of_imposes (hf : frictionCheck sy m0 = true) {f : Frame tp am} {a : 
   simp only [Bool.and_eq_true, beq_iff_eq] at h3
   have h4 : peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_XSpeedAbsolute =
       absB (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_X_Speed) := h3.1.2
-  rw [h2, h4, absB_natAbs, h1]
+  rw [h2, h4, SurfaceFrames.absB_natAbs, h1]
 
 /-- In the air with no Left or Right, from a stopped Mario at every stored speed. The fraction and the collision bits are not read on this path: these values stand for all. -/
 def keepCases (sy : Syms) : List FastHop.Case :=
@@ -1369,30 +1273,34 @@ structure DirectWay (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (rows : Nat
   /-- a slow jump's grab, moving left on the frame before it, with the fraction below `F`: no castle before `Nc` frames after it -/
   flagTight : (a T).fast = false → (fr (g - 1)).v₂ < 0 → (fr g).P₂ < SurfaceRun.poleP sy m0 + F → DirectFlag sy b vs flag g (Nc - 1)
 
-/-- What a real run gives, with frames counted from control above ground: `fr j` is frame `j` after control (`fr 1` the first frame). `PA` is the position at control.
-`g` is the frame he touches the pole, `c` the frame of the castle entry, `flag` the castle flag per frame. On frame `g` only the fields of `fr g` up to `P₂` are the real
-frame's: the touch moves him, and that is not a `Frame`. `B.m` is the machine at control: `PA` is its position. Every field is a hypothesis of the theorem: none is proved here. -/
+/-- What a real run gives, with frames counted from control above ground: `fr j` is frame `j` after control (`fr 1` the first frame), read from the machines `seq`: `seq j` is the machine at the end
+of the counted frame `j`, so `seq 0` is the machine at control. `g` is the frame he touches the pole, `c` the frame of the castle entry, `flag` the castle flag per frame. On frame `g` only the
+fields of `fr g` up to `P₂` are the real frame's: the touch moves him, and that is not a `Frame`. `B.m` is the machine of the private proof at control. Every field is a hypothesis of the theorem:
+none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `pass` and `pos` (`Run.inRange`). -/
 structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc : Nat) (F : Int) where
   fr : Nat → Frame (top sy) (amax sy m0)
   g : Nat
   c : Nat
   flag : Nat → Bool
-  w : List HIn
-  h : Nat
-  /-- the collision bits frame `j` leaves -/
-  bits : Nat → UInt8
+  /-- the machines -/
+  seq : Nat → Machine
   touchY : UInt8
   touchRising : Bool
   one_le : 1 ≤ g
-  /-- the frames up to the touch follow each other -/
-  next : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))
-  /-- at control he is stopped at `PA` -/
-  startP : (fr 1).P = posP sy B.m
-  startV : (fr 1).v = 0
-  /-- up to the first hit the frames follow `hstep` from the 1-1 start's horizontal state -/
-  surface : Surface sy m0 (posP sy B.m) B T J fr w h bits
-  /-- a touch needs his position in the pole's range -/
-  inRange : poleP sy m0 ≤ (fr g).P₂
+  /-- the frames: read from the machines; each one from a clean state follows `hstep`, up to a hit; the ones before `J` run the collision routine as on the machine at control -/
+  frames : SurfaceFrames.OnFrames sy m0 B T J g seq fr
+  /-- the machine when frame `g` begins, and its input -/
+  fm : Machine
+  inp : UInt8
+  /-- frame `g` is a touch on real machines -/
+  touches : PoleEntryRule.Touches sy fm inp
+  /-- the routine's write ends one pass of the side check -/
+  pass : ∀ n, PoleEntryRule.WriteStep sy fm inp n →
+    PoleEntryRule.Pass (PoleEntryRule.spots sy m0) (PipeEntryRule.envOf m0) (PipeEntryRule.trace fm inp) n
+  /-- `P₂` is the position when the block buffer routine reads the page for the side check, before the write -/
+  pos : ∀ n j, PoleEntryRule.WriteStep sy fm inp n → j < n →
+    PoleEntryRule.AtEntry (PoleEntryRule.spots sy m0) (PipeEntryRule.trace fm inp j) →
+    ∃ f : Int, 0 ≤ f ∧ (fr g).P₂ = 256 * (PoleEntryRule.px (PoleEntryRule.spots sy m0) (PipeEntryRule.trace fm inp j) : Int) + f
   /-- the castle entry comes after the touch -/
   atCastle : flag c = true
   afterTouch : g < c
@@ -1401,6 +1309,25 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
     ∃ q L T' a tk, DirectWay sy m0 b vs B.rows fr flag T Nc F g touchY touchRising q L T' a tk
   /-- any other touch: no castle for the frames that could matter -/
   other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs flag g (Nc + 5)
+
+/-- the frames up to the touch follow each other: they are read from the machines -/
+theorem Run.next {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F) :
+    ∀ j, 1 ≤ j → j < R.g → Next (R.fr j) (R.fr (j + 1)) :=
+  SurfaceFrames.next_of_reads R.frames.reads
+
+/-- at control he is stopped at the position of the machine `B.m` -/
+theorem Run.startP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+    (st : SurfaceFrames.Start sy B (R.seq 0)) : (R.fr 1).P = posP sy B.m :=
+  SurfaceFrames.start_P R.frames R.one_le st
+
+theorem Run.startV {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+    (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (st : SurfaceFrames.Start sy B (R.seq 0)) : (R.fr 1).v = 0 :=
+  SurfaceFrames.start_v hN R.frames R.one_le st
+
+/-- A touch needs his position in the pole's range: `PoleEntryRule.inRange_of_pass` on frame `g`. -/
+theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (hc : PoleEntryRule.ruleCheck sy m0 = true) (R : Run sy m0 b vs B T J Nc F) :
+    poleP sy m0 ≤ (R.fr R.g).P₂ :=
+  PoleEntryRule.inRange_of_pass hc R.touches R.pass R.pos
 
 /-- the numbers the join needs -/
 def joinCheck (sy : Syms) (m0 : Machine) (X : Int) (N E T J Nc lo : Nat) (F : Int) : Bool :=
@@ -1442,26 +1369,31 @@ section Join
 
 variable {b : Machine} {vs : List Jump.VS} {n : Nat} {X F : Int} {N E T J dx dy rows Nc lo : Nat}
 
+/-- what the machine at control gives: `hN` the numbers of the machine of the private proof, `st` the state of the real machine at control -/
+abbrev AtControl (sy : Syms) (m0 : Machine) (n dx dy rows J : Nat) (m : Machine) : Prop :=
+  SurfaceFrames.numbersCheck sy m0 ⟨above m0 n, dx, dy, rows⟩ J = true ∧ SurfaceFrames.Start sy ⟨above m0 n, dx, dy, rows⟩ m
+
 /-- `hB` of `slow_short` on a run, with `B = PA + X + 16·top·(T − N)` and `PA` the position of `SurfaceRun.above` -/
 theorem hB_run (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (H : Numbers sy m0 X N E T J Nc lo F)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ R.g) (hd : e + d = T)
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ R.g) (hd : e + d = T)
     (hPf : feetP sy m0 ≤ (R.fr e).P₂) :
     (R.fr e).P₂ + 16 * (top sy : Int) * (d : Int) ≤
       posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
   have hgap := S.gap
   have hearly := H.hearly
-  exact hB_of_line (PA := posP sy (above m0 n)) Fa S H.h16 H.h255 H.hE H.hJ R.surface (first_of_surface S.noHit H.hJT R.surface) R.next R.startV R.startP
+  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 H.hJT R.frames A.2
+  exact hB_of_line (PA := posP sy (above m0 n)) Fa S H.h16 H.h255 H.hE H.hJ Rs (first_of_surface S.noHit H.hJT Rs) R.next (R.startV A.1 A.2) (R.startP A.2)
     (by omega) e d he1 heg hd hPf
 
 /-- The position bound forbids standing on the base by frame `T`: with his feet over it on frame `w − 1`, `w` is past `T`. -/
 theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (H : Numbers sy m0 X N E T J Nc lo F)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (w : Nat) (h2 : 2 ≤ w) (hg : w ≤ R.g) (hPf : feetP sy m0 ≤ (R.fr (w - 1)).P₂) :
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (w : Nat) (h2 : 2 ≤ w) (hg : w ≤ R.g) (hPf : feetP sy m0 ≤ (R.fr (w - 1)).P₂) :
     T + 1 ≤ w := by
   by_cases hw : T + 1 ≤ w
   · exact hw
   · exfalso
     obtain ⟨d, hd⟩ : ∃ d, (w - 1) + (d + 1) = T := ⟨T - w, by omega⟩
-    have h1 := hB_run Fa S H R (w - 1) (d + 1) (by omega) (by omega) hd hPf
+    have h1 := hB_run Fa S H R A (w - 1) (d + 1) (by omega) (by omega) hd hPf
     have h3 := S.gap
     have h4 := H.hfeet
     have h16 := H.h16
@@ -1473,16 +1405,17 @@ theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 
 /-- No touch up to frame `T`: this is `P₂(g) < P₀` from the position bound, hits included. -/
 theorem touch_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) : T + 1 ≤ R.g := by
+    (hc : PoleEntryRule.ruleCheck sy m0 = true)
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) : T + 1 ≤ R.g := by
   have H := numbers_of_check hn
   by_cases hgT : R.g ≤ T
   · exfalso
     have hgap := S.gap
-    have hr := R.inRange
+    have hr := R.inRange hc
     have h16 := H.h16
     have hfar := H.hfar
     by_cases hPf : feetP sy m0 ≤ (R.fr R.g).P₂
-    · have h1 := hB_run Fa S H R R.g (T - R.g) R.one_le (Nat.le_refl _) (by omega) hPf
+    · have h1 := hB_run Fa S H R A R.g (T - R.g) R.one_le (Nat.le_refl _) (by omega) hPf
       have h2 : 0 ≤ 16 * (top sy : Int) * ((T - R.g : Nat) : Int) := Int.mul_nonneg (by omega) (by omega)
       omega
     · omega
@@ -1494,8 +1427,8 @@ later than that, `Nc − 1` frames are enough. -/
 theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (hd : IsDirect sy R.touchY R.touchRising) :
+    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleEntryRule.ruleCheck sy m0 = true)
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hd : IsDirect sy R.touchY R.touchRising) :
     T + 7 ≤ R.g ∧ (R.g ≤ T + 8 → R.g + Nc ≤ R.c) ∧ R.g + Nc ≤ R.c + 1 := by
   have H := numbers_of_check hn
   obtain ⟨q, L, T', a, tk, W⟩ := R.direct hd
@@ -1505,13 +1438,13 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
   have hv : ∀ j, q ≤ j → j ≤ R.g → -(top sy : Int) ≤ (R.fr j).v ∧ (R.fr j).v ≤ (top sy : Int) := fun j h1 h2 => by
     obtain ⟨i, hi⟩ : ∃ i, j = i + 1 := ⟨j - 1, by omega⟩
     subst hi
-    exact speed_range H.h16 R.next R.startV i h2
-  have hin := R.inRange
+    exact speed_range H.h16 R.next (R.startV A.1 A.2) i h2
+  have hin := R.inRange hc
   have hgap := S.gap
   have hN := H.hN
   have hTg := W.path.before
   have hbase : q < L → L < T' → ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (R.fr (w - 1)).P₂ → T + 1 ≤ w :=
-    fun h1 h2 w h3 h4 h5 => base_late Fa S H R w h3 (by omega) h5
+    fun h1 h2 w h3 h4 h5 => base_late Fa S H R A w h3 (by omega) h5
   cases hfa : (a T').fast with
   | true =>
     exfalso
@@ -1530,7 +1463,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
       rw [hfa] at hA
       have := slow_short H.h16 H.hA R.fr (sideP sy m0) (feetP sy m0) (poleP sy m0)
         (posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int)) T H.hPs H.hfar (by omega)
-        (fun e d h1 h2 h3 h4 => hB_run Fa S H R e d (by omega) (by omega) h3 h4) hnx hv hA hr hg
+        (fun e d h1 h2 h3 h4 => hB_run Fa S H R A e d (by omega) (by omega) h3 h4) hnx hv hA hr hg
       omega
     · have h0 := castle_of_direct C (n := Nc - 2) (by omega) (W.flagAny hfa) R.atCastle R.afterTouch
       refine ⟨by omega, fun hg8 => ?_, by omega⟩
@@ -1550,16 +1483,16 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
 theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) : T + 7 + Nc ≤ R.c := by
+    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleEntryRule.ruleCheck sy m0 = true)
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) : T + 7 + Nc ≤ R.c := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr R hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc R A hd
     by_cases hg : R.g ≤ T + 8
     · have := h2 hg
       omega
     · omega
-  · have h1 := touch_ge Fa S hn R
+  · have h1 := touch_ge Fa S hn hc R A
     have h2 := castle_of_other C (n := Nc + 5) (by have := H.hNlo; omega) (R.other hd) R.atCastle R.afterTouch
     omega
 
@@ -1568,16 +1501,16 @@ theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 theorem touch_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) :
+    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleEntryRule.ruleCheck sy m0 = true)
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) :
     (T + 1 ≤ R.g ∧ R.g + Nc + 6 ≤ R.c) ∨ (T + 7 ≤ R.g ∧ R.g ≤ T + 8 ∧ R.g + Nc ≤ R.c) ∨ (T + 9 ≤ R.g ∧ R.g + Nc ≤ R.c + 1) := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr R hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc R A hd
     by_cases hg : R.g ≤ T + 8
     · exact Or.inr (Or.inl ⟨h1, hg, h2 hg⟩)
     · exact Or.inr (Or.inr ⟨by omega, h3⟩)
-  · have h1 := touch_ge Fa S hn R
+  · have h1 := touch_ge Fa S hn hc R A
     have h2 := castle_of_other C (n := Nc + 5) (by have := H.hNlo; omega) (R.other hd) R.atCastle R.afterTouch
     exact Or.inl ⟨h1, by omega⟩
 

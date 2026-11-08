@@ -79,12 +79,10 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 
 | 仮定 | 内容 | 根拠 |
 |---|---|---|
-| `fr`、`next` | フレーム `1 .. g − 1` は続いている `TopSpeed.Frame`。`g` では `P₂` までのフィールドだけが本物（触ると動かされる） | [最高速の上限](../0-0/0-1-TopSpeed-ja.md) と同じ |
-| `startP`、`startV` | 操作できるとき `P_A` で止まっている | `SurfaceRun.Statement.start`、本物の走り 1 つ |
-| `surface` | 最初のヒット `h` の前のフレームは `hstep` のとおり。ヒットは `hit_bound` の種類で、速さを 0 以下にする | [地上](e-1-SurfaceRun-ja.md) と同じ |
-| `surface.box` | `J` より前のフレームは、`noHitCheck` の範囲の状態として当たり判定のルーチンを動かす | 下の本物の走り。範囲の中にいることは仮定 |
-| `surface.off` | モデルから外れるのは当たり判定のルーチンのため。`h` までのフレームでルーチンが何かをしたか、ボタンを止めた | 下の本物の走り |
-| `inRange` | `P₀ ≤ P₂(g)` | その状態での `poleCheck` とコード |
+| `fr`、`seq`、`frames.reads` | フレームは機械から読む。`g` では `P₂` までのフィールドだけが本物（触ると動かされる）。`next` は定理 | [地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md) |
+| `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
+| `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
+| `fm`、`inp`、`touches`、`pass`、`pos` | フレーム `g` は本物の機械で触る。書き込みは横の判定の 1 回の通過の終わり。`P₂(g)` はページを読むときの位置。`P₀ ≤ P₂(g)` はこれらからの定理 `Run.inRange` | [旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md) |
 | `atCastle`、`afterTouch` | `c` で旗が立つ、触ったあと | コード |
 | `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |
@@ -96,6 +94,8 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 | `stopped` | `L + 1` の速いジャンプ: 速さ 0 からのフレームは `ImposeFriction` を動かすか、`keepCases` の 1 つとして移動のルーチンを動かす | 下の本物の走り |
 | `fall` | 遅いジャンプ: 落下は `w ≤ q` で `fallStarts` の 1 つか、土台から降りて始まる。フレームは `fallNext` のとおり | 下のマップの事実 |
 | `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
+
+操作できるときの状態 `Start` は定理の引数で、`Route.Run.start` が切り替えの最後の段から与えます。
 
 `fall` の中のマップの事実です。非公開の証明では `rows = 8` です。
 

@@ -4,6 +4,8 @@
 
 **Claim.** This is a partial result. "He enters" is defined on real machines. If a frame enters, then when the frame's foot check goes to read the right foot's block, Mario's position is not left of the left end of the pipe's window. The proof follows one pass of the foot check with an abstract machine. It does not follow the rest of the frame. The rest stays as the hypotheses `Pass` and `pos`.
 
+`Route` does not use `Pass` of this page. It uses [the theorem on the whole frame](a-5-2-PipeWrites.md).
+
 The names are those of [Entering the vertical pipe](a-4-PipeEntry.md). `frame(m, i)` is the real frame with the input `i`. `tr(n)` is the machine `n` instructions into that frame. `rt(m)` is `GameEngineSubroutine`. `e_v` is the number of the pipe's routine. `page(m)` is `Player_PageLoc`, `x(m)` is `Player_X_Position`. `w` is the instruction in `HandlePipeEntry` that writes `rt`. `T_R` is the pipe's right tile, `d_R` its place in the block buffer.
 
 ```
@@ -74,7 +76,7 @@ This was measured by a program. It is no theorem. The frame is the TAS frame jus
 | 35 sound bytes | 1,857,523 | 4,656 | 650 | `HandleSquare2Music` |
 | the screen buffer | 34 | 0 | 1 | `UpdateScreen` |
 
-So a whole frame does not close. The failures are at these places.
+So with the machine of this table a whole frame does not close. The failures are at these places. With what is missing here added as a condition, it closes ([next page](a-5-2-PipeWrites.md)).
 
 * Reads through a pointer that is not known: `BlockBufferCollision`, `DBlockSte`, `HandleSquare2Music`, `UpdateScreen`.
 * A write through a pointer that is not known: `ErACM`.
@@ -106,12 +108,12 @@ This is a program (`pipe-rule-check`).
 
 ## Assumed (not proved in Lean)
 
-* **The write in `Pass` (item 1-1-a-5-2).** The only instruction that makes `rt` equal to `e_v` is `w`; earlier in that frame the foot check started; from there it came to no exit. This is read from the code and checked on the real frames above. The rest of the frame (NMI, sound, screen, enemies) is not followed.
-* **`Start`.** The stack pointer, the offset of the foot adders, the dot and the flags. The value of a big Mario in water is left out.
-* **`RowOK`.** Read from the code's `AND`, `SBC`, `TAY` and the `CMP` at the foot check's start. The abstract machine's addition loses the bits, so it is not checked.
+* **The write in `Pass` ([the whole frame](a-5-2-PipeWrites.md) has the conditions `FrameStart`, `Clean` for it).** The only instruction that makes `rt` equal to `e_v` is `w`; earlier in that frame the foot check started; from there it came to no exit. This is read from the code and checked on the real frames above. The rest of the frame (NMI, sound, screen, enemies) is not followed.
+* **`Start`.** The stack pointer, the offset of the foot adders, the dot and the flags. The value of a big Mario in water is in.
+* **`RowOK`.** Read from the code's `AND`, `SBC`, `TAY` and the `CMP` at the foot check's start. It is assumed on this page. [The whole frame](a-5-2-PipeWrites.md) does not assume it.
 * **`TilesOK` (item 1-1-a-5-3).** This is narrower than "the same as the hand-written block buffer": it is about the right tile only. The page condition says that the pipe's column is not yet in the buffer when he is on the page two before it, which has the same parity.
 * **`pos`.** `P₂` is the position on entering the routine for the right foot. It is part of making `Frame` from real frames (item 0-0-0-3-1).
-* **The right end of the window and the rest of `rule`.** Only the left end is given here, and `Route` uses only the left end: `Route.Pipe` has `pass` and `pos` in place of `rule`. The right end, Down and the landing stay with `rule` of [Entering the vertical pipe](a-4-PipeEntry.md), on the hand-written buffer.
+* **The right end of the window and the rest of `rule`.** Only the left end is given here, and `Route` uses only the left end: `Route.Pipe` has `start`, `clean`, `tiles` and `pos` in place of `rule`. The right end, Down and the landing stay with `rule` of [Entering the vertical pipe](a-4-PipeEntry.md), on the hand-written buffer.
 
 **Files.** `Theorems/PipeEntryRule.lean`, private `Proof/PipeEntryRule.lean`.
 

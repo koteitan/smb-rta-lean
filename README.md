@@ -14,6 +14,7 @@ Theorems that several stages use.
 |---|---|---|---|
 | 0-0-0-1 | [Top speed bound](0-0/0-1-TopSpeed.md) | Away from platforms, vines, pipes and similar objects, Mario never moves right by more than 2.5 px per frame. | per-routine checks: theorems; the routines being the only writers: from the disassembly |
 | 0-0-0-2 | [Reach](0-0/0-2-Reach.md) | From the start of 1-1, in the open area, Mario moves right at most 2.5·n − 38.375 px in n ≥ 28 frames. | theorems under the assumptions of the top speed bound and of the horizontal frame; the TAS inputs move 2.5·n − 41.94 px |
+| 0-0-0-3-2 | [A real frame and the horizontal model](0-0/0-3-2-FrameModel.md) | From the player's routine to the scroll handler, a real frame changes the horizontal state as `hstep` says and moves the position by 16·v'. | the movement by a walk of two machines; the check by `native_decide` (about 2 s). Not proved: the rest of the frame (`Clean`, `ReadFrame`) |
 
 Each page gives the statement, what Lean proves, the assumptions and how they were checked,
 and how to reproduce it. A theorem is `Theorems/Name.lean` (the statement and how it follows from a computation) and the pages `<stage>/<part>-<number>-Name.md`, `<stage>/<part>-<number>-Name-ja.md`.
@@ -62,8 +63,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-a-4 The condition to enter the pipe
   - 🚨 1-1-a-5 Assumptions of part a
     - ✅ 1-1-a-5-1 The entry on real frames: one pass of the foot check
-    - 🚨 1-1-a-5-2 Only that instruction writes the routine, at the end of a pass (`Pass`)
-    - 🚨 1-1-a-5-3 The pipe's right tile is only at its place (`TilesOK`)
+    - 🚨 1-1-a-5-2 One whole frame: only that instruction writes the pipe's routine
+      - 🚨 1-1-a-5-2-1 The state when an entering frame starts (`start`)
+      - 🚨 1-1-a-5-2-2 Each instruction up to the write meets `Clean` (`clean`)
+    - 🚨 1-1-a-5-3 The pipe's right tile is only at its place (`tiles`)
     - 🚨 1-1-a-5-4 The bound on the opening's position (`openP`, `openB`)
     - 🚨 1-1-a-5-5 The frames after it follow each other (`speed`, `next`)
     - 🚨 1-1-a-5-6 Open flat ground, in the air only during a jump
@@ -77,9 +80,12 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-b-2-3 The last 41 frames, for the bytes that differ from run to run
   - 🚨 1-1-b-3 Assumptions of part b
     - ✅ 1-1-b-3-1 `change₁` proved from `chg`
-    - 🚨 1-1-b-3-2 The frames left fall by at most one per frame (`chg.fall₁`)
+    - ✅ 1-1-b-3-2 `chg.fall₁` removed: the change from conditions at the entry, the pipe's frames and the exit
     - 🚨 1-1-b-3-3 A `lag` frame keeps the frames left (`chg.keep₁`)
     - 🚨 1-1-b-3-4 A real entry meets the condition (`chg.entry₁`)
+    - 🚨 1-1-b-3-5 The conditions at places of the pipe's frames (`chg.places₁`)
+    - 🚨 1-1-b-3-6 No pause after the pipe (`chg.noStart₁`)
+    - 🚨 1-1-b-3-7 No pause sound, and the song and the screen buffer in the tables, at the exit (`chg.quiet₁`)
   - 🚨 1-1-b-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-b-4-1 The same for every input (`Merge`)
     - 🚨 1-1-b-4-2 The bytes, size and timer at frame 50 (`Cond`)
@@ -92,7 +98,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-c-5 Joining the room
   - ✅ 1-1-c-6 Runs that reach the block without touching the floor
   - 🚨 1-1-c-7 Assumptions of part c
-    - 🚨 1-1-c-7-1 Each frame follows `hstep` or stops him (`frames`, `move_top`)
+    - ✅ 1-1-c-7-1 Each frame follows `hstep` or stops him (from `clean`)
     - 🚨 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`)
     - 🚨 1-1-c-7-3 The entry frame follows the routine (`entry`, `entered`)
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
@@ -111,13 +117,17 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-d-2-1 The bytes that decide the last 122 frames
   - ✅ 1-1-d-2-2 The first 160 frames (under the condition at the entry, any inputs)
   - ✅ 1-1-d-2-3 The last 122 frames (under the condition at the exit, no Start on the game core's frames)
-  - 🚨 1-1-d-2-4 The screen stays on the first page
+  - 🚨 1-1-d-2-4 The screen stays on the first page, the entry has the long timer
+    - 🚨 1-1-d-2-4-1 The condition at the first control in the room (`chg.roomStart`)
+    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (`chg.roomSites`)
+    - 🚨 1-1-d-2-4-3 Each frame before the entry starts in the player's routine (`chg.roomStay`)
   - 🚨 1-1-d-2-5 A real entry meets the condition (`chg.entry₂`)
   - 🚨 1-1-d-3 Assumptions of part d
     - ✅ 1-1-d-3-1 `change₂` proved from `chg`
     - 🚨 1-1-d-3-2 A `lag` frame keeps the frames left (`chg.keep₂`)
     - 🚨 1-1-d-3-3 No pause after the pipe (`chg.noStart₂`)
     - 🚨 1-1-d-3-4 No pause sound at the exit (`chg.quiet₂`)
+    - 🚨 1-1-d-3-5 `left` is not 0 before control (`chg.first₂`)
   - 🚨 1-1-d-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-d-4-1 The same for every input (`GMerge`)
     - 🚨 1-1-d-4-2 The bytes when the timer has run out (H3)
@@ -126,13 +136,16 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
 - 🚨 1-1-e Speeding up above ground (852 → 1085)
   - ✅ 1-1-e-1 The bound on the speed-up
   - 🚨 1-1-e-2 Assumptions of part e
-    - 🚨 1-1-e-2-1 He is stopped at control (`startP`, `startV`)
-    - 🚨 1-1-e-2-2 `hstep` up to the first hit (`model`)
-    - 🚨 1-1-e-2-3 A hit leaves the speed at 0 or below (`hit`, `stop`)
-    - 🚨 1-1-e-2-4 Frames 1 to 8 stay in the checked box (`box`)
-    - 🚨 1-1-e-2-5 He leaves the model only by a collision (`off`)
-    - 🚨 1-1-e-2-6 The frames follow each other (`next`)
-    - 🚨 1-1-e-2-7 The left edge of the screen stopping him
+    - ✅ 1-1-e-2-1 Stopped at control (from the change's last row)
+    - ✅ 1-1-e-2-2 `hstep` up to the first hit (from `step`)
+    - ✅ 1-1-e-2-3 A hit leaves the speed at 0 or below (from `step`)
+    - ✅ 1-1-e-2-4 Frames 1 to 8 stay in the checked box (from `vert`, `box`)
+    - ✅ 1-1-e-2-5 He leaves the model only by a collision (from `step`)
+    - ✅ 1-1-e-2-6 The frames follow each other (from `reads`)
+    - ✅ 1-1-e-2-7 The left edge of the screen stopping him (`Frame`, `Hit`)
+    - 🚨 1-1-e-2-8 One frame is `hstep` and the collision routine (`step`)
+    - 🚨 1-1-e-2-9 Frames 1 to 8 are `vstep` and the machine at control (`vert`, `box`)
+    - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `atCtl`)
 - 🚨 1-1-f The flag (1085 → 1218)
   - ✅ 1-1-f-1 The bound on the push back
   - ✅ 1-1-f-2 The height of a jump
@@ -140,7 +153,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-f-4 The length from the touch to the castle
   - ✅ 1-1-f-5 Joining parts e and f
   - 🚨 1-1-f-6 Assumptions of part f
-    - 🚨 1-1-f-6-1 A touch means he is in the pole's range (`inRange`)
+    - ✅ 1-1-f-6-1 The touch on real frames: one pass of the side check
     - 🚨 1-1-f-6-2 The castle comes after the touch (`atCastle`, `afterTouch`)
     - 🚨 1-1-f-6-3 The path of the jump (`path`, `atY`, `atRising`)
     - 🚨 1-1-f-6-4 He comes from the left and falls below the base's top (`order`, `left`, `air`)
@@ -155,20 +168,24 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-13 The position's fraction is a multiple of 1/16 px
     - 🚨 1-1-f-6-14 No enemy near the flag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
+    - 🚨 1-1-f-6-16 Only that instruction writes the routine, at the end of a pass (`pass`)
+    - 🚨 1-1-f-6-17 The pole's tiles are only in its column (`TilesOK`)
+    - 🚨 1-1-f-6-18 The position at the side check is the frame's (`pos`)
 - 🚨 1-1-g From the castle to 1-2 (1218 → 1748)
   - ✅ 1-1-g-1 The timer and the grid
   - 🚨 1-1-g-2 Assumptions of part g
-    - 🚨 1-1-g-2-1 Each frame follows the star flag's rule (`step`)
-    - 🚨 1-1-g-2-2 Task and flag height at the entry (`task_E`, `y_E`)
+    - ✅ 1-1-g-2-1 Each frame follows the star flag's rule (`step`)
+    - 🚨 1-1-g-2-2 The condition at the entry (`Good`, task 2, flag height)
     - 🚨 1-1-g-2-3 The same for every input (`GMerge`)
-    - 🚨 1-1-g-2-4 The level changes on a frame with task 5 (`task_L`)
+    - ✅ 1-1-g-2-4 The level changes on a frame with task 5 (`task_L`)
+    - 🚨 1-1-g-2-5 No pause after the castle entry (`flag.noStart`)
 - 🚨 0-0-0 Common
   - ✅ 0-0-0-1 The top speed bound
   - ✅ 0-0-0-2 Reach
   - 🚨 0-0-0-3 Common assumptions
-    - 🚨 0-0-0-3-1 Real frames have the form of `Frame`
-    - 🚨 0-0-0-3-2 `hstep` is the horizontal part of one frame
-    - 🚨 0-0-0-3-3 Only the 5 checked routines write the speed and position
-    - 🚨 0-0-0-3-4 Each routine depends only on the checked bytes, at their usual values
+    - 🚨 0-0-0-3-1 Real frames have the form of `Frame`: `frame_read` (`ReadFrame` remains)
+    - ✅ 0-0-0-3-2 `hstep` is the horizontal part of one frame (`move_model`)
+    - 🚨 0-0-0-3-3 Only the 5 checked routines write the speed and position: proved in the movement (`before`, `after`, `collide` remain)
+    - 🚨 0-0-0-3-4 Each routine depends only on the checked bytes: proved in the movement, not for `ImpedePlayerMove`
     - 🚨 0-0-0-3-5 Runs that press Start or Select
     - 🚨 0-0-0-3-6 The emulator is the same as the real machine

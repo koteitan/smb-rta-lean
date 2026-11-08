@@ -1,0 +1,159 @@
+[← Back](README.md) | [English](b-3-2-PipeChangeEnd.md) | [Japanese](b-3-2-PipeChangeEnd-ja.md)
+
+# The change into the room without `fall`
+
+**Claim.** This is a partial result. Take a run that meets a condition on the state at the entry, a condition at some places of the pipe's frames, and a condition at the exit, and that has no Start on the frames of the game core after the pipe. Then it takes at least 91 counted frames from the entry to control. This removes the hypothesis `fall₁` from [the whole route](0-1-Route.md). `Changes` has the fields `places₁`, `quiet₁` and `noStart₁` in its place, and `entry₁` is the new condition at the entry. `keep₁` stays.
+
+`m₀`, `run`, `ctl`, `0^k` and `E` are those of [What decides the length of the change](b-2-1-PipeTransitionAll.md). `left` is that of [A bound from single frames](b-2-2-PipeChangeBound.md): `timer + 43` while the pipe's routine runs, then a table of 43 rows. `frame(m, i)` is the frame from `m` with the input `i`. `trace(m, i, j)` is the machine after `j` steps of that frame. `T = run(E, 0^48)` is the reference at the exit. `m[b]` is the byte `b` of `m`. A name with `+k` is the byte `k` after the name.
+
+**The condition at the entry.** `Entry(M)` is a condition on the state `M` at the end of the entry frame.
+
+* The frame has ended in the idle loop, as in [the side pipe's first frames](d-2-2-SideChangeBound.md): the program counter and the stack pointer are those of `E`, the dot is at most 9, the vblank and NMI flags fit the dot, the sprite-0 flag is set, NMI is on in the PPU control, the controller is not strobed.
+* The 113 bytes `K` have the values of `E`. They are listed below.
+* 12 bytes have the bits of `E` under a mask, below.
+* `timer(M) ≥ 48`.
+
+All other bytes are free: Mario's position, speed and size, the score, the coins, the digits of the game timer, the frame counter, the random bytes, the song, the sprites, the screen buffers, the area parser, the enemies in their slots.
+
+**The list `K`**, by name:
+
+| group | bytes |
+|---|---|
+| mode | `OperMode` (2), `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `JoypadOverride`, `WorldSelectNumber+2` … `+4` |
+| area | `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `WarpZoneControl`, `CurrentPlayer`, `AreaType`, `LoopCommand`, `CloudTypeOverride`, `BackgroundColorCtrl`, `ScrollThirtyTwo+1`, `VerticalScroll` |
+| timers | `GameTimerExpiredFlag`, `FetchNewGameTimerFlag`, `StarInvincibleTimer`, `ScreenTimer`, `WorldEndTimer`, `DemoTimer` |
+| input | `Up_Down_Buttons`, `Left_Right_Buttons` |
+| Mario | `Player_State` |
+| slots that stay empty | `Enemy_Flag+4` … `+6`, `Enemy_ID+3` … `+6`, `Enemy_State+4`, `+5`, `Fireball_State` (2), `Block_State` (4), `Block_RepFlag` (2), `Misc_State` (9), `Misc_Y_Position+7`, `Misc_Collision_Flag+10` … `+12`, `FloateyNum_Control` (7), `FirebarSpinSpeed+14`, `+15`, `MaximumRightSpeed+18`, `+19`, `SprDataOffset_Ctrl+1`, `Cannon_Offset`, `Cannon_PageLoc` (6), `Cannon_X_Position` (6), `Cannon_Y_Position` (5), `FireballCounter`, `DuplicateObj_Offset`, `VineFlagOffset`, `VineHeight`, `FlagpoleFNum_Y_Pos`, `FlagpoleFNum_YMFDummy`, `FlagpoleScore` |
+| enemy data | `EnemyData`, `EnemyDataHigh`, `EnemyObjectPageLoc`, `EnemyObjectPageSel`, `EnemyFrenzyBuffer`, `EnemyFrenzyQueue`, `SecondaryHardMode` |
+| sound | `NoiseSoundBuffer`, `AreaMusicBuffer`, `EventMusicBuffer`, `AreaMusicQueue`, `EventMusicQueue`, `NoiseSoundQueue`, `Square2SoundQueue`, `Square1SoundQueue+1` |
+
+**The bytes with a mask.**
+
+| bytes | free bits | what it allows |
+|---|---|---|
+| `Enemy_ID` (first 3 slots) | bits 1, 2 | some kinds of enemy |
+| `Enemy_State` (first 4 slots) | bit 0 | |
+| `Misc_Y_Position+8` | bits 0, 1, 5, 6 | |
+| `Square1SoundQueue` | bit 4 | one sound |
+| `SprDataOffset_Ctrl` | bit 0 | |
+| `PlayerStatus` | bit 0 | small or big Mario. Fire Mario does not meet `Entry` |
+| `GamePauseStatus` | bits 0, 7 | |
+
+**The places.** `Places(t)` says: if the program counter of `t` is one of these places, then the dot of `t` is at most the bound, and `t` has the values of one row of the place.
+
+| place | rows | dot at most |
+|---|---|---|
+| `NonMaskableInterrupt` | 1,061 forms of the screen buffers: the first byte and the length of each record | no bound |
+| `MusicHandler` | 1,607 rows of the song | no bound |
+| `EnemyGfxHandler`, `PlayerGfxHandler` | 3 rows of the sprites' offsets | no bound |
+| `UpdScrollVar` | 67 rows of the area parser | 50,000 |
+| `ColorRotation` | all 256 values of `VRAM_Buffer1_Offset` | 50,000 |
+| `ProcELoop`, `FlagpoleRoutine`, `BlockObjMT_Updater` | any | 50,000 |
+| the store into the block buffer in `HandleEToBGCollision` | none: not reached | |
+| after the first `BCS` of `PositionEnemyObj` | none: not reached | |
+| after the first `BCC` of `CheckRightExtBounds` | none: not reached | |
+
+So on the pipe's frames: no enemy stands on a block that is being bumped, the next enemy of the level's data is not loaded, the frame's work reaches these places before dot 50,000, and the song, the screen buffers, the sprites' offsets and the area parser are in one of the rows. A frame has 89,342 dots.
+
+**The condition at the exit.** `ExitAt(m)` says that `OperMode_Task`, `ScreenRoutineTask`, `GameEngineSubroutine` and `DisableScreenFlag` have the values of `T`. At such a state the run must have:
+
+* `Quiet(m)`: `PauseSoundBuffer`, `PauseSoundQueue`, `Square1SoundBuffer`, `Square2SoundBuffer`, `NoiseSoundBuffer` and `VRAM_Buffer_AddrCtrl` have the values of `T`.
+* `Song(m)`: the 12 bytes of the song (`MusicData` (2), the four offsets, `NoiseDataLoopbackOfs`, the note counters and buffers) have the values of one of the 1,607 rows. On a frame that ends a part of the song, `GroundMusicHeaderOfs` is in the row too.
+* `Shape(m)`: the first screen buffer is empty, or it holds one record of 4 bytes of the palette.
+
+`Exit(m)` is `ExitCond(m)` of [the side pipe's last frames](d-2-3-SideChangeEnd.md) with the 19 bytes of the exit (`OperMode`, `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `CurrentPlayer`, `JoypadOverride`, `GameTimerExpiredFlag`, `AreaMusicBuffer`, `EventMusicBuffer`, `AreaMusicQueue`, `EventMusicQueue`, `Square1SoundQueue`, `Square2SoundQueue`, `NoiseSoundQueue`) and the 6 bytes of `Quiet`, with the values of `T`, and `Song(m) ∧ Shape(m)`.
+
+`NoStart(m, i)` says: if `m` is in the game core with a routine other than the pipe's, the input `i` has no Start.
+
+**The statement.** `During(m)` says that `m` is covered by one of the abstract start states of the pipe's frames. `InRows(m)` says that `m` is covered by the states of one of the rows, below.
+
+```
+during     :  ∀ M,  Entry(M) → During(M)
+atEntry    :  ∀ M,  Entry(M) → 91 ≤ left(M)
+inRoutine  :  ∀ m,  During(m) → the pipe's routine runs in m
+step       :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
+                left(m) ≤ left(frame(m, i)) + 1  ∧
+                ( During(frame(m, i))  ∨  ( ExitAt(frame(m, i))  ∧  ( Quiet ∧ Song ∧ Shape at frame(m, i)  →  InRows(frame(m, i)) ) ) )
+atExit     :  ∀ m,  Exit(m) → InRows(m)
+leftExit   :  ∀ m,  Exit(m) → left(m) = 43
+rows       :  ∀ m, InRows(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  ( InRows(frame(m, i))  ∧  left(m) ≤ left(frame(m, i)) + 1 )
+atControl  :  ∀ m,  ctl(m) → left(m) = 0
+
+no_control_exit :  Exit(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 43, ¬ctl(sⱼ)
+PipeRun.bound   :  a run with the fields below  →  cnt(a) + 91 ≤ cnt(b)
+Changes.bound₁  :  e₁ + 91 ≤ c₂
+```
+
+The fields of `PipeRun`, and of the first change in `Changes`:
+
+```
+entry    :  Entry(seq a)
+atCtl    :  ctl(seq b)
+lagKeeps :  ∀ n, a ≤ n < b,  lag(n)  →  left(seq n) ≤ left(seq (n+1))
+places   :  ∀ n, a ≤ n < b,  the pipe's routine runs in seq n  →  ∀ j, Places(trace(seq n, inp n, j))
+quiet    :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  Quiet(seq n) ∧ Song(seq n) ∧ Shape(seq n)
+noStart  :  ∀ n, a ≤ n < b,  NoStart(seq n, inp n)
+```
+
+`cnt` counts the frames that are not `lag`. `left` falls by at most one on every frame from the entry to control, and is 0 at control. So `91 ≤ left(seq a) ≤ cnt(b) − cnt(a)`.
+
+Lean: `Theorems/PipeChangeEnd.lean` (`cov_place`, `cov_zsplit`, `s_zsuccs`, `zlive_step`, `zframe_run`, `zframe_of_walk`, `z_step`, `in_rows`, `EndStatement`, `endStatement_of_check`, `PipeRun`, `PipeRun.bound`, `no_control_exit`), `Theorems/Route.lean` (`Changes.run₁`, `Changes.bound₁`), private `pipe_end_checks` (`native_decide`), `pipe_end`, `pipe_exit_no_control`, `pipe_change_end`. The theorems without ROM use only `propext`, `Classical.choice` and `Quot.sound`.
+
+## How it works
+
+**The frames of the pipe.** The abstract machine of [the side pipe's first frames](d-2-2-SideChangeBound.md) fails here when the song, the screen buffers, the sprites' offsets and the area parser are free: there are too many paths. So the statement asks for `Places`, and the abstract machine uses it. At a place a state splits into one state for each row (`placeSplit`). A state that fits no row goes no further. This is sound because the real machine fits a row there (`cov_place`). An instruction that reads or writes through a value known in all but at most 4 bits splits the state into one state for each value of those bits (`zsplit`): the accumulator at `JumpEngine`, the low byte of the pointer at an indirect load or store, `X` or `Y` at an indexed store. `s_zsuccs` proves these steps against the real step. `zframe_run` follows the real frame step by step with `trace`: at each step a state of the walk covers the machine.
+
+**The check of the frames.** From the start states of `Entry`, a search makes a table of states. The check walks from each state of the table. Each state it reaches at a place of the table is covered by a state of the table, and each frame's end is covered by a start state again, or is the exit.
+
+| frames | search steps | states in the table |
+|---|---|---|
+| the timer ≥ 2 | 893,614 | 35,607 |
+| the timer = 1 | 527,656 | 23,111 |
+
+The search holds states at some places until the others are done, and forgets some bytes there. This only makes the table small. The check does not depend on it.
+
+**After the exit.** Frame 48 is the exit. Frames 49 and 50 clear RAM, and the clear crosses the end of frame 49. Then 41 frames come before control. These frames use the rows of [the side pipe's last frames](d-2-3-SideChangeEnd.md), in two cases of `PauseModeFlag`.
+
+* Flag 0: one state for each form of the screen buffer and each row of the song, 6,428 states. Each goes alone to the place after the sound routines. There every 32nd one is joined, without the song's bytes, and the search goes on from them. The check walks from all 6,428.
+* Flag not 0: the sound routines do not run. One state for each form, each alone to the same place.
+
+Each case has 44 rows, with `left` from 43 to 0.
+
+**The rows of the places.** They come from frames of reference runs: `E` with no input for 47 frames, `E` with `Player_X_Scroll` set to 3 and the timer set to 230, for 225 frames, the 13 real entries of [b-2-1](b-2-1-PipeTransitionAll.md) for 47 frames each, and the frames of the way from `m₀` to `E`, for the starts of the parser's columns near those of `E`. At the start of a column the parser clears the metatile buffer before it reads it, so those rows leave the metatile buffer free. The forms of the screen buffer add every form with up to 2 records, made from the first bytes seen, with lengths 1 to 8. The song's rows are the song played from `m₀` with no input for 5,327 frames: its period is 5,184 frames, after 143 frames of the start.
+
+**The size of the check.** About 21 s in a program, 25 s in the private proof build.
+
+## Facts that are false
+
+* `fall₁` is false on states that meet the condition of [A bound from single frames](b-2-2-PipeChangeBound.md). With `HalfwayPage` set to 1 at `E`, control comes after 75 frames, and `left` falls from 18 to 0 on frame 73. With `WarpZoneControl` set to 1, control comes after 228 frames, and `left` falls from 36 to 0 on frame 55. With `GameTimerExpiredFlag` set to 1, control comes after 229 frames, and `left` falls from 37 to 0 on frame 54. These bytes are in `K`, so `Entry` does not hold on these states. Measured with no input.
+* `Quiet` is false on real runs when Start is pressed on the pipe's frames. Below, it fails on 129 of 437 runs with random Start on the pipe's frames.
+* With all 256 values of `VRAM_Buffer1_Offset`, the place `ColorRotation` asks only for the dot.
+
+## Measured but not a theorem
+
+Entries: `E`, the TAS entry, the 13 real entries, and 422 entries of runs of my own from `m₀`. These are random play to the pipe: plain, with stomps, started big, big with stomps, after waiting 1,000, 2,500 or 4,000 frames, after going past `x` = 980 and back. They are in two sets made with other seeds. From each entry, inputs of three kinds until control.
+
+| inputs | runs | `Entry` holds | frames of the pipe | frames against `Places` | `Quiet ∧ Song ∧ Shape` at the exit | frames where `left` falls by more than one | least frames to control |
+|---|---|---|---|---|---|---|---|
+| none | 437 | 437 | 20,976 | 0 | 437 | 0 | 91 |
+| random, no Start | 437 | 437 | 20,976 | 0 | 437 | 0 | 91 |
+| random, Start on the pipe's frames only | 437 | 437 | 48,044 | 0 | 308 | 0 | 136 |
+
+`Song ∧ Shape` held at all 437 exits of each kind. Only `Quiet` failed, and only with Start. Before the rows of the parser's column starts were added, 11 of 1,920 frames of the plain runs were against `Places`.
+
+## Assumptions (not proved in Lean)
+
+* `Entry` on the state at the entry of a real run (`chg.entry₁`). Item 1-1-b-3-4.
+* `Places` on every step of the pipe's frames (`chg.places₁`). The rows come from the frames of a few runs. A run where an enemy is loaded, or where the parser has a column not in the rows, is outside.
+* `Quiet ∧ Song ∧ Shape` at the exit (`chg.quiet₁`). It fails after Start on the pipe's frames.
+* `NoStart` on the frames of the game core after the pipe (`chg.noStart₁`).
+* `lagKeeps` (`chg.keep₁`), item 1-1-b-3-3.
+
+**Files.** `Theorems/PipeChangeEnd.lean`, private `Proof/PipeChangeEnd.lean`.
+
+**To reproduce.**
+```
+.lake/build/bin/smbrta pipe-end-check FM2    # the check, the conditions on E, the TAS entry and 13 real entries with three kinds of inputs, about 1 min
+.lake/build/bin/smbrta changes-check FM2     # the fields of Changes on the TAS run
+```

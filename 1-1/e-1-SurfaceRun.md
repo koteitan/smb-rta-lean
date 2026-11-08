@@ -66,9 +66,9 @@ As a separate check (a program, not a theorem), the model with a hit of any kind
 
 * Real frames follow `hstep` up to the first hit. On the TAS `hstep` agrees with the emulator on all 233 frames from 853 to 1085, which include walking off the pipe, the staircase and the ledges (program, no difference). The first difference is frame 1086, the hit at the base block.
 * The frames after a hit are `TopSpeed.Frame`s: the assumptions of [Top speed bound](../0-0/0-1-TopSpeed.md) and [Reach](../0-0/0-2-Reach.md). Enemies are as on that page: a contact writes none of these bytes, except a death.
-* On frames 1 to 8 Mario stays in the box of `noHit`. `dbound` gives less than 4 px either way, and a jump rises at most 5 px per frame. That he stays in the box is assumed. `PoleJoin.first_of_surface` joins it to the check. `noHit` tries the speeds 0, ±1/16 and ±1/2 px per frame, because the routine reads a speed only by its sign.
+* On frames 1 to 8 Mario stays in the box of `noHit`. That he stays in the box is proved for `x` and the height (`SurfaceFrames.quiet_upto`).
 * `mask` in Lean runs the fractions 0, 128 and 255. As a program over every fraction: same frame 2,288,640 times, stopped 46,080 times, anything else 0 times.
-* The left screen edge is not in `Frame`. It stops him and leaves `P` at most where it was, so it counts as a first hit of the second kind, but that is not in Lean.
+* The left screen edge is in `Frame` and `SurfaceFrames.Hit` ([Above ground: the frames from control, one by one](e-2-SurfaceFrames.md)). At the edge he can stop with `v₂ > 0` (largest measured 4), so `P` rises by 16·v₂. What holds is `v′ ≤ 0 ∧ P′ ≤ P + 256`.
 * The start is one real run. Other runs are not covered by a theorem. On the emulator: the TAS at 852 has the same horizontal state, position and height as `A` (17 RAM bytes differ, all timers and random numbers), and changing the fraction, speed or facing at the side pipe's entry gives the same state after the same 282 frames. If control comes later than 852 and the state is the same, `short` still applies, because it holds for every `|w| ≤ 233`.
 * No Start or Select.
 

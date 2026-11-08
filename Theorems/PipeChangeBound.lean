@@ -3,7 +3,7 @@ import Theorems.PipeTransitionAll
 /-!
 # A lower bound for the change into the room, from single frames
 
-`Route` proves `change₁ : pipe.E + 91 ≤ room.C` with the fields of this file's `left`, on its own sequence of machines. Here that bound follows from a statement about single frames: a number `left` of the state falls by at
+`Route` proves `change₁ : pipe.E + 91 ≤ room.C` with this file's `left` and `PipeChangeEnd.PipeRun`. Here that bound follows from a statement about single frames: a number `left` of the state falls by at
 most one per frame, it is 91 at the entry, and it is 0 when Mario has control. A frame that takes longer, a pause or a handler that never ends keep `left`, so they only delay control.
 
 `left` is computed from a few bytes: the pipe's timer while the pipe's routine runs, and then a table found by running the reference entry `E` with no input.
@@ -237,7 +237,7 @@ structure Change (left : Machine → Nat) (n : Nat) where
   /-- `left` when Mario has control -/
   atControl : left (fm C) = 0
 
-/-- the bound on the change follows from the single frames. `Route` proves `change₁` in the same way, with `n = 91` -/
+/-- the bound on the change follows from the single frames. `PipeChangeEnd` proves `change₁` of `Route` without the hypothesis on every frame -/
 theorem Change.bound {left : Machine → Nat} {n : Nat} (R : Change left n) : R.E + n ≤ R.C := by
   have h := change_ge (fm := R.fm) (left := left) R.order R.fall R.atControl
   have := R.start

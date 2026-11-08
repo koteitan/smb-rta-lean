@@ -1,16 +1,17 @@
 import Theorems.FastTakeoff
 import Theorems.AirCap
 import Theorems.SidePipe
+import Theorems.FrameModel
 
 /-!
 # Joining the bonus room
 
-`RoomRun` is what a real run in the room gives: frames that follow `hstep` or leave him stopped, the takeoff before the first frame
+`RoomRun` is what a real run in the room gives: real machines, frames of which `FrameModel.clean_frame` proves that they follow `hstep`, or that leave him stopped, the takeoff before the first frame
 past the block's right end, the jump's frames in the vertical routine, how he leaves the block, and the entry frame. `entry_ge`
 proves, from it and the checks of the earlier theorems, that the entry comes at least `goalF + aboveF` frames after first control.
 Page: `1-1/c-5-RoomJoin.md`.
 
-The frames and the arcs are hypotheses: that real frames follow `hstep` and `vstep` is not proved. What follows from them is proved
+The arcs are hypotheses: that real frames follow `vstep` is not proved. What follows from them is proved
 here, with the theorems of `AirCap`, `FastTakeoff` and `Jump`. Most fields are about one frame: the input and the height of a frame, standing, what the
 left wall does to a frame, the stored speed, the entry. From these and small checks: before `hitF` he is left of the corner (`corner_late`), his feet are
 low by the earliest jump (`low_by`), with no wall hit he stays on the floor up to an early takeoff (`floor_low`), `RunningSpeed` is 0 at a stop by `runF` or
@@ -260,8 +261,8 @@ inductive Way (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 E : Nat) 
   | onto (a : NoWall sy m N fr C → (∀ n, C + N.hitF ≤ n → n ≤ t0 → ¬Stop sy m N fr n) → Approach sy m N fr C t0)
       (off : Off sy m N fr C t0 E) : Way sy m N fr C t0 E
 
-/-- what a real run in the room gives -/
-structure RoomRun (sy : Syms) (m : Machine) (N : Nums) where
+/-- what a real run in the room gives, apart from the frames' link to `hstep` -/
+structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   fr : Frames
   /-- first control -/
   C : Nat
@@ -280,10 +281,6 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) where
   t0_ge : C ≤ t0
   past : goalP sy ≤ fr.P t0
   first : ∀ n, C ≤ n → n < t0 → fr.P n < goalP sy
-  /-- every frame up to `t0` follows `hstep` or leaves him stopped -/
-  frames : ∀ n, C ≤ n → n < t0 → Follow sy m fr n ∨ Stop sy m N fr (n + 1)
-  /-- every frame moves him at most the top speed -/
-  move_top : ∀ n, C ≤ n → n < t0 → fr.P (n + 1) ≤ fr.P n + 16 * (top sy : Int)
   /-- a frame before `hitF` that does not follow `hstep` is stopped by the left wall -/
   wall : ∀ n, C ≤ n → n + 1 < C + N.hitF → ¬Follow sy m fr n → WallAt N fr n
   /-- from `hitF` to `runF + 1`, by the left wall, or he is at the corner -/
@@ -322,6 +319,31 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) where
   ab_follow : ∀ n, C ≤ n → n < t0 → Follow sy m fr n →
     fr.ab (n + 1) = (sbyte (fr.hs (n + 1)).v).natAbs ∨ (fr.ab (n + 1) = fr.ab n ∧ (fr.hs (n + 1)).v = (fr.hs n).v)
   way : Way sy m N fr C t0 E
+
+/-- the frames as numbers: what the theorems below use. `RoomRun.toCore` makes them from real machines -/
+structure RoomCore (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N where
+  /-- every frame up to `t0` follows `hstep` or leaves him stopped -/
+  frames : ∀ n, C ≤ n → n < t0 → Follow sy m fr n ∨ Stop sy m N fr (n + 1)
+  /-- every frame moves him at most the top speed -/
+  move_top : ∀ n, C ≤ n → n < t0 → fr.P (n + 1) ≤ fr.P n + 16 * (top sy : Int)
+
+/-- what a real run in the room gives, on real machines -/
+structure RoomRun (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N where
+  /-- `fm n` is the machine at the end of frame `n`, `pad n` the input of frame `n` -/
+  fm : Nat → Machine
+  pad : Nat → UInt8
+  /-- the instruction at which frame `n + 1` comes to the player's routine -/
+  arr : Nat → Nat
+  next : ∀ n, C ≤ n → n < t0 → fm (n + 1) = PipeTransition.frame (fm n) (pad (n + 1))
+  /-- the state and the position are those of the machine -/
+  read_hs : ∀ n, C ≤ n → n ≤ t0 → fr.hs n = FrameModel.readHS sy (fm n)
+  read_P : ∀ n, C ≤ n → n ≤ t0 → fr.P n = posP sy (fm n)
+  /-- a frame that follows the model has the input read from the machine -/
+  read_in : ∀ n, C ≤ n → n < t0 → FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) →
+    fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (fm n) (pad (n + 1)) (arr n))
+  /-- each frame up to `t0` is one that follows the model; or it leaves him stopped, and it is a `TopSpeed.Frame` -/
+  clean : ∀ n, C ≤ n → n < t0 → FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) ∨
+    (Stop sy m N fr (n + 1) ∧ FrameModel.ReadFrame sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n))
 
 /-! ## What the computation provides -/
 
@@ -513,6 +535,10 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   /-- the frames of the fall -/
   fall : airCheck sy m = true
   safe : safeCheck sy m (phi sy m (room sy N).s0 + a1 sy m * (N.fall : Int)) (N.runF - N.fall - 1) = true
+  /-- a real frame follows the model -/
+  model : FrameModel.modelOK sy m (FrameModel.ctrlStack sy m) = true
+  /-- the routine of the friction, for `TopSpeed.Frame` -/
+  fric : TopSpeed.frictionCheck sy m = true
   nums : NumFacts sy m N
 
 /-! ## Lists of frames -/
@@ -992,9 +1018,9 @@ theorem arc_next (H : Checks sy m N) {fr : Frames} {T n : Nat} (h : OnArc sy m N
 
 /-! ## The run -/
 
-namespace RoomRun
+namespace RoomCore
 
-variable (r : RoomRun sy m N)
+variable (r : RoomCore sy m N)
 
 theorem inD_start (H : Checks sy m N) : inD sy (r.fr.hs r.C) = true := by
   have h := H.roomOk
@@ -2675,6 +2701,81 @@ theorem entry_ge (H : Checks sy m N) : r.C + N.goalF + N.aboveF ≤ r.E := by
       have h1 := hw2 f f_mem d (mem_bytes d)
       have h3 := hn.walk_le
       omega
+
+end RoomCore
+
+namespace RoomRun
+
+variable (r : RoomRun sy m N)
+
+/-- a frame that follows the model follows `hstep`: `FrameModel.clean_frame` -/
+theorem follow_of_clean (H : Checks sy m N) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0)
+    (hc : FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.pad (n + 1)) (r.arr n)) : Follow sy m r.fr n := by
+  obtain ⟨h1, h3⟩ := FrameModel.clean_frame H.model hc
+  rw [← r.next n hC h2] at h1 h3
+  have e0 := r.read_hs n hC (by omega)
+  have e1 := r.read_hs (n + 1) (by omega) (by omega)
+  have p0 := r.read_P n hC (by omega)
+  have p1 := r.read_P (n + 1) (by omega) (by omega)
+  have e2 := r.read_in n hC h2 hc
+  refine ⟨?_, ?_, ?_⟩
+  · rw [e2]
+    exact FrameModel.readIn_mem (FrameModel.joy_of_model H.model) _
+  · rw [e1, h1, e0, e2]
+  · rw [p1, h3, p0, e1]
+
+/-- each frame follows `hstep` or leaves him stopped -/
+theorem frames_of (H : Checks sy m N) : ∀ n, r.C ≤ n → n < r.t0 → Follow sy m r.fr n ∨ Stop sy m N r.fr (n + 1) := by
+  intro n h1 h2
+  rcases r.clean n h1 h2 with h3 | h3
+  · exact Or.inl (r.follow_of_clean H h1 h2 h3)
+  · exact Or.inr h3.1
+
+/-- every frame up to `t0` is in the domain -/
+theorem inD_of (H : Checks sy m N) : ∀ d, r.C + d ≤ r.t0 → inD sy (r.fr.hs (r.C + d)) = true
+  | 0, _ => by
+    have h := H.roomOk
+    simp only [roomCheck, Bool.and_eq_true] at h
+    rw [show r.C + 0 = r.C from rfl, r.start]
+    exact h.1.1
+  | d + 1, h => by
+    have ih := inD_of H d (by omega)
+    rcases r.frames_of H (r.C + d) (by omega) (by omega) with h1 | h1
+    · rw [show r.C + (d + 1) = r.C + d + 1 by omega, h1.2.1]
+      exact (FastTakeoff.step_facts H.air.pot ih h1.1).1
+    · exact h1.1
+
+/-- every frame moves him at most the top speed: a frame that follows `hstep` by the bound on its domain -/
+theorem move_top_of (H : Checks sy m N) : ∀ n, r.C ≤ n → n < r.t0 → r.fr.P (n + 1) ≤ r.fr.P n + 16 * (top sy : Int) := by
+  intro n h1 h2
+  rcases r.clean n h1 h2 with h3 | h3
+  · have hf := r.follow_of_clean H h1 h2 h3
+    have hd := r.inD_of H (n + 1 - r.C) (by omega)
+    rw [show r.C + (n + 1 - r.C) = n + 1 by omega] at hd
+    simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at hd
+    have h4 := hd.1.1.1
+    rw [hf.2.2]
+    omega
+  · -- a `TopSpeed.Frame`: `Frame.bound`, from the domain
+    obtain ⟨f, e1, _, e3, _, _, e6⟩ := FrameModel.frame_read H.model H.fric h3.2
+    have hd := r.inD_of H (n - r.C) (by omega)
+    rw [show r.C + (n - r.C) = n by omega, r.read_hs n h1 (by omega)] at hd
+    simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at hd
+    have h4 : (sbyte (peek (r.fm n) sy.Player_X_Speed)).natAbs ≤ top sy := hd.1.1.1
+    have h16 : (16 : Int) ≤ (top sy : Int) := by
+      have := (FrameModel.facts_of H.model).top16
+      show (16 : Int) ≤ (TopSpeed.top sy : Int)
+      omega
+    have hb := f.bound h16 (by rw [e1]; omega)
+    rw [r.read_P (n + 1) (by omega) (by omega), r.read_P n h1 (by omega), r.next n h1 h2, ← e6, ← e3]
+    omega
+
+/-- the frames as numbers -/
+def toCore (H : Checks sy m N) : RoomCore sy m N :=
+  { r.toRoomFields with frames := r.frames_of H, move_top := r.move_top_of H }
+
+/-- **The entry comes at least `goalF + aboveF` frames after first control.** -/
+theorem entry_ge (H : Checks sy m N) : r.C + N.goalF + N.aboveF ≤ r.E := (r.toCore H).entry_ge H
 
 end RoomRun
 

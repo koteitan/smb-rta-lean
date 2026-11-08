@@ -41,7 +41,7 @@ the vertical speed and whether Mario is in the air.
 
 `Frame` describes one frame by these five facts; `Frame.bound` and `chain_bound` follow by
 arithmetic. The only way to be pushed right (`ImpedePlayerMove`) needs `v ≤ 0`, so that frame
-moves at most 256 < 16·v_top.
+moves at most 256 < 16·v_top. The third case of `impedeP` is the push and the screen's left edge: `P′ ≤ P + 256 ∧ v₂ ≤ 0`.
 
 ## Assumptions (not proved in Lean)
 

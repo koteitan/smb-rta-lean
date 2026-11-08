@@ -1,0 +1,159 @@
+[← Back](README-ja.md) | [English](b-3-2-PipeChangeEnd.md) | [Japanese](b-3-2-PipeChangeEnd-ja.md)
+
+# `fall` なしの部屋への切り替え
+
+**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入り、`entry₁` は新しい入るときの条件になります。`keep₁` は残ります。
+
+`m₀`、`run`、`ctl`、`0^k`、`E` は[地下への切り替えの長さを決めるもの](b-2-1-PipeTransitionAll-ja.md)と同じです。`left` は[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)と同じです。土管のルーチンが動くあいだは `timer + 43` で、そのあとは 43 行の表から読みます。`frame(m, i)` は `m` から入力 `i` で進む 1 フレームです。`trace(m, i, j)` はそのフレームを `j` ステップ進めた機械です。`T = run(E, 0^48)` は出口の基準です。`m[b]` は `m` のバイト `b` です。`+k` のついた名前は、その名前の `k` バイトあとのバイトです。
+
+**入るときの条件.** `Entry(M)` は、入るフレームの終わりの状態 `M` についての条件です。
+
+* フレームは待ちの繰り返しの中で終わっています。[地上への切り替えのはじめのフレーム](d-2-2-SideChangeBound-ja.md)と同じです。プログラムカウンタとスタックポインタは `E` と同じです。ドットは 9 以下です。vblank と NMI のフラグはドットに合っています。スプライト 0 のフラグは立っています。PPU 制御で NMI はオンです。コントローラはストローブ中ではありません。
+* 113 バイトの `K` は `E` と同じ値です。下に挙げます。
+* 12 バイトは、マスクのビットが `E` と同じです。下に挙げます。
+* `timer(M) ≥ 48`。
+
+ほかのバイトは何でもかまいません。マリオの位置、速さ、大きさ、スコア、コイン、ゲームタイマーの数字、フレームカウンタ、乱数、曲、スプライト、画面のバッファ、面のパーサー、スロットにいる敵です。
+
+**リスト `K`**（名前）:
+
+| まとまり | バイト |
+|---|---|
+| モード | `OperMode`（2）、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`JoypadOverride`、`WorldSelectNumber+2` … `+4` |
+| 面 | `AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`WarpZoneControl`、`CurrentPlayer`、`AreaType`、`LoopCommand`、`CloudTypeOverride`、`BackgroundColorCtrl`、`ScrollThirtyTwo+1`、`VerticalScroll` |
+| タイマー | `GameTimerExpiredFlag`、`FetchNewGameTimerFlag`、`StarInvincibleTimer`、`ScreenTimer`、`WorldEndTimer`、`DemoTimer` |
+| 入力 | `Up_Down_Buttons`、`Left_Right_Buttons` |
+| マリオ | `Player_State` |
+| 空のままのスロット | `Enemy_Flag+4` … `+6`、`Enemy_ID+3` … `+6`、`Enemy_State+4`、`+5`、`Fireball_State`（2）、`Block_State`（4）、`Block_RepFlag`（2）、`Misc_State`（9）、`Misc_Y_Position+7`、`Misc_Collision_Flag+10` … `+12`、`FloateyNum_Control`（7）、`FirebarSpinSpeed+14`、`+15`、`MaximumRightSpeed+18`、`+19`、`SprDataOffset_Ctrl+1`、`Cannon_Offset`、`Cannon_PageLoc`（6）、`Cannon_X_Position`（6）、`Cannon_Y_Position`（5）、`FireballCounter`、`DuplicateObj_Offset`、`VineFlagOffset`、`VineHeight`、`FlagpoleFNum_Y_Pos`、`FlagpoleFNum_YMFDummy`、`FlagpoleScore` |
+| 敵のデータ | `EnemyData`、`EnemyDataHigh`、`EnemyObjectPageLoc`、`EnemyObjectPageSel`、`EnemyFrenzyBuffer`、`EnemyFrenzyQueue`、`SecondaryHardMode` |
+| 音 | `NoiseSoundBuffer`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`NoiseSoundQueue`、`Square2SoundQueue`、`Square1SoundQueue+1` |
+
+**マスクつきのバイト.**
+
+| バイト | 自由なビット | 許すもの |
+|---|---|---|
+| `Enemy_ID`（はじめの 3 スロット） | ビット 1、2 | いくつかの敵の種類 |
+| `Enemy_State`（はじめの 4 スロット） | ビット 0 | |
+| `Misc_Y_Position+8` | ビット 0、1、5、6 | |
+| `Square1SoundQueue` | ビット 4 | 1 つの音 |
+| `SprDataOffset_Ctrl` | ビット 0 | |
+| `PlayerStatus` | ビット 0 | 小さいマリオか大きいマリオ。ファイアマリオは `Entry` を満たしません |
+| `GamePauseStatus` | ビット 0、7 | |
+
+**場所.** `Places(t)` はこう言います。`t` のプログラムカウンタが下の場所のどれかなら、`t` のドットはその上限以下で、`t` はその場所の行のどれか 1 つと同じ値を持ちます。
+
+| 場所 | 行 | ドットの上限 |
+|---|---|---|
+| `NonMaskableInterrupt` | 画面のバッファの形 1,061 個。各レコードの最初のバイトと長さ | なし |
+| `MusicHandler` | 曲の行 1,607 個 | なし |
+| `EnemyGfxHandler`、`PlayerGfxHandler` | スプライトの位置の行 3 個 | なし |
+| `UpdScrollVar` | 面のパーサーの行 67 個 | 50,000 |
+| `ColorRotation` | `VRAM_Buffer1_Offset` の 256 の値すべて | 50,000 |
+| `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater` | 何でもよい | 50,000 |
+| `HandleEToBGCollision` のブロックのバッファへの書き込み | なし。着かない | |
+| `PositionEnemyObj` の最初の `BCS` のあと | なし。着かない | |
+| `CheckRightExtBounds` の最初の `BCC` のあと | なし。着かない | |
+
+つまり土管のフレームでは、突き上げられているブロックの上に敵は立っていません。面のデータの次の敵は読み込まれません。フレームの仕事はドット 50,000 より前にこれらの場所に着きます。曲、画面のバッファ、スプライトの位置、面のパーサーは行のどれかにあります。1 フレームは 89,342 ドットです。
+
+**出口の条件.** `ExitAt(m)` は、`OperMode_Task`、`ScreenRoutineTask`、`GameEngineSubroutine`、`DisableScreenFlag` が `T` と同じ値であることです。そのような状態で、走りは次を満たします。
+
+* `Quiet(m)`: `PauseSoundBuffer`、`PauseSoundQueue`、`Square1SoundBuffer`、`Square2SoundBuffer`、`NoiseSoundBuffer`、`VRAM_Buffer_AddrCtrl` は `T` と同じ値です。
+* `Song(m)`: 曲の 12 バイト（`MusicData`（2）、4 つの位置、`NoiseDataLoopbackOfs`、音符のカウンタとバッファ）は 1,607 行のどれかと同じ値です。曲の部分が終わるフレームでは `GroundMusicHeaderOfs` も行に入ります。
+* `Shape(m)`: 1 つ目の画面のバッファは空か、パレットの 4 バイトのレコードを 1 つだけ持ちます。
+
+`Exit(m)` は、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の `ExitCond(m)` に出口の 19 バイトと `Quiet` の 6 バイトを `T` の値で入れたものと、`Song(m) ∧ Shape(m)` です。出口の 19 バイトは `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`CurrentPlayer`、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`Square1SoundQueue`、`Square2SoundQueue`、`NoiseSoundQueue` です。
+
+`NoStart(m, i)` は、`m` がゲームコアで土管以外のルーチンなら入力 `i` に Start がないことです。
+
+**主張の形.** `During(m)` は、`m` が土管のフレームの抽象的な始まりの状態のどれかに含まれることです。`InRows(m)` は、`m` が下の段のどれかの状態に含まれることです。
+
+```
+during     :  ∀ M,  Entry(M) → During(M)
+atEntry    :  ∀ M,  Entry(M) → 91 ≤ left(M)
+inRoutine  :  ∀ m,  During(m) → m では土管のルーチンが動く
+step       :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
+                left(m) ≤ left(frame(m, i)) + 1  ∧
+                ( During(frame(m, i))  ∨  ( ExitAt(frame(m, i))  ∧  ( frame(m, i) で Quiet ∧ Song ∧ Shape  →  InRows(frame(m, i)) ) ) )
+atExit     :  ∀ m,  Exit(m) → InRows(m)
+leftExit   :  ∀ m,  Exit(m) → left(m) = 43
+rows       :  ∀ m, InRows(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  ( InRows(frame(m, i))  ∧  left(m) ≤ left(frame(m, i)) + 1 )
+atControl  :  ∀ m,  ctl(m) → left(m) = 0
+
+no_control_exit :  Exit(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 43, ¬ctl(sⱼ)
+PipeRun.bound   :  下のフィールドを持つ走り  →  cnt(a) + 91 ≤ cnt(b)
+Changes.bound₁  :  e₁ + 91 ≤ c₂
+```
+
+`PipeRun` のフィールドです。`Changes` の 1 つ目の切り替えのフィールドも同じです。
+
+```
+entry    :  Entry(seq a)
+atCtl    :  ctl(seq b)
+lagKeeps :  ∀ n, a ≤ n < b,  lag(n)  →  left(seq n) ≤ left(seq (n+1))
+places   :  ∀ n, a ≤ n < b,  seq n で土管のルーチンが動く  →  ∀ j, Places(trace(seq n, inp n, j))
+quiet    :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  Quiet(seq n) ∧ Song(seq n) ∧ Shape(seq n)
+noStart  :  ∀ n, a ≤ n < b,  NoStart(seq n, inp n)
+```
+
+`cnt` は `lag` でないフレームを数えます。`left` は入ってから操作できるまで、どのフレームでも高々 1 しか減らず、操作できるときは 0 です。ですから `91 ≤ left(seq a) ≤ cnt(b) − cnt(a)` です。
+
+Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、`zlive_step`、`zframe_run`、`zframe_of_walk`、`z_step`、`in_rows`、`EndStatement`、`endStatement_of_check`、`PipeRun`、`PipeRun.bound`、`no_control_exit`）、`Theorems/Route.lean`（`Changes.run₁`、`Changes.bound₁`）、非公開の `pipe_end_checks`（`native_decide`）、`pipe_end`、`pipe_exit_no_control`、`pipe_change_end`。ROM なしの定理は `propext`、`Classical.choice`、`Quot.sound` だけを使います。
+
+## しくみ
+
+**土管のフレーム.** 曲、画面のバッファ、スプライトの位置、面のパーサーが自由だと、[地上への切り替えのはじめのフレーム](d-2-2-SideChangeBound-ja.md)の抽象機械はここで失敗します。道が多すぎるからです。そこで主張は `Places` を求め、抽象機械はそれを使います。場所に着いた状態は、行ごとに 1 つの状態に分かれます（`placeSplit`）。どの行にも合わない状態は先へ進みません。本物の機械はそこでどれかの行に合うので、これは正しいです（`cov_place`）。わからないビットが 4 つ以下の値を通して読み書きする命令は、そのビットの値ごとに状態を分けます（`zsplit`）。`JumpEngine` でのアキュムレータ、間接の読み書きでのポインタの下のバイト、添字つきの書き込みでの `X` か `Y` です。`s_zsuccs` はこれらのステップを本物のステップに対して証明します。`zframe_run` は本物のフレームを `trace` で 1 ステップずつ追います。どのステップでも、歩みの状態のどれかが機械を含みます。
+
+**フレームの確認.** `Entry` の始まりの状態から、探索が状態の表を作ります。確認は表の各状態から歩きます。表の場所で着いた状態は、表のどれかの状態に含まれます。フレームの終わりは、また始まりの状態のどれかに含まれるか、出口です。
+
+| フレーム | 探索のステップ | 表の状態 |
+|---|---|---|
+| タイマー ≥ 2 | 893,614 | 35,607 |
+| タイマー = 1 | 527,656 | 23,111 |
+
+探索は、いくつかの場所で状態をほかが終わるまで待たせ、そこでいくつかのバイトを忘れます。これは表を小さくするだけです。確認はこれに頼りません。
+
+**出口のあと.** フレーム 48 が出口です。フレーム 49 と 50 は RAM を消し、消す途中でフレーム 49 が終わります。そのあと 41 フレームで操作できます。これらのフレームには[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の段を使います。`PauseModeFlag` の 2 つの場合があります。
+
+* フラグ 0: 画面のバッファの形と曲の行の組ごとに 1 つの状態で、6,428 個です。どれも 1 つずつ、音のルーチンのあとの場所まで進みます。そこで 32 個に 1 個を、曲のバイトを除いてまとめ、そこから探索を続けます。確認は 6,428 個すべてから歩きます。
+* フラグ 0 でない: 音のルーチンは動きません。形ごとに 1 つの状態で、1 つずつ同じ場所まで進みます。
+
+どちらの場合も 44 段で、`left` は 43 から 0 まで減ります。
+
+**場所の行.** 行は基準の走りのフレームから作ります。`E` を入力なしで 47 フレーム、`E` で `Player_X_Scroll` を 3、タイマーを 230 にして 225 フレーム、[b-2-1](b-2-1-PipeTransitionAll-ja.md) の本物の 13 個の入る状態をそれぞれ 47 フレーム、それに `m₀` から `E` までの道のフレームです。道のフレームからは、`E` の近くのパーサーの列の始まりだけを使います。列の始まりでは、パーサーはメタタイルのバッファを読む前に消します。ですから、その行ではメタタイルのバッファは自由です。画面のバッファの形には、見えたレコードの最初のバイトと長さ 1 から 8 で作った、レコード 2 つまでのすべての形を足します。曲の行は、`m₀` から入力なしで 5,327 フレーム鳴らした曲です。曲は始めの 143 フレームのあと、5,184 フレームの周期です。
+
+**確認の大きさ.** プログラムで約 21 秒、非公開の証明のビルドで 25 秒です。
+
+## 正しくない事実
+
+* `fall₁` は、[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)の条件を満たす状態で正しくないことがあります。`E` で `HalfwayPage` を 1 にすると、75 フレームで操作でき、フレーム 73 で `left` は 18 から 0 になります。`WarpZoneControl` を 1 にすると 228 フレームで操作でき、フレーム 55 で `left` は 36 から 0 になります。`GameTimerExpiredFlag` を 1 にすると 229 フレームで操作でき、フレーム 54 で `left` は 37 から 0 になります。これらのバイトは `K` にあるので、これらの状態は `Entry` を満たしません。入力なしで測りました。
+* 土管のフレームで Start を押すと、本物の走りで `Quiet` は正しくありません。下では、土管のフレームで乱数の Start を使った 437 の走りのうち 129 で成り立ちません。
+* `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許すので、ドットだけを求めます。
+
+## 測ったけれど定理にしていないこと
+
+入る状態は、`E`、TAS の入る状態、本物の 13 個、それに `m₀` からの自分の走りの 422 個です。自分の走りは、土管まで乱数で遊ぶものです。ふつう、踏みつけあり、大きいマリオで始める、大きいマリオで踏みつけあり、1,000、2,500、4,000 フレーム待ってから、`x` = 980 を越えてから戻る、です。種の違う 2 組があります。それぞれの入る状態から、3 種類の入力で操作できるまで動かしました。
+
+| 入力 | 走り | `Entry` が成り立つ | 土管のフレーム | `Places` に反するフレーム | 出口で `Quiet ∧ Song ∧ Shape` | `left` が 2 以上減るフレーム | 操作できるまでの最少フレーム |
+|---|---|---|---|---|---|---|---|
+| なし | 437 | 437 | 20,976 | 0 | 437 | 0 | 91 |
+| 乱数、Start なし | 437 | 437 | 20,976 | 0 | 437 | 0 | 91 |
+| 乱数、土管のフレームでだけ Start | 437 | 437 | 48,044 | 0 | 308 | 0 | 136 |
+
+`Song ∧ Shape` は、どの種類でも 437 の出口すべてで成り立ちました。成り立たなかったのは `Quiet` だけで、Start のあるときだけです。パーサーの列の始まりの行を足す前は、ふつうの走りの 1,920 フレームのうち 11 フレームが `Places` に反していました。
+
+## 仮定（Lean では証明していない）
+
+* 本物の走りの入る状態で `Entry`（`chg.entry₁`）。項目 1-1-b-3-4。
+* 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。
+* 出口で `Quiet ∧ Song ∧ Shape`（`chg.quiet₁`）。土管のフレームで Start を押すと成り立たないことがあります。
+* 土管のあとのゲームコアのフレームで `NoStart`（`chg.noStart₁`）。
+* `lagKeeps`（`chg.keep₁`）、項目 1-1-b-3-3。
+
+**ファイル.** `Theorems/PipeChangeEnd.lean`、非公開の `Proof/PipeChangeEnd.lean`。
+
+**再現.**
+```
+.lake/build/bin/smbrta pipe-end-check FM2    # 確認と、E、TAS の入る状態、本物の 13 個での 3 種類の入力による条件の確認。約 1 分
+.lake/build/bin/smbrta changes-check FM2     # TAS の走りでの Changes のフィールド
+```

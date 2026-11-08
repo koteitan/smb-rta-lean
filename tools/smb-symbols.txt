@@ -128,3 +128,71 @@ RoomPipeByte=byte:L_UndergroundArea3+16
 # the star flag's task: the height it rises to and the interval timer it sets
 StarFlagTopY=byte:RaiseFlagSetoffFWorks+3
 StarFlagDelay=byte:DrawFlagSetTimer+4
+# the change into the bonus room: places in the frames of the pipe
+NonMaskableInterrupt
+SoundEngine
+MusicHandler
+HandleSquare1Music
+HandleTriangleMusic
+HandleNoiseMusic
+SkipSoundSubroutines
+ReadPortBits
+GameEngine
+ProcELoop
+EnemyGfxHandler
+GetEnemyBoundBox
+PlayerGfxHandler
+BlockObjMT_Updater
+FlagpoleRoutine
+ColorRotation
+UpdScrollVar
+ExitEng
+HandleEToBGCollision
+PositionEnemyObj
+CheckRightExtBounds
+JumpEngine
+# places of a frame after the castle entry
+ReadJoypads
+DecTimers
+NoDecTimers
+PlayerEndLevel
+GetPlayerOffscreenBits
+RunStarFlagObj
+FloateyNumbersRoutine
+RunGameTimer
+XLdBData
+GetXOffscreenBits
+FetchSqu1MusicData
+MiscSqu1MusicTasks
+ExXOfsBS
+# the side timer's value at a bump into a wall, and the collision bits when they are reset
+SideTimerBump=byte:NXSpd+1
+CollisionInit=byte:ChkOnScr+7
+EndlessLoop
+# the frame in the room: places of the screen routine, the number and palette routines, the collision routine's end, the side pipe's timer
+UpdateScreen
+OutputToVRAM
+RepeatByte
+OutputNumbers
+ExitOutputN
+UpdateNumber
+NoZSup
+GetPlayerColors
+SetVRAMOffset
+ExitColorRot
+ProcMove
+MoveSubs
+SideCheckLoop
+BHalf
+ErACM
+PlyrPipe
+AreaChangeTimerData
+SkipMainOper
+CoinTile=byte:CheckForCoinMTiles+1
+# the side check of the collision routine: the routine's write at the pole, where a pass ends
+RunFR
+ExSCH
+ExCSM
+ExHC
+ContSChk
+VineCollision

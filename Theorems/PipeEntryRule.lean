@@ -9,9 +9,9 @@ import Std.Data.TreeMap
 `PipeEntry.no_entry_by` takes an arbitrary predicate `Enter` and a hypothesis `rule`. Here the entry is defined on real machines: the frame of `m` with the input `i` ends with the pipe's routine and `m` has another
 routine (`Enters`). The theorem says that such a frame was at or right of the left end of the pipe's window when the foot check read the right foot (`entry_right_of_left`).
 
-The whole frame is not followed. What is assumed stays on the single frame: the instruction that writes the routine byte is the collision routine's own, it comes at the end of one pass from the start
+The whole frame is not followed here. What is assumed stays on the single frame: the instruction that writes the routine byte is the collision routine's own, it comes at the end of one pass from the start
 of the foot check (`Pass`), and the block buffer holds the pipe's right tile only at its place (`ReadOK`). What is proved is the pass (`no_write`): an abstract machine (the one of `SideChangeBound`) follows it, with
-every byte unknown except the stack and the offset of the adders. There is no game data in this file. Page: `1-1/a-5-1-PipeEntryRule.md`.
+every byte unknown except the stack and the offset of the adders. `PipeWrites` follows the whole frame, and `Route` uses that. There is no game data in this file. Page: `1-1/a-5-1-PipeEntryRule.md`.
 -/
 
 namespace Smbrta.PipeEntryRule
@@ -118,7 +118,7 @@ structure Spots where
   write : UInt16
   /-- where a pass ends without that instruction -/
   exits : List UInt16
-  /-- the byte with the offset of the adders, and its values out of the water: a big Mario, and a small or crouching one -/
+  /-- the byte with the offset of the adders, and its values: a big Mario, a small or crouching one, and a big one in the water -/
   adI : Nat
   ads : List UInt8
   /-- the byte where the routine keeps its offset -/
@@ -180,7 +180,7 @@ def spotsOf (sy : Syms) (m0 : Machine) (s : UInt8) : Spots :=
     write := findStore m0 sy.HandlePipeEntry sy.GameEngineSubroutine.toUInt8 64
     exits := [sy.DoPlayerSideCheck, sy.AwardTouchedCoin, sy.HandleAxeMetatile, sy.ImpedePlayerMove]
     adI := (romByte m0 (sy.DoFootCheck + 1)).toNat
-    ads := [romByte m0 sy.BlockBufferAdderData, romByte m0 (sy.BlockBufferAdderData + 2)]
+    ads := [romByte m0 sy.BlockBufferAdderData, romByte m0 (sy.BlockBufferAdderData + 2), romByte m0 (sy.BlockBufferAdderData + 1)]
     saveI := (romByte m0 (sy.BlockBufferCollision + 2)).toNat
     ptrI := (romByte m0 (read + 1)).toNat
     sumI := (romByte m0 (sum + 1)).toNat
@@ -746,7 +746,7 @@ theorem entry_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : ruleC
     exact hn hW
 
 /-- **The rule on frames.** `fm t` is the machine when frame `t` begins and `inp t` its input. If a frame enters, the instruction of the write ends a `Pass`, and `P₂` is the position when the block buffer routine is entered
-for the right foot before the write, then `P₂` is at or right of the window's left end. This is what `PipeEntry.no_entry_by` needs, and `Route.Pipe` has `pass` and `pos` for it. `PipeEntry.rule_of_cases` gives the same from `rule` on a hand-written buffer. -/
+for the right foot before the write, then `P₂` is at or right of the window's left end. This is what `PipeEntry.no_entry_by` needs. `PipeWrites.rule_on_frames` gives the same without `Pass`, and `Route.Pipe` uses that. `PipeEntry.rule_of_cases` gives the same from `rule` on a hand-written buffer. -/
 theorem rule_on_frames {top amax : Int} {sy : Syms} {m0 : Machine} (hc : ruleCheck sy m0 = true) (fr : Nat → TopSpeed.Frame top amax)
     (fm : Nat → Machine) (inp : Nat → UInt8)
     (hp : ∀ t, Enters sy (fm t) (inp t) → ∀ n, WriteStep sy (fm t) (inp t) n → Pass (spots sy m0) (envOf m0) (trace (fm t) (inp t)) n)

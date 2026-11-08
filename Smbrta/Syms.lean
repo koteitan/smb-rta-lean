@@ -125,6 +125,69 @@ structure Syms where
   RoomPipeByte : UInt16
   StarFlagTopY : UInt16
   StarFlagDelay : UInt16
+  NonMaskableInterrupt : UInt16
+  SoundEngine : UInt16
+  MusicHandler : UInt16
+  HandleSquare1Music : UInt16
+  HandleTriangleMusic : UInt16
+  HandleNoiseMusic : UInt16
+  SkipSoundSubroutines : UInt16
+  ReadPortBits : UInt16
+  GameEngine : UInt16
+  ProcELoop : UInt16
+  EnemyGfxHandler : UInt16
+  GetEnemyBoundBox : UInt16
+  PlayerGfxHandler : UInt16
+  BlockObjMT_Updater : UInt16
+  FlagpoleRoutine : UInt16
+  ColorRotation : UInt16
+  UpdScrollVar : UInt16
+  ExitEng : UInt16
+  HandleEToBGCollision : UInt16
+  PositionEnemyObj : UInt16
+  CheckRightExtBounds : UInt16
+  JumpEngine : UInt16
+  ReadJoypads : UInt16
+  DecTimers : UInt16
+  NoDecTimers : UInt16
+  PlayerEndLevel : UInt16
+  GetPlayerOffscreenBits : UInt16
+  RunStarFlagObj : UInt16
+  FloateyNumbersRoutine : UInt16
+  RunGameTimer : UInt16
+  XLdBData : UInt16
+  GetXOffscreenBits : UInt16
+  FetchSqu1MusicData : UInt16
+  MiscSqu1MusicTasks : UInt16
+  ExXOfsBS : UInt16
+  SideTimerBump : UInt16
+  CollisionInit : UInt16
+  EndlessLoop : UInt16
+  SetVRAMOffset : UInt16
+  GetPlayerColors : UInt16
+  UpdateScreen : UInt16
+  OutputToVRAM : UInt16
+  RepeatByte : UInt16
+  OutputNumbers : UInt16
+  ExitOutputN : UInt16
+  UpdateNumber : UInt16
+  NoZSup : UInt16
+  ExitColorRot : UInt16
+  ProcMove : UInt16
+  MoveSubs : UInt16
+  SideCheckLoop : UInt16
+  BHalf : UInt16
+  ErACM : UInt16
+  PlyrPipe : UInt16
+  AreaChangeTimerData : UInt16
+  SkipMainOper : UInt16
+  CoinTile : UInt16
+  RunFR : UInt16
+  ExSCH : UInt16
+  ExCSM : UInt16
+  ExHC : UInt16
+  ContSChk : UInt16
+  VineCollision : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -242,8 +305,72 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("EngSidePipe", fun s => s.EngSidePipe),
   ("RoomPipeByte", fun s => s.RoomPipeByte),
   ("StarFlagTopY", fun s => s.StarFlagTopY),
-  ("StarFlagDelay", fun s => s.StarFlagDelay)]
+  ("StarFlagDelay", fun s => s.StarFlagDelay),
+  ("NonMaskableInterrupt", fun s => s.NonMaskableInterrupt),
+  ("SoundEngine", fun s => s.SoundEngine),
+  ("MusicHandler", fun s => s.MusicHandler),
+  ("HandleSquare1Music", fun s => s.HandleSquare1Music),
+  ("HandleTriangleMusic", fun s => s.HandleTriangleMusic),
+  ("HandleNoiseMusic", fun s => s.HandleNoiseMusic),
+  ("SkipSoundSubroutines", fun s => s.SkipSoundSubroutines),
+  ("ReadPortBits", fun s => s.ReadPortBits),
+  ("GameEngine", fun s => s.GameEngine),
+  ("ProcELoop", fun s => s.ProcELoop),
+  ("EnemyGfxHandler", fun s => s.EnemyGfxHandler),
+  ("GetEnemyBoundBox", fun s => s.GetEnemyBoundBox),
+  ("PlayerGfxHandler", fun s => s.PlayerGfxHandler),
+  ("BlockObjMT_Updater", fun s => s.BlockObjMT_Updater),
+  ("FlagpoleRoutine", fun s => s.FlagpoleRoutine),
+  ("ColorRotation", fun s => s.ColorRotation),
+  ("UpdScrollVar", fun s => s.UpdScrollVar),
+  ("ExitEng", fun s => s.ExitEng),
+  ("HandleEToBGCollision", fun s => s.HandleEToBGCollision),
+  ("PositionEnemyObj", fun s => s.PositionEnemyObj),
+  ("CheckRightExtBounds", fun s => s.CheckRightExtBounds),
+  ("JumpEngine", fun s => s.JumpEngine),
+  ("ReadJoypads", fun s => s.ReadJoypads),
+  ("DecTimers", fun s => s.DecTimers),
+  ("NoDecTimers", fun s => s.NoDecTimers),
+  ("PlayerEndLevel", fun s => s.PlayerEndLevel),
+  ("GetPlayerOffscreenBits", fun s => s.GetPlayerOffscreenBits),
+  ("RunStarFlagObj", fun s => s.RunStarFlagObj),
+  ("FloateyNumbersRoutine", fun s => s.FloateyNumbersRoutine),
+  ("RunGameTimer", fun s => s.RunGameTimer),
+  ("XLdBData", fun s => s.XLdBData),
+  ("GetXOffscreenBits", fun s => s.GetXOffscreenBits),
+  ("FetchSqu1MusicData", fun s => s.FetchSqu1MusicData),
+  ("MiscSqu1MusicTasks", fun s => s.MiscSqu1MusicTasks),
+  ("ExXOfsBS", fun s => s.ExXOfsBS),
+  ("SideTimerBump", fun s => s.SideTimerBump),
+  ("CollisionInit", fun s => s.CollisionInit),
+  ("EndlessLoop", fun s => s.EndlessLoop),
+  ("SetVRAMOffset", fun s => s.SetVRAMOffset),
+  ("GetPlayerColors", fun s => s.GetPlayerColors),
+  ("UpdateScreen", fun s => s.UpdateScreen),
+  ("OutputToVRAM", fun s => s.OutputToVRAM),
+  ("RepeatByte", fun s => s.RepeatByte),
+  ("OutputNumbers", fun s => s.OutputNumbers),
+  ("ExitOutputN", fun s => s.ExitOutputN),
+  ("UpdateNumber", fun s => s.UpdateNumber),
+  ("NoZSup", fun s => s.NoZSup),
+  ("ExitColorRot", fun s => s.ExitColorRot),
+  ("ProcMove", fun s => s.ProcMove),
+  ("MoveSubs", fun s => s.MoveSubs),
+  ("SideCheckLoop", fun s => s.SideCheckLoop),
+  ("BHalf", fun s => s.BHalf),
+  ("ErACM", fun s => s.ErACM),
+  ("PlyrPipe", fun s => s.PlyrPipe),
+  ("AreaChangeTimerData", fun s => s.AreaChangeTimerData),
+  ("SkipMainOper", fun s => s.SkipMainOper),
+  ("CoinTile", fun s => s.CoinTile),
+  ("RunFR", fun s => s.RunFR),
+  ("ExSCH", fun s => s.ExSCH),
+  ("ExCSM", fun s => s.ExCSM),
+  ("ExHC", fun s => s.ExHC),
+  ("ContSChk", fun s => s.ContSChk),
+  ("VineCollision", fun s => s.VineCollision)]
 
+set_option maxRecDepth 100000 in
 /-- Parse a symbol file (`key value` per line, decimal). -/
 def Syms.parse (text : String) : Except String Syms := do
   let mut tbl : List (String × Nat) := []
@@ -369,6 +496,69 @@ def Syms.parse (text : String) : Except String Syms := do
     RoomPipeByte := ← get "RoomPipeByte"
     StarFlagTopY := ← get "StarFlagTopY"
     StarFlagDelay := ← get "StarFlagDelay"
+    NonMaskableInterrupt := ← get "NonMaskableInterrupt"
+    SoundEngine := ← get "SoundEngine"
+    MusicHandler := ← get "MusicHandler"
+    HandleSquare1Music := ← get "HandleSquare1Music"
+    HandleTriangleMusic := ← get "HandleTriangleMusic"
+    HandleNoiseMusic := ← get "HandleNoiseMusic"
+    SkipSoundSubroutines := ← get "SkipSoundSubroutines"
+    ReadPortBits := ← get "ReadPortBits"
+    GameEngine := ← get "GameEngine"
+    ProcELoop := ← get "ProcELoop"
+    EnemyGfxHandler := ← get "EnemyGfxHandler"
+    GetEnemyBoundBox := ← get "GetEnemyBoundBox"
+    PlayerGfxHandler := ← get "PlayerGfxHandler"
+    BlockObjMT_Updater := ← get "BlockObjMT_Updater"
+    FlagpoleRoutine := ← get "FlagpoleRoutine"
+    ColorRotation := ← get "ColorRotation"
+    UpdScrollVar := ← get "UpdScrollVar"
+    ExitEng := ← get "ExitEng"
+    HandleEToBGCollision := ← get "HandleEToBGCollision"
+    PositionEnemyObj := ← get "PositionEnemyObj"
+    CheckRightExtBounds := ← get "CheckRightExtBounds"
+    JumpEngine := ← get "JumpEngine"
+    ReadJoypads := ← get "ReadJoypads"
+    DecTimers := ← get "DecTimers"
+    NoDecTimers := ← get "NoDecTimers"
+    PlayerEndLevel := ← get "PlayerEndLevel"
+    GetPlayerOffscreenBits := ← get "GetPlayerOffscreenBits"
+    RunStarFlagObj := ← get "RunStarFlagObj"
+    FloateyNumbersRoutine := ← get "FloateyNumbersRoutine"
+    RunGameTimer := ← get "RunGameTimer"
+    XLdBData := ← get "XLdBData"
+    GetXOffscreenBits := ← get "GetXOffscreenBits"
+    FetchSqu1MusicData := ← get "FetchSqu1MusicData"
+    MiscSqu1MusicTasks := ← get "MiscSqu1MusicTasks"
+    ExXOfsBS := ← get "ExXOfsBS"
+    SideTimerBump := ← get "SideTimerBump"
+    CollisionInit := ← get "CollisionInit"
+    EndlessLoop := ← get "EndlessLoop"
+    SetVRAMOffset := ← get "SetVRAMOffset"
+    GetPlayerColors := ← get "GetPlayerColors"
+    UpdateScreen := ← get "UpdateScreen"
+    OutputToVRAM := ← get "OutputToVRAM"
+    RepeatByte := ← get "RepeatByte"
+    OutputNumbers := ← get "OutputNumbers"
+    ExitOutputN := ← get "ExitOutputN"
+    UpdateNumber := ← get "UpdateNumber"
+    NoZSup := ← get "NoZSup"
+    ExitColorRot := ← get "ExitColorRot"
+    ProcMove := ← get "ProcMove"
+    MoveSubs := ← get "MoveSubs"
+    SideCheckLoop := ← get "SideCheckLoop"
+    BHalf := ← get "BHalf"
+    ErACM := ← get "ErACM"
+    PlyrPipe := ← get "PlyrPipe"
+    AreaChangeTimerData := ← get "AreaChangeTimerData"
+    SkipMainOper := ← get "SkipMainOper"
+    CoinTile := ← get "CoinTile"
+    RunFR := ← get "RunFR"
+    ExSCH := ← get "ExSCH"
+    ExCSM := ← get "ExCSM"
+    ExHC := ← get "ExHC"
+    ContSChk := ← get "ContSChk"
+    VineCollision := ← get "VineCollision"
   }
 
 def Syms.load (path : String) : IO Syms := do
