@@ -109,7 +109,7 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 
 ## Assumptions (not proved in Lean)
 
-* **`Room(seq(c))`.** 73 bytes at the first control in the room. `K` keeps only bytes that do not differ between runs. It fails for a fire Mario (`PlayerStatus` 2); before this pipe in 1-1 there is one power-up. It should come from walking the rows of the change into the room, since the state after that change is nearly all known. If the last row of item 1-1-b-3-2 knows the values of `K`, one check with `AS.le` is enough. The bytes of `K` that the area's setup does not clear are `AreaType`, `CurrentPlayer`, `PlayerStatus`, `WorldNumber`, `OperMode`, `OperMode_Task`, `AreaMusicBuffer_Alt`. The exit condition of those rows has to know them. This page does not depend on those rows, and they were not run here.
+* **`Room(seq(c))`.** 73 bytes at the first control in the room. In the route it is proved except for 5 bytes ([The condition `Room` at the first control in the room](d-2-4-1-ScreenStart.md)). The rest of this item is as written for this page. `K` keeps only bytes that do not differ between runs. It fails for a fire Mario (`PlayerStatus` 2); before this pipe in 1-1 there is one power-up. It should come from walking the rows of the change into the room, since the state after that change is nearly all known. If the last row of item 1-1-b-3-2 knows the values of `K`, one check with `AS.le` is enough. The bytes of `K` that the area's setup does not clear are `AreaType`, `CurrentPlayer`, `PlayerStatus`, `WorldNumber`, `OperMode`, `OperMode_Task`, `AreaMusicBuffer_Alt`. The exit condition of those rows has to know them. This page does not depend on those rows, and they were not run here.
 * **The time in `SiteOK`.** The frames in the room do not overrun.
 * **The address of a read.** `LDA (zp),Y` does not read a register.
 * **Tiles.** A block buffer read gives a value of `T`. This comes from the address being in the block buffers, and the block buffers of the room being as at the start or with coins erased. Not proved.
@@ -126,7 +126,7 @@ The timer in `chg.entry₂` can be replaced by these (`entry_long`, private `scr
 ```
 entry₂     : Entry2 nm₂ nx₂ E 0 (seq a₂)            (no condition on the timer)
 roomOrder  : b₁ ≤ a₂
-roomStart  : Room(seq b₁)
+roomRest   : RestAt(seq b₁)                            (5 bytes; Room(seq b₁) is Changes.roomAt)
 roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
 roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)
 ```

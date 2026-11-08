@@ -35,12 +35,11 @@ rule_on_frames      :  ruleCheck,  ∀ t,  Enters(fm t, inp t) → (∀ n, Write
                        (P₂(t) は右足のときの位置: P₂(t) = 256·px(tr(j)) + f,  0 ≤ f)
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 pipe_rule_check（非公開）    :  ruleCheck(sy, m₀) = true（native_decide）
-pipe_no_entry_real（非公開） :  同じ仮定と `pipe_no_entry` の位置の仮定  →  ∀ t ≤ 367,  ¬Enters(fm t, inp t)
 ```
 
 `L = 256·L_px` は [縦の土管に入る](a-4-PipeEntry-ja.md) の `windowP` です。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/PipeEntryRule.lean`、非公開の `Proof/PipeEntryRule.lean`（`pipe_rule_check`、`pipe_rule_real`、`pipe_no_entry_real`）。
+Lean: `Theorems/PipeEntryRule.lean`、非公開の `Proof/PipeEntryRule.lean`（`pipe_rule_check`、`pipe_rule_real`）。`Route` が使う `pipe_no_entry_real` は [1 フレーム全部](a-5-2-PipeWrites-ja.md) と [土管までのフレームを機械から読む](a-5-5-PipeFrames-ja.md) にあります。
 
 ## しくみ
 

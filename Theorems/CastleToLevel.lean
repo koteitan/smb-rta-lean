@@ -284,12 +284,12 @@ inductive Kind where
   | lag
   deriving DecidableEq, Repr
 
-/-- the rule of one frame, from the counters before it (`a`, `p`) to the counters after it (`b`, `p'`). A frame of play follows `playStep`. On an `auto` frame the digits stay and the
-sub-counter falls, down to 0. The phase falls by 1 modulo 21 on the frames on which the timers run. -/
+/-- the rule of one frame, from the counters before it (`a`, `p`) to the counters after it (`b`, `p'`). A frame of play follows `playStep`. On the other frames the digits stay;
+a `lag` frame keeps the sub-counter too, and the rule says nothing of the sub-counter on `auto` and `setup` frames. The phase falls by 1 modulo 21 on the frames on which the timers run. -/
 def Step (q : Nat) : Kind → TS → TS → Nat → Nat → Prop
   | .play, a, b, p, p' => b = playStep q a ∧ p' = (p + 20) % 21
-  | .auto, a, b, p, p' => b.t = a.t ∧ b.sub ≤ a.sub - 1 ∧ p' = (p + 20) % 21
-  | .setup, a, b, p, p' => b.t = a.t ∧ b.sub ≤ a.sub ∧ p' = p
+  | .auto, a, b, p, p' => b.t = a.t ∧ p' = (p + 20) % 21
+  | .setup, a, b, p, p' => b.t = a.t ∧ p' = p
   | .lag, a, b, p, p' => b = a ∧ p' = p
 
 instance (q : Nat) (k : Kind) (a b : TS) (p p' : Nat) : Decidable (Step q k a b p p') := by
@@ -316,15 +316,13 @@ def Segs.kind (S : Segs) (r : Nat) : Kind :=
   else if r < S.g then .play
   else .auto
 
-/-- the segments are in order, and a change is longer than the timer's period -/
-structure Segs.Ok (q : Nat) (S : Segs) : Prop where
+/-- the segments are in order -/
+structure Segs.Ok (S : Segs) : Prop where
   z₁_ge : S.e₁ ≤ S.z₁
   z₁_lt : S.z₁ < S.c₂
-  len₁ : S.e₁ + q < S.c₂
   c₂_le : S.c₂ ≤ S.e₂
   z₂_ge : S.e₂ ≤ S.z₂
   z₂_lt : S.z₂ < S.c₃
-  len₂ : S.e₂ + q < S.c₃
   c₃_le : S.c₃ ≤ S.g
   g_le : S.g ≤ S.last
 
@@ -339,14 +337,12 @@ def seen (k : Nat → Kind) : Nat → Nat
   | n + 1 => seen k n + if k n = .lag then 0 else 1
 
 /-- the frames of a run up to its castle entry, frame `E`. `s n` and `ph n` are the counters when frame `n` begins, so `n + 1` holds what frame `n` leaves. A frame's values are those at the end of
-its routine. On a frame that runs over, that end comes after the next frame has begun, and the next frame is the `lag` frame. -/
-structure Frames (q t0 E : Nat) (S : Segs) where
+its routine. On a frame that runs over, that end comes after the next frame has begun, and the next frame is the `lag` frame. The counters before frame 0 are not fields:
+the theorems that need them take them (`hT`, `hc`), and `Route.Run` reads them from the machine when frame 0 begins. -/
+structure Frames (q E : Nat) (S : Segs) where
   kind : Nat → Kind
   s : Nat → TS
   ph : Nat → Nat
-  /-- before frame 0 -/
-  s_zero : s 0 = ⟨t0, 0⟩
-  ph_zero : ph 0 = 2
   /-- each frame follows its kind -/
   step : ∀ n, n ≤ E → Step q (kind n) (s n) (s (n + 1)) (ph n) (ph (n + 1))
   /-- each frame is a `lag` frame or has the kind of its place -/
@@ -397,7 +393,7 @@ theorem Segs.kind_ne_lag (S : Segs) (r : Nat) : S.kind r ≠ .lag := by
   repeat' split
   all_goals exact fun h => Kind.noConfusion h
 
-theorem Segs.kind_setup {q : Nat} {S : Segs} (hS : S.Ok q) (r : Nat) : S.kind r = .setup ↔ r = S.z₁ ∨ r = S.z₂ := by
+theorem Segs.kind_setup {S : Segs} (hS : S.Ok) (r : Nat) : S.kind r = .setup ↔ r = S.z₁ ∨ r = S.z₂ := by
   have h1 := hS.z₁_ge
   have h2 := hS.z₁_lt
   have h3 := hS.c₂_le
@@ -418,13 +414,13 @@ theorem Segs.kind_change₁ {S : Segs} {r : Nat} (h1 : S.e₁ ≤ r) (h2 : r < S
   rw [if_neg (by omega), if_pos h2]
   split <;> exact fun h => Kind.noConfusion h
 
-theorem Segs.kind_play₂ {q : Nat} {S : Segs} (hS : S.Ok q) {r : Nat} (h1 : S.c₂ ≤ r) (h2 : r < S.e₂) : S.kind r = .play := by
+theorem Segs.kind_play₂ {S : Segs} (hS : S.Ok) {r : Nat} (h1 : S.c₂ ≤ r) (h2 : r < S.e₂) : S.kind r = .play := by
   have := hS.z₁_ge
   have := hS.z₁_lt
   unfold Segs.kind
   rw [if_neg (by omega), if_neg (by omega), if_pos h2]
 
-theorem Segs.kind_change₂ {q : Nat} {S : Segs} (hS : S.Ok q) {r : Nat} (h1 : S.e₂ ≤ r) (h2 : r < S.c₃) : S.kind r ≠ .play := by
+theorem Segs.kind_change₂ {S : Segs} (hS : S.Ok) {r : Nat} (h1 : S.e₂ ≤ r) (h2 : r < S.c₃) : S.kind r ≠ .play := by
   have := hS.z₁_ge
   have := hS.z₁_lt
   have := hS.c₂_le
@@ -432,7 +428,7 @@ theorem Segs.kind_change₂ {q : Nat} {S : Segs} (hS : S.Ok q) {r : Nat} (h1 : S
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos h2]
   split <;> exact fun h => Kind.noConfusion h
 
-theorem Segs.kind_play₃ {q : Nat} {S : Segs} (hS : S.Ok q) {r : Nat} (h1 : S.c₃ ≤ r) (h2 : r < S.g) : S.kind r = .play := by
+theorem Segs.kind_play₃ {S : Segs} (hS : S.Ok) {r : Nat} (h1 : S.c₃ ≤ r) (h2 : r < S.g) : S.kind r = .play := by
   have := hS.z₁_ge
   have := hS.z₁_lt
   have := hS.c₂_le
@@ -441,7 +437,7 @@ theorem Segs.kind_play₃ {q : Nat} {S : Segs} (hS : S.Ok q) {r : Nat} (h1 : S.c
   unfold Segs.kind
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos h2]
 
-theorem Segs.kind_after {q : Nat} {S : Segs} (hS : S.Ok q) {r : Nat} (h : S.g ≤ r) : S.kind r = .auto := by
+theorem Segs.kind_after {S : Segs} (hS : S.Ok) {r : Nat} (h : S.g ≤ r) : S.kind r = .auto := by
   have := hS.z₁_ge
   have := hS.z₁_lt
   have := hS.c₂_le
@@ -458,9 +454,52 @@ theorem playN_sub_le {q : Nat} (hq : 1 ≤ q) (t p : Nat) : (playN q p ⟨t, 0�
     obtain ⟨k, _, _, h, _⟩ := playN_inv hq t n
     exact h
 
+/-- a frame of play never raises the digits -/
+theorem playStep_t_le (q : Nat) (a : TS) : (playStep q a).t ≤ a.t := by
+  unfold playStep
+  split
+  · show a.t - 1 ≤ a.t
+    omega
+  · exact Nat.le_refl _
+
+/-- what stays true over frames of play, from any sub-counter: `q` times the ticks, and the frames since the last tick (`q − 1 − (sub − 1)`), grow by at most 1 per frame -/
+theorem playN_drop_inv {q : Nat} (hq : 1 ≤ q) (a : TS) : ∀ p,
+    (playN q p a).t ≤ a.t ∧ q * (a.t - (playN q p a).t) + (q - 1 - ((playN q p a).sub - 1)) ≤ p + (q - 1 - (a.sub - 1))
+  | 0 => ⟨Nat.le_refl _, by simp [playN]⟩
+  | p + 1 => by
+    obtain ⟨h1, h2⟩ := playN_drop_inv hq a p
+    show (playStep q (playN q p a)).t ≤ a.t ∧
+      q * (a.t - (playStep q (playN q p a)).t) + (q - 1 - ((playStep q (playN q p a)).sub - 1)) ≤ p + 1 + (q - 1 - (a.sub - 1))
+    generalize playN q p a = b at h1 h2
+    unfold playStep
+    by_cases hz : b.sub - 1 = 0
+    · rw [if_pos hz]
+      show b.t - 1 ≤ a.t ∧ q * (a.t - (b.t - 1)) + (q - 1 - (q - 1)) ≤ p + 1 + (q - 1 - (a.sub - 1))
+      rw [hz] at h2
+      refine ⟨by omega, ?_⟩
+      by_cases ht : b.t = 0
+      · have e : a.t - (b.t - 1) = a.t - b.t := by omega
+        rw [e]
+        omega
+      · have e : a.t - (b.t - 1) = (a.t - b.t) + 1 := by omega
+        rw [e, Nat.mul_succ]
+        omega
+    · rw [if_neg hz]
+      show b.t ≤ a.t ∧ q * (a.t - b.t) + (q - 1 - (b.sub - 1 - 1)) ≤ p + 1 + (q - 1 - (a.sub - 1))
+      exact ⟨h1, by omega⟩
+
+/-- **`p` frames of play take at most `⌈p/q⌉` off the digits, whatever the sub-counter is at their start** -/
+theorem playN_drop {q : Nat} (hq : 1 ≤ q) (a : TS) (p : Nat) : a.t ≤ (playN q p a).t + ticks q p := by
+  obtain ⟨h1, h2⟩ := playN_drop_inv hq a p
+  have h3 : (a.t - (playN q p a).t) * q ≤ p + q - 1 := by
+    rw [Nat.mul_comm]
+    omega
+  have h4 : a.t - (playN q p a).t ≤ ticks q p := (Nat.le_div_iff_mul_le (by omega)).2 h3
+  omega
+
 namespace Frames
 
-variable {q t0 E : Nat} {S : Segs} (F : Frames q t0 E S)
+variable {q E : Nat} {S : Segs} (F : Frames q E S)
 
 /-- the frames of `j`: up to the castle entry, the frames on which the timers do not run, other than one in each change -/
 def j : Nat := count F.kind .lag E
@@ -492,42 +531,38 @@ theorem play_stretch (a : Nat) : ∀ d, a + d ≤ E + 1 → (∀ i, a ≤ i → 
       rw [e, ← ih]
       exact hs.1
 
-/-- frames without play: the digits stay, and each frame other than a `setup` or a `lag` frame takes one off the sub-counter, down to 0 -/
+/-- frames without play: the digits stay -/
 theorem change_stretch (a : Nat) : ∀ d, a + d ≤ E + 1 → (∀ i, a ≤ i → i < a + d → F.kind i ≠ .play) →
-    (F.s (a + d)).t = (F.s a).t ∧ ((F.s (a + d)).sub = 0 ∨
-      (F.s (a + d)).sub + seen F.kind (a + d) + count F.kind .setup a ≤ (F.s a).sub + seen F.kind a + count F.kind .setup (a + d))
-  | 0, _, _ => ⟨rfl, Or.inr (by simp only [Nat.add_zero]; omega)⟩
+    (F.s (a + d)).t = (F.s a).t
+  | 0, _, _ => rfl
   | d + 1, hn, hk => by
-    obtain ⟨ih1, ih2⟩ := change_stretch a d (by omega) (fun i h1 h2 => hk i h1 (by omega))
+    have ih := change_stretch a d (by omega) (fun i h1 h2 => hk i h1 (by omega))
     have hs := F.step (a + d) (by omega)
     have hp := hk (a + d) (by omega) (by omega)
-    rw [show a + (d + 1) = a + d + 1 from rfl]
-    generalize hx : F.kind (a + d) = x at hs hp
+    rw [show a + (d + 1) = a + d + 1 from rfl, ← ih]
+    generalize F.kind (a + d) = x at hs hp
     cases x with
     | play => exact absurd rfl hp
-    | auto =>
-      obtain ⟨h1, h2, _⟩ := hs
-      have e1 : seen F.kind (a + d + 1) = seen F.kind (a + d) + 1 := by simp [seen, hx]
-      have e2 : count F.kind .setup (a + d + 1) = count F.kind .setup (a + d) := by simp [count, hx]
-      rw [e1, e2]
-      refine ⟨by omega, ?_⟩
-      omega
-    | setup =>
-      obtain ⟨h1, h2, _⟩ := hs
-      have e1 : seen F.kind (a + d + 1) = seen F.kind (a + d) + 1 := by simp [seen, hx]
-      have e2 : count F.kind .setup (a + d + 1) = count F.kind .setup (a + d) + 1 := by simp [count, hx]
-      rw [e1, e2]
-      refine ⟨by omega, ?_⟩
-      omega
-    | lag =>
-      obtain ⟨h1, _⟩ := hs
-      have e1 : seen F.kind (a + d + 1) = seen F.kind (a + d) := by simp [seen, hx]
-      have e2 : count F.kind .setup (a + d + 1) = count F.kind .setup (a + d) := by simp [count, hx]
-      rw [e1, e2, h1]
-      exact ⟨ih1, ih2⟩
+    | auto => exact hs.1
+    | setup => exact hs.1
+    | lag => rw [hs.1]
+
+/-- no frame raises the digits -/
+theorem t_succ (n : Nat) (hn : n ≤ E) : (F.s (n + 1)).t ≤ (F.s n).t := by
+  have hs := F.step n hn
+  generalize F.kind n = x at hs
+  cases x with
+  | play => rw [hs.1]; exact playStep_t_le q _
+  | auto => exact Nat.le_of_eq hs.1
+  | setup => exact Nat.le_of_eq hs.1
+  | lag => rw [hs.1]; exact Nat.le_refl _
+
+theorem t_anti (n : Nat) : ∀ d, n + d ≤ E + 1 → (F.s (n + d)).t ≤ (F.s n).t
+  | 0, _ => Nat.le_refl _
+  | d + 1, h => Nat.le_trans (F.t_succ (n + d) (by omega)) (t_anti n d (by omega))
 
 /-- the `setup` frames so far: one when the count has passed `z₁`, one when it has passed `z₂` -/
-theorem setups (hS : S.Ok q) : ∀ n, n ≤ E + 1 →
+theorem setups (hS : S.Ok) : ∀ n, n ≤ E + 1 →
     count F.kind .setup n = (if S.z₁ < seen F.kind n then 1 else 0) + (if S.z₂ < seen F.kind n then 1 else 0)
   | 0, _ => by
     simp [count, seen]
@@ -559,12 +594,12 @@ theorem setups (hS : S.Ok q) : ∀ n, n ≤ E + 1 →
         have a2 : (S.z₂ < seen F.kind n + 1) = (S.z₂ < seen F.kind n) := propext (by omega)
         simp only [a1, a2, Nat.add_zero]
 
-/-- the phase and the frame number: only the frames on which the timers do not run move their sum -/
-theorem phase : ∀ n, n ≤ E + 1 → (F.ph n + n) % 21 = (2 + count F.kind .lag n + count F.kind .setup n) % 21
+/-- the phase and the frame number: only the frames on which the timers do not run move their sum. `hp0`: the phase before frame 0. -/
+theorem phase (hp0 : F.ph 0 = 2) : ∀ n, n ≤ E + 1 → (F.ph n + n) % 21 = (2 + count F.kind .lag n + count F.kind .setup n) % 21
   | 0, _ => by
-    simp [count, F.ph_zero]
+    simp [count, hp0]
   | n + 1, hn => by
-    have ih := phase n (by omega)
+    have ih := phase hp0 n (by omega)
     have hs := F.step n (by omega)
     generalize hx : F.kind n = x at hs
     have e1 : count F.kind .lag (n + 1) = count F.kind .lag n + if x = .lag then 1 else 0 := by simp [count, hx]
@@ -576,11 +611,11 @@ theorem phase : ∀ n, n ≤ E + 1 → (F.ph n + n) % 21 = (2 + count F.kind .la
       simp only [reduceCtorEq, if_false]
       omega
     | auto =>
-      have := hs.2.2
+      have := hs.2
       simp only [reduceCtorEq, if_false]
       omega
     | setup =>
-      have := hs.2.2
+      have := hs.2
       simp only [reduceCtorEq, if_false, if_true]
       omega
     | lag =>
@@ -596,16 +631,16 @@ theorem hE : E = S.last + F.j := by
   omega
 
 /-- the castle entry is an `auto` frame -/
-theorem kind_E (hS : S.Ok q) : F.kind E = .auto := by
+theorem kind_E (hS : S.Ok) : F.kind E = .auto := by
   rcases F.plan E (by omega) with h | h
   · exact absurd h F.runs_E
   · rw [h, F.seen_E]
     exact S.kind_after hS hS.g_le
 
-/-- **`hc`.** The grid at the castle entry. -/
-theorem hc (hS : S.Ok q) : (F.c + E) % 21 = (3 + F.j) % 21 := by
+/-- **`hc`.** The grid at the castle entry. `hp0`: the phase before frame 0. -/
+theorem hc (hS : S.Ok) (hp0 : F.ph 0 = 2) : (F.c + E) % 21 = (3 + F.j) % 21 := by
   have hk := F.kind_E hS
-  have h1 := F.phase (E + 1) (by omega)
+  have h1 := F.phase hp0 (E + 1) (by omega)
   have h2 := F.setups hS (E + 1) (by omega)
   have hg := hS.g_le
   have hz1 := hS.z₁_lt
@@ -629,8 +664,10 @@ theorem ts_of_sub_zero {x : TS} (hx : x.sub = 0) : x = ⟨x.t, 0⟩ := by
   cases x
   simp_all
 
-/-- **`hT`.** The timer at the castle entry: each stretch of play takes `⌈p/q⌉`, because each change leaves the sub-counter at 0. -/
-theorem hT (hq : 1 ≤ q) (hS : S.Ok q) : t0 ≤ F.T + (ticks q S.e₁ + ticks q (S.e₂ - S.c₂) + ticks q (S.g - S.c₃)) := by
+/-- **`hT`.** The timer at the castle entry: each stretch of play takes at most `⌈p/q⌉` (`playN_drop`), and the frames between the stretches keep the digits.
+`h0`: the digits before frame 0. -/
+theorem hT {t0 : Nat} (hq : 1 ≤ q) (hS : S.Ok) (h0 : (F.s 0).t = t0) :
+    t0 ≤ F.T + (ticks q S.e₁ + ticks q (S.e₂ - S.c₂) + ticks q (S.g - S.c₃)) := by
   have o1 := hS.z₁_ge
   have o2 := hS.z₁_lt
   have o3 := hS.c₂_le
@@ -638,8 +675,6 @@ theorem hT (hq : 1 ≤ q) (hS : S.Ok q) : t0 ≤ F.T + (ticks q S.e₁ + ticks q
   have o5 := hS.z₂_lt
   have o6 := hS.c₃_le
   have o7 := hS.g_le
-  have l1 := hS.len₁
-  have l2 := hS.len₂
   have hE' := F.seen_E
   -- the first frame of each segment
   obtain ⟨a₁, ha₁, s₁, f₁⟩ := first_at F.kind S.e₁ E (by omega)
@@ -651,26 +686,18 @@ theorem hT (hq : 1 ≤ q) (hS : S.Ok q) : t0 ≤ F.T + (ticks q S.e₁ + ticks q
   have le₂₃ : a₂ ≤ a₃ := Nat.le_of_not_lt fun h => by have := f₂ a₃ h; omega
   have le₃₄ : a₃ ≤ a₄ := Nat.le_of_not_lt fun h => by have := f₃ a₄ h; omega
   have le₄₅ : a₄ ≤ a₅ := Nat.le_of_not_lt fun h => by have := f₄ a₅ h; omega
-  -- the setup frames at the ends of the changes
-  have c₁ := F.setups hS a₁ (by omega)
-  have c₂ := F.setups hS a₂ (by omega)
-  have c₃ := F.setups hS a₃ (by omega)
-  have c₄ := F.setups hS a₄ (by omega)
-  rw [s₁, if_neg (by omega), if_neg (by omega)] at c₁
-  rw [s₂, if_pos (by omega), if_neg (by omega)] at c₂
-  rw [s₃, if_pos (by omega), if_neg (by omega)] at c₃
-  rw [s₄, if_pos (by omega), if_pos (by omega)] at c₄
   -- first stretch
-  have p₁ : F.s a₁ = playN q S.e₁ ⟨t0, 0⟩ := by
+  have p₁ : F.s a₁ = playN q S.e₁ (F.s 0) := by
     have h := F.play_stretch 0 a₁ (by omega) (fun i _ h2 => by
       have hi : i ≤ E := by omega
       have := f₁ i (by omega)
       rcases F.plan i hi with h | h
       · exact Or.inr h
       · exact Or.inl (h.trans (Segs.kind_play₁ this)))
-    simp only [Nat.zero_add, seen, Nat.sub_zero, F.s_zero, s₁] at h
+    simp only [Nat.zero_add, seen, Nat.sub_zero, s₁] at h
     exact h
-  have sb₁ : (F.s a₁).sub ≤ q := by rw [p₁]; exact playN_sub_le hq _ _
+  have t₁ := playN_drop hq (F.s 0) S.e₁
+  rw [← p₁] at t₁
   -- first change
   obtain ⟨d₂, rfl⟩ : ∃ d, a₂ = a₁ + d := ⟨a₂ - a₁, by omega⟩
   have ch₁ := F.change_stretch a₁ d₂ (by omega) (fun i h1 h2 => by
@@ -678,23 +705,18 @@ theorem hT (hq : 1 ≤ q) (hS : S.Ok q) : t0 ≤ F.T + (ticks q S.e₁ + ticks q
     rcases F.plan i (by omega) with h | h
     · rw [h]; exact fun hh => Kind.noConfusion hh
     · rw [h]; exact Segs.kind_change₁ hi.1 hi.2)
-  have z₂ : F.s (a₁ + d₂) = ⟨(F.s a₁).t, 0⟩ := by
-    obtain ⟨t1, t2⟩ := ch₁
-    have : (F.s (a₁ + d₂)).sub = 0 := by
-      rw [s₂, s₁, c₁, c₂] at t2
-      omega
-    rw [ts_of_sub_zero this, t1]
   -- second stretch
   obtain ⟨d₃, rfl⟩ : ∃ d, a₃ = a₁ + d₂ + d := ⟨a₃ - (a₁ + d₂), by omega⟩
-  have p₂ : F.s (a₁ + d₂ + d₃) = playN q (S.e₂ - S.c₂) ⟨(F.s a₁).t, 0⟩ := by
+  have p₂ : F.s (a₁ + d₂ + d₃) = playN q (S.e₂ - S.c₂) (F.s (a₁ + d₂)) := by
     have h := F.play_stretch (a₁ + d₂) d₃ (by omega) (fun i h1 h2 => by
       have hi := F.seg s₂ f₃ h1 h2
       rcases F.plan i (by omega) with h | h
       · exact Or.inr h
       · exact Or.inl (h.trans (Segs.kind_play₂ hS hi.1 hi.2)))
-    rw [s₃, s₂, z₂] at h
+    rw [s₃, s₂] at h
     exact h
-  have sb₂ : (F.s (a₁ + d₂ + d₃)).sub ≤ q := by rw [p₂]; exact playN_sub_le hq _ _
+  have t₂ := playN_drop hq (F.s (a₁ + d₂)) (S.e₂ - S.c₂)
+  rw [← p₂] at t₂
   -- second change
   obtain ⟨d₄, rfl⟩ : ∃ d, a₄ = a₁ + d₂ + d₃ + d := ⟨a₄ - (a₁ + d₂ + d₃), by omega⟩
   have ch₂ := F.change_stretch (a₁ + d₂ + d₃) d₄ (by omega) (fun i h1 h2 => by
@@ -702,22 +724,18 @@ theorem hT (hq : 1 ≤ q) (hS : S.Ok q) : t0 ≤ F.T + (ticks q S.e₁ + ticks q
     rcases F.plan i (by omega) with h | h
     · rw [h]; exact fun hh => Kind.noConfusion hh
     · rw [h]; exact Segs.kind_change₂ hS hi.1 hi.2)
-  have z₄ : F.s (a₁ + d₂ + d₃ + d₄) = ⟨(F.s (a₁ + d₂ + d₃)).t, 0⟩ := by
-    obtain ⟨t1, t2⟩ := ch₂
-    have : (F.s (a₁ + d₂ + d₃ + d₄)).sub = 0 := by
-      rw [s₄, s₃, c₃, c₄] at t2
-      omega
-    rw [ts_of_sub_zero this, t1]
   -- third stretch
   obtain ⟨d₅, rfl⟩ : ∃ d, a₅ = a₁ + d₂ + d₃ + d₄ + d := ⟨a₅ - (a₁ + d₂ + d₃ + d₄), by omega⟩
-  have p₃ : F.s (a₁ + d₂ + d₃ + d₄ + d₅) = playN q (S.g - S.c₃) ⟨(F.s (a₁ + d₂ + d₃)).t, 0⟩ := by
+  have p₃ : F.s (a₁ + d₂ + d₃ + d₄ + d₅) = playN q (S.g - S.c₃) (F.s (a₁ + d₂ + d₃ + d₄)) := by
     have h := F.play_stretch (a₁ + d₂ + d₃ + d₄) d₅ (by omega) (fun i h1 h2 => by
       have hi := F.seg s₄ f₅ h1 h2
       rcases F.plan i (by omega) with h | h
       · exact Or.inr h
       · exact Or.inl (h.trans (Segs.kind_play₃ hS hi.1 hi.2)))
-    rw [s₅, s₄, z₄] at h
+    rw [s₅, s₄] at h
     exact h
+  have t₃ := playN_drop hq (F.s (a₁ + d₂ + d₃ + d₄)) (S.g - S.c₃)
+  rw [← p₃] at t₃
   -- after the touch, up to and with the castle entry
   obtain ⟨d₆, hd₆⟩ : ∃ d, E + 1 = a₁ + d₂ + d₃ + d₄ + d₅ + d := ⟨E + 1 - (a₁ + d₂ + d₃ + d₄ + d₅), by omega⟩
   have ch₃ := F.change_stretch (a₁ + d₂ + d₃ + d₄ + d₅) d₆ (by omega) (fun i h1 h2 => by
@@ -725,10 +743,34 @@ theorem hT (hq : 1 ≤ q) (hS : S.Ok q) : t0 ≤ F.T + (ticks q S.e₁ + ticks q
     rcases F.plan i (by omega) with h | h
     · rw [h]; exact fun hh => Kind.noConfusion hh
     · rw [h, Segs.kind_after hS (by omega)]; exact fun hh => Kind.noConfusion hh)
-  have hTe : F.T = (playN q (S.g - S.c₃) ⟨(playN q (S.e₂ - S.c₂) ⟨(playN q S.e₁ ⟨t0, 0⟩).t, 0⟩).t, 0⟩).t := by
+  unfold T
+  rw [hd₆, ch₃]
+  omega
+
+/-- **Late timers.** If the timer shows `u` or less when some frame up to `E + 1` begins, the run has used at least `q · (t0 − u) − 3q` frames before the castle entry:
+the digits fall only on frames of play, by at most `⌈p/q⌉` in a stretch of `p` frames. -/
+theorem late {t0 : Nat} (hq : 1 ≤ q) (hS : S.Ok) (h0 : (F.s 0).t = t0) {n u : Nat} (hn : n ≤ E + 1) (ht : (F.s n).t ≤ u) :
+    q * (t0 - u) ≤ E + 3 * q := by
+  have h1 := F.hT hq hS h0
+  have h2 : F.T ≤ u := by
+    have h := F.t_anti n (E + 1 - n) (by omega)
+    rw [show n + (E + 1 - n) = E + 1 by omega] at h
     unfold T
-    rw [hd₆, ch₃.1, p₃, p₂, p₁]
-  exact timer_of_rule hq hTe
+    omega
+  have hE := F.hE
+  have k1 : ticks q S.e₁ * q ≤ S.e₁ + q - 1 := Nat.div_mul_le_self _ _
+  have k2 : ticks q (S.e₂ - S.c₂) * q ≤ S.e₂ - S.c₂ + q - 1 := Nat.div_mul_le_self _ _
+  have k3 : ticks q (S.g - S.c₃) * q ≤ S.g - S.c₃ + q - 1 := Nat.div_mul_le_self _ _
+  have m : q * (t0 - u) ≤ q * (ticks q S.e₁ + ticks q (S.e₂ - S.c₂) + ticks q (S.g - S.c₃)) := Nat.mul_le_mul_left q (by omega)
+  rw [Nat.mul_add, Nat.mul_add, Nat.mul_comm q (ticks q S.e₁), Nat.mul_comm q (ticks q (S.e₂ - S.c₂)), Nat.mul_comm q (ticks q (S.g - S.c₃))] at m
+  have o1 := hS.z₁_ge
+  have o2 := hS.z₁_lt
+  have o3 := hS.c₂_le
+  have o4 := hS.z₂_ge
+  have o5 := hS.z₂_lt
+  have o6 := hS.c₃_le
+  have o7 := hS.g_le
+  omega
 
 end Frames
 
@@ -753,12 +795,10 @@ theorem seen_noLag (S : Segs) : ∀ n, seen S.kind n = n
     simp [seen, h, S.kind_ne_lag]
 
 /-- the sequence with no `lag` frames: its castle entry is the frame `S.last` -/
-def Frames.noLag (q t0 : Nat) (S : Segs) : Frames q t0 S.last S where
+def Frames.noLag (q t0 : Nat) (S : Segs) : Frames q S.last S where
   kind := S.kind
   s n := (noLagC q t0 S n).1
   ph n := (noLagC q t0 S n).2
-  s_zero := rfl
-  ph_zero := rfl
   step n _ := by
     simp only [noLagC]
     generalize S.kind n = x
@@ -767,6 +807,9 @@ def Frames.noLag (q t0 : Nat) (S : Segs) : Frames q t0 S.last S where
   plan n _ := Or.inr (by rw [seen_noLag])
   runs_E := S.kind_ne_lag _
   seen_E := seen_noLag S _
+
+/-- its counters before frame 0: the digits `t0` and the phase 2, as `hT` and `hc` take them -/
+theorem Frames.noLag_zero (q t0 : Nat) (S : Segs) : ((Frames.noLag q t0 S).s 0).t = t0 ∧ (Frames.noLag q t0 S).ph 0 = 2 := ⟨rfl, rfl⟩
 
 /-! ## The frames after the castle entry
 
@@ -1321,7 +1364,8 @@ def startAt (sy : Syms) (cart : Machine) (kk : Nat) : Machine := (startPair sy c
 /-- the machine one frame before the first control -/
 def beforeStart (sy : Syms) (cart : Machine) (kk : Nat) : Machine := (startPair sy cart kk).1
 
-/-- frame 0 does not depend on the Start press: the phase, the timer and the sub-counter are the same, on frame 0 and before it. The last three are `Frames.s_zero` and `Frames.ph_zero`. -/
+/-- frame 0 does not depend on the Start press: the phase, the timer and the sub-counter are the same, on frame 0 and before it. Before frame 0 the timer shows `t0` and the phase is 2:
+the counters that `Frames.hT` and `Frames.hc` take, and the condition `Route.Run.zero` on the machine when frame 0 begins. -/
 def startOK (sy : Syms) (nm : Names) (p : Params) (cart : Machine) (kk : Nat) : Bool :=
   let (b, m) := startPair sy cart kk
   controllable sy m && phaseOf nm m == p.c0 && timerOf nm m + 1 == p.t0 && subOf nm m == p.q &&
@@ -1466,7 +1510,7 @@ structure Statement (sy : Syms) (nm : Names) (p : Params) (cart m0 : Machine) (s
   runs : ∀ r ∈ runsT, RunProp sy nm p m0 (routeWith r.1.1 r.1.2.1 r.1.2.2) r.2 0
   /-- a real run with a pause in each segment: the same, and the frames of the pauses are `lag` frames -/
   pauses : RunProp sy nm p m0 pauseRun pauseAreas pauseJ
-  /-- frame 0 does not depend on the Start press, and the counters before frame 0 are those of `Frames.s_zero`, `Frames.ph_zero` -/
+  /-- frame 0 does not depend on the Start press, and the counters before frame 0 are those that `Frames.hT` and `Frames.hc` take (`Route.Run.zero`) -/
   starts : ∀ kk ∈ startsT, phaseOf nm (startAt sy cart kk) = p.c0 ∧ timerOf nm (startAt sy cart kk) + 1 = p.t0 ∧
     timerOf nm (beforeStart sy cart kk) = p.t0 ∧ subOf nm (beforeStart sy cart kk) = 0 ∧ phaseOf nm (beforeStart sy cart kk) = 2
   /-- the frames after the castle entry follow `Flag`: every phase, the real timer, another value, the digits with fireworks -/

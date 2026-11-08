@@ -7,8 +7,9 @@
 `frame(m, i)` は入力 `i` の本物の 1 フレームです。`tr(n)` は、そのフレームの `n` 命令あとの機械です。`rt(m)` は `GameEngineSubroutine` です。`e_f` は旗のルーチンの番号です。`page(m)` は `Player_PageLoc`、`x(m)` は `Player_X_Position` です。`pg` は旗のページ、`col` は旗の列です。`w` は `RunFR` の中で `rt` を書く命令です。`T_b`、`T_s` は旗の玉と棒のタイルです。`d_C` はブロックバッファの中の旗の列の一番上の場所です。`R` はブロックバッファの行の数です。
 
 ```
-Touches(m, i)   :=  rt(m) ≠ e_f  ∧  rt(frame(m, i)) = e_f
 WriteStep(n)    :=  rt(tr(n)) ≠ e_f  ∧  rt(tr(n + 1)) = e_f
+Touches(m, i)   :=  ∃ n,  WriteStep(n)
+EndsTouch(m, i) :=  rt(m) ≠ e_f  ∧  rt(frame(m, i)) = e_f
 px(m)           :=  256·page(m) + x(m)
 L_px            :=  256·pg + 16·col − 10
 
@@ -32,8 +33,11 @@ touch_right_of_left :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pas
                        →  ∃ n j,  WriteStep(n) ∧ j < n ∧ AtEntry(tr(j)) ∧ L_px ≤ px(tr(j))
 inRange_of_pass     :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pass(n)),  pos(P₂)  →  P₀ ≤ P₂
 Run.inRange         :  ruleCheck,  Run  →  P₀ ≤ P₂(g)
+touches_of_ends     :  EndsTouch(m, i)  →  Touches(m, i)
 pole_rule_check（非公開） :  ruleCheck(sy, m₀) = true（native_decide）
 ```
+
+**訂正.** 前の `Touches` は今の `EndsTouch` でした。フレームの終わりで旗のルーチンになる、という形です。これは直接つかむ全部の場合で成り立ちません。TAS もそうです。旗のルーチン（`FlagpoleRoutine`）は同じフレームのあとで動きます。マリオが `FlagGrabY` 以下にいると、すぐに面の終わり（`GiveFPScr`）を始めます。ですから TAS の触るフレーム（フレーム 1092）は、操作のルーチンから面の終わりのルーチンになり、`e_f` で終わりません。直接つかむときの高さは `FlagGrabY` 以下です（`IsDirect`）。なので直接つかむ走りは、どれも `Run` の `touches` を満たしていませんでした。プログラムは書き込みの命令で触るフレームを数えていたので、これに気づきませんでした。今の `Touches` は、そのフレームのある命令が `e_f` を書く、という形です。定理は変わりません。証明が使っていたのはその命令だけです。前の形からは今の形が出ます（`touches_of_ends`）。
 
 `P₀ = 256·L_px` は `poleP` です。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
@@ -82,7 +86,7 @@ Lean: `Theorems/PoleEntryRule.lean`、`Theorems/PoleJoin.lean` の `Run`、非�
 
 **触るに入らないもの.**
 
-* フレームの始めですでに `rt = e_f` のフレームは `Touches` ではありません。旗をすべっているあいだは `w` が同じ値を書き直します。これは `WriteStep` でもありません。
+* 旗をすべっているあいだは、フレームのあいだずっと `rt = e_f` です。`w` は同じ値を書き直します。これは `WriteStep` ではないので、このフレームは `Touches` ではありません。
 * 添字つきの書き込みやポインタを通す書き込みで `rt` が `e_f` になるフレームは、`Touches` を満たします。しかし `Pass` の `pc(tr(n)) = w` を満たしません。ですから `Run` の仮定がこれを除きます。本物のフレームでは出ません。[縦の土管](a-5-1-PipeEntryRule-ja.md) のページのとおり、この書き込みの候補は 347 個あり、範囲は証明していません。
 
 ## 本物のフレームで確かめたこと
@@ -104,6 +108,7 @@ Lean: `Theorems/PoleEntryRule.lean`、`Theorems/PoleJoin.lean` の `Run`、非�
 * 触ったフレームは全部 `w` で書き、全部 1 回の通過の終わりです。左端より左はありません。ページを読むときの位置は、判定のルーチンの始めの位置と同じです（`pos`）。
 * 位置は、範囲の左端から 0 から 3 ピクセルと、16 から 19 ピクセルだけに出ます。これらの走りには、その全部の位置のフレームがあります。
 * `pole-join-check` は `Run` の新しいフィールドも見ます。TAS は `f = 80`、フレーム 1089 のあと `02808080` の走りは `f = 64`、TAS で A を長く押した走り（ほかの触り方、`g = 234`）は `f = 112` です。
+* 触るフレームの終わりのルーチン: TAS とフレーム 1089 のあと `02808080` の走り（どちらも直接つかむ）は面の終わり、A を長く押した走りは旗のルーチンです。`pole-frac-check` の 676 回の触り（操作できてからと、動画のフレーム 1002 から 1091 からの乱数の入力）のうち、17 回は `FlagGrabY` 以下で、ちょうどその 17 回が面の終わりで終わります。
 
 ## 前提（Lean では証明していない）
 

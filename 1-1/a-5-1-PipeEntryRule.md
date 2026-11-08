@@ -35,12 +35,11 @@ rule_on_frames      :  ruleCheck,  ∀ t,  Enters(fm t, inp t) → (∀ n, Write
                        (P₂(t) is the position at the right foot: P₂(t) = 256·px(tr(j)) + f,  0 ≤ f)
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 pipe_rule_check (private)    :  ruleCheck(sy, m₀) = true (native_decide)
-pipe_no_entry_real (private) :  the same hypotheses and the position hypotheses of `pipe_no_entry`  →  ∀ t ≤ 367,  ¬Enters(fm t, inp t)
 ```
 
 `L = 256·L_px` is `windowP` of [Entering the vertical pipe](a-4-PipeEntry.md). The theorems without the ROM use the axioms `propext`, `Classical.choice`, `Quot.sound` only.
 
-Lean: `Theorems/PipeEntryRule.lean`, private `Proof/PipeEntryRule.lean` (`pipe_rule_check`, `pipe_rule_real`, `pipe_no_entry_real`).
+Lean: `Theorems/PipeEntryRule.lean`, private `Proof/PipeEntryRule.lean` (`pipe_rule_check`, `pipe_rule_real`). `pipe_no_entry_real`, which `Route` uses, is on [the whole frame](a-5-2-PipeWrites.md) and [The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md).
 
 ## How it works
 

@@ -66,7 +66,7 @@ runs      :  6 real runs with idle frames in the three areas:  every frame follo
              T + Σ⌈Pi/q⌉ = t0,  2 frames without timers,  (c + f) mod 21 = 3 at the end
 pauses    :  a real run with a pause in each of the 5 segments:  the same, with j = 252 and 2 + j frames without timers
 starts    :  Start pressed on 5 different frames of the title:  the same phase, timer and sub-counter at frame 0;
-             before frame 0, s(0) = (t0, 0) and ph(0) = 2
+             the machine when frame 0 begins: timer t0, sub-counter 0, phase 2
 flags     :  the castle entries of phases, real, values, fireworks:  every frame up to the level change follows FlagStep,
              task(E + 1) = 2,  lim + 30 ≤ y(E + 1),  task(L) = 5,  early(L) = T + D
 flagPauses:  T = 125, a pause in task 2, in task 3, in task 4, and on the frame of the level change:  the same,  L not before the formula
@@ -83,12 +83,12 @@ The frames of a run are one sequence (`Frames`). `n` counts all frames. Frame `n
 ```
 k(n)     (t, sub) → (t', sub')                                       ph → ph'
 play     sub − 1 = 0: (t − 1, q);  otherwise (t, sub − 1)            (ph − 1) mod 21
-auto     t' = t,  sub' ≤ sub − 1                                     (ph − 1) mod 21
-setup    t' = t,  sub' ≤ sub                                         ph' = ph
+auto     t' = t                                                      (ph − 1) mod 21
+setup    t' = t                                                      ph' = ph
 lag      t' = t,  sub' = sub                                         ph' = ph
-
-start    s(0) = (t0, 0),  ph(0) = 2
 ```
+
+The rule says nothing of the sub-counter on `auto` and `setup` frames. The counters before frame 0 are not fields of `Frames`: `hT` takes `t(0) = t0` and `hc` takes `ph(0) = 2`. [The whole of 1-1](0-1-Route.md) reads them from the machine when frame 0 begins (`zero`, `read₀`).
 
 `play` is a frame of play. `auto` is a frame on which the timers run and the play routine does not: a frame of a change, or a frame from the touch to the castle. `setup` is the one frame of each change on which the timers do not run. `lag` is any other frame on which the timers do not run: a pause, or a frame that runs over.
 
@@ -107,21 +107,23 @@ plan(r) = play    r < e₁
 k(E) ≠ lag,  r(E) = last
 ```
 
-The theorems. They use the order `e₁ ≤ z₁ < c₂ ≤ e₂ ≤ z₂ < c₃ ≤ g ≤ last` and `e₁ + q < c₂`, `e₂ + q < c₃` (`Segs.Ok`).
+The theorems. They use the order `e₁ ≤ z₁ < c₂ ≤ e₂ ≤ z₂ < c₃ ≤ g ≤ last` (`Segs.Ok`).
 
 ```
 j = #{i < E : k(i) = lag},   T = t(E + 1),   c = ph(E + 1)
 
 Frames.hE :  E = last + j
-Frames.hT :  t0 ≤ T + ⌈e₁/q⌉ + ⌈(e₂ − c₂)/q⌉ + ⌈(g − c₃)/q⌉
-Frames.hc :  (c + E) mod 21 = (3 + j) mod 21
+Frames.hT   :  t(0) = t0  ⟹  t0 ≤ T + ⌈e₁/q⌉ + ⌈(e₂ − c₂)/q⌉ + ⌈(g − c₃)/q⌉
+Frames.hc   :  ph(0) = 2  ⟹  (c + E) mod 21 = (3 + j) mod 21
+Frames.late :  t(0) = t0,  n ≤ E + 1,  t(n) ≤ u  ⟹  q · (t0 − u) ≤ E + 3q
 ```
 
 The proofs:
 
 * `hE`: every frame is a `lag` frame or not, so `n = r(n) + #{i < n : k(i) = lag}`.
-* `hT`: a stretch of play has only `play` and `lag` frames, so it is `playN` (`play_stretch`). In a change the digits do not move. Each `auto` frame takes 1 off the sub-counter, and a change is longer than `q`, so the sub-counter is 0 at its end (`change_stretch`). The rest is `playN_t`.
-* `hc`: `(ph(n) + n) mod 21 = (2 + #lag + #setup) mod 21` (`phase`), and there are 2 `setup` frames up to `E` (`setups`).
+* `hT`: a stretch of play has only `play` and `lag` frames, so it is `playN` (`play_stretch`). Outside the stretches the digits do not move (`change_stretch`). From any sub-counter, `p` frames of play take at most `⌈p/q⌉` off the digits (`playN_drop`): `q` times the ticks, plus the frames since the last tick, grow by at most 1 per frame.
+* `late`: no frame raises the digits (`t_anti`), so `T ≤ u`. With `hT` and `q · ⌈p/q⌉ ≤ p + q − 1`, the frames of play are at least `q · (t0 − u) − 3q`. [Runs with the hurry-up music](0-6-4-HurryMusic.md) use it.
+* `hc`: `(ph(n) + n) mod 21 = (2 + #lag + #setup) mod 21` (`phase`, from `ph(0) = 2`), and there are 2 `setup` frames up to `E` (`setups`).
 
 On real frames the kind is read from the phase and from control (`kindOf`). A phase that stays is `lag` or `setup`; a phase that moves is `play` with control and `auto` without. The Lean checks `runs` and `pauses` test this very rule (`Step`, `Segs.kind`) on every frame.
 
@@ -202,7 +204,7 @@ The fields hold together: for any numbers with `1 ≤ lim` there is a sequence w
 
 **Inputs.** The frames ignore A, B, Up, Down, Left and Right: the routine that walks into the castle overrides the buttons. All 64 inputs on every frame give the same state in `allInputs`. Run as a program from the real entry, with `T = 360` and all 513 frames, the result is the same.
 
-**The timer's rule.** On a frame of play the sub-counter falls by 1. When it reaches 0 the timer falls by 1 and the sub-counter is set to `q`, so the timer falls by 1 every 24 frames of play. During a change of area the sub-counter falls by 1 per frame and stops at 0, and the digits do not change. A change is longer than `q`, so the sub-counter is 0 at its end. So each area ticks on its first frame of play, and `p` frames of play take `⌈p/q⌉` off the timer. That is why the sub-counter cannot differ between runs with the same `P1`, `P2`, `P3`: whatever it was when he entered a pipe falls to 0. The TAS has `⌈368/24⌉ + ⌈111/24⌉ + ⌈240/24⌉ = 31` ticks, the first on frame 0: the timer shows 400 on frame 0 and 370 at the touch. On the frame of the TAS's touch the sub-counter is 0, but the touch has already changed the routine, so no tick comes.
+**The timer's rule.** On a frame of play the sub-counter falls by 1. When it reaches 0 the timer falls by 1 and the sub-counter is set to `q`, so the timer falls by 1 every 24 frames of play. During a change of area the sub-counter falls by 1 per frame and stops at 0, and the digits do not change. A change is longer than `q`, so the sub-counter is 0 at its end. So each area ticks on its first frame of play, and `p` frames of play take `⌈p/q⌉` off the timer. That is why the sub-counter cannot differ between runs with the same `P1`, `P2`, `P3`: whatever it was when he entered a pipe falls to 0. The bound does not use this: from any sub-counter, `p` frames of play take at most `⌈p/q⌉` (`playN_drop`). The TAS has `⌈368/24⌉ + ⌈111/24⌉ + ⌈240/24⌉ = 31` ticks, the first on frame 0: the timer shows 400 on frame 0 and 370 at the touch. On the frame of the TAS's touch the sub-counter is 0, but the touch has already changed the routine, so no tick comes.
 
 **Arriving later.** `p − ⌈p/q⌉` does not fall when `p` grows, so `E + T` does not fall when a part of the run gets longer (`sum_mono`). It can stay equal: `P3 = 241` has one more frame and one more tick, so the same sum 1728. Over all parts, the smallest sum is at `(368, 111, 240)` and `(368, 111, 241)`. The three cases of `hP3` are `touch_castle` of [From control to the castle](f-5-PoleJoin.md). Another touch with `P3 = 234` and `W = 132` has the sum 1728, as the TAS does (the least measured is `W = 153`). Only `P3 = 241` with `W = 125` gives the sum 1727, so `hP3` asks for `W ≥ 126` up to `P3 = 241`. From `P3 = 242` on, `W = 125` does not lower the sum; this uses `2 ≤ q`.
 
@@ -224,11 +226,11 @@ No way was found to make `E + T + D + 107` smaller than the TAS's, or to move th
 
 * `hP1`, `hP2`, `hP3`: the parts of the route. They come from the other theorems of [the route](../docs/route-1-1.md), and they are joined in [The whole of 1-1](0-1-Route.md). A run that does not take these two pipes is not covered.
 * `hX1`, `hX2`: [the two changes](b-1-PipeTransition.md), proved for the entry states they list. A frame that runs over counts in `j`.
-* `hE`, `hT`, `hc`: in [The whole of 1-1](0-1-Route.md) these are proved from `Frames`. The assumptions are the fields of `Frames`: each frame follows `Step` and `plan`, `s(0)`, `ph(0)`, and the number of `E`. That a real run satisfies them is not proved. They are checked on every frame of 7 real runs of this page and on the TAS. Frames with a power-up, a hit or a death are not in this form; for a power-up use `level_ge_of_late`. A run restarted after a death is not covered.
+* `hE`, `hT`, `hc`: in [The whole of 1-1](0-1-Route.md) these are proved from `Frames`. The assumptions are the fields of `Frames`: each frame follows `Step` and `plan`, and the number of `E`. `t(0)` and `ph(0)` come from the condition `zero` on the machine of frame 0. That a real run satisfies them is not proved. They are checked on every frame of 7 real runs of this page and on the TAS. Frames with a power-up, a hit or a death are not in this form; for a power-up use `level_ge_of_late`. A run restarted after a death is not covered.
 * `hD`, `hL`: in [The whole of 1-1](0-1-Route.md) these are proved from `Flag`. The assumptions are the fields of `Flag`: each frame follows `FlagStep`, `task(E + 1) = 2`, the flag's height at `E`, `task(L) = 5`. That a real run satisfies them is not proved. They are checked on every frame of the listed runs. That the flag starts at the same height in every run is still read from the code; only these runs check it.
 * `T` and `c` link `Flag` to `Frames` by number. `L` is a frame that begins with task 5. That the level number changes on no other frame is read from the code and seen on the listed runs. It is not a field.
 * Frames that run over after `E`: measured only with five Hammer Brothers overwritten at the entry, with the flag in the first slot and in the last slot (26 and 66 such frames; a working program, not in the repository). No frame read at the boundary broke `FlagStep`. That is no proof for other frames that run over.
-* The counters before frame 0 are checked for 5 Start presses.
+* The timer and the phase when frame 0 begins (`zero`) are checked for 5 Start presses in Lean, and on the movie and 79 other Start presses by `hurry-check`.
 * The formula as an equality: checked on the listed states, with no input, from one route. Every input ran from one state only, with `GMerge` as a hypothesis and with the timer and the music overwritten. From the real entry that is a program's result, not a theorem. The bound does not use it.
 * The states at the pole are overwritten at the end of a real run, as in [the castle walk](f-4-CastleWalk.md). Enemies, score and other bytes of other runs are not covered.
 * Start and Select are not in the input set of the theorem. Pausing is measured, not proved. Select held was measured to change nothing.

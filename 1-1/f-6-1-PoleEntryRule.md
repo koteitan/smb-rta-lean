@@ -7,8 +7,9 @@
 `frame(m, i)` is the real frame with the input `i`. `tr(n)` is the machine `n` instructions into that frame. `rt(m)` is `GameEngineSubroutine`. `e_f` is the number of the pole's routine. `page(m)` is `Player_PageLoc`, `x(m)` is `Player_X_Position`. `pg` is the pole's page, `col` its column. `w` is the instruction in `RunFR` that writes `rt`. `T_b`, `T_s` are the tiles of the pole's ball and shaft. `d_C` is the top of the pole's column in the block buffers. `R` is the number of rows of a block buffer.
 
 ```
-Touches(m, i)   :=  rt(m) ≠ e_f  ∧  rt(frame(m, i)) = e_f
 WriteStep(n)    :=  rt(tr(n)) ≠ e_f  ∧  rt(tr(n + 1)) = e_f
+Touches(m, i)   :=  ∃ n,  WriteStep(n)
+EndsTouch(m, i) :=  rt(m) ≠ e_f  ∧  rt(frame(m, i)) = e_f
 px(m)           :=  256·page(m) + x(m)
 L_px            :=  256·pg + 16·col − 10
 
@@ -32,8 +33,11 @@ touch_right_of_left :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pas
                        →  ∃ n j,  WriteStep(n) ∧ j < n ∧ AtEntry(tr(j)) ∧ L_px ≤ px(tr(j))
 inRange_of_pass     :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pass(n)),  pos(P₂)  →  P₀ ≤ P₂
 Run.inRange         :  ruleCheck,  Run  →  P₀ ≤ P₂(g)
+touches_of_ends     :  EndsTouch(m, i)  →  Touches(m, i)
 pole_rule_check (private) :  ruleCheck(sy, m₀) = true (native_decide)
 ```
+
+**A correction.** `Touches` used to be what is now `EndsTouch`: the frame ends with the pole's routine. That is false on every direct grab, the TAS included. The flag's routine (`FlagpoleRoutine`) runs later in the same frame. It finds him at or below `FlagGrabY`, and it starts the end of the level (`GiveFPScr`). So the TAS's frame of the touch (frame 1092) goes from the control routine to the end of the level, and never ends with `e_f`. Each direct grab has its height at or below `FlagGrabY` (`IsDirect`), so no direct grab met `touches` of `Run`. The program counted touches by the instruction of the write, so it did not see this. Now `Touches` says that an instruction of the frame writes `e_f`. The theorems are the same: their proofs used only that instruction. The old form still gives the new one (`touches_of_ends`).
 
 `P₀ = 256·L_px` is `poleP`. The theorems without the ROM use the axioms `propext`, `Classical.choice`, `Quot.sound` only.
 
@@ -82,7 +86,7 @@ So only `w` writes the pole's number directly. `w` is reached only from `Flagpol
 
 **What does not count as a touch.**
 
-* A frame that already has `rt = e_f` when it begins is not `Touches`. While he slides, `w` writes the same value again. That is no `WriteStep` either.
+* While he slides, `rt = e_f` all through the frame. `w` writes the same value again. That is no `WriteStep`, so the frame is not `Touches`.
 * A frame in which an indexed write or a write through a pointer makes `rt` equal `e_f` meets `Touches`, but not `pc(tr(n)) = w` of `Pass`. So the hypotheses of `Run` leave it out. It does not occur on real frames. As [the vertical pipe's page](a-5-1-PipeEntryRule.md) says, there are 347 candidates for such a write, and their ranges are not proved.
 
 ## On real frames
@@ -104,6 +108,7 @@ A program (`pole-rule-check`).
 * Every frame that touches writes by `w`, and at the end of one pass. None is left of the left end. The position when the page is read is the position when the collision routine starts (`pos`).
 * The positions are only 0 to 3 and 16 to 19 pixels from the left end of the range. These runs have frames at all those positions.
 * `pole-join-check` also reads the new fields of `Run`: `f = 80` on the TAS, `f = 64` on frame 1089 then `02808080`, `f = 112` on the TAS with A held (another touch, `g = 234`).
+* The routine at the end of the frame of the touch: the end of the level on the TAS and on frame 1089 then `02808080` (both direct grabs), the pole's routine on the touch with A held. Of the 676 touches of `pole-frac-check` (random inputs from control and from the movie's frames 1002 to 1091), 17 are at `FlagGrabY` or lower, and exactly these 17 end with the end of the level.
 
 ## Hypotheses (not proved in Lean)
 

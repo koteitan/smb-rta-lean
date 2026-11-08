@@ -38,7 +38,7 @@ E + T + D + 107 + ((c_E − T − D) mod 21) ≤ L,  D ≥ 33          Run.hD, R
 L ≥ 1748 + j                                                   level_ge_of_parts
 ```
 
-Lean: `Run`, `Changes`, `Run.change₁`, `Run.change₂`, `Run.hE`, `Run.hT`, `Run.hc`, `Run.hD`, `Run.hL`, `Run.start`, `RoomChecks` and `level_ge_of_parts` in `Theorems/Route.lean`, and the private `route_1_1`. `#print axioms route_1_1` shows no `sorryAx`; it shows the axioms of `native_decide`.
+Lean: `Run`, `Changes`, `Run.change₁`, `Run.change₂`, `Run.hE`, `Run.hT`, `Run.hc`, `Run.s_zero`, `Run.ph_zero`, `Run.hD`, `Run.hL`, `Run.start`, `Run.roomStart`, `Changes.roomAt`, `RoomChecks` and `level_ge_of_parts` in `Theorems/Route.lean`, and the private `route_1_1`. `#print axioms route_1_1` shows no `sorryAx`; it shows the axioms of `native_decide`.
 
 ## The assumptions
 
@@ -47,30 +47,33 @@ All are fields of `Run`, so none is hidden. The page of each part explains its f
 | part | field | what it says | checked on |
 |---|---|---|---|
 | a | `pipe.fm`, `inp`, `start`, `clean`, `tiles`, `pos` | an entering frame is on real machines and starts in control; each instruction up to the write is `Clean`, each read of the right foot `TilesOK`; `P₂` is the position at the right foot's entry | 68,311 real frames, 177 entries ([One whole frame: who writes the routine byte](a-5-2-PipeWrites.md)) |
-| a | `pipe.openP`, `openB`, `speed`, `next` | the bound of the opening and the frames after it | [Entering the vertical pipe](a-4-PipeEntry.md) |
+| a | `pipe.openP`, `openB` | the bound on the position in the opening | [Entering the vertical pipe](a-4-PipeEntry.md) |
+| a | `pipe.reads`, `still` | the frames 1 to `E` are read from the real machines; the speed at control is 0 | 434,206 real frames ([The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md)) |
 | b | `chg.a₁`, `b₁`, `order₁`, `ha₁`, `hb₁`, `ctl₁` | which machines of `chg.seq` are the entry and control | `route-check` on the two runs below |
 | b | `chg.entry₁` | the condition on the state at the entry: 113 bytes, 12 bytes under a mask, the timer at least 48, the frame ended in the idle loop | 437 entries ([The change into the room without `fall`](b-3-2-PipeChangeEnd.md)) |
 | b | `chg.places₁` | on the pipe's frames, at each place of the table, the dot is under the bound and the machine has a row of the place | every frame of the pipe of 437 runs, three kinds of inputs. Not proved |
 | b | `chg.quiet₁` | at the exit no pause sound, and the song and the screen buffer are rows of the tables | fails after Start on the pipe's frames (129 of 437); true on the runs with no Start there |
 | b | `chg.noStart₁` | no Start on the frames of the game core after the pipe | a condition on the inputs; true on the TAS |
-| b | `chg.keep₁` | a `lag` frame takes nothing off `left₁` | the runs in the section below. Not proved |
-| c | `room` | the frames in the room: each frame is `Clean`, or stops him and is `ReadFrame`; the frames are read from machines | the TAS and real runs ([Joining the bonus room](c-5-RoomJoin.md), [A real frame and the horizontal model](../0-0/0-3-2-FrameModel.md)) |
+| b | `chg.paused₁` | a `lag` frame of the change ends paused (the low bit of `GamePauseStatus` is set) | 995 + 823 `lag` frames with Start, pauses on the TAS ([A `lag` frame of the change into the room](b-3-3-LagPaused.md)). Not proved |
+| b, c | `chg.first₁` | `left₁` is not 0 before control | 616 real runs ([The state at the first control in the room](c-7-2-RoomStart.md)) |
+| c | `room` | the frames in the room: each frame is `Clean`, or stops him and is `ReadFrame`; the frames are read from machines; the vertical state and stored speed at first control are read from the machine too (`vs_C`, `ab_C`), and the first machine is `chg`'s machine at control in the room (`roomCtl`) | the TAS and real runs ([Joining the bonus room](c-5-RoomJoin.md), [A real frame and the horizontal model](../0-0/0-3-2-FrameModel.md)) |
 | d | `chg.a₂`, `b₂`, `order₂`, `ha₂`, `hb₂`, `ctl₂` | which machines of `chg.seq` are the entry and control | `route-check` on the two runs below |
 | d | `chg.entry₂` | the condition on the state at the entry: 90 bytes, the screen buffer, the frame ended in the idle loop; the timer comes from the room (`ScreenPage.entry_long`) | 76 of 80 sampled entries ([The first frames of the change out of the side pipe](d-2-2-SideChangeBound.md)), and the 8 bytes more on 44 entries ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)). The ones that fail are listed below |
-| d | `chg.roomOrder`, `roomStart`, `roomSites`, `roomStay` | the condition `Room` at the first control in the room, `SiteOK` on each instruction in the room, the player's routine on each frame before the entry | 130,030 real frames and overwritten runs ([The screen's page in the room, and the long timer](d-2-4-ScreenPage.md)) |
+| d | `chg.roomOrder`, `roomRest`, `roomSites`, `roomStay` | 5 bytes at the first control in the room (the rest of `Room` from the change's rows, `Changes.roomAt`), `SiteOK` on each instruction in the room, the player's routine on each frame before the entry | 130,030 real frames and overwritten runs ([The screen's page in the room, and the long timer](d-2-4-ScreenPage.md), [The condition `Room` at the first control in the room](d-2-4-1-ScreenStart.md)); the 5 bytes can fail after Start on the pipe's frames (41 of 300), where `quiet₁` fails too |
 | d | `chg.noStart₂` | no Start on the frames of the game core after the pipe | a condition on the inputs; true on the TAS |
 | d | `chg.quiet₂` | no pause sound running at the exit | fails after Start on the pipe's frames ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)); true on the runs with no Start there |
-| d | `chg.keep₂` | a `lag` frame takes nothing off `left₂` | the runs in the section below. Not proved |
-| d, e | `chg.first₂` | `left₂` is not 0 before control | 201 real runs ([Above ground: the frames from control, one by one](e-2-SurfaceFrames.md)) |
+| d | `chg.paused₂` | a `lag` frame of the change ends paused | 46,829 frames of 264 runs with Start on the pipe's frames ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)). Not proved |
+| d | `chg.time₂`, `ctlFirst₂` | the time is not up at the exit (the timer's digits are not all 0); `b₂` is the first machine with control after the entry | 132 real runs and 75 with Start ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)); that `left₂` is not 0 before control is proved |
 | e, f | `pole` | the one-frame form above ground (`frames`), the collisions near the base, the frame that touches the pole (`touches`, `pass`, `pos`), the castle flag | real runs ([Above ground: the frames from control, one by one](e-2-SurfaceFrames.md), [Touching the pole on real frames](f-6-1-PoleEntryRule.md), [From control to the castle](f-5-PoleJoin.md)) |
 | e | `atCtl` | `pole`'s first machine is `chg`'s machine at control | how the sequence is made |
 | all | `clock`, `z₁`, `z₂` | the kind and the counters of every frame: the rule on one frame, and which frame is in which part | every frame of 7 runs, one with pauses, and of the TAS ([From the castle to 1-2](g-1-CastleToLevel.md)) |
+| all | `zero`, `read₀` | the machine when frame 0 begins: the timer shows `t0` and the phase is 2. The counters of `clock` before frame 0 are those of this machine | the TAS and 79 Start presses on the title (`hurry-check`), 5 of them in Lean (`starts` of [From the castle to 1-2](g-1-CastleToLevel.md)) |
 | all | `chg.seq`, `inp`, `next` | one sequence of real machines for both changes, numbered as `clock` numbers the frames | holds for any run by how the sequence is made |
 | all | `flag`, `L` | the condition `Good` on the real machine just after the castle entry (task 2, the flag's height, `T`, `c`), no Start up to `L`, the level number changed after frame `L` | the rule on every frame and task 5 are proved ([The star flag's rule after the castle entry](g-2-1-FlagRule.md)); the condition was checked on the TAS, the late touch, real fireworks, random inputs with no Start, and set timers |
 
-`E = C_s + c + j`, the timer's formula and the grid's formula are no longer fields of `Run`. They are proved from `clock` (`Run.hE`, `Run.hT`, `Run.hc`). `D ≥ 33` and the formula of the level change are proved from `flag` (`Run.hD`, `Run.hL`). `change₁` and `change₂` are no longer fields either. They are proved from `chg` (`Run.change₁`, `Run.change₂`). `level_ge_of_parts` also uses `2 ≤ q ≤ 90`, computed from the game's value, and the checks on the ROM `pipe_end`, `side_bound`, `side_end`, `side_start`, `RoomChecks` (`screen_facts`, `screen_timer_same`, `screen_rt`) and `flag_checked`, and that the star flag's delay is at least 6, which are private theorems and not assumptions.
+`E = C_s + c + j`, the timer's formula and the grid's formula are no longer fields of `Run`. They are proved from `clock` (`Run.hE`, `Run.hT`, `Run.hc`), with the timer and the phase before frame 0 from `zero` and `read₀` (`Run.s_zero`, `Run.ph_zero`). `D ≥ 33` and the formula of the level change are proved from `flag` (`Run.hD`, `Run.hL`). `change₁` and `change₂` are no longer fields either. They are proved from `chg` (`Run.change₁`, `Run.change₂`). `level_ge_of_parts` also uses `2 ≤ q`, computed from the game's value, and the checks on the ROM `pipe_end`, `side_bound`, `side_end`, `side_start`, `room_start`, `RoomChecks` (`screen_facts`, `screen_timer_same`, `screen_rt`, `pipe_end`, `screen_start`) and `flag_checked`, and that the star flag's delay is at least 6, which are private theorems and not assumptions.
 
-`route_1_1` does not use `Merge`, `GMerge`, `Cond` or H3: they are neither fields of `Run` nor arguments of the theorem. It does not use that six objects stay apart either: a frame that runs over is a `lag` frame, which `keep₁` and `keep₂` cover. These belong to the theorems on the exact length.
+`route_1_1` does not use `Merge`, `GMerge`, `Cond` or H3: they are neither fields of `Run` nor arguments of the theorem. It does not use that six objects stay apart either. These belong to the theorems on the exact length. But a `lag` frame is assumed to end paused (`paused₁`, `paused₂`), so a run with a `lag` frame in a change that is not a pause (such as the frame after one that runs over) is outside the theorem. On real runs the only frame of a change that runs over is the RAM clear, and the frame after it is the counted `setup` frame.
 
 By the form of `Run`, these runs are not in the theorem:
 
@@ -80,7 +83,8 @@ By the form of `Run`, these runs are not in the theorem:
 * A run with Start on the frames of the game core after the vertical pipe (`chg.noStart₁`), with a pause sound, or a song or screen buffer not in the tables, at its exit (`chg.quiet₁`), with an enemy loaded or a parser column not in the rows during the pipe's frames (`chg.places₁`), or with fire Mario at the entry (`chg.entry₁`, `chg.roomStart`).
 * A run with Start after the castle entry (`flag`). A pause only delays (80 frames for a pause of 80 frames), but that is not in Lean.
 * A run with Start on the frames of the game core after the side pipe (`chg.noStart₂`), or with a pause sound running at its exit (`chg.quiet₂`). A pause there only delays control on the runs measured, but that is not in Lean.
-* A run that does not meet `chg.entry₂` at the side pipe: the hurry-up music plays, a fireball is alive, a block object is alive, or the entry frame runs over. By the timer, the music means far more than 1748 frames, and 1-1 has only one power-up before this pipe, but neither is in Lean.
+* A run with a `lag` frame in a change that does not end paused (`chg.paused₁`, `chg.paused₂`).
+* A run that does not meet `chg.entry₂` at the side pipe: the hurry-up music plays, a fireball is alive, a block object is alive, or the entry frame runs over. For the music, a theorem of its own shows that 1-2 does not start before frame 1748 ([Runs with the hurry-up music](0-6-4-HurryMusic.md), under the one-frame hypothesis `music`). 1-1 has only one power-up before this pipe, but that is not in Lean.
 
 ## The two changes (`chg`)
 
@@ -91,29 +95,33 @@ seq(n + 1) = frame(seq n, inp n)
 r(a₁) = E_a + 1,   r(b₁) = C_r + 1,   r(a₂) = E_b + 1,   r(b₂) = C_s + 1
 entry₁ : Entry(seq a₁)                     ctl₁ : ctl(seq b₁)
 entry₂ : Entry2(0, seq a₂)                 ctl₂ : ctl(seq b₂)
-room : Room(seq b₁),  b₁ ≤ n < a₂ → (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r)
-keep₁ : a₁ ≤ n < b₁ ∧ kind(n) = lag  →  left₁(seq n) ≤ left₁(seq(n + 1))
+roomRest : RestAt(seq b₁),  b₁ ≤ n < a₂ → (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r)
+paused₁ : a₁ ≤ n < b₁ ∧ kind(n) = lag  →  Paused(seq(n + 1))
+first₁ : a₁ ≤ n < b₁  →  left₁(seq n) ≠ 0
 places₁ : a₁ ≤ n < b₁ ∧ inPipe(seq n)  →  ∀ j, Places(trₙ(j))
 noStart₁ : a₁ ≤ n < b₁ ∧ coreFrame(seq n)  →  inp n has no Start
 quiet₁ : a₁ ≤ n ≤ b₁ ∧ ExitAt(seq n)  →  Quiet ∧ Song ∧ Shape (seq n)
-keep₂ : a₂ ≤ n < b₂ ∧ kind(n) = lag  →  left₂(seq n) ≤ left₂(seq(n + 1))
+paused₂ : a₂ ≤ n < b₂ ∧ kind(n) = lag  →  Paused(seq(n + 1))
 noStart₂ : a₂ ≤ n < b₂ ∧ coreFrame(seq n)  →  inp n has no Start
 quiet₂ : a₂ ≤ n ≤ b₂ ∧ ExitAt(seq n)  →  Quiet(seq n)
-first₂ : a₂ ≤ n < b₂  →  left₂(seq n) ≠ 0
+time₂ : a₂ ≤ n ≤ b₂ ∧ ExitAt(seq n)  →  Time(seq n)          ctlFirst₂ : a₂ ≤ n < b₂  →  ¬ctl(seq n)
 ```
 
 From these:
 
 ```
 E_a + 91 ≤ C_r                                               Run.change₁, by PipeRun.bound with pipe_end
-timer(seq a₂) ≥ 160                                          ScreenPage.entry_long, from room and RoomChecks
+Room(seq b₁)                                                 Changes.roomAt, from PipeRun.inRows and screen_start
+timer(seq a₂) ≥ 160                                          ScreenPage.entry_long, from Room and RoomChecks
+StartAt(room.fm room.C)                                      Run.roomStart, from pipe_end and room_start
 ─────────────────────────────────────────
+a₂ ≤ n < b₂ → left₂(seq n) ≠ 0                              EndRun.first, from time₂ and ctlFirst₂
 E_b + 282 ≤ C_s                                              Run.change₂, by EndRun.bound with side_bound and side_end
 ```
 
 `left` is read at the frame boundary. A frame whose routine runs over ends in the middle of the routine, and the next frame is the `lag` frame.
 
-**What a `lag` frame does to `left`: nothing.** In each change, among the frames where the interval timer's phase stays, `left` falls on one frame only, and that frame is `setup`. It is counted, and `z₁`, `z₂` are its number. On every other such frame `left` stays. `change-scenes` shows this from real entries, for no input, random inputs, Start pressed twice, and six objects written at a frame so that frames run over:
+**What a `lag` frame does to `left`: nothing.** `keep₁` and `keep₂` are no longer assumed: from a `lag` frame ending paused (`paused₁`, `paused₂`) the check on the ROM proves that `left` does not fall. The measurements below are the earlier ones. In each change, among the frames where the interval timer's phase stays, `left` falls on one frame only, and that frame is `setup`. It is counted, and `z₁`, `z₂` are its number. On every other such frame `left` stays. `change-scenes` shows this from real entries, for no input, random inputs, Start pressed twice, and six objects written at a frame so that frames run over:
 
 | change | runs | frames | runs that ran over | `lag` frames | `lag` frames where `left` falls | frames where `left` falls by 2 or more | least frames to control, without `lag` |
 |---|---|---|---|---|---|---|---|

@@ -38,7 +38,7 @@ rule_on_frames      :  ruleCheckG,  ∀ t,  Enters(fm t, inp t) → FrameStart(f
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 tiles_of_steps      :  TilesAll(s(0)),  (∀ k < N,  TileStep(s(k), s(k + 1)))         →  ∀ k ≤ N,  TilesOK(s(k))
 pipe_frame_check (private)   :  ruleCheckG(sy, m₀) = true (native_decide)
-pipe_no_entry_real (private) :  start, clean, tiles, pos and the position hypotheses of `pipe_no_entry`  →  ∀ t ≤ 367,  ¬Enters(fm t, inp t)
+pipe_no_entry_real (private) :  start, clean, tiles, pos,  openP, openB,  the frames read from the machines ([item 1-1-a-5-5](a-5-5-PipeFrames.md)),  Enters(fm E, inp E)  →  367 < E
 ```
 
 The theorems with no ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.

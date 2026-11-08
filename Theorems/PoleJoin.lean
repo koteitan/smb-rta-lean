@@ -565,8 +565,8 @@ theorem take_snoc {α : Type} (w : List α) (k : Nat) (hk : k < w.length) : ∃ 
 /-- The line of the position bound, on a real run, hits included: at frame `j` at most `PA + X + 16·top·(j − N)`. This joins `Statement.after` and `hit_bound`. -/
 theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m0) (hE : 1 ≤ E) (hJ : 1 ≤ J)
-    {PA : Int} {B : Box} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat} {bits : Nat → UInt8}
-    (R : Surface sy m0 PA B T J g fr w h bits) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
+    {PA : Int} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat}
+    (R : Surface sy m0 PA T J g fr w h) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
     (j : Nat) (h1 : N + E ≤ j) (h2 : j ≤ T) (h3 : j < g) :
     (fr j).P' ≤ PA + X + 16 * (top sy : Int) * ((j - N : Nat) : Int) := by
   have hs : (0 : Int) ≤ 16 * (top sy : Int) := by omega
@@ -620,8 +620,8 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
 /-- `hB` of `grab_short`: on any frame `e` with `Pf ≤ P₂(e)`, `P₂(e) + 16·top·(T − e)` is at most `B = PA + X + 16·top·(T − N)`. -/
 theorem hB_of_line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m0) (hE : 1 ≤ E) (hJ : 1 ≤ J)
-    {PA Pf : Int} {B : Box} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat} {bits : Nat → UInt8}
-    (R : Surface sy m0 PA B T J g fr w h bits) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
+    {PA Pf : Int} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat}
+    (R : Surface sy m0 PA T J g fr w h) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
     (hP : (fr 1).P = PA) (hearly : PA + 16 * (top sy : Int) * ((N + E : Nat) : Int) < Pf)
     (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ g) (hd : e + d = T) (hPf : Pf ≤ (fr e).P₂) :
     (fr e).P₂ + 16 * (top sy : Int) * (d : Int) ≤ PA + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
@@ -1227,9 +1227,24 @@ theorem castle_after {flag : Nat → Bool} {g c n : Nat} {E : Machine}
     exact Bool.noConfusion h1
   · omega
 
-/-- for `n` frames after the touch, a direct grab behaves as a checked direct grab: `CastleWalk.Statement.anyFraction` or `otherStates` -/
-def DirectFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool) (g n : Nat) : Prop :=
-  (∃ fr ∈ fracs, FollowsTouch sy flag g (touchAt sy b (firstX sy) fr (vs.headD default)) n) ∨
+/-- the fraction of a position, as the byte `CastleWalk.atPole` writes -/
+def fracOf (P : Int) : UInt8 := (P % 256).toNat.toUInt8
+
+/-- a fraction that is a multiple of 1/16 px is one of `CastleWalk.fracs` -/
+theorem fracOf_mem {P : Int} (h : P % 16 = 0) : fracOf P ∈ fracs := by
+  obtain ⟨k, hk, hr⟩ : ∃ k : Nat, k < 16 ∧ P % 256 = 16 * (k : Int) :=
+    ⟨((P % 256) / 16).toNat, by omega, by omega⟩
+  have e : fracOf P = (16 * k).toUInt8 := by
+    unfold fracOf
+    rw [hr]
+    rfl
+  rw [e]
+  have : ∀ i : Fin 16, (16 * i.val).toUInt8 ∈ fracs := by decide
+  exact this ⟨k, hk⟩
+
+/-- for `n` frames after the touch, a direct grab behaves as a checked direct grab: with the touch's own fraction `u` (`CastleWalk.Statement.anyFraction`), or `otherStates` -/
+def DirectFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool) (g n : Nat) (u : UInt8) : Prop :=
+  FollowsTouch sy flag g (touchAt sy b (firstX sy) u (vs.headD default)) n ∨
     ∃ s ∈ vs, ∃ x ∈ grabXs sy, FollowsTouch sy flag g (touchAt sy b x bigFrac s) n
 
 /-- for `n` frames after the touch, any other touch behaves as a checked touch at another height: `CastleWalk.Statement.otherTouch` -/
@@ -1238,10 +1253,10 @@ def OtherFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool
     (touchAt sy b (colX sy - 9).toUInt8 bigFrac { (vs.headD default) with y := y + 3 }) n
 
 theorem castle_of_direct {b : Machine} {vs : List Jump.VS} {Nc lo : Nat} (C : CastleWalk.Statement sy b vs Nc lo)
-    {flag : Nat → Bool} {g c n : Nat} (hn : n + 1 ≤ Nc) (H : DirectFlag sy b vs flag g n) (hc : flag c = true) (hgc : g < c) :
+    {flag : Nat → Bool} {g c n : Nat} {u : UInt8} (hu : u ∈ fracs) (hn : n + 1 ≤ Nc) (H : DirectFlag sy b vs flag g n u) (hc : flag c = true) (hgc : g < c) :
     g + n + 1 ≤ c := by
-  rcases H with ⟨fr, hfr, H⟩ | ⟨s, hs, x, hx, H⟩
-  · exact castle_after (fun k h1 h2 => C.anyFraction fr hfr k h1 (by omega)) H hc hgc
+  rcases H with H | ⟨s, hs, x, hx, H⟩
+  · exact castle_after (fun k h1 h2 => C.anyFraction u hu k h1 (by omega)) H hc hgc
   · exact castle_after (fun k h1 h2 => by
       rw [C.otherStates s hs x hx k h1 (by omega)]
       simp
@@ -1268,20 +1283,23 @@ structure DirectWay (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (rows : Nat
   atRising : Jump.falling (a g).s = !rising
   /-- the frames before the grab, needed for a fast jump at any time and for a slow jump up to frame `t + 8` -/
   approach : ((a T).fast = true ∨ g ≤ t + 8) → ApproachCases sy m0 rows fr t q L T g (a T).fast tk
-  /-- a slow jump's grab: no castle before `Nc − 1` frames after it -/
-  flagAny : (a T).fast = false → DirectFlag sy b vs flag g (Nc - 2)
+  /-- a slow jump's grab: no castle before `Nc − 1` frames after it. The checked touch has the fraction of `P₂(g)`. -/
+  flagAny : (a T).fast = false → DirectFlag sy b vs flag g (Nc - 2) (fracOf (fr g).P₂)
   /-- a slow jump's grab, moving left on the frame before it, with the fraction below `F`: no castle before `Nc` frames after it -/
-  flagTight : (a T).fast = false → (fr (g - 1)).v₂ < 0 → (fr g).P₂ < SurfaceRun.poleP sy m0 + F → DirectFlag sy b vs flag g (Nc - 1)
+  flagTight : (a T).fast = false → (fr (g - 1)).v₂ < 0 → (fr g).P₂ < SurfaceRun.poleP sy m0 + F → DirectFlag sy b vs flag g (Nc - 1) (fracOf (fr g).P₂)
+
+/-- the castle flag of the machines, frame by frame -/
+def flagOf (sy : Syms) (seq : Nat → Machine) (j : Nat) : Bool := castle sy (seq j)
 
 /-- What a real run gives, with frames counted from control above ground: `fr j` is frame `j` after control (`fr 1` the first frame), read from the machines `seq`: `seq j` is the machine at the end
-of the counted frame `j`, so `seq 0` is the machine at control. `g` is the frame he touches the pole, `c` the frame of the castle entry, `flag` the castle flag per frame. On frame `g` only the
+of the counted frame `j`, so `seq 0` is the machine at control. `g` is the frame he touches the pole, `c` the frame of the castle entry. The castle flag is read from the machines (`flagOf`). On frame `g` only the
 fields of `fr g` up to `P₂` are the real frame's: the touch moves him, and that is not a `Frame`. `B.m` is the machine of the private proof at control. Every field is a hypothesis of the theorem:
-none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `pass` and `pos` (`Run.inRange`). -/
+none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `pass` and `pos` (`Run.inRange`).
+That the fraction of `P₂(g)` is a multiple of 1/16 px is a theorem from `fracStep` (`Run.frac`), and that the castle entry is after the touch is one from `noCastle` (`Run.afterTouch`). -/
 structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc : Nat) (F : Int) where
   fr : Nat → Frame (top sy) (amax sy m0)
   g : Nat
   c : Nat
-  flag : Nat → Bool
   /-- the machines -/
   seq : Nat → Machine
   touchY : UInt8
@@ -1289,6 +1307,8 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   one_le : 1 ≤ g
   /-- the frames: read from the machines; each one from a clean state follows `hstep`, up to a hit; the ones before `J` run the collision routine as on the machine at control -/
   frames : SurfaceFrames.OnFrames sy m0 B T J g seq fr
+  /-- each frame before the touch moves the position by a multiple of 1/16 px: only the move writes the fraction, and it adds `16·v₂` -/
+  fracStep : ∀ j, 1 ≤ j → j < g → ((fr j).P' - (fr j).P) % 16 = 0
   /-- the machine when frame `g` begins, and its input -/
   fm : Machine
   inp : UInt8
@@ -1301,14 +1321,23 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   pos : ∀ n j, PoleEntryRule.WriteStep sy fm inp n → j < n →
     PoleEntryRule.AtEntry (PoleEntryRule.spots sy m0) (PipeEntryRule.trace fm inp j) →
     ∃ f : Int, 0 ≤ f ∧ (fr g).P₂ = 256 * (PoleEntryRule.px (PoleEntryRule.spots sy m0) (PipeEntryRule.trace fm inp j) : Int) + f
-  /-- the castle entry comes after the touch -/
-  atCastle : flag c = true
-  afterTouch : g < c
+  /-- the castle entry: the machine at the end of frame `c` has the castle flag -/
+  atCastle : castle sy (seq c) = true
+  /-- up to the touch no machine has the castle flag: only the end of the level sets it, and that routine comes after the pole's -/
+  noCastle : ∀ j, j ≤ g → castle sy (seq j) = false
   /-- a direct grab -/
   direct : IsDirect sy touchY touchRising →
-    ∃ q L T' a tk, DirectWay sy m0 b vs B.rows fr flag T Nc F g touchY touchRising q L T' a tk
+    ∃ q L T' a tk, DirectWay sy m0 b vs B.rows fr (flagOf sy seq) T Nc F g touchY touchRising q L T' a tk
   /-- any other touch: no castle for the frames that could matter -/
-  other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs flag g (Nc + 5)
+  other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs (flagOf sy seq) g (Nc + 5)
+
+/-- **The castle entry comes after the touch**: up to the touch no machine has the castle flag. -/
+theorem Run.afterTouch {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F) : R.g < R.c := by
+  by_cases h : R.c ≤ R.g
+  · have h1 := R.noCastle R.c h
+    rw [R.atCastle] at h1
+    exact absurd h1 (by decide)
+  · omega
 
 /-- the frames up to the touch follow each other: they are read from the machines -/
 theorem Run.next {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F) :
@@ -1323,6 +1352,40 @@ theorem Run.startP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F
 theorem Run.startV {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (st : SurfaceFrames.Start sy B (R.seq 0)) : (R.fr 1).v = 0 :=
   SurfaceFrames.start_v hN R.frames R.one_le st
+
+/-- the fraction of the position at control is a multiple of 1/16 px -/
+def fracCheck (sy : Syms) (m : Machine) : Bool := decide (posP sy m % 16 = 0)
+
+/-- **The fraction is a multiple of 1/16 px** on each frame up to the touch: it is one at control (`fracCheck` on the machine `B.m`, `Start.P`), and each frame keeps it (`fracStep`). -/
+theorem Run.fracP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) : ∀ j, 1 ≤ j → j ≤ R.g → (R.fr j).P % 16 = 0 := by
+  have h0 : posP sy B.m % 16 = 0 := by simpa [fracCheck] using hq
+  intro j
+  induction j with
+  | zero => intro h; omega
+  | succ i ih =>
+    intro _ hi
+    by_cases h1 : i = 0
+    · subst h1
+      rw [R.startP st]
+      exact h0
+    · have hn := R.next i (by omega) (by omega)
+      have hs := R.fracStep i (by omega) (by omega)
+      have ih' := ih (by omega) (by omega)
+      rw [hn.2.2]
+      omega
+
+/-- at the touch, `P₂` too: the move adds `16·v₂` -/
+theorem Run.frac {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) : (R.fr R.g).P₂ % 16 = 0 := by
+  have h1 := R.fracP st hq R.g R.one_le (Nat.le_refl _)
+  have h2 := (R.fr R.g).move
+  omega
+
+/-- so the checked touch with the fraction of `P₂(g)` is one of `CastleWalk.fracs` -/
+theorem Run.frac_mem {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) : fracOf (R.fr R.g).P₂ ∈ fracs :=
+  fracOf_mem (R.frac st hq)
 
 /-- A touch needs his position in the pole's range: `PoleEntryRule.inRange_of_pass` on frame `g`. -/
 theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (hc : PoleEntryRule.ruleCheck sy m0 = true) (R : Run sy m0 b vs B T J Nc F) :
@@ -1428,7 +1491,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleEntryRule.ruleCheck sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hd : IsDirect sy R.touchY R.touchRising) :
+    (hfq : fracCheck sy (above m0 n) = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hd : IsDirect sy R.touchY R.touchRising) :
     T + 7 ≤ R.g ∧ (R.g ≤ T + 8 → R.g + Nc ≤ R.c) ∧ R.g + Nc ≤ R.c + 1 := by
   have H := numbers_of_check hn
   obtain ⟨q, L, T', a, tk, W⟩ := R.direct hd
@@ -1465,7 +1528,8 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
         (posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int)) T H.hPs H.hfar (by omega)
         (fun e d h1 h2 h3 h4 => hB_run Fa S H R A e d (by omega) (by omega) h3 h4) hnx hv hA hr hg
       omega
-    · have h0 := castle_of_direct C (n := Nc - 2) (by omega) (W.flagAny hfa) R.atCastle R.afterTouch
+    · have hu := R.frac_mem A.2 hfq
+      have h0 := castle_of_direct C (n := Nc - 2) hu (by omega) (W.flagAny hfa) R.atCastle R.afterTouch
       refine ⟨by omega, fun hg8 => ?_, by omega⟩
       have hA0 := W.approach (Or.inr hg8)
       have hA := approach_of_cases hp hm H.hd hf hk hr' hA0 (hbase hA0.order.1 hA0.order.2)
@@ -1476,7 +1540,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
         (fun j h3 h4 => hnx j h3 (by omega)) (fun j h3 h4 => hv j h3 (by omega)) hA' (by omega) hin'
       have e1 : R.g - 1 = T' + 1 := by omega
       have h3 := W.flagTight hfa (by rw [e1]; exact h1) (by rw [hr]; exact h2)
-      have h4 := castle_of_direct C (n := Nc - 1) (by omega) h3 R.atCastle R.afterTouch
+      have h4 := castle_of_direct C (n := Nc - 1) hu (by omega) h3 R.atCastle R.afterTouch
       omega
 
 /-- **The castle entry is at least `T + 7 + Nc` frames after control above ground.** With the numbers of the private proof, `366 ≤ c`. -/
@@ -1484,10 +1548,10 @@ theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleEntryRule.ruleCheck sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) : T + 7 + Nc ≤ R.c := by
+    (hfq : fracCheck sy (above m0 n) = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) : T + 7 + Nc ≤ R.c := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc R A hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc hfq R A hd
     by_cases hg : R.g ≤ T + 8
     · have := h2 hg
       omega
@@ -1502,11 +1566,11 @@ theorem touch_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N 
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleEntryRule.ruleCheck sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) :
+    (hfq : fracCheck sy (above m0 n) = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) :
     (T + 1 ≤ R.g ∧ R.g + Nc + 6 ≤ R.c) ∨ (T + 7 ≤ R.g ∧ R.g ≤ T + 8 ∧ R.g + Nc ≤ R.c) ∨ (T + 9 ≤ R.g ∧ R.g + Nc ≤ R.c + 1) := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc R A hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc hfq R A hd
     by_cases hg : R.g ≤ T + 8
     · exact Or.inr (Or.inl ⟨h1, hg, h2 hg⟩)
     · exact Or.inr (Or.inr ⟨by omega, h3⟩)

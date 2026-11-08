@@ -2,7 +2,7 @@
 
 # 地上への切り替えの最後のフレーム
 
-**主張.** これは部分的な結果です。出口の 1 つの状態についての条件を満たす機械は、次の 121 フレームのあいだ操作できません。入力は、ゲームコアのフレームで Start を押さないものなら何でもかまいません。切り替えのはじめのフレームと合わせると、仮定 `fallAfter` がなくなります。そのような入力の走りは、入ってから操作できるまで、数えるフレームで 282 以上かかります。
+**主張.** これは部分的な結果です。出口の 1 つの状態についての条件を満たす機械は、次の 121 フレームのあいだ操作できません。入力は、ゲームコアのフレームで Start を押さないものなら何でもかまいません。切り替えのはじめのフレームと合わせると、仮定 `fallAfter` がなくなります。そのような入力の走りは、入ってから操作できるまで、数えるフレームで 282 以上かかります。切り替えのあいだ、ポーズで終わるフレームは `left` を減らしません。出口でゲームタイマーが 000 でなく、音のポーズのフラグが 0 なら、入ってから最初に操作できるまで `left` は 0 になりません。
 
 `m₀`、`run`、`ctl`、`0^k`、`E`、`T = run(E, 0^160)` は[地上への切り替えの長さを決めるもの](d-2-1-SideTransitionAll-ja.md)と同じです。`EntryCond`、`During`、`left`、`frame(m, i)` は[地上への切り替えのはじめのフレーム](d-2-2-SideChangeBound-ja.md)と同じです。`m[b]` は `m` のバイト `b` です。
 
@@ -26,7 +26,14 @@
 
 **`During` の終わりがこの条件にどうつながるか.** `Entry2(M)` は `EntryCond(M)` と、さらに 8 バイト `X` が `E` と同じ値であることです。`AreaPointer`、`EntrancePage`、`CurrentPlayer`、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaNumber`、`PrimaryHardMode`、`NoteLengthTblAdder` です。`During2(m)` は、これらのバイトも知っている `During(m)` です。土管のフレームがこれらを変えないことは確認が示します。タイマーが切れるフレームは、音のポーズの 2 バイトを除く `Kx` の全部と、`GamePauseStatus` の下のビットを出します。`Quiet(m)` は、その 2 バイトが `T` の値（0）であることです。Start を押すと、ポーズの音が鳴るあいだこれらは変わります。`Quiet` は証明していません。出口の状態についての仮定です。
 
-`NoStart(m, i)` は、`m` がゲームコアで土管以外のルーチンなら入力 `i` に Start がないことです。`InRows(m)` は、`m` が下の段の抽象状態のどれかに含まれることです。
+`NoStart(m, i)` は、`m` がゲームコアで土管以外のルーチンなら入力 `i` に Start がないことです。`InRows(m)` は、`m` が下の段の抽象状態のどれかに含まれることです。`InRowsT(m)` は、`m` が下の「時間の段」の抽象状態のどれかに含まれることです。
+
+```
+Time(m)    :=  m[PauseModeFlag] = 0  ∧  ( m[GameTimerDisplay], m[GameTimerDisplay + 1], m[GameTimerDisplay + 2] ) ≠ ( 0, 0, 0 )
+Paused(m)  :=  m[GamePauseStatus] & 1 = 1
+```
+
+`Time` は、出口で時間が切れていないことです。`Paused` は、フレームがポーズで終わることです。
 
 ```
 entry      :  ∀ M,  Entry2(M) → EntryCond(M)
@@ -36,14 +43,28 @@ step       :  ∀ m, During2(m) → ∀ i :  During2(frame(m, i))  ∨  ( Exit(f
 atExit     :  ∀ m,  ExitCond(m) → InRows(m)
 leftExit   :  ∀ m,  ExitCond(m) → left(m) = 122
 rows       :  ∀ m, InRows(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  ( InRows(frame(m, i))  ∧  left(m) ≤ left(frame(m, i)) + 1 )
+duringLeft :  ∀ m,  During2(m) → left(m) ≠ 0
+stepT      :  ∀ m, During2(m) → ∀ i :  During2(frame(m, i))  ∨  ( Exit(frame(m, i))  ∧  ( Quiet(frame(m, i)) ∧ Time(frame(m, i)) → InRowsT(frame(m, i)) ) )
+rowsT      :  ∀ m, InRowsT(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  InRowsT(frame(m, i))
+zeroT      :  ∀ m,  InRowsT(m) ∧ left(m) = 0 → ctl(m)
+pauseKeeps :  ∀ m, During2(m) → ∀ i,  Paused(frame(m, i)) ∧ During2(frame(m, i)) → left(m) ≤ left(frame(m, i))
+rowsNotPaused :  ∀ m,  InRows(m) → ¬Paused(m)
 no_control_exit :  ExitCond(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 122, ¬ctl(sⱼ)
 EndRun.fall     :  `EndRun` のフィールドを持つ走りの、はじめて left = 0 になるより前のフレームで :  left(seq n) ≤ left(seq (n+1)) + 1
 EndRun.bound    :  `EndRun` のフィールドを持つ走りについて :  cnt(a) + 282 ≤ cnt(b)
+EndRun.first    :  `EndRun` のフィールドを持つ走りで、(∀ n ∈ [a, b],  Exit(seq n) → Time(seq n))  ∧  (∀ n ∈ [a, b),  ¬ctl(seq n))
+                   →  ∀ n ∈ [a, b),  left(seq n) ≠ 0
 ```
 
-`Exit(m)` は、はじめのフレームのページと同じです。`EndRun` のフィールドは `ChangeRun` のフィールドから `fallAfter` を除いたものです。入るときの条件は `Entry2` です。`noStart` と `quiet` が増えます。`lagKeeps` は残ります。
+`Exit(m)` は、はじめのフレームのページと同じです。`EndRun` のフィールドは `ChangeRun` のフィールドから `fallAfter` を除いたものです。入るときの条件は `Entry2` です。`noStart` と `quiet` が増えます。`lagKeeps` は `lagPaused` に変わりました。
 
-Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe_of_walk`、`link_frame`、`chain_step`、`exit_cover`、`during_step`、`EndStatement`、`endStatement_of_check`、`no_control_exit`、`EndRun`、`EndRun.fall`、`EndRun.bound`）、非公開の `side_end_checks`（`native_decide`）、`side_end`、`side_exit_no_control`、`side_change_end`。
+```
+lagPaused  :  ∀ n ∈ [a, b),  lag(n) → Paused(seq (n + 1))
+```
+
+`EndRun.first` の 2 つの仮定は、`Route` の `chg.time₂` と `chg.ctlFirst₂` です。`EndRun.first` が `chg.first₂`（操作の前に `left` は 0 にならない）を置き換えます。
+
+Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe_of_walk`、`link_frame`、`chain_step`、`exit_cover`、`during_step`、`sim_normD`、`link_frameD`、`chain_stepD`、`ctl_of_zero`、`TimeOK`、`timeRows`、`InRowsT`、`Paused`、`pause_keeps`、`not_paused_rows`、`EndStatement`、`endStatement_of_check`、`no_control_exit`、`EndRun`、`st_step_paused`、`EndRun.fall`、`EndRun.bound`、`EndRun.first`）、非公開の `side_end_checks`（`native_decide`）、`side_end`、`side_exit_no_control`、`side_change_end`。
 
 ## しくみ
 
@@ -52,6 +73,10 @@ Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe
 **RAM を消すフレーム.** 出口の状態からは、消す繰り返しに着くときのドットは区間でしかわかりません。音のルーチンの時間が、わからないバイトで変わるからです。ですから、フレームが終わる場所は繰り返しの中に 1,904 か所あります（フラグが 0 でなければ 774 か所）。どの場所でも `left` のキーはその段の値です。繰り返しは `ScreenRoutineTask` を消し終え、`GameEngineSubroutine` にはまだ着いていません。次のフレームはこれらすべての場所から始まります。探索は繰り返しの回の順に進むので、道は 1 つにまとまります。このフレームは 6,905 ステップです。
 
 **段.** 消したあとは 2,048 バイトのうち 1,769 バイトがわかっています。消されないバイトは `ExitCond` から来るか、自由です。1 フレームは 1 つの段の状態から次の段の状態へ進みます。全部で 123 段で、`left` は 122 から 0 まで減ります。最後の段には、操作できる状態と、タイムアップの道の状態があります。ゲームタイマーの数字が自由だからです。どちらも `left` は 0 です。
+
+**時間の段.** 最後の段の時間切れの状態をなくすため、もう 1 組の段 `timeRows` を作ります。始まりはフラグ 0 の段の状態で、`dg` は「ゲームタイマーの 3 つの数字は全部 0 ではない」を表します。最後のフレームで時間を確かめる命令は、数字の 1 つのビットが 1 の 24 個に分けます。ですから時間切れの道はなくなります。入るときの準備のフレームは、`FetchNewGameTimerFlag` が 0 でなければタイマーを面の値にします。この道は数字に書くので `dg` がなくなります。探索はこのフラグを分けたままにします。フレームの終わりでは、1 と知っているビットを持つ数字から `dg` を戻します（`normD`、`sim_normD`）。ですから 2 つの道はまた 1 つになります。この段の確認は `chainOKD` です。`left` が 0 の段の状態はどれも操作できます（`zeroCtl`）。出口の状態が `Quiet` と `Time` を満たせば、この段に入ります（`stepT`）。
+
+**ポーズで終わるフレーム.** ポーズで終わるフレームは、タイマーもモードのルーチンも動かしません。土管のフレームを、ポーズのビットを分けて読み、ポーズのバイトを分けたままにして、もう一度歩きます（`pauseCheck`）。カウンタが減った終わりの状態は、どれもビットが 0 と知っています（`finRkP`）。ですから、ポーズで終わる土管のフレームはカウンタを減らさず、`left` も減りません（`pause_keeps`）。段の状態はどれもビットが 0 と知っています（`notPausedRows`）。ですから段のフレームはポーズで終わりません。`lag` のフレームがポーズで終わるなら、`lag` のフレームは `left` を減らしません（`st_step_paused`）。
 
 **音のポーズのフラグの 2 つの場合.** RAM を消しても `PauseModeFlag` は変わりません。0 でなければ、次に Start を押すまで音のルーチンは動かず、曲も始まりません。ですから段は 2 組あります。2 組目は、フラグが 0 でないという事実（`dg`）を使います。
 
@@ -63,8 +88,10 @@ Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe
 | 土管の 1 フレーム、タイマー = 1 | 90,308 |
 | 段、フラグ 0 | 682,944 |
 | 段、フラグ 0 でない | 691,797 |
+| 時間の段 | 684,535 |
+| 土管の 1 フレーム、タイマー ≥ 2、ポーズのビットを分ける | 252,566 |
 
-プログラムで約 5 秒、非公開の証明のビルドで約 13 秒です。
+プログラムで約 9 秒（前は約 6 秒）、非公開の証明のビルドで約 11 秒（前は約 6 秒）です。
 
 ## Start を除く理由
 
@@ -86,6 +113,9 @@ Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe
 * ゲームタイマーの数字を 100 の近くに書き換えた乱数の走りでは、5 個のうち 4 個が `EntryCond` を満たし、`Entry2` を満たすものはありません。急ぎの音楽が `NoteLengthTblAdder` を変えています。そのような走りは 1748 フレームよりずっと多く使っています（タイマーの計算で、Lean にしていません）。
 * `ChangeRun` の `fallAfter` は成り立たない状態があります。`E` でゲームタイマーを 000 に書き換えると `EntryCond` は成り立ち、フレーム 800 で操作できるまでに、`left` が 2 以上減るフレームが 4 個あります（たとえば 116 から 0）。ですから `EndRun.fall` ははじめての `left = 0` までで止まり、`EndRun.bound` はそのあとのフレームを使いません。
 * 出口のあとでタイマーが動かないフレームは、RAM を消すフレームの次のフレームだけです。`Frames` の `setup` のフレームです。これは 1 つの走りで 1 個という数からの読みです。
+* 上の 132 の走り（入力なし、乱数、Start ははじめの 80 フレームだけ）で、出口で `Time` が成り立ちます。操作の前に `left` が 0 になるフレームはありません。
+* 44 の入る状態から、土管のフレームで Start を乱数で押し、そのあと Start なしで操作まで動かしました（264 回）。出口で音のポーズのフラグが 0 でないのは 189 回で、どれも `ExitCond` を満たしません。`ExitCond` を満たす 75 回では、どれも `Time` が成り立ちます。土管のフレームでタイマーが動かないフレームは 46,829 個で、どれもポーズで終わります。ポーズで終わる土管のフレームで `left` が減るものはありません。出口のあとでタイマーが動かないフレームは 75 個（1 回に 1 個の `setup` のフレーム）で、ポーズで終わるものはありません。
+* 入る状態のゲームタイマーを 000 に書き換えると、出口で `Time` は成り立たず、`left` が 0 になるフレーム 282 で操作できません（ルーチンは死）。001 に書き換えると `Time` が成り立ち、フレーム 282 で操作できます。
 
 **縦の土管の最後のフレーム.** 同じ道具で地下への切り替えを測りました。
 
@@ -102,12 +132,14 @@ Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe
 * 本物の走りの入る状態での `Entry2`、または出口での `ExitCond`。バイト `X` はコードから読みました。部屋が準備されたあと、部屋の中で書くものはありません。`NoteLengthTblAdder` は急ぎの音楽のあとは成り立ちません。項目 1-1-d-2-5 です。
 * `Quiet`。出口でポーズの音が鳴っていないことです。測った走りでは、土管の最後のほうのフレームで Start を押すと成り立ちません。そのような走りでも `left` はちょうど 1 ずつ減ります。これは測っただけです。
 * `NoStart`。土管のあとのゲームコアのフレームで Start を押さないことです。
-* `lagKeeps`。`lag` のフレームが `left` を減らさないことです。段ではどのフレームも次の段へ進みます。ですから `lagKeeps` は、段のフレームが `lag` でないことを言います。`lag` と本物のフレームのつながりは `Route` にあります。項目 1-1-d-3-2 です。
+* `lagPaused`。`lag` のフレームがポーズで終わることです。`lag` は `Frames` の記号で、機械とつながるのはこのフィールドだけです。本物の走りでは、土管のフレームでタイマーが動かないフレームはどれもポーズで終わりました。出口のあとでタイマーが動かないフレームは `setup` のフレームだけで、これは `lag` ではありません。ほかの理由でタイマーが動かない `lag` のフレームは、このフィールドに合いません。`TimerControl` が 0 でないフレームと、ハンドラがフレームからはみ出したあとのフレームです。土管のフレームについては、確認がどのフレームも待ちの繰り返しで終わることを示すので、はみ出しはありません。測った走りには、どちらもありませんでした。項目 1-1-d-3-2 です。
+* `Time`。出口でゲームタイマーが 000 でなく、音のポーズのフラグが 0 であることです。000 の走りは 400 秒を使っています。フラグについては、`Quiet` と `ExitCond` を満たす本物の出口で、フラグが 0 でないものはありませんでした。項目 1-1-d-3-5 です。
+* `b` は入ってから最初に操作できる状態であること（`Route` の `chg.ctlFirst₂`）。
 * [1-1 全体](0-1-Route-ja.md) はこの定理を使います。`Changes.run₂` は `EndRun` です。
 
 **ファイル.** `Theorems/SideChangeEnd.lean`、非公開の `Proof/SideChangeEnd.lean`。
 
 **再現.**
 ```
-.lake/build/bin/smbrta side-end-check FM2    # 確認、本物の入る状態と出口での条件、本物のフレームでの left、約 20 秒
+.lake/build/bin/smbrta side-end-check FM2    # 確認、本物の入る状態と出口での条件、本物のフレームでの left、時間とポーズ、約 50 秒
 ```

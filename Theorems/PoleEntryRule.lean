@@ -6,8 +6,8 @@ import Std.Data.TreeMap
 /-!
 # A touch of the pole, on real frames
 
-`PoleJoin.Run` had the hypothesis `inRange`: at the touch his position is in the pole's range. Its frame `g` had no link to machines. Here the touch is defined on real machines: the frame of `m` with the input `i` ends with
-the pole's routine and `m` has another routine (`Touches`). The theorem says that such a frame was at or right of the left end of the pole's range when the block buffer routine read the page for the side check
+`PoleJoin.Run` had the hypothesis `inRange`: at the touch his position is in the pole's range. Its frame `g` had no link to machines. Here the touch is defined on real machines: an instruction of the frame of `m`
+with the input `i` makes the routine byte the pole's (`Touches`). The frame need not end with the pole's routine: on a direct grab the flag's routine of the same frame starts the end of the level. The theorem says that such a frame was at or right of the left end of the pole's range when the block buffer routine read the page for the side check
 (`touch_right_of_left`), and `inRange_of_pass` gives `inRange` from that.
 
 The whole frame is not followed, as in `PipeEntryRule`. What is assumed stays on the single frame: the instruction that writes the routine byte is the collision routine's own, it comes at the end of one pass from the start
@@ -28,15 +28,19 @@ open PipeEntryRule (trace frame_trace trace_stop nxt rt findOp findStore footSta
 /-- the value of the pole's routine -/
 def vf (sy : Syms) : UInt8 := sy.EngFlagpole.toUInt8
 
-/-- **A touch.** The frame of `m` with the input `i` ends with the pole's routine, and `m` has another routine. -/
-def Touches (sy : Syms) (m : Machine) (i : UInt8) : Prop := rt sy m ≠ vf sy ∧ rt sy (frame m i) = vf sy
-
 /-- the instruction `n` of the frame makes the routine byte the pole's -/
 def WriteStep (sy : Syms) (m : Machine) (i : UInt8) (n : Nat) : Prop :=
   rt sy (trace m i n) ≠ vf sy ∧ rt sy (trace m i (n + 1)) = vf sy
 
-/-- there is such an instruction -/
-theorem writeStep_of_touches {sy : Syms} {m : Machine} {i : UInt8} (h : Touches sy m i) : ∃ n, n < fuelPerFrame ∧ WriteStep sy m i n := by
+/-- **A touch.** An instruction of the frame of `m` with the input `i` makes the routine byte the pole's. The frame need not end with the pole's routine: on a direct grab the flag's
+routine of the same frame finds him low on the pole and starts the end of the level at once. -/
+def Touches (sy : Syms) (m : Machine) (i : UInt8) : Prop := ∃ n, WriteStep sy m i n
+
+/-- a frame that ends with the pole's routine, from another routine: a touch at a height where the flag's routine does not end the level on the same frame -/
+def EndsTouch (sy : Syms) (m : Machine) (i : UInt8) : Prop := rt sy m ≠ vf sy ∧ rt sy (frame m i) = vf sy
+
+/-- such a frame has an instruction of the write -/
+theorem writeStep_of_ends {sy : Syms} {m : Machine} {i : UInt8} (h : EndsTouch sy m i) : ∃ n, n < fuelPerFrame ∧ WriteStep sy m i n := by
   have h0 : rt sy (trace m i 0) ≠ vf sy := h.1
   have h1 : rt sy (trace m i fuelPerFrame) = vf sy := by rw [← frame_trace]; exact h.2
   have key : ∀ N, rt sy (trace m i N) = vf sy → ∃ n, n < N ∧ WriteStep sy m i n := by
@@ -50,6 +54,11 @@ theorem writeStep_of_touches {sy : Syms} {m : Machine} {i : UInt8} (h : Touches 
         exact ⟨n, by omega, h3⟩
       · exact ⟨N, by omega, hN, hs⟩
   exact key _ h1
+
+/-- so it is a touch -/
+theorem touches_of_ends {sy : Syms} {m : Machine} {i : UInt8} (h : EndsTouch sy m i) : Touches sy m i := by
+  obtain ⟨n, _, hn⟩ := writeStep_of_ends h
+  exact ⟨n, hn⟩
 
 /-- before the write the frame runs: each instruction is a step -/
 theorem step_before {sy : Syms} {m : Machine} {i : UInt8} {n : Nat} (h : WriteStep sy m i n) :
@@ -627,7 +636,7 @@ the position is at or right of the left end of the pole's range. -/
 theorem touch_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : ruleCheck sy m0 = true) (he : Touches sy m i)
     (hp : ∀ n, WriteStep sy m i n → Pass (spots sy m0) (envOf m0) (trace m i) n) :
     ∃ n j, WriteStep sy m i n ∧ j < n ∧ AtEntry (spots sy m0) (trace m i j) ∧ (spots sy m0).left ≤ px (spots sy m0) (trace m i j) := by
-  obtain ⟨n, _, hw⟩ := writeStep_of_touches he
+  obtain ⟨n, hw⟩ := he
   obtain ⟨hW, n₀, h1, h2, h3, h4⟩ := hp n hw
   by_cases hx : ∃ j, j < n ∧ AtEntry (spots sy m0) (trace m i j) ∧ (spots sy m0).left ≤ px (spots sy m0) (trace m i j)
   · obtain ⟨j, a, b, c⟩ := hx

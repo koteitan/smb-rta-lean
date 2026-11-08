@@ -29,24 +29,59 @@ OneFrame(a, b) : MaskStop(a, b) ∨ (Pre(a, b) ∧ Coll(a, b))
 
 `Follow(a, b)` has the form of `RoomJoin.Follow` of [the bonus room](c-5-RoomJoin.md): `fr.hs n = hs(seq n)`, `fr.P n = P(seq n)`, and the input is `readIn`.
 
-The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`.
+## One frame on the real machine
+
+[`FrameModel.move_model`](../0-0/0-3-2-FrameModel.md) proves the movement of a real frame: from the player's routine to the scroll handler, `hs` follows `hstep` and `P` moves by `16·v₂`. So `OneFrame` is a theorem from what the frame does outside the movement.
+
+`fm j` is the machine when the counted frame `j` begins: `seq (j − 1)`, or later by `lag` frames. `pad j` is its input, and `arr j` the instruction at which it comes to the player's routine. `R` is the machine there, and `Q` the machine when the frame comes to the scroll handler. `b = frame(M, i)` is the machine at the frame's end.
 
 ```
-reads : 1 ≤ j ≤ g   →  v, f, P at the start of fr j are those of seq (j − 1)
-        1 ≤ j < g   →  v', f', P' at the end of fr j are those of seq j
-        1 ≤ j < g, Clean(seq (j − 1)), bits(seq (j − 1)) = FF  →  v₂(fr j) = v₂
-step  : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  OneFrame(seq (j − 1), seq j)
-vert  : 1 ≤ j < J, j < g  →  vs(seq j) = vstep(vs(seq (j − 1)), A, abs(seq (j − 1)))
-box   : 1 ≤ j < J, j < g  →  the collision routine does what it does on B.m at (pix P₂(j), y, w, vy, st)
-                             (y, vy, st) is vstep's result, w stands for the speed's sign
+Masked(a, b)       : bits(a) & lr ≠ lr            lr = the Left/Right that hstep reads from readIn(a, b)
+
+After(a, Q, b)     : f, fd, md of b are those of Q ∧ (RunningSpeed(b) = 0 ⟺ RunningSpeed(Q) = 0) ∧ abs(b) = |v(Q)|
+                     ∧ ( (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = FF)
+                       ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
+                       ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
+
+Moves(a, M, i, n₀) : AtCtrl(R)                                   the state at the player's routine, as FrameModel needs it
+                     ∧ the 8 horizontal bytes of R are those of a    nothing writes them from a to R
+                     ∧ the frame does not end within 728 instructions after R
+                     ∧ FrameModel.readIn(R) = readIn(a, b)           the input that the routine reads
+                     ∧ 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
+                     ∧ After(a, Q, b) at every Q at the scroll handler
+
+at_subs       : modelOK ∧ Moves  →  ∃ Q at the scroll handler, hs(Q) = t ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_moves  : modelOK ∧ Moves  →  Pre(a, b) ∧ Coll(a, b)
+one_of_frames : OnFrames ∧ Clean(seq (j − 1))  →  OneFrame(seq (j − 1), seq j)
 ```
+
+`modelOK` is the check on the ROM of `FrameModel`. It is a part of `numbersCheck` now, so the private proof computes it by `native_decide` (about 3 s more). `move_model` needs that the side he presses is not masked. A frame where it is masked (`Masked`) stays a `OneFrame` by assumption: there the routine of the friction reads the mask, and `hstep` does not.
+
+The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`. `fm`, `pad`, `arr` are data in it.
+
+```
+reads  : 1 ≤ j ≤ g   →  v, f, P at the start of fr j are those of seq (j − 1)
+         1 ≤ j < g   →  v', f', P' at the end of fr j are those of seq j
+ends   : 1 ≤ j ≤ T, j < g  →  seq j = frame(fm j, pad j)
+moves  : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1)), ¬Masked(seq (j − 1), seq j)  →  Moves(seq (j − 1), fm j, pad j, arr j)
+masked : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1)), Masked(seq (j − 1), seq j)   →  OneFrame(seq (j − 1), seq j)
+vert   : 1 ≤ j < J, j < g  →  vs(seq j) = vstep(vs(seq (j − 1)), A, abs(seq (j − 1)))
+box    : 1 ≤ j < J, j < g, Q at the scroll handler  →  from Q to seq j the collision routine does what it does
+         on B.m at (pix P(Q), y, w, vy, st)          (y, vy, st) is vstep's result, w stands for the speed's sign
+```
+
+| Field before | Now |
+|---|---|
+| `step`: every clean frame is a `OneFrame` | `moves` (the frame outside the movement), `masked` (only the frames with the pressed side masked), `ends` |
+| `reads`: `v₂(fr j) = v₂` | gone. `box` is on the real machines `Q` and `seq j`, so the frame's `v₂` is not needed |
+| `box` on `fr j` | `box` on the real machines, from the scroll handler |
 
 ## The statements about the whole run are theorems
 
 ```
 step_of_one       : Clean(a) ∧ OneFrame(a, b)  →  (Follow(a, b) ∧ Clean(b)) ∨ Hit(a, b)
 next_of_reads     : reads  →  ∀ j ∈ [1, g), Next(fr j, fr (j + 1))
-quiet_upto        : 1 ≤ j < J, j < g  →  BoxFrame(fr j) ∧ frames 1..j are Follow ∧ bits(seq j) = FF
+quiet_upto        : 1 ≤ j < J, j < g  →  frames 1..j are Follow ∧ seq 0..j are Clean ∧ bits(seq j) = FF
 surface_of_frames : OnFrames ∧ Start(B, seq 0) ∧ noHitCheck ∧ numbersCheck ∧ J ≤ T
                     →  ∃ w h, Surface(w, h)
 Run.next, Run.startP, Run.startV                                 PoleJoin
@@ -54,10 +89,9 @@ Run.next, Run.startP, Run.startV                                 PoleJoin
 
 | Assumption before | Now | From |
 |---|---|---|
-| `model`: `P'(j) ≤ P_A + d(w)` for `j < h` | theorem | `step`. `w` is the list of `readIn`, `h` the first frame that is not `Follow ∧ Clean` |
-| `hit`, `stop` | theorem | `Hit` in `step` |
-| `box` | theorem | `box`, `vert`, the bound on the distance (`dist_abs`), the search of the height (`vCheck`) |
-| `off` | theorem | `Pre`, `reads`. A frame where the routine does nothing follows `hstep` |
+| `model`: `P'(j) ≤ P_A + d(w)` for `j < h` | theorem | `one_of_frames`. `w` is the list of `readIn`, `h` the first frame that is not `Follow ∧ Clean` |
+| `hit`, `stop` | theorem | `Hit` in `OneFrame` |
+| `box`, `off`: no hit before `J` | theorem (`Surface.first : J ≤ h`) | `box`, `vert`, `moves`, the bound on the distance (`dist_abs`), the search of the height (`vCheck`) |
 | `next` | theorem | `reads`. Both ends are read from the same machine |
 | `startP`, `startV` | theorem | `Start`. Next section |
 | `mem`, `long` | theorem | `readIn_mem`, how `w` is made |
@@ -80,7 +114,7 @@ EndRun.start  : Statement ∧ EndStatement ∧ startCheck ∧ EndRun ∧ (∀ n 
 Run.start     : the same conditions, on a run of Route  Start(B, pole.seq 0)
 ```
 
-`left` is 0 only on the last row. It has 6 states, and 2 have control. The other 4 are the time-up states. The rows end where `left` is 0, so `left` must not be 0 before control (`chg.first₂`). `Route` has two new fields: `first₂` and `atCtl : pole.seq 0 = chg.seq chg.b₂`. The conditions `entry₂`, `noStart₂`, `quiet₂` of `chg` are used as `Run.change₂` uses them.
+`left` is 0 only on the last row. It has 6 states, and 2 have control. The other 4 are the time-up states. The rows end where `left` is 0, so `left` must not be 0 before control (`EndRun.first`, proved from `chg.time₂` and `chg.ctlFirst₂`). `Route` has a new field `atCtl : pole.seq 0 = chg.seq chg.b₂`. The conditions `entry₂`, `noStart₂`, `quiet₂` of `chg` are used as `Run.change₂` uses them.
 
 The last row also gives the vertical bytes, the A button and the collision bits. The main bytes it does not know are `PlayerSize` and `EventMusicQueue`.
 
@@ -90,7 +124,7 @@ When Mario is on the pixel of the screen's left edge, the scroll routine sets th
 
 * The old `Frame.impedeP` is false on real frames. A frame that runs past the edge has `v₂ = −v_top`, `P' − P₂ = 512`. Of 53,398 frames that run to the edge, 13 do this.
 * So the third case of `impedeP` is now `P' ≤ P + 256 ∧ v₂ ≤ 0` in place of `P' = P₂ + 256 ∧ v₂ ≤ 0`. `Frame.bound`, `Frame.adv_le`, `chain_reach` stay.
-* In the statement on one frame this is the second kind of `Hit`. He can stop with `v₂ > 0` too (the largest measured is 4). Then `P(b) = P₂ ≤ P(a) + 256`. He does not leave the edge's pixel fast, so this is enough. That he is not fast is not proved: it is assumed in `step`.
+* In the statement on one frame this is the second kind of `Hit`. He can stop with `v₂ > 0` too (the largest measured is 4). Then `P(b) = P₂ ≤ P(a) + 256`. He does not leave the edge's pixel fast, so this is enough. That he is not fast is not proved: it is assumed in `After` (in `moves`).
 
 ## Measured
 
@@ -130,7 +164,7 @@ So frame 1 alone closes. It is one frame of 233, and the states grow on the next
 * `step`: a real frame is a `OneFrame`. This is the job of [`FrameModel`](../0-0/0-3-2-FrameModel.md).
 * `vert`, `box`: frames 1 to 8 follow `vstep`, and the collision routine gives the same result as on the machine at control.
 * `reads`: `fr` is read from the machines. That it is a `Frame` stays an assumption of [Top speed](../0-0/0-1-TopSpeed.md).
-* `chg.first₂`, `atCtl`.
+* `chg.time₂`, `chg.ctlFirst₂`, `atCtl`.
 * `MaskStop` on a frame with Left blocked. `SurfaceRun.maskSame` covers fractions 0, 128, 255 in Lean, and this proof does not use it. All fractions were run as a program (28 s, no difference).
 
 **Files.** `Theorems/SurfaceFrames.lean`, private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`).

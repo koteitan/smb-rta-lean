@@ -42,7 +42,7 @@ B + 32 < P₀                                   Statement.gap
 P_f ≤ P₂(e),  e + d = T   →   P₂(e) + 16·v_top·d ≤ B      hB_of_line, from Statement.after and hit_bound, with hits
 ```
 
-Lean: `Theorems/PoleJoin.lean`, private `pole_join_numbers`, `pole_keep`, `pole_falls`, `pole_join`, `pole_touch`. `pole_join` applies the private `surface_run`, `castle_walk`, `jump_grab`, `pole_rules`, `top_frictionCheck`, `pole_keep` and `pole_falls`, so these do not appear in its hypotheses.
+Lean: `Theorems/PoleJoin.lean`, private `pole_join_numbers`, `pole_keep`, `pole_falls`, `pole_frac`, `pole_join`, `pole_touch`. `pole_join` applies the private `surface_run`, `castle_walk`, `jump_grab`, `pole_rules`, `top_frictionCheck`, `pole_keep`, `pole_falls` and `pole_frac`, so these do not appear in its hypotheses.
 
 ## What the join changes on the route page
 
@@ -73,6 +73,47 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 
 `fallCheck` is a search of every fall: every jump from the ground and from 1 to `rows` rows up, and every step off a block from 2 to `rows` rows up, for each fall force and each carried fraction. It counts the frames in a row with the feet inside the base's rows, and finds at most 3. After 120 frames every fall is over, so the search has no length hypothesis. Stepping off a block 1 row up gives 4 frames, so it is not in the search. `base_late` excludes it: with his feet over the base on frame `w − 1`, the position bound gives `w ≥ T + 1`, so he falls past frame `T + 1`.
 
+## The fraction and the castle flag
+
+`seq j` is the machine at the end of the counted frame `j`. `castle(m)` says that `StarFlagTaskControl` is not 0. `frac(P) = P mod 256` is the byte that `CastleWalk.atPole` writes, and `fracs` are the 16 multiples of 16 and 255.
+
+```
+fracStep        :  ∀ j,  1 ≤ j < g  →  (P'(j) − P(j)) mod 16 = 0                 (field)
+fracCheck       :  posP(B.m) mod 16 = 0                                       (pole_frac, native_decide)
+Run.fracP       :  Start(seq 0),  fracCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
+Run.frac        :  Start(seq 0),  fracCheck,  Run  →  P₂(g) mod 16 = 0
+Run.frac_mem    :  Start(seq 0),  fracCheck,  Run  →  frac(P₂(g)) ∈ fracs
+atCastle        :  castle(seq c) = true                                       (field)
+noCastle        :  ∀ j ≤ g,  castle(seq j) = false                            (field)
+Run.afterTouch  :  Run  →  g < c
+```
+
+`Run.fracP` is an induction: `P(1) = posP(B.m)` (`Run.startP`), and `P(j + 1) = P'(j)` (`Run.next`). `Run.frac` adds `P₂ = P + 16·v₂`. So the fraction that `CastleWalk.Statement.anyFraction` checks is now the fraction of the run: `flagAny` and `flagTight` name the checked touch with `frac(P₂(g))`, and `castle_of_direct` takes `frac(P₂(g)) ∈ fracs` from `Run.frac_mem`. The flag of `flagAny`, `flagTight`, `other` is `castle(seq ·)`, not a function of its own.
+
+Why `fracStep` holds, read from the code. The fraction of the position is the byte `SprObject_X_MoveForce` of the player. Only `MoveObjectHorizontally` writes it, and it adds the speed's low 4 bits times 16. The other writes of the position (`KeepOnscr` at the screen's left edge, `ImpedePlayerMove`, the climb, the vine, the platforms) write the pixel and the page only. At the left edge the move still changes the fraction by `16·v₂`, and the edge puts the pixel back.
+
+Why `noCastle` holds, read from the code. `StarFlagTaskControl` leaves 0 only in `PlayerEndLevel`, the end of the level. The star flag's object does nothing while it is 0. The end of the level comes only from `GiveFPScr` in the flag's routine, after the pole's routine is set.
+
+The fields changed:
+
+* Removed: `flag` (a function of its own), `afterTouch` (now the theorem `Run.afterTouch`).
+* Added: `fracStep`, `noCastle`. `atCastle` now reads the machine: `castle(seq c) = true`. `flagAny`, `flagTight` take the fraction of `P₂(g)`.
+* New arguments of `direct_castle`, `castle_ge`, `touch_castle`: `(hfq : fracCheck sy (above m0 n) = true)`, after `hc`.
+
+On real frames (`pole-frac-check`, after the last change, exit 0, bad 0):
+
+| run | runs | frames | touches | frames with a push or a stop | of these at the left edge |
+|---|---|---|---|---|---|
+| the movie from control to the touch | 1 | 240 | 1 (fraction 80) | 5 | 0 |
+| random inputs from control | 300 | 83,559 | 1 | 4,354 | 3,546 |
+| random inputs from the movie's frames 1002 to 1091 | 1,200 | 137,055 | 675 | 6,896 | 732 |
+| into the screen's left edge, then random | 720 | 181,894 | 0 | 15,006 | 12,940 |
+
+* The fraction at control is 0, on the movie and on the machine of the proof.
+* On every frame `P' − P` is a multiple of 16. The touches have all 16 fractions `0, 16, …, 240`, and all are in `fracs`.
+* No machine has the castle flag up to the touch.
+* `pole-join-check` reads the three fields on the TAS (`frac(P₂(g)) = 80`), on 1089 then `02808080` (64), and on the touch with A held (112). The flags agree with the checked touch with that fraction.
+
 ## Assumptions (not proved in Lean)
 
 The hypotheses are the fields of `Run` and the structures in it. `pole_join` assumes all of these.
@@ -83,7 +124,8 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 | `frames.step` | one frame from a clean state is a `OneFrame`; `model`, `hit`, `stop`, `off` are theorems | real runs on that page |
 | `frames.vert`, `frames.box` | frames before `J` follow `vstep`, and the collision routine does what it does on the machine at control; `box` is a theorem | real runs on that page |
 | `fm`, `inp`, `touches`, `pass`, `pos` | frame `g` is a touch on real machines; the write ends one pass of the side check; `P₂(g)` is the position when the page is read; `P₀ ≤ P₂(g)` is the theorem `Run.inRange` from these | [Touching the pole on real frames](f-6-1-PoleEntryRule.md) |
-| `atCastle`, `afterTouch` | the flag is set on `c`, after the touch | the code |
+| `fracStep` | each frame before the touch moves `P` by a multiple of 1/16 px; `16 ∣ P₂(g)` is the theorem `Run.frac` | the code; real runs above |
+| `atCastle`, `noCastle` | the castle flag of the machines: set on `c`, on none up to the touch; `g < c` is the theorem `Run.afterTouch` | the code; real runs above |
 | `other` | not a direct grab: for 131 frames the flag is that of a checked touch at another height | measured: at least the touch + 153 |
 | `path`, `atY`, `atRising` | the jump's frames are a path of `Jump.arcSucc` from the ground | `Jump.md`; the jump starts from the ground: no enemy to bounce off near the pole |
 | `order`, `left`, `air` | he comes from the left, and from frame `q` he falls below the block's top. A fall cannot skip the landing window. On a frame with the feet over the block, the case has the frame's moving direction, height and fall speed | code; going over the pole and back is not covered |
@@ -93,7 +135,7 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 | `onGround` | a fast jump later than `L + 1`: frame `T' − 1` runs `ImposeFriction` on a state of `frictionCheck` (`Imposes`) | real runs below |
 | `stopped` | a fast jump on `L + 1`: a frame from speed 0 runs `ImposeFriction`, or the movement routine on a case of `keepCases` | real runs below |
 | `fall` | a slow jump: the fall began on `w ≤ q` by a start of `fallStarts`, or by stepping off the base; the frames follow `fallNext` | map facts below |
-| `flagAny`, `flagTight` | slow grab: for 124 frames the flag is that of a checked direct grab; for 125 frames if the frame before moved left and the fraction is below `F` | measured below |
+| `flagAny`, `flagTight` | slow grab: for 124 frames the flag is that of a checked direct grab with the fraction of `P₂(g)`; for 125 frames if the frame before moved left and the fraction is below `F` | measured below |
 
 The state at control, `Start`, is an argument of the theorems. `Route.Run.start` gives it from the change's last row.
 
@@ -123,4 +165,5 @@ Not proved: that every run satisfies `Run`. The bound `B` of the position is in 
 ```
 .lake/build/bin/smbrta pole-join-check FM2                  # every field of Run on the movie's frames (2 s)
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # the same with the inputs from frame 1036 replaced
+.lake/build/bin/smbrta pole-frac-check FM2 300               # fracStep, fracCheck, noCastle on real runs (about 4 min)
 ```

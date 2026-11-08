@@ -27,7 +27,7 @@ Lean: `Theorems/CastleWalk.lean`、非公開の `castle_checks`、`castle_walk`�
 * `GMerge`: ボタンをそのまま写すバイトだけが違う状態は同じように動く。`allInputs` の仮定で、[地下への切り替え](b-1-PipeTransition-ja.md) と同じです。
 * 全部の入力を動かしたのは、触った状態 1 つだけです。ほかの状態は入力なしです。
 * 旗のところの状態は、本物の走りの最後を書き換えたもので、そのままたどり着けることは示していません。敵、スクロール、タイマーが違う走りは含みません。
-* `anyFraction` は 1/16 ピクセルの倍数の 16 通り（位置は 1/256 ピクセル単位で `16·v` ずつ動く）と最大の端数です。位置の端数がいつもその倍数であることは証明していません。
+* `anyFraction` は 1/16 ピクセルの倍数の 16 通り（位置は 1/256 ピクセル単位で `16·v` ずつ動く）と最大の端数です。本物の触りの端数がその倍数であることは定理 `PoleJoin.Run.frac` です。1 フレームの仮定 `fracStep` から出ます（[操作から城まで](f-5-PoleJoin-ja.md)）。
 * Start と Select は入力に含めていません。
 
 **ファイル.** `Theorems/CastleWalk.lean`、非公開の `Proof/CastleWalk.lean`。

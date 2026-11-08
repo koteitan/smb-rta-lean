@@ -109,7 +109,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 
 ## 前提（Lean では証明していない）
 
-* **`Room(seq(c))`.** 部屋で最初に操作できる状態の 73 バイト。走りが違っても変わらないバイトだけを `K` に残しました。ファイアマリオ（`PlayerStatus` が 2）では成り立ちません。1-1 のこの土管より前のパワーアップは 1 つです。部屋に入る切り替えの段を歩けば出るはずです。切り替えのあとの状態はほとんど知られているからです。項目 1-1-b-3-2 の段の最後の状態が `K` の値を知っていれば、`AS.le` の確認 1 つで済みます。`K` のうち面の準備が消さないバイトは `AreaType`、`CurrentPlayer`、`PlayerStatus`、`WorldNumber`、`OperMode`、`OperMode_Task`、`AreaMusicBuffer_Alt` です。その段の出口の条件がこれらを知る必要があります。ここではその段に頼っていません。動かしてもいません。
+* **`Room(seq(c))`.** 部屋で最初に操作できる状態の 73 バイト。ルートでは 5 バイトを除いて証明しました（[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md)）。以下はこのページを書いたときの説明です。走りが違っても変わらないバイトだけを `K` に残しました。ファイアマリオ（`PlayerStatus` が 2）では成り立ちません。1-1 のこの土管より前のパワーアップは 1 つです。部屋に入る切り替えの段を歩けば出るはずです。切り替えのあとの状態はほとんど知られているからです。項目 1-1-b-3-2 の段の最後の状態が `K` の値を知っていれば、`AS.le` の確認 1 つで済みます。`K` のうち面の準備が消さないバイトは `AreaType`、`CurrentPlayer`、`PlayerStatus`、`WorldNumber`、`OperMode`、`OperMode_Task`、`AreaMusicBuffer_Alt` です。その段の出口の条件がこれらを知る必要があります。ここではその段に頼っていません。動かしてもいません。
 * **`SiteOK` の時間.** 部屋のフレームがはみ出さないことです。
 * **読みの番地.** `LDA (zp),Y` がレジスタを読まないこと。
 * **タイル.** ブロックバッファの読みが `T` の値を返すこと。読む番地がブロックバッファの中にあり、部屋のブロックバッファが初めの値かコインの消えた値であることから来ます。これは証明していません。
@@ -126,7 +126,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 ```
 entry₂     : Entry2 nm₂ nx₂ E 0 (seq a₂)            （タイマーの条件なし）
 roomOrder  : b₁ ≤ a₂
-roomStart  : Room(seq b₁)
+roomRest   : RestAt(seq b₁)                            （5 バイト。Room(seq b₁) は Changes.roomAt）
 roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
 roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)
 ```

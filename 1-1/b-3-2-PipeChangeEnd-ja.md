@@ -2,9 +2,9 @@
 
 # `fall` なしの部屋への切り替え
 
-**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入り、`entry₁` は新しい入るときの条件になります。`keep₁` は残ります。
+**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入り、`entry₁` は新しい入るときの条件になります。`keep₁` もなくなりました。[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)を見てください。
 
-`m₀`、`run`、`ctl`、`0^k`、`E` は[地下への切り替えの長さを決めるもの](b-2-1-PipeTransitionAll-ja.md)と同じです。`left` は[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)と同じです。土管のルーチンが動くあいだは `timer + 43` で、そのあとは 43 行の表から読みます。`frame(m, i)` は `m` から入力 `i` で進む 1 フレームです。`trace(m, i, j)` はそのフレームを `j` ステップ進めた機械です。`T = run(E, 0^48)` は出口の基準です。`m[b]` は `m` のバイト `b` です。`+k` のついた名前は、その名前の `k` バイトあとのバイトです。
+`m₀`、`run`、`ctl`、`0^k`、`E` は[地下への切り替えの長さを決めるもの](b-2-1-PipeTransitionAll-ja.md)と同じです。`left` は[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)と同じです。土管のルーチンが動くあいだは `timer + 43` で、そのあとは 43 行の表から読みます。`frame(m, i)` は `m` から入力 `i` で進む 1 フレームです。`trace(m, i, j)` はそのフレームを `j` ステップ進めた機械です。`T = run(E, 0^48)` は出口の基準です。`m[b]` は `m` のバイト `b` です。`+k` のついた名前は、その名前の `k` バイトあとのバイトです。`Paused(m)` は、`GamePauseStatus` の最下位ビットが立っていることです。`m[GamePauseStatus] & 1 = 1` です。
 
 **入るときの条件.** `Entry(M)` は、入るフレームの終わりの状態 `M` についての条件です。
 
@@ -48,21 +48,20 @@
 | `MusicHandler` | 曲の行 1,607 個 | なし |
 | `EnemyGfxHandler`、`PlayerGfxHandler` | スプライトの位置の行 3 個 | なし |
 | `UpdScrollVar` | 面のパーサーの行 67 個 | 50,000 |
-| `ColorRotation` | `VRAM_Buffer1_Offset` の 256 の値すべて | 50,000 |
-| `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater` | 何でもよい | 50,000 |
+| `ColorRotation` | `VRAM_Buffer1_Offset` の 256 の値すべて | 上限なし |
 | `HandleEToBGCollision` のブロックのバッファへの書き込み | なし。着かない | |
 | `PositionEnemyObj` の最初の `BCS` のあと | なし。着かない | |
 | `CheckRightExtBounds` の最初の `BCC` のあと | なし。着かない | |
 
-つまり土管のフレームでは、突き上げられているブロックの上に敵は立っていません。面のデータの次の敵は読み込まれません。フレームの仕事はドット 50,000 より前にこれらの場所に着きます。曲、画面のバッファ、スプライトの位置、面のパーサーは行のどれかにあります。1 フレームは 89,342 ドットです。
+つまり土管のフレームでは、突き上げられているブロックの上に敵は立っていません。面のデータの次の敵は読み込まれません。フレームはドット 50,000 より前にパーサーの場所に着きます。曲、画面のバッファ、スプライトの位置、面のパーサーは行のどれかにあります。1 フレームは 89,342 ドットです。
 
 **出口の条件.** `ExitAt(m)` は、`OperMode_Task`、`ScreenRoutineTask`、`GameEngineSubroutine`、`DisableScreenFlag` が `T` と同じ値であることです。そのような状態で、走りは次を満たします。
 
-* `Quiet(m)`: `PauseSoundBuffer`、`PauseSoundQueue`、`Square1SoundBuffer`、`Square2SoundBuffer`、`NoiseSoundBuffer`、`VRAM_Buffer_AddrCtrl` は `T` と同じ値です。
+* `Quiet(m)`: `PauseSoundBuffer`、`PauseSoundQueue`、`Square1SoundBuffer`、`Square2SoundBuffer` は `T` と同じ値です。`NoiseSoundBuffer` と `VRAM_Buffer_AddrCtrl` も同じ値ですが、走りがそれを言う必要はありません。確認が出口のフレームでそれを証明します。`NoiseSoundBuffer` は `K` にあり、土管のフレームはこれを変えません。NMI は `VRAM_Buffer_AddrCtrl` を 0 にし、出口のフレームは土管のルーチンのあとでゲームエンジンを動かしません。
 * `Song(m)`: 曲の 12 バイト（`MusicData`（2）、4 つの位置、`NoiseDataLoopbackOfs`、音符のカウンタとバッファ）は 1,607 行のどれかと同じ値です。曲の部分が終わるフレームでは `GroundMusicHeaderOfs` も行に入ります。
 * `Shape(m)`: 1 つ目の画面のバッファは空か、パレットの 4 バイトのレコードを 1 つだけ持ちます。
 
-`Exit(m)` は、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の `ExitCond(m)` に出口の 19 バイトと `Quiet` の 6 バイトを `T` の値で入れたものと、`Song(m) ∧ Shape(m)` です。出口の 19 バイトは `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`CurrentPlayer`、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`Square1SoundQueue`、`Square2SoundQueue`、`NoiseSoundQueue` です。
+`Exit(m)` は、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の `ExitCond(m)` に出口の 19 バイトと 6 バイト `PauseSoundBuffer`、`PauseSoundQueue`、`Square1SoundBuffer`、`Square2SoundBuffer`、`NoiseSoundBuffer`、`VRAM_Buffer_AddrCtrl` を `T` の値で入れたものと、`Song(m) ∧ Shape(m)` です。出口の 19 バイトは `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`CurrentPlayer`、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`Square1SoundQueue`、`Square2SoundQueue`、`NoiseSoundQueue` です。
 
 `NoStart(m, i)` は、`m` がゲームコアで土管以外のルーチンなら入力 `i` に Start がないことです。
 
@@ -79,6 +78,8 @@ atExit     :  ∀ m,  Exit(m) → InRows(m)
 leftExit   :  ∀ m,  Exit(m) → left(m) = 43
 rows       :  ∀ m, InRows(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  ( InRows(frame(m, i))  ∧  left(m) ≤ left(frame(m, i)) + 1 )
 atControl  :  ∀ m,  ctl(m) → left(m) = 0
+paused     :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) → Paused(frame(m, i)) → left(m) ≤ left(frame(m, i))
+rowsGo     :  ∀ m,  InRows(m) → ¬Paused(m)
 
 no_control_exit :  Exit(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 43, ¬ctl(sⱼ)
 PipeRun.bound   :  下のフィールドを持つ走り  →  cnt(a) + 91 ≤ cnt(b)
@@ -90,13 +91,13 @@ Changes.bound₁  :  e₁ + 91 ≤ c₂
 ```
 entry    :  Entry(seq a)
 atCtl    :  ctl(seq b)
-lagKeeps :  ∀ n, a ≤ n < b,  lag(n)  →  left(seq n) ≤ left(seq (n+1))
+lagPaused:  ∀ n, a ≤ n < b,  lag(n)  →  Paused(seq (n+1))
 places   :  ∀ n, a ≤ n < b,  seq n で土管のルーチンが動く  →  ∀ j, Places(trace(seq n, inp n, j))
 quiet    :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  Quiet(seq n) ∧ Song(seq n) ∧ Shape(seq n)
 noStart  :  ∀ n, a ≤ n < b,  NoStart(seq n, inp n)
 ```
 
-`cnt` は `lag` でないフレームを数えます。`left` は入ってから操作できるまで、どのフレームでも高々 1 しか減らず、操作できるときは 0 です。ですから `91 ≤ left(seq a) ≤ cnt(b) − cnt(a)` です。
+`cnt` は `lag` でないフレームを数えます。`left` は入ってから操作できるまで、どのフレームでも高々 1 しか減らず、操作できるときは 0 です。`lag` のフレームはポーズの状態で終わり、そのとき `left` は減りません（[b-3-3](b-3-3-LagPaused-ja.md)）。ですから `91 ≤ left(seq a) ≤ cnt(b) − cnt(a)` です。
 
 Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、`zlive_step`、`zframe_run`、`zframe_of_walk`、`z_step`、`in_rows`、`EndStatement`、`endStatement_of_check`、`PipeRun`、`PipeRun.bound`、`no_control_exit`）、`Theorems/Route.lean`（`Changes.run₁`、`Changes.bound₁`）、非公開の `pipe_end_checks`（`native_decide`）、`pipe_end`、`pipe_exit_no_control`、`pipe_change_end`。ROM なしの定理は `propext`、`Classical.choice`、`Quot.sound` だけを使います。
 
@@ -108,10 +109,10 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 
 | フレーム | 探索のステップ | 表の状態 |
 |---|---|---|
-| タイマー ≥ 2 | 893,614 | 35,607 |
-| タイマー = 1 | 527,656 | 23,111 |
+| タイマー ≥ 2 | 902,238 | 36,062 |
+| タイマー = 1 | 527,799 | 23,135 |
 
-探索は、いくつかの場所で状態をほかが終わるまで待たせ、そこでいくつかのバイトを忘れます。これは表を小さくするだけです。確認はこれに頼りません。
+探索は、いくつかの場所で状態をほかが終わるまで待たせ、そこでいくつかのバイトを忘れます。これは表を小さくするだけです。確認はこれに頼りません。`GamePauseStatus` の最下位ビットは探索のキーに入ります（[b-3-3](b-3-3-LagPaused-ja.md)）。
 
 **出口のあと.** フレーム 48 が出口です。フレーム 49 と 50 は RAM を消し、消す途中でフレーム 49 が終わります。そのあと 41 フレームで操作できます。これらのフレームには[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の段を使います。`PauseModeFlag` の 2 つの場合があります。
 
@@ -122,13 +123,12 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 
 **場所の行.** 行は基準の走りのフレームから作ります。`E` を入力なしで 47 フレーム、`E` で `Player_X_Scroll` を 3、タイマーを 230 にして 225 フレーム、[b-2-1](b-2-1-PipeTransitionAll-ja.md) の本物の 13 個の入る状態をそれぞれ 47 フレーム、それに `m₀` から `E` までの道のフレームです。道のフレームからは、`E` の近くのパーサーの列の始まりだけを使います。列の始まりでは、パーサーはメタタイルのバッファを読む前に消します。ですから、その行ではメタタイルのバッファは自由です。画面のバッファの形には、見えたレコードの最初のバイトと長さ 1 から 8 で作った、レコード 2 つまでのすべての形を足します。曲の行は、`m₀` から入力なしで 5,327 フレーム鳴らした曲です。曲は始めの 143 フレームのあと、5,184 フレームの周期です。
 
-**確認の大きさ.** プログラムで約 21 秒、非公開の証明のビルドで 25 秒です。
+**確認の大きさ.** プログラムで約 23 秒、非公開の証明のビルドで 28 秒です。
 
 ## 正しくない事実
 
 * `fall₁` は、[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)の条件を満たす状態で正しくないことがあります。`E` で `HalfwayPage` を 1 にすると、75 フレームで操作でき、フレーム 73 で `left` は 18 から 0 になります。`WarpZoneControl` を 1 にすると 228 フレームで操作でき、フレーム 55 で `left` は 36 から 0 になります。`GameTimerExpiredFlag` を 1 にすると 229 フレームで操作でき、フレーム 54 で `left` は 37 から 0 になります。これらのバイトは `K` にあるので、これらの状態は `Entry` を満たしません。入力なしで測りました。
-* 土管のフレームで Start を押すと、本物の走りで `Quiet` は正しくありません。下では、土管のフレームで乱数の Start を使った 437 の走りのうち 129 で成り立ちません。
-* `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許すので、ドットだけを求めます。
+* 土管のフレームで Start を押すと、本物の走りで `Quiet` は正しくありません。下では、土管のフレームで乱数の Start を使った 437 の走りのうち 129 で成り立ちません。この走りでは 6 バイトを求めていました。いまの 4 バイトでも `pipe-end-check` は同じで、土管のフレームで Start を押す 15 の走りのうち 6 で成り立たず、Start なしでは 0 です。
 
 ## 測ったけれど定理にしていないこと
 
@@ -140,15 +140,17 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 | 乱数、Start なし | 437 | 437 | 20,976 | 0 | 437 | 0 | 91 |
 | 乱数、土管のフレームでだけ Start | 437 | 437 | 48,044 | 0 | 308 | 0 | 136 |
 
-`Song ∧ Shape` は、どの種類でも 437 の出口すべてで成り立ちました。成り立たなかったのは `Quiet` だけで、Start のあるときだけです。パーサーの列の始まりの行を足す前は、ふつうの走りの 1,920 フレームのうち 11 フレームが `Places` に反していました。
+`Song ∧ Shape` は、どの種類でも 437 の出口すべてで成り立ちました。成り立たなかったのは `Quiet` だけで、Start のあるときだけです。この走りでは、そのときの `Quiet` の 6 バイトを求めていました。いま求める 4 バイトは、6 バイトが成り立つところでは成り立ちます。パーサーの列の始まりの行を足す前は、ふつうの走りの 1,920 フレームのうち 11 フレームが `Places` に反していました。
 
 ## 仮定（Lean では証明していない）
 
-* 本物の走りの入る状態で `Entry`（`chg.entry₁`）。項目 1-1-b-3-4。
-* 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。
-* 出口で `Quiet ∧ Song ∧ Shape`（`chg.quiet₁`）。土管のフレームで Start を押すと成り立たないことがあります。
+* 本物の走りの入る状態で `Entry`（`chg.entry₁`）。項目 1-1-b-3-4。測ったこと: `K` の 113 バイトとマスクつきの 12 バイトのうち 109 は、基準の道でも TAS でも、`m₀` から入るまでのどのフレームでも同じ値です。5 つは `m₀` ですでに違います。`Up_Down_Buttons`、`GameEngineSubroutine`、`EnemyObjectPageLoc`、`EnemyObjectPageSel`、`ScreenTimer` です。TAS では 11 が途中で変わり、入るときには戻っています。`Player_State`、`Enemy_State`（2 つのスロット）、`Block_State`、`Block_RepFlag`、`Misc_State+8`、`Misc_Y_Position+8`、`FloateyNum_Control`（2 つ）、`Square1SoundQueue`、`Square2SoundQueue` です。パート a のフレームの歩みが 109 バイトを保つとしても、この 16 は残ります。
+* 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。項目 1-1-b-3-5:
+  * `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許し、上限もないので、走りに何も求めません。状態はそこでこのオフセットで分かれ、確認にはそれが要ります。
+  * `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater`、`ColorRotation` にはドットの上限 50,000 がありました。これらはなくなりました。5 つの上限（`UpdScrollVar` とこの 4 つ）のうちどの 4 つを外しても確認は成り立ち、5 つすべてを外すと成り立ちません。だから上限は 1 つ、パーサーの場所に残します。14 個の入る状態と 3 種類の入力では、土管の 1,974 フレームは、どれもドット 37,603 以下でパーサーの場所に着きます。
+* 出口で `Quiet ∧ Song ∧ Shape`（`chg.quiet₁`）。土管のフレームで Start を押すと成り立たないことがあります。`Shape` と `Song` は出口のフレームの歩みからは出ません。その歩みの出口での終わりの状態 36 個のどれも、1 つめの画面のバッファの形も曲のバイトも知りません。出口のフレームの NMI が 2 つめのバッファから書くとき、1 つめのバッファには前のフレームが書いたものが残ります。1 フレームの歩みはそれを知りません。
 * 土管のあとのゲームコアのフレームで `NoStart`（`chg.noStart₁`）。
-* `lagKeeps`（`chg.keep₁`）、項目 1-1-b-3-3。
+* `lagPaused`（`chg.paused₁`）: `lag` のフレームはポーズの状態で終わる。[b-3-3](b-3-3-LagPaused-ja.md) を見てください。
 
 **ファイル.** `Theorems/PipeChangeEnd.lean`、非公開の `Proof/PipeChangeEnd.lean`。
 

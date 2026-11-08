@@ -38,7 +38,7 @@ rule_on_frames      :  ruleCheckG,  ∀ t,  Enters(fm t, inp t) → FrameStart(f
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 tiles_of_steps      :  TilesAll(s(0)),  (∀ k < N,  TileStep(s(k), s(k + 1)))         →  ∀ k ≤ N,  TilesOK(s(k))
 pipe_frame_check（非公開）   :  ruleCheckG(sy, m₀) = true（native_decide）
-pipe_no_entry_real（非公開） :  start, clean, tiles, pos と `pipe_no_entry` の位置の仮定  →  ∀ t ≤ 367,  ¬Enters(fm t, inp t)
+pipe_no_entry_real（非公開） :  start, clean, tiles, pos,  openP, openB,  機械から読むフレーム（[次の項目](a-5-5-PipeFrames-ja.md)）,  Enters(fm E, inp E)  →  367 < E
 ```
 
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。

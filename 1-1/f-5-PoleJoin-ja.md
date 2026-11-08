@@ -42,7 +42,7 @@ B + 32 < P₀                                   Statement.gap
 P_f ≤ P₂(e),  e + d = T   →   P₂(e) + 16·v_top·d ≤ B      hB_of_line。Statement.after と hit_bound から、ぶつかる場合も含む
 ```
 
-Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_keep`、`pole_falls`、`pole_join`、`pole_touch`。`pole_join` は非公開の `surface_run`、`castle_walk`、`jump_grab`、`pole_rules`、`top_frictionCheck`、`pole_keep`、`pole_falls` を適用しているので、これらは仮定に現れません。
+Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_keep`、`pole_falls`、`pole_frac`、`pole_join`、`pole_touch`。`pole_join` は非公開の `surface_run`、`castle_walk`、`jump_grab`、`pole_rules`、`top_frictionCheck`、`pole_keep`、`pole_falls`、`pole_frac` を適用しているので、これらは仮定に現れません。
 
 ## つないだことで道筋のページから変わること
 
@@ -73,6 +73,47 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 
 `fallCheck` は全部の落下の探索です。地面と 1 から `rows` 段上からの全部のジャンプと、2 から `rows` 段上のブロックから降りる全部の落下を、落下の力と持ち越した端数ごとに調べます。足が土台の高さにあるフレームが続く数を数え、3 以下であることを確かめます。120 フレームで全部の落下が終わるので、探索に長さの仮定はありません。1 段のブロックから降りると 4 フレームなので、これは探索に入れません。`base_late` がこれを除きます。フレーム `w − 1` で足が土台の上にあれば、位置の上限から `w ≥ T + 1` です。なので落下はフレーム `T + 1` より後です。
 
+## 位置の端数と城の旗
+
+`seq j` は数えたフレーム `j` の終わりの機械です。`castle(m)` は `StarFlagTaskControl` が 0 でないことです。`frac(P) = P mod 256` は `CastleWalk.atPole` が書くバイトです。`fracs` は 16 の倍数の 16 個と 255 です。
+
+```
+fracStep        :  ∀ j,  1 ≤ j < g  →  (P'(j) − P(j)) mod 16 = 0                 （フィールド）
+fracCheck       :  posP(B.m) mod 16 = 0                                       （pole_frac、native_decide）
+Run.fracP       :  Start(seq 0),  fracCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
+Run.frac        :  Start(seq 0),  fracCheck,  Run  →  P₂(g) mod 16 = 0
+Run.frac_mem    :  Start(seq 0),  fracCheck,  Run  →  frac(P₂(g)) ∈ fracs
+atCastle        :  castle(seq c) = true                                       （フィールド）
+noCastle        :  ∀ j ≤ g,  castle(seq j) = false                            （フィールド）
+Run.afterTouch  :  Run  →  g < c
+```
+
+`Run.fracP` は帰納法です。`P(1) = posP(B.m)`（`Run.startP`）、`P(j + 1) = P'(j)`（`Run.next`）。`Run.frac` は `P₂ = P + 16·v₂` を足します。ですから `CastleWalk.Statement.anyFraction` が確かめる端数は、走りの端数になりました。`flagAny` と `flagTight` は、確かめた触り方を端数 `frac(P₂(g))` で名指しします。`castle_of_direct` は `frac(P₂(g)) ∈ fracs` を `Run.frac_mem` から受け取ります。`flagAny`、`flagTight`、`other` の旗は `castle(seq ·)` です。別の関数ではありません。
+
+`fracStep` が成り立つわけ（コードから読みました）。位置の端数はプレイヤーの `SprObject_X_MoveForce` のバイトです。これを書くのは `MoveObjectHorizontally` だけで、速さの下 4 ビットの 16 倍を足します。位置を書くほかの命令（画面の左端の `KeepOnscr`、`ImpedePlayerMove`、よじ登り、つる、リフト）はピクセルとページだけを書きます。左端でも移動は端数を `16·v₂` だけ変え、左端はピクセルを戻します。
+
+`noCastle` が成り立つわけ（コードから読みました）。`StarFlagTaskControl` が 0 から変わるのは面の終わりの `PlayerEndLevel` だけです。星の旗の物は、それが 0 のあいだ何もしません。面の終わりは旗のルーチンの `GiveFPScr` からだけ来ます。それは旗のルーチンになったあとです。
+
+フィールドは次のように変わりました。
+
+* なくなったもの: `flag`（別の関数）、`afterTouch`（定理 `Run.afterTouch` になった）。
+* 増えたもの: `fracStep`、`noCastle`。`atCastle` は機械を読みます: `castle(seq c) = true`。`flagAny`、`flagTight` は `P₂(g)` の端数を使います。
+* `direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `hc` のあとの `(hfq : fracCheck sy (above m0 n) = true)`。
+
+本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
+
+| 走り | 回数 | フレーム | 触り | 押し戻しか止まりのフレーム | そのうち左端 |
+|---|---|---|---|---|---|
+| 動画の、操作から触るまで | 1 | 240 | 1（端数 80） | 5 | 0 |
+| 操作できてからの乱数の入力 | 300 | 83,559 | 1 | 4,354 | 3,546 |
+| 動画のフレーム 1002 から 1091 からの乱数の入力 | 1,200 | 137,055 | 675 | 6,896 | 732 |
+| 画面の左端へ、そのあと乱数 | 720 | 181,894 | 0 | 15,006 | 12,940 |
+
+* 操作できるときの端数は、動画でも証明の機械でも 0 です。
+* どのフレームでも `P' − P` は 16 の倍数です。触りには 16 個の端数 `0, 16, …, 240` が全部出て、全部 `fracs` に入ります。
+* 触るまで、城の旗のある機械はありません。
+* `pole-join-check` は TAS（`frac(P₂(g)) = 80`）、1089 のあと `02808080`（64）、A を長く押した触り（112）で 3 つのフィールドを読みます。旗は、その端数で確かめた触り方の旗と同じです。
+
 ## 前提（Lean では証明していない）
 
 仮定は `Run` とその中の構造のフィールドです。`pole_join` はこれらを全部仮定します。
@@ -83,7 +124,8 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 | `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
 | `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
 | `fm`、`inp`、`touches`、`pass`、`pos` | フレーム `g` は本物の機械で触る。書き込みは横の判定の 1 回の通過の終わり。`P₂(g)` はページを読むときの位置。`P₀ ≤ P₂(g)` はこれらからの定理 `Run.inRange` | [旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md) |
-| `atCastle`、`afterTouch` | `c` で旗が立つ、触ったあと | コード |
+| `fracStep` | 触る前の各フレームは `P` を 1/16 ピクセルの倍数だけ動かす。`16 ∣ P₂(g)` は定理 `Run.frac` | コード。上の本物の走り |
+| `atCastle`、`noCastle` | 機械の城の旗: `c` で立ち、触るまではどの機械にもない。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
 | `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |
 | `order`、`left`、`air` | 左から来て、フレーム `q` から土台の上面より下を落ちる。落下は着地の幅を飛び越せない。足が土台の上にあるフレームでは、ケースの動く向き、高さ、落下の速さはそのフレームのもの | コード。旗の上を越えて戻る走りは含まない |
@@ -93,7 +135,7 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 | `onGround` | `L + 1` より後の速いジャンプ: フレーム `T' − 1` は `frictionCheck` の状態で `ImposeFriction` を動かす（`Imposes`） | 下の本物の走り |
 | `stopped` | `L + 1` の速いジャンプ: 速さ 0 からのフレームは `ImposeFriction` を動かすか、`keepCases` の 1 つとして移動のルーチンを動かす | 下の本物の走り |
 | `fall` | 遅いジャンプ: 落下は `w ≤ q` で `fallStarts` の 1 つか、土台から降りて始まる。フレームは `fallNext` のとおり | 下のマップの事実 |
-| `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
+| `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ、`P₂(g)` の端数で確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
 
 操作できるときの状態 `Start` は定理の引数で、`Route.Run.start` が切り替えの最後の段から与えます。
 
@@ -123,4 +165,5 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 ```
 .lake/build/bin/smbrta pole-join-check FM2                  # ムービーのフレームで Run の全部のフィールド（2 秒）
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # フレーム 1036 からの入力を入れ替えて同じことを
+.lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで fracStep、fracCheck、noCastle（約 4 分）
 ```
