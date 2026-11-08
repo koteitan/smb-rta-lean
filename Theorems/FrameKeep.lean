@@ -1,0 +1,742 @@
+import Theorems.PipeWrites
+import Theorems.CastleWalk
+
+/-!
+# One frame in control keeps watched bits
+
+`PipeWrites` follows a whole frame in control with the abstract machine of `TaintRun`, and asks one condition on each instruction (`Clean`). Here the same walk watches some bits of RAM:
+known when the frame starts, they are known at its end, with the same values. The bits are the castle flag (`StarFlagTaskControl`, all bits 0) and the low 4 bits of the
+position's fraction (`SprObject_X_MoveForce`).
+
+Two steps are not the machine's usual abstract steps:
+* `ADC zp` with the low 4 bits of `A`, of the byte and the carry known: the low 4 bits of the sum are known (`aadcL`). The move routine adds the speed's low 4 bits times 16 to the fraction this way.
+* at the entry of the move routine an index that is not known is split into its 256 values, so that the routine's store of the fraction knows its target.
+
+The condition on one instruction is `PipeWrites.Clean` with the watched bytes and the jumpspring's control among the bytes that a store with a target not known does not touch, but the
+move routine's store with the index 0 is not asked: that is the player's own store of the fraction, and there the walk knows the target (`CleanK`). The frame starts as in `PipeWrites`
+(`FrameStart`), with the jumpspring's control 0, so that the player's move has the index 0 known. `Frames` lists what the frames of a run need for this, frame by frame.
+There is no game data in this file. Page: `1-1/f-6-19-FrameKeep.md`.
+-/
+
+namespace Smbrta.FrameKeep
+
+open PipeTransition (frame)
+open PipeTransitionAll (go ba_get_set_self ba_get_set_ne ba_size_set)
+open TaintRun
+open PipeEntryRule (trace nxt frame_trace trace_stop findOp)
+open PipeWrites (Guard Clean Plain FrameStart wTarget opAt rTarget tableOf gsucc customOf capT jumpP startG zeros keepKn leK joinK knownOf guardOf SG)
+
+/-! ## What the walk watches -/
+
+/-- a watched byte: its RAM index, the bits watched, and their values -/
+abbrev Watch := Nat × UInt8 × UInt8
+
+/-- the watched bits are known in `B`, with their values -/
+def watchOK (W : List Watch) (B : AS) : Bool :=
+  W.all fun w => decide (w.1 < 2048) && ((B.getK w.1).k &&& w.2.1 == w.2.1) && ((B.getK w.1).v &&& w.2.1 == w.2.2 &&& w.2.1)
+
+/-- the watched bits of a machine have their values -/
+def Watched (W : List Watch) (m : Machine) : Prop := ∀ w ∈ W, m.ram.get! w.1 &&& w.2.1 = w.2.2 &&& w.2.1
+
+/-- the move routine: its entry, and its store of the fraction -/
+structure Spot where
+  entry : UInt16
+  store : UInt16
+  /-- the zero page bytes that the search keeps inside the routine: no part of the proof -/
+  temps : List Nat
+  deriving Inhabited
+
+/-! ## The condition on one instruction -/
+
+/-- **What stays assumed of one instruction**: `PipeWrites.Clean`, but the store of the move routine with the index 0 (the player's fraction) is not asked. -/
+structure CleanK (G : Guard) (q : UInt16) (m : Machine) : Prop where
+  /-- a store through an index or a pointer is `Plain`, but at `q` with the index 0 -/
+  store : ∀ t, wTarget (opAt m) m = some t → ¬ (m.pc = q ∧ m.x = 0) → Plain G.prot t
+  /-- `LDA (zp),Y` does not read a register -/
+  read : opAt m = 0xB1 → rTarget m < 0x2000 ∨ 0x8000 ≤ rTarget m
+  /-- the index of the jump is in its table -/
+  jump : m.pc = G.je → ∀ n, G.jumps.lookup (tableOf m).toNat = some n → m.a.toNat < n
+  /-- the time -/
+  time : m.pc ≠ G.idle → m.fdot ≤ G.late
+
+theorem clean_of {G : Guard} {q : UInt16} {m : Machine} (h : CleanK G q m) (hq : ¬ (m.pc = q ∧ m.x = 0)) : Clean G m :=
+  ⟨fun t ht => h.store t ht hq, h.read, h.jump, h.time⟩
+
+/-! ## The steps -/
+
+/-- `ADC` with the low 4 bits of `A` and of the byte and the carry known: the low 4 bits of the sum are known -/
+def aadcL (v : AB) : AM Unit := fun A =>
+  let c := A.p.and (AB.known 1)
+  let r : AB := ⟨(A.a.v + v.v + c.v) &&& 0x0F, 0x0F⟩
+  let p := (((((A.p.and (AB.known 0x3C)).or (AB.ite none 0x01 0)).or (AB.ite none 0x02 0)).or (AB.top.and (AB.known 0x80))).or (AB.ite none 0x40 0))
+  if A.a.k &&& 0x0F == 0x0F && v.k &&& 0x0F == 0x0F && c.isK then some ((), { A with a := r, p := p }) else none
+
+/-- the zero page byte that the instruction at `A.pc` names -/
+def zpOf (E : Env) (A : AS) : AB := A.getK (E.prg.get! ((A.pc + 1) &&& E.mask).toNat).toNat
+
+/-- an `ADC zp` with the low 4 bits of `A` and of the byte and the carry known, but not every bit -/
+def lowAdc (E : Env) (A : AS) : Bool :=
+  !A.nmi && decide (0x8000 ≤ A.pc) && E.prg.get! (A.pc &&& E.mask).toNat == 0x65 &&
+    A.a.k &&& 0x0F == 0x0F && (zpOf E A).k &&& 0x0F == 0x0F && (A.p.and (AB.known 1)).isK && !(A.a.isK && (zpOf E A).isK)
+
+/-- the abstract `ADC zp` of the low bits -/
+def aSumL (E : Env) : AM Unit := aZp E >>= fun ad => ard E ad >>= aadcL
+
+/-- the index has a known bit 1: it is not 0 -/
+def nonZero (b : AB) : Bool := b.k &&& b.v != 0
+
+/-- the abstract successors: at the move routine's store the index is known, or known not to be 0; the low-bits `ADC zp`; else the steps of `PipeWrites` -/
+def kstep (S : Spot) (G : Guard) (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) :=
+  if !A.nmi && A.pc == S.store then
+    (if A.x.isK && E.prg.get! (A.pc &&& E.mask).toNat == 0x9D then succs E ops A else if nonZero A.x then gsucc G E ops A else [none])
+  else if lowAdc E A then [((aSumL E >>= fun _ => atick (cycOf 0x65) (cycOf 0x65)) { A with pc := A.pc + 1 }).map (·.2)]
+  else gsucc G E ops A
+
+/-- the pieces of a byte: 0, or its lowest bit 1 at `b` -/
+def xPieces : List AB := AB.known 0 :: (List.range 8).map fun b => ⟨(1 <<< b).toUInt8, ((1 <<< (b + 1)) - 1).toUInt8⟩
+
+/-- the index at the move routine's entry: 0, or not 0 -/
+def splitX (S : Spot) (B : AS) : List AS :=
+  if B.pc == S.entry && !B.x.isK && !nonZero B.x then xPieces.map fun x => { B with x } else [B]
+
+/-- the pieces before a step: the time, the jump's table, the index at the move routine -/
+def preK (S : Spot) (G : Guard) (A : AS) : List AS := (jumpP G (capT G A)).flatMap (splitX S)
+
+/-! ## The walk -/
+
+/-- the table -/
+structure CfgK where
+  E : Env
+  ops : Array (AM Unit)
+  S : Spot
+  G : Guard
+  W : List Watch
+  t : Array AS
+  kl : Array (List Nat)
+  idx : Std.HashMap Nat (List Nat)
+  cut : ByteArray
+  /-- the table's key of a state: no part of the proof -/
+  key : AS → Nat
+
+def coverK (C : CfgK) (B : AS) : Bool :=
+  (C.idx.getD (C.key B) []).any fun i =>
+    match C.t[i]?, C.kl[i]? with
+    | some D, some l => leK B D l
+    | _, _ => false
+
+/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with the watched bits known -/
+def walkK (C : CfgK) : Nat → AS → Bool
+  | 0, _ => false
+  | n + 1, A => (preK C.S C.G A).all fun A₁ => (kstep C.S C.G C.E C.ops A₁).all fun r =>
+    match r with
+    | none => false
+    | some B =>
+      if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverK C B) || walkK C n B
+      else B.k == A.k + 1 && watchOK C.W B
+
+/-- the abstract state when the frame starts: that of `PipeWrites`, with the watched bits known -/
+def startK (G : Guard) (W : List Watch) (late : Bool) : AS :=
+  W.foldl (fun A w => A.setK w.1 ⟨w.2.2 &&& w.2.1, w.2.1⟩) (startG G late)
+
+/-! ## Finding the table: a search, no part of the proof -/
+
+/-- in the move routine -/
+def inMove (S : Spot) (pc : UInt16) : Bool := decide (S.entry ≤ pc) && decide (pc ≤ S.store + 2)
+
+/-- what the search forgets: the bytes outside `prot` and the free stack; inside the move routine it keeps its temporaries; near the jump routine nothing -/
+def normK (S : Spot) (G : Guard) (A0 : AS) : AS :=
+  let A := { A0 with padShift := AB.top }
+  if G.je ≤ A.pc && A.pc ≤ G.je + 18 then A else
+  let keep := if inMove S A.pc then S.temps ++ G.prot else G.prot
+  let B := PipeWrites.AS.forgetW keep A
+  let kn := (List.range (0x100 + A.s.toNat + 1 - G.stackLo)).foldl (fun k j => k.set! (G.stackLo + j) 0) B.kn
+  { B with kn }
+
+/-- the key: states with the same key are joined -/
+def keyK (S : Spot) (G : Guard) (W : List Watch) (A : AS) : Nat :=
+  let num := fun (b : AB) => b.k.toNat * 256 + (b.v &&& b.k).toNat
+  let n := num (A.getK G.rtI)
+  let n := W.foldl (fun n w => n * 65536 + num (A.getK w.1)) n
+  let n := n * 16 + (if A.nmi then 1 else 0) + (if A.vb then 2 else 0) + (if A.strobe then 4 else 0) + (if A.lo == 0 then 8 else 0)
+  let n := if G.je ≤ A.pc && A.pc ≤ G.je + 18 then (n * 65536 + num A.a) * 65536 + num A.y else n
+  let n := if inMove S A.pc then n * 65536 + num A.x else n
+  let n := n * 16777216 + A.s.toNat * 65536 + A.pc.toNat
+  n * 18446744073709551616 + (n % 4294967291) * 4294967296 + stackHash A
+
+def routeK (S : Spot) (G : Guard) (W : List Watch) (X : SG) (B0 : AS) : SG :=
+  let B := normK S G B0
+  let K := keyK S G W B
+  match X.pending[K]? with
+  | some Q =>
+    match X.done[K]? with
+    | some (D, l0) =>
+      let l := l0.getD (knownOf D)
+      let J := joinK Q B l
+      let l' := l.filter fun i => J.kn.get! i != 0
+      { X with pending := X.pending.insert K J, done := X.done.insert K (J, some l'), multi := X.multi.insert K () }
+    | none => X
+  | none =>
+    match X.done[K]? with
+    | some (D, l0) =>
+      let l := l0.getD (knownOf D)
+      if leK B D l then { X with multi := X.multi.insert K (), done := X.done.insert K (D, some l) } else
+      let J0 := joinK D B l
+      let c := X.arr.getD K 0
+      let J := if c < 2 || G.late < J0.hi || J0.pc == G.idle || J0.vb then J0 else { J0 with hi := G.late }
+      let l' := l.filter fun i => J.kn.get! i != 0
+      { X with pending := X.pending.insert K J, done := X.done.insert K (J, some l'), multi := X.multi.insert K (), arr := X.arr.insert K (c + 1) }
+    | none => { X with pending := X.pending.insert K B, done := X.done.insert K (B, none) }
+
+partial def runK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array (AM Unit)) (X0 : SG) (A0 : AS) : SG := Id.run do
+  let mut X := X0
+  let mut cur := A0
+  let mut run := 0
+  while true do
+    let rs := (preK S G cur).flatMap (kstep S G E ops)
+    X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
+    let bad := rs.any fun r => match r with
+      | none => true
+      | some B => B.k != cur.k && !watchOK W B
+    if bad then
+      X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur, failPcs := X.failPcs.insert cur.pc.toNat (X.failPcs.getD cur.pc.toNat 0 + 1) }
+    let good := (rs.filterMap id).filter fun b => b.k == cur.k
+    match good with
+    | [b] =>
+      if (X.leaders[b.pc.toNat]?).isNone && run < 64 && b.pc != G.je && b.pc != S.entry &&
+          (b.pc.toNat == cur.pc.toNat + 1 || b.pc.toNat == cur.pc.toNat + 2 || b.pc.toNat == cur.pc.toNat + 3) then
+        cur := b
+        run := run + 1
+        continue
+      else pure ()
+    | _ => pure ()
+    for b in good do
+      X := { X with leaders := X.leaders.insert b.pc.toNat () }
+      X := routeK S G W X b
+    break
+  return X
+
+partial def searchK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array (AM Unit)) (X0 : SG) : SG := Id.run do
+  let mut X := X0
+  while true do
+    match X.pending.minEntry? with
+    | none => break
+    | some (key, A) =>
+      X := { X with pending := X.pending.erase key }
+      X := runK S G E W ops X A
+  return X
+
+def searchOfK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : SG :=
+  let ops := (aRows E).toArray
+  searchK S G E W ops ([startK G W false, startK G W true].foldl (routeK S G W) {})
+
+/-- the table, from the search: every state that was reached more than once -/
+def tableOfK (S : Spot) (G : Guard) (W : List Watch) (X : SG) : Array AS × Std.HashMap Nat (List Nat) × ByteArray := Id.run do
+  let mut t : Array AS := #[]
+  let mut idx : Std.HashMap Nat (List Nat) := {}
+  let mut cut := ByteArray.mk (Array.replicate 65536 0)
+  for (k, _) in X.multi.toList do
+    match X.done[k]? with
+    | some (A, _) =>
+      idx := idx.insert (keyK S G W A) (t.size :: idx.getD (keyK S G W A) [])
+      cut := cut.set! A.pc.toNat 1
+      t := t.push A
+    | none => pure ()
+  return (t, idx, cut)
+
+def cfgOfK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : CfgK :=
+  let q := tableOfK S G W (searchOfK S G E W)
+  { E, ops := (aRows E).toArray, S, G, W, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key := keyK S G W }
+
+/-- the fuel of a walk -/
+def fuelK : Nat := 20000
+
+/-- **The check.** -/
+def keepCheck (S : Spot) (G : Guard) (E : Env) (W : List Watch) : Bool :=
+  let C := cfgOfK S G E W
+  decide (G.late < dotsPerFrame) && W.all (fun w => decide (w.1 < 2048)) &&
+    C.t.all (walkK C fuelK) && walkK C fuelK (startK G W false) && walkK C fuelK (startK G W true)
+
+/-! ## The steps follow the machine -/
+
+section
+variable {E : Env} {F : Nat × UInt8}
+
+theorem and0F (y : UInt8) : (y &&& 0x0F).toNat = y.toNat % 16 := by
+  have h := PipeWrites.and_0F ⟨y.toNat, y.toNat_lt⟩
+  simpa using h
+
+/-- the known low 4 bits of a byte -/
+theorem low_of_mem {b : AB} {x : UInt8} (hk : b.k &&& 0x0F = 0x0F) (h : b.mem x) : x &&& 0x0F = b.v &&& 0x0F := by
+  have e : (x &&& b.k) &&& 0x0F = (b.v &&& b.k) &&& 0x0F := by rw [show x &&& b.k = b.v &&& b.k from h]
+  rwa [UInt8.and_assoc, UInt8.and_assoc, hk] at e
+
+/-- the sum of the machine, as bytes -/
+theorem sum_u8 (a b c : UInt8) : (a.toUInt16 + b.toUInt16 + c.toUInt16).toUInt8 = a + b + c := by
+  apply UInt8.toNat_inj.1
+  have h1 := a.toNat_lt
+  have h2 := b.toNat_lt
+  have h3 := c.toNat_lt
+  simp [UInt8.toNat_add]
+
+/-- the low 4 bits of a sum come from the low 4 bits of its terms -/
+theorem low_add {a a' b b' c : UInt8} (ha : a &&& 0x0F = a' &&& 0x0F) (hb : b &&& 0x0F = b' &&& 0x0F) : (a + b + c) &&& 0x0F = ((a' + b' + c) &&& 0x0F) &&& 0x0F := by
+  have e1 : (a &&& 0x0F).toNat = (a' &&& 0x0F).toNat := by rw [ha]
+  have e2 : (b &&& 0x0F).toNat = (b' &&& 0x0F).toNat := by rw [hb]
+  rw [and0F, and0F] at e1 e2
+  apply UInt8.toNat_inj.1
+  rw [and0F, and0F, and0F, UInt8.toNat_add, UInt8.toNat_add, UInt8.toNat_add, UInt8.toNat_add]
+  omega
+
+/-- **The low-bits sum** follows `adc` -/
+theorem s_adcL {v : AB} {x : UInt8} (h : v.mem x) : Snd E F TT (aadcL v) (adc x) := by
+  refine snd_leaf fun A m hs a A' he => ?_
+  unfold aadcL at he
+  simp only at he
+  split at he
+  · rename_i hc
+    simp only [Bool.and_eq_true, beq_iff_eq] at hc
+    obtain ⟨⟨h1, h2⟩, h3⟩ := hc
+    obtain ⟨rfl, rfl⟩ := some_pair he
+    have hcm : (A.p.and (AB.known 1)).mem (m.p &&& 1) := mem_and hs.p (mem_known_self _)
+    have e3 := isK_eq h3 hcm
+    have ea := low_of_mem h1 hs.a
+    have ex := low_of_mem h2 h
+    have hp := hs.p
+    refine ⟨trivial, { hs with a := ?_, p := ?_ }, rfl, rfl⟩
+    · show ((m.a.toUInt16 + x.toUInt16 + (m.p &&& 1).toUInt16).toUInt8) &&& 0x0F = ((A.a.v + v.v + (A.p.and (AB.known 1)).v) &&& 0x0F) &&& 0x0F
+      rw [sum_u8, e3]
+      exact low_add ea ex
+    · exact mem_or (mem_or (mem_or (mem_or (mem_and hp (mem_known_self _)) (mem_iteN _ _ _)) (mem_iteN _ _ _)) (mem_and (mem_top _) (mem_known_self _))) (mem_iteN _ _ _)
+  · cases he
+
+set_option maxRecDepth 100000 in
+theorem op_65 : opTable[(0x65 : UInt8).toNat]?.getD opJAM = opADC mZp := by rw [PipeTransitionAll.opTable_eq]; rfl
+
+theorem s_sumL : Snd E F TT (aSumL E) (opADC mZp) :=
+  Snd.bind s_mZp fun _ _ ha => Snd.bind (s_ard ha) fun _ _ hv => s_adcL hv
+
+/-- an index with a known bit 1 is not 0 -/
+theorem ne_of_nonZero {b : AB} {x : UInt8} (h : nonZero b = true) (hm : b.mem x) : x ≠ 0 := by
+  intro hx
+  subst hx
+  simp only [nonZero, bne_iff_ne, ne_eq] at h
+  apply h
+  have e : (0 : UInt8) &&& b.k = b.v &&& b.k := hm
+  rw [UInt8.and_comm, ← e]
+  simp
+
+set_option maxRecDepth 100000 in
+/-- **A step of the machine**, with the steps of this walk -/
+theorem s_kstep {S : Spot} {G : Guard} {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat)
+    (hc : CleanK G S.store m) (hs : Sim E F A m) :
+    ∃ r ∈ kstep S G E ops A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 := by
+  unfold kstep
+  by_cases h1 : (!A.nmi && A.pc == S.store) = true
+  · rw [if_pos h1]
+    by_cases h2 : (A.x.isK && E.prg.get! (A.pc &&& E.mask).toNat == 0x9D) = true
+    · rw [if_pos h2]
+      exact s_succs hops hT hs
+    · rw [if_neg h2]
+      by_cases h3 : nonZero A.x = true
+      · rw [if_pos h3]
+        have hx := ne_of_nonZero h3 hs.x
+        exact PipeWrites.s_gsucc hops hT (clean_of hc fun h => hx h.2) hs
+      · rw [if_neg h3]
+        exact ⟨none, List.mem_singleton.2 rfl, fun B hB => by cases hB⟩
+  · rw [if_neg h1]
+    by_cases h4 : lowAdc E A = true
+    · rw [if_pos h4]
+      simp only [lowAdc, Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at h4
+      obtain ⟨⟨⟨⟨⟨⟨hn, hp⟩, hop⟩, _⟩, _⟩, _⟩, _⟩ := h4
+      have hs1 : Sim E F { A with pc := A.pc + 1 } { m with pc := m.pc + 1 } := { hs with
+        pc := by
+          show m.pc + 1 = A.pc + 1
+          rw [hs.pc] }
+      refine ⟨_, List.mem_singleton.2 rfl, fun B hB => ?_⟩
+      refine PipeWrites.custom_step hs hn hp hop (by decide) (by decide) (fun u A₂ he => ?_) B hB
+      rw [op_65]
+      obtain ⟨_, g1, g2⟩ := s_sumL _ _ hs1 _ _ he
+      exact ⟨g1, g2⟩
+    · rw [if_neg h4]
+      by_cases hn : A.nmi = true
+      · have e : gsucc G E ops A = succs E ops A := by
+          unfold gsucc
+          simp [hn]
+        rw [e]
+        exact s_succs hops hT hs
+      · have hq : A.pc ≠ S.store := by
+          intro hq
+          apply h1
+          simp [hn, hq]
+        exact PipeWrites.s_gsucc hops hT (clean_of hc fun h => hq (hs.pc ▸ h.1)) hs
+
+/-! ### The pieces -/
+
+theorem sim_capK {G : Guard} {q : UInt16} {A : AS} {m : Machine} (hc : CleanK G q m) (hs : Sim E F A m) : Sim E F (capT G A) m := by
+  unfold capT
+  by_cases h : (A.pc != G.idle && decide (G.late < A.hi)) = true
+  · rw [if_pos h]
+    simp only [Bool.and_eq_true, bne_iff_ne, decide_eq_true_eq] at h
+    obtain ⟨h1, h2⟩ := h
+    have hl := hs.lim
+    exact { hs with
+      hi := hc.time (by rw [hs.pc]; exact h1)
+      lim := by
+        show G.late < dotsPerFrame
+        omega }
+  · rw [if_neg h]
+    exact hs
+
+theorem cov_jumpK {G : Guard} {q : UInt16} {A : AS} {m : Machine} (hc : CleanK G q m) (hs : Sim E F A m) : ∃ B ∈ jumpP G A, Sim E F B m := by
+  unfold jumpP
+  by_cases h : (A.pc == G.je && !A.a.isK) = true
+  · rw [if_pos h]
+    have hpc : m.pc = G.je := by
+      rw [hs.pc]
+      simp only [Bool.and_eq_true, beq_iff_eq] at h
+      exact h.1
+    cases hp : ptrOf (A.getK (0x100 + A.s.toNat + 1)) (A.getK (0x100 + A.s.toNat + 2)) with
+    | none => exact ⟨A, List.mem_singleton.2 rfl, hs⟩
+    | some r =>
+      simp only
+      cases hl : G.jumps.lookup (r + 1).toNat with
+      | none => exact ⟨A, List.mem_singleton.2 rfl, hs⟩
+      | some n =>
+        simp only
+        have hsz : A.s.toNat < 256 := A.s.toNat_lt
+        have e1 := hs.ram (0x100 + A.s.toNat + 1) (by omega)
+        have e2 := hs.ram (0x100 + A.s.toNat + 2) (by omega)
+        have e3 := TaintRun.ptrOf_ok hp e1 e2
+        have ht : tableOf m = r + 1 := by
+          unfold tableOf
+          rw [hs.s, e3]
+        have hlt := hc.jump hpc n (by rw [ht]; exact hl)
+        refine ⟨_, List.mem_map.2 ⟨m.a.toNat, List.mem_range.2 hlt, rfl⟩, ?_⟩
+        refine { hs with a := ?_ }
+        have e4 : m.a.toNat.toUInt8 = m.a := by simp
+        show (AB.known m.a.toNat.toUInt8).mem m.a
+        rw [e4]
+        exact mem_known_self _
+  · rw [if_neg h]
+    exact ⟨A, List.mem_singleton.2 rfl, hs⟩
+
+set_option maxRecDepth 100000 in
+theorem xPieces_all : (List.range 256).all (fun n => xPieces.any fun p => (n.toUInt8 &&& p.k) == (p.v &&& p.k)) = true := by decide
+
+theorem xPieces_cover (y : UInt8) : ∃ p ∈ xPieces, p.mem y := by
+  have h := List.all_eq_true.1 xPieces_all y.toNat (List.mem_range.2 y.toNat_lt)
+  obtain ⟨p, hp, he⟩ := List.any_eq_true.1 h
+  refine ⟨p, hp, ?_⟩
+  have e : y.toNat.toUInt8 = y := by simp
+  rw [e] at he
+  exact beq_iff_eq.1 he
+
+theorem cov_splitX (S : Spot) : Cov E F (splitX S) := by
+  intro B m hs
+  unfold splitX
+  split
+  · obtain ⟨p, hp, hm⟩ := xPieces_cover m.x
+    exact ⟨{ B with x := p }, List.mem_map.2 ⟨p, hp, rfl⟩, { hs with x := hm }, rfl⟩
+  · exact ⟨B, List.mem_singleton.2 rfl, hs, rfl⟩
+
+theorem k_of_sim {A B : AS} {m : Machine} (h1 : Sim E F A m) (h2 : Sim E F B m) : B.k = A.k := by
+  have a1 := h1.fr
+  have a2 := h2.fr
+  omega
+
+/-- **The pieces cover the machine** -/
+theorem cov_preK {S : Spot} {G : Guard} {A : AS} {m : Machine} (hc : CleanK G S.store m) (hs : Sim E F A m) :
+    ∃ B ∈ preK S G A, Sim E F B m ∧ B.k = A.k := by
+  have h1 := sim_capK hc hs
+  obtain ⟨B, hB, h2⟩ := cov_jumpK hc h1
+  obtain ⟨D, hD, h3, h4⟩ := cov_splitX S B m h2
+  exact ⟨D, List.mem_flatMap.2 ⟨B, hB, hD⟩, h3, h4.trans (k_of_sim hs h2)⟩
+
+end
+
+/-! ## The walk covers the frame -/
+
+section
+variable {C : CfgK} {Fu : Nat} {F : Nat × UInt8}
+
+/-- `A` covers `m`, and a walk from `A` succeeds -/
+def LiveK (C : CfgK) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop := Sim C.E F A m ∧ ∃ n, walkK C n A = true
+
+theorem cover_liveK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) {B : AS} {m : Machine} (hs : Sim C.E F B m) (h : coverK C B = true) :
+    ∃ D, LiveK C F D m ∧ D.k = B.k := by
+  unfold coverK at h
+  obtain ⟨i, _, h2⟩ := List.any_eq_true.1 h
+  split at h2
+  · rename_i D l e1 e2
+    obtain ⟨hi, he⟩ := Array.getElem?_eq_some_iff.1 e1
+    have hl : l = knownOf D := by
+      rw [hkl] at e2
+      rw [Array.getElem?_map, e1] at e2
+      exact (Option.some.inj e2).symm
+    rw [hl] at h2
+    have hle := PipeWrites.leK_le h2
+    have hall := (Array.all_eq_true.1 ht) i hi
+    rw [he] at hall
+    exact ⟨D, ⟨sim_le hle hs, Fu, hall⟩, (PipeWrites.le_k hle).symm⟩
+  · cases h2
+
+theorem live_stepK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine}
+    (hl : LiveK C F A m) (hh : CleanK C.G C.S.store m) :
+    (∃ A', LiveK C F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
+    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
+  obtain ⟨hs, n, hw⟩ := hl
+  cases n with
+  | zero => simp [walkK] at hw
+  | succ n =>
+    obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preK hh hs
+    obtain ⟨r, hr, hB⟩ := s_kstep hops hT hh hs1
+    simp only [walkK, List.all_eq_true] at hw
+    have hw2 := hw A₁ hA r hr
+    cases r with
+    | none => simp at hw2
+    | some B =>
+      obtain ⟨h1, h2⟩ := hB B rfl
+      dsimp only at hw2
+      rcases h2 with ⟨k1, k2, k3⟩ | ⟨k1, k2⟩
+      · left
+        rw [hk1] at k1
+        rw [if_pos (by simp [k1])] at hw2
+        simp only [Bool.or_eq_true, Bool.and_eq_true] at hw2
+        rcases hw2 with ⟨_, h3⟩ | h3
+        · obtain ⟨D, hD, hk⟩ := cover_liveK ht hkl h1 h3
+          exact ⟨D, hD, by rw [hk, k1], k2, k3⟩
+        · exact ⟨B, ⟨h1, n, h3⟩, k1, k2, k3⟩
+      · right
+        rw [hk1] at k1
+        rw [if_neg (by simp [k1])] at hw2
+        simp only [Bool.and_eq_true, beq_iff_eq] at hw2
+        exact ⟨k2, B, hw2.2, k1, h1⟩
+
+/-- **One frame.** A walk from `S` that succeeds covers the frame of every machine of `S`, for every input, if each instruction meets `CleanK`. -/
+theorem frame_of_walkK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
+    {S : AS} {m : Machine} {i : UInt8} (hw : walkK C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) :
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
+  have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
+  have key : ∀ j, (∃ A, LiveK C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
+      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
+    intro j
+    induction j with
+    | zero => exact Or.inl ⟨S, ⟨hs0, Fu, hw⟩, rfl, rfl, Nat.le_refl _⟩
+    | succ j ih =>
+      have e : trace m i (j + 1) = nxt (m.frame + 1) (trace m i j) := rfl
+      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h3, h4⟩
+      · have hh := h1.1.halted
+        have hc : ¬ (((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true) := by
+          simp [h3, hh]
+        have e2 : trace m i (j + 1) = (go step (trace m i j)).2 := by
+          rw [e]
+          simp only [nxt, if_neg hc]
+        rw [e2]
+        rcases live_stepK ht hkl hops hT h1 (hk j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a3, a4⟩
+        · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
+        · exact Or.inr ⟨by rw [a1, h3], B, a2, by rw [a3, h2], a4⟩
+      · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
+          simp [h1]
+        have e2 : trace m i (j + 1) = trace m i j := by
+          rw [e]
+          simp only [nxt, if_pos hc]
+        rw [e2]
+        exact Or.inr ⟨h1, B, h2, h3, h4⟩
+  rw [frame_trace]
+  rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h3, h4⟩
+  · exfalso
+    have a1 := h1.1.hi
+    have a2 := h1.1.lim
+    have a3 : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
+    omega
+  · exact ⟨h1, B, h2, h3, h4⟩
+
+end
+
+/-! ## The frame -/
+
+section
+variable {E : Env} {F : Nat × UInt8}
+
+theorem sim_watch {W : List Watch} {m : Machine} (hw : Watched W m) :
+    ∀ (l : List Watch), (∀ w ∈ l, w ∈ W) → ∀ A, Sim E F A m → Sim E F (l.foldl (fun A w => A.setK w.1 ⟨w.2.2 &&& w.2.1, w.2.1⟩) A) m := by
+  intro l
+  induction l with
+  | nil => exact fun _ _ h => h
+  | cons w l ih =>
+    intro hl A hs
+    simp only [List.foldl_cons]
+    refine ih (fun x hx => hl x (List.mem_cons_of_mem _ hx)) _ (PipeEntryRule.sim_setK' hs ?_)
+    show m.ram.get! w.1 &&& w.2.1 = (w.2.2 &&& w.2.1) &&& w.2.1
+    rw [hw w (hl w List.mem_cons_self), UInt8.and_assoc, UInt8.and_self]
+
+/-- the state when the frame starts covers the machine -/
+theorem sim_startK {G : Guard} {W : List Watch} (hE : E.pad = AB.top) {m : Machine} (h : FrameStart G E m) (hw : Watched W m) :
+    ∃ b : Bool, Sim E (m.frame, 2) (startK G W b) m := by
+  obtain ⟨b, hs⟩ := PipeWrites.sim_startG hE h
+  exact ⟨b, sim_watch hw W (fun _ h => h) _ hs⟩
+
+/-- the watched bits of the frame's end -/
+theorem watched_of {W : List Watch} {B : AS} {m : Machine} (hk : watchOK W B = true) (hs : Sim E F B m) : Watched W m := by
+  intro w hw
+  have h := List.all_eq_true.1 hk w hw
+  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  obtain ⟨⟨h1, h2⟩, h3⟩ := h
+  have e : m.ram.get! w.1 &&& (B.getK w.1).k = (B.getK w.1).v &&& (B.getK w.1).k := hs.ram w.1 h1
+  show m.ram.get! w.1 &&& w.2.1 = w.2.2 &&& w.2.1
+  calc m.ram.get! w.1 &&& w.2.1 = m.ram.get! w.1 &&& ((B.getK w.1).k &&& w.2.1) := by rw [h2]
+    _ = (m.ram.get! w.1 &&& (B.getK w.1).k) &&& w.2.1 := by rw [UInt8.and_assoc]
+    _ = ((B.getK w.1).v &&& (B.getK w.1).k) &&& w.2.1 := by rw [e]
+    _ = (B.getK w.1).v &&& ((B.getK w.1).k &&& w.2.1) := by rw [UInt8.and_assoc]
+    _ = (B.getK w.1).v &&& w.2.1 := by rw [h2]
+    _ = w.2.2 &&& w.2.1 := h3
+
+/-- what the check says -/
+structure KeepOK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : Prop where
+  late : G.late < dotsPerFrame
+  table : (cfgOfK S G E W).t.all (walkK (cfgOfK S G E W) fuelK) = true
+  s0 : walkK (cfgOfK S G E W) fuelK (startK G W false) = true
+  s1 : walkK (cfgOfK S G E W) fuelK (startK G W true) = true
+
+theorem keepOK_of_check {S : Spot} {G : Guard} {E : Env} {W : List Watch} (h : keepCheck S G E W = true) : KeepOK S G E W := by
+  simp only [keepCheck, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨⟨h1, _⟩, h2⟩, h3⟩, h4⟩ := h
+  exact ⟨h1, h2, h3, h4⟩
+
+/-- **One frame in control keeps the watched bits.** A frame that starts in the idle loop in control (`FrameStart`) with the watched bits at their values, and whose every instruction
+meets `CleanK`, ends with the watched bits at their values. -/
+theorem keep_frame {S : Spot} {G : Guard} {W : List Watch} (hc : keepCheck S G E W = true) (hE : E.pad = AB.top) {m : Machine} {i : UInt8}
+    (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) : Watched W (frame m i) := by
+  have hC := keepOK_of_check hc
+  obtain ⟨b, hs⟩ := sim_startK hE h0 hw
+  have hw0 : walkK (cfgOfK S G E W) fuelK (startK G W b) = true := by
+    cases b with
+    | false => exact hC.s0
+    | true => exact hC.s1
+  obtain ⟨_, B, h1, _, h2⟩ := frame_of_walkK (C := cfgOfK S G E W) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
+  exact watched_of h1 h2
+
+end
+
+/-! ## On the ROM -/
+
+/-- the guard: that of `PipeWrites`, with the jumpspring's control known to be 0 when the frame starts, and the watched bytes and that byte among the bytes a store with a target not known does
+not touch -/
+def guardK (sy : Syms) (m0 : Machine) : Guard :=
+  let G := guardOf sy m0
+  { G with
+    known := G.known ++ [((sy.JumpspringAnimCtrl &&& 0x7FF).toNat, 0)]
+    prot := (sy.StarFlagTaskControl &&& 0x7FF).toNat :: (sy.SprObject_X_MoveForce &&& 0x7FF).toNat :: (sy.JumpspringAnimCtrl &&& 0x7FF).toNat :: G.prot }
+
+/-- the watched bits: the castle flag down, the fraction's low 4 bits 0 -/
+def watchOf (sy : Syms) : List Watch :=
+  [((sy.StarFlagTaskControl &&& 0x7FF).toNat, 0xFF, 0), ((sy.SprObject_X_MoveForce &&& 0x7FF).toNat, 0x0F, 0)]
+
+/-- the move routine: its store of the fraction is its first `STA abs,X`, and its sum adds a zero page byte -/
+def spotOf (sy : Syms) (m0 : Machine) : Spot :=
+  let sum := findOp m0 sy.MoveObjectHorizontally 0x65 64
+  { entry := sy.MoveObjectHorizontally, store := findOp m0 sy.MoveObjectHorizontally 0x9D 64, temps := [(romByte m0 (sum + 1)).toNat] }
+
+/-- the check on the ROM -/
+def keepCheckOf (sy : Syms) (m0 : Machine) : Bool := keepCheck (spotOf sy m0) (guardK sy m0) (PipeEntryRule.envOf m0) (watchOf sy)
+
+/-- `Watched` as a check, for a program -/
+def watchedB (W : List Watch) (m : Machine) : Bool := W.all fun w => m.ram.get! w.1 &&& w.2.1 == w.2.2 &&& w.2.1
+
+/-- the store is the fraction's -/
+def spotCheck (sy : Syms) (m0 : Machine) : Bool :=
+  let q := (spotOf sy m0).store
+  romByte m0 q == 0x9D && romByte m0 (q + 1) == sy.SprObject_X_MoveForce.toUInt8 && romByte m0 (q + 2) == (sy.SprObject_X_MoveForce >>> 8).toUInt8
+
+/-! ## The castle flag and the fraction -/
+
+section
+variable {sy : Syms} {m0 m : Machine}
+
+theorem and_ff (x : UInt8) : x &&& 0xFF = x := by
+  apply bt_ext
+  intro j hj
+  rw [bt_and, TaintRun.bt_ff hj, Bool.and_true]
+
+/-- the watched bits: the castle flag is down -/
+theorem castle_of_watched (h : Watched (watchOf sy) m) : CastleWalk.castle sy m = false := by
+  have h1 : m.ram.get! (sy.StarFlagTaskControl &&& 0x7FF).toNat &&& 0xFF = (0 : UInt8) &&& 0xFF := h _ List.mem_cons_self
+  rw [and_ff, and_ff] at h1
+  unfold CastleWalk.castle peek
+  rw [h1]
+  rfl
+
+/-- the watched bits: the fraction is a multiple of 1/16 px -/
+theorem frac_of_watched (h : Watched (watchOf sy) m) : posP sy m % 16 = 0 := by
+  have h1 : m.ram.get! (sy.SprObject_X_MoveForce &&& 0x7FF).toNat &&& 0x0F = (0 : UInt8) &&& 0x0F := h _ (List.mem_cons_of_mem _ List.mem_cons_self)
+  have e : (peek m sy.SprObject_X_MoveForce &&& 0x0F).toNat = 0 := by
+    unfold peek
+    rw [h1]
+    rfl
+  rw [and0F] at e
+  unfold posP
+  omega
+
+/-- the castle flag down and the fraction a multiple of 1/16 px are the watched bits -/
+theorem watched_of_parts (h1 : CastleWalk.castle sy m = false) (h2 : posP sy m % 16 = 0) : Watched (watchOf sy) m := by
+  intro w hw
+  simp only [watchOf, List.mem_cons, List.not_mem_nil, or_false] at hw
+  rcases hw with rfl | rfl
+  · show m.ram.get! (sy.StarFlagTaskControl &&& 0x7FF).toNat &&& 0xFF = (0 : UInt8) &&& 0xFF
+    have e : peek m sy.StarFlagTaskControl = 0 := by
+      unfold CastleWalk.castle at h1
+      simpa using h1
+    unfold peek at e
+    rw [e]
+  · show m.ram.get! (sy.SprObject_X_MoveForce &&& 0x7FF).toNat &&& 0x0F = (0 : UInt8) &&& 0x0F
+    have e := and0F (peek m sy.SprObject_X_MoveForce)
+    unfold posP at h2
+    have e2 : (peek m sy.SprObject_X_MoveForce &&& 0x0F).toNat = ((0 : UInt8) &&& 0x0F).toNat := by
+      rw [e]
+      show _ = 0
+      omega
+    exact UInt8.toNat_inj.1 e2
+
+end
+
+/-! ## The frames of a run -/
+
+/-- **The frames of a run, as the walk needs them.** `seq j` is the machine at the end of the counted frame `j`, and `seq 0` the machine at control. `fm j` is the machine when the counted frame
+`j` begins (`seq (j − 1)`, or later by `lag` frames), and `pad j` its input. Every field is a hypothesis. -/
+structure Frames (sy : Syms) (m0 : Machine) (g : Nat) (seq : Nat → Machine) where
+  fm : Nat → Machine
+  pad : Nat → UInt8
+  /-- the frame ends at `seq j` -/
+  ends : ∀ j, 1 ≤ j → j ≤ g → seq j = frame (fm j) (pad j)
+  /-- it starts in the idle loop, in control, with the jumpspring's control 0 -/
+  start : ∀ j, 1 ≤ j → j ≤ g → FrameStart (guardK sy m0) (PipeEntryRule.envOf m0) (fm j)
+  /-- each of its instructions meets `CleanK` -/
+  clean : ∀ j, 1 ≤ j → j ≤ g → ∀ n, CleanK (guardK sy m0) (spotOf sy m0).store (trace (fm j) (pad j) n)
+  /-- the `lag` frames before it keep the watched bits -/
+  lag : ∀ j, 1 ≤ j → j ≤ g → Watched (watchOf sy) (seq (j - 1)) → Watched (watchOf sy) (fm j)
+
+section
+variable {sy : Syms} {m0 : Machine} {g : Nat} {seq : Nat → Machine}
+
+/-- **Every frame keeps the watched bits**, from the machine at control on. `hc` is the walk's check on the ROM. -/
+theorem Frames.watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h0 : Watched (watchOf sy) (seq 0)) : ∀ j, j ≤ g → Watched (watchOf sy) (seq j) := by
+  intro j
+  induction j with
+  | zero => exact fun _ => h0
+  | succ i ih =>
+    intro hj
+    have hl := K.lag (i + 1) (by omega) hj (by rw [Nat.add_sub_cancel]; exact ih (by omega))
+    rw [K.ends (i + 1) (by omega) hj]
+    exact keep_frame hc rfl (K.start (i + 1) (by omega) hj) hl (K.clean (i + 1) (by omega) hj)
+
+/-- no castle flag up to frame `g` -/
+theorem Frames.noCastle (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h0 : Watched (watchOf sy) (seq 0)) : ∀ j, j ≤ g → CastleWalk.castle sy (seq j) = false :=
+  fun j hj => castle_of_watched (K.watched hc h0 j hj)
+
+/-- the fraction is a multiple of 1/16 px up to frame `g` -/
+theorem Frames.frac (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h0 : Watched (watchOf sy) (seq 0)) : ∀ j, j ≤ g → posP sy (seq j) % 16 = 0 :=
+  fun j hj => frac_of_watched (K.watched hc h0 j hj)
+
+end
+
+end Smbrta.FrameKeep

@@ -52,6 +52,7 @@ Lean: `Theorems/PipeWrites.lean`, private `Proof/PipeWrites.lean`.
 **Steps added to the machine.** Each is proved to keep `Sim`. `TaintRun` is not changed.
 
 * A store through an index or a pointer whose address is not known. By `Plain`, `Prot` does not change. Every other byte of RAM becomes not known (`forgetW`).
+  A byte followed as the counter of `TaintRun` stays followed when it is in `Prot` (`AS.forgetK`); this walk has no counter, but [the frames not counted](a-5-5-3-LagFrames.md) use it.
 * `LDA (zp),Y` through a pointer not known. The address is no register, so the machine does not change. The value read is not known.
 * `ADC abs,Y`. If the top 4 bits of `A` are known, the value added has no low 4 bits and the carry is 0, the top 4 bits of the sum are known.
 

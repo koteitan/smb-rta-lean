@@ -23,8 +23,7 @@ The fields of `HurryMusic.Run`:
 ```
 clock, order   Frames (each frame follows Step and plan), and the order of the segments
 next           seq(n + 1) = frame(seq n, inp n)
-zero           timer(seq 0) = t0
-quiet₀         hurryOn(seq 0) = false
+title          from the press of Start on the title to frame 0 (TitleStart.Begin)
 read₀          s(0).t = timer(seq 0)
 k, hk, on      k ≤ E + 1,  hurryOn(seq k) = true
 music          n < k,  hurryOn(seq n) = false,  hurryOn(frame(seq n, inp n)) = true  ⟹  timer(seq n) ≤ u        (one frame)
@@ -36,6 +35,8 @@ The theorems:
 
 ```
 Frames.late             :  s(0).t = t0,  n ≤ E + 1,  s(n).t ≤ u  ⟹  q · (t0 − u) ≤ E + 3q
+Run.zero                :  timer(seq 0) = t0                (from title, with the check title_check)
+Run.quiet₀              :  hurryOn(seq 0) = false           (from title, with the check title_check)
 Run.late                :  1 ≤ q  ⟹  q · (t0 − u) ≤ E + 3q
 Run.level_ge            :  1 ≤ q,  1748 + 3q ≤ q · (t0 − u)  ⟹  1748 ≤ L
 hurry_1_1 (private)     :  q = 24,  t0 = 401,  u = 100  ⟹  1748 ≤ L
@@ -72,9 +73,10 @@ The 60 runs in which the music did not start are in a change of area (the timer 
 
 * `music` is a hypothesis on one frame. In the code, only `RunGameTimer` queues the hurry-up music, when the timer is at 100. `EventMusicBuffer` is copied from the queue. Only the loading of the hurry-up music from the queue sets `NoteLengthTblAdder` to a value other than 0. This is read from the code, and checked on the 108 frames above.
 * `below` and `read₀` link the counters to the machines. In a run with no frame that runs over, the counters of `clock` are the values read from the machines, so they hold with equality. On a frame that runs over, the digits at the frame's start are not below those that the routine leaves, because the routine only lowers them. This is read from the code, not checked.
+* `title` is the hypothesis of [From Start on the title to control](0-5-3-TitleStart.md): one condition on the machine after the press, and no Start on the frames of the game core before control. `zero` and `quiet₀` are no longer fields: they are proved from it (`Run.zero`, `Run.quiet₀`).
 * `step` and `plan` of `clock` are the same hypotheses as in `Route.Run` ([the whole of 1-1](0-1-Route.md)). Runs with a power-up and runs with a death do not follow `plan`, so they are not covered here either.
 
-**Files.** `Theorems/HurryMusic.lean`, `Theorems/CastleToLevel.lean` (`Frames.late`, `playN_drop`), the private `Proof/HurryMusic.lean`.
+**Files.** `Theorems/HurryMusic.lean`, `Theorems/CastleToLevel.lean` (`Frames.late`, `playN_drop`), `Theorems/TitleStart.lean`, the private `Proof/HurryMusic.lean` and `Proof/TitleStart.lean`.
 
 **Reproduce.**
 ```

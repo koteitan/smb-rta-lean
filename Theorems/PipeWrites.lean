@@ -9,7 +9,8 @@ import Std.Data.TreeMap
 the player's routine, the enemies, to the frame's end. The result: an instruction that makes the routine byte the pipe's is the end of a foot check whose right foot was at or right of the window's left end.
 
 The machine is the one of `TaintRun`. It does not fail on four things that it cannot decide. Each of them is a condition on one state (`Clean`), asked of every instruction of the frame up to the write:
-* a store through an index or a pointer whose target is not known: it does not touch the bytes the walk needs (`Plain`); the walk then forgets the other bytes (`AS.forgetW`);
+* a store through an index or a pointer whose target is not known: it does not touch the bytes the walk needs (`Plain`); the walk then forgets the other bytes (`AS.forgetW`).
+  A byte followed as the counter of `TaintRun` stays followed when it is among these bytes (`AS.forgetK`, used by `LagFrames`; this walk has no counter);
 * `LDA (zp),Y` through a pointer that is not known: it does not read a register;
 * the indirect jump: the index is in its table;
 * the time: the instruction runs before the frame's last dots.
@@ -120,9 +121,12 @@ def keepKn (prot : List Nat) (kn : ByteArray) : ByteArray := prot.foldl (fun k i
 /-- after a store with a target not known: only the bytes of `prot` stay known -/
 def AS.forgetW (prot : List Nat) (A : AS) : AS := { A with kn := keepKn prot A.kn, dg := false, rk := false }
 
+/-- the same, but the counter `r` stays followed when it is in `prot`: such a store does not touch it -/
+def AS.forgetK (prot : List Nat) (r : Nat) (A : AS) : AS := { AS.forgetW prot A with rk := A.rk && prot.contains r }
+
 /-! ## The steps that do not know their target -/
 
-def aforget (prot : List Nat) : AM Unit := fun A => some ((), AS.forgetW prot A)
+def aforget (prot : List Nat) (r : Nat) : AM Unit := fun A => some ((), AS.forgetK prot r A)
 
 /-- `(zp),Y` with the pointer not known: the bytes of the pointer are read -/
 def aIzyT (E : Env) : AM Unit := do
@@ -150,7 +154,7 @@ def customOf (prot : List Nat) (E : Env) (A : AS) (op : UInt8) : Option (AM Unit
   let zx := aZpi E (·.x)
   let ax := aAbi E (·.x)
   let ay := aAbi E (·.y)
-  let f := aforget prot
+  let f := aforget prot E.rkI
   let unkP := fun (z : UInt8) => !((A.getK z.toNat).isK && (A.getK (z + 1).toNat).isK)
   let z1 := E.prg.get! ((A.pc + 1) &&& E.mask).toNat
   if op == 0x95 || op == 0x94 then if A.x.isK then none else some (zx >>= fun _ => f)
@@ -623,6 +627,29 @@ theorem sim_forget_write {prot : List Nat} {A : AS} {m : Machine} (hs : Sim E F 
   · intro h
     cases h
 
+/-- forgetting with the counter kept -/
+theorem sim_forgetK {prot : List Nat} {A : AS} {m : Machine} (hs : Sim E F A m) : Sim E F (AS.forgetK prot E.rkI A) m := by
+  have h0 := sim_forgetW (prot := prot) hs
+  refine { h0 with rkv := ?_ }
+  intro h
+  have h1 : A.rk = true := by
+    simp only [AS.forgetK, Bool.and_eq_true] at h
+    exact h.1
+  exact hs.rkv h1
+
+/-- a write outside `prot`, with the counter kept if it is in `prot` -/
+theorem sim_forget_writeK {prot : List Nat} {A : AS} {m : Machine} (hs : Sim E F A m) {d : Nat} (hd : d ∉ prot) (v : UInt8) :
+    Sim E F (AS.forgetK prot E.rkI A) { m with ram := m.ram.set! d v } := by
+  have h0 := sim_forget_write (prot := prot) hs hd v
+  refine { h0 with rkv := ?_ }
+  intro h
+  simp only [AS.forgetK, Bool.and_eq_true] at h
+  have hm : E.rkI ∈ prot := by simpa using h.2
+  have hne : d ≠ E.rkI := fun e => hd (e ▸ hm)
+  show (m.ram.set! d v).get! E.rkI = _
+  rw [ba_get_set_ne _ _ _ _ hne]
+  exact hs.rkv h.1
+
 /-! ## A store with a target not known -/
 
 theorem rd_plain {prot : List Nat} {t : UInt16} {m : Machine} (ht : Plain prot t) (hk : m.trk = false) : (go (rd t) m).2 = m := by
@@ -648,10 +675,10 @@ theorem rd_plain {prot : List Nat} {t : UInt16} {m : Machine} (ht : Plain prot t
       · rw [rd_else _ a1 a2 a3 a4 a5]
 
 theorem wr_plain {prot : List Nat} {t : UInt16} {x : UInt8} {A : AS} {m : Machine} (ht : Plain prot t) (hs : Sim E F A m) :
-    Sim E F (AS.forgetW prot A) (go (wr t x) m).2 ∧ (go (wr t x) m).2.frame = m.frame ∧ (go (wr t x) m).2.fdot = m.fdot := by
+    Sim E F (AS.forgetK prot E.rkI A) (go (wr t x) m).2 ∧ (go (wr t x) m).2.frame = m.frame ∧ (go (wr t x) m).2.fdot = m.fdot := by
   rcases ht with ⟨h1, h2⟩ | ⟨h1, h2, h3⟩
   · rw [wr_ram x h1 hs.trk]
-    exact ⟨sim_forget_write hs h2 x, rfl, rfl⟩
+    exact ⟨sim_forget_writeK hs h2 x, rfl, rfl⟩
   · have a1 : ¬ t < 0x2000 := by
       intro h
       have b1 := UInt16.lt_iff_toNat_lt.1 h
@@ -669,11 +696,11 @@ theorem wr_plain {prot : List Nat} {t : UInt16} {x : UInt8} {A : AS} {m : Machin
       rw [if_neg a1, if_neg a2, if_neg (by simpa using h2), if_neg (by simpa using h3)]
       rfl
     rw [e]
-    exact ⟨sim_forgetW hs, rfl, rfl⟩
+    exact ⟨sim_forgetK hs, rfl, rfl⟩
 
 /-- `md`, then a store of a value of the machine -/
 theorem w_store {α : Type} {R : α → UInt16 → Prop} {prot : List Nat} {amd : AM α} {md : Mode} (hmd : Snd E F R amd md) (val : Machine → UInt8) {A : AS} {m : Machine} (hs : Sim E F A m)
-    (hp : Plain prot (go md m).1) {u : Unit} {B : AS} (he : (amd >>= fun _ => aforget prot) A = some (u, B)) :
+    (hp : Plain prot (go md m).1) {u : Unit} {B : AS} (he : (amd >>= fun _ => aforget prot E.rkI) A = some (u, B)) :
     Sim E F B (go (md >>= fun ad => (get : M Machine) >>= fun n => wr ad (val n)) m).2 ∧ Adv m (go (md >>= fun ad => (get : M Machine) >>= fun n => wr ad (val n)) m).2 := by
   obtain ⟨a, A2, h1, h2⟩ := abind_some he
   obtain ⟨_, h3, h4⟩ := hmd A m hs a A2 h1
@@ -687,7 +714,7 @@ theorem w_store {α : Type} {R : α → UInt16 → Prop} {prot : List Nat} {amd 
 /-- `md`, then a change of the byte -/
 theorem w_rmw {α : Type} {R : α → UInt16 → Prop} {prot : List Nat} {amd : AM α} {md : Mode} {af : AB → AM AB} {f : UInt8 → M UInt8} (hmd : Snd E F R amd md)
     (hf : ∀ v x, v.mem x → Snd E F AB.mem (af v) (f x)) {A : AS} {m : Machine} (hs : Sim E F A m)
-    (hp : Plain prot (go md m).1) {u : Unit} {B : AS} (he : (amd >>= fun _ => af AB.top >>= fun _ => aforget prot) A = some (u, B)) :
+    (hp : Plain prot (go md m).1) {u : Unit} {B : AS} (he : (amd >>= fun _ => af AB.top >>= fun _ => aforget prot E.rkI) A = some (u, B)) :
     Sim E F B (go (rmw f md) m).2 ∧ Adv m (go (rmw f md) m).2 := by
   obtain ⟨a, A2, h1, h2⟩ := abind_some he
   obtain ⟨_, h3, h4⟩ := hmd A m hs a A2 h1
@@ -893,7 +920,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
   simp only at h
   by_cases o1 : op = 0x95
   · subst o1
-    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -902,7 +929,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_store s_mZpx (·.a) hs1 (hst _ rfl) he
   by_cases o2 : op = 0x94
   · subst o2
-    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -911,7 +938,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_store s_mZpx (·.y) hs1 (hst _ rfl) he
   by_cases o3 : op = 0xD6
   · subst o3
-    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => adecV AB.top >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => adecV AB.top >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -920,7 +947,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_rmw s_mZpx (fun _ _ => s_decV) hs1 (hst _ rfl) he
   by_cases o4 : op = 0xF6
   · subst o4
-    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => aincV AB.top >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aZpi E (·.x) >>= fun _ => aincV AB.top >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -929,7 +956,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_rmw s_mZpx (fun _ _ => s_incV) hs1 (hst _ rfl) he
   by_cases o5 : op = 0x9D
   · subst o5
-    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -938,7 +965,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_store s_mAbx (·.a) hs1 (hst _ rfl) he
   by_cases o6 : op = 0xDE
   · subst o6
-    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => adecV AB.top >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => adecV AB.top >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -947,7 +974,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_rmw s_mAbx (fun _ _ => s_decV) hs1 (hst _ rfl) he
   by_cases o7 : op = 0xFE
   · subst o7
-    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => aincV AB.top >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => aincV AB.top >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -956,7 +983,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_rmw s_mAbx (fun _ _ => s_incV) hs1 (hst _ rfl) he
   by_cases o8 : op = 0x7E
   · subst o8
-    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => arorV AB.top >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.x.isK = true then none else some (aAbi E (·.x) >>= fun _ => arorV AB.top >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -965,7 +992,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_rmw s_mAbx (fun _ _ => s_rorV) hs1 (hst _ rfl) he
   by_cases o9 : op = 0x99
   · subst o9
-    have : (if A.y.isK = true then none else some (aAbi E (·.y) >>= fun _ => aforget G.prot)) = some af := h
+    have : (if A.y.isK = true then none else some (aAbi E (·.y) >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this
@@ -974,7 +1001,7 @@ theorem custom_ok {G : Guard} {A : AS} {m : Machine} {op : UInt8} {af : AM Unit}
       exact w_store s_mAby (·.a) hs1 (hst _ rfl) he
   by_cases o10 : op = 0x91
   · subst o10
-    have : (if _ then none else some (aIzyT E >>= fun _ => aforget G.prot)) = some af := h
+    have : (if _ then none else some (aIzyT E >>= fun _ => aforget G.prot E.rkI)) = some af := h
     split at this
     · cases this
     · obtain rfl := Option.some.inj this

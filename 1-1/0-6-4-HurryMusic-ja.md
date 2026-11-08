@@ -23,8 +23,7 @@ hurryOn(m)  =  EventMusicQueue(m) = TimeRunningOutMusic  ∨  EventMusicBuffer(m
 ```
 clock, order   Frames（各フレームは Step と plan に従う）と、区間の順序
 next           seq(n + 1) = frame(seq n, inp n)
-zero           timer(seq 0) = t0
-quiet₀         hurryOn(seq 0) = false
+title          タイトルで Start を押してからフレーム 0 まで（TitleStart.Begin）
 read₀          s(0).t = timer(seq 0)
 k, hk, on      k ≤ E + 1,  hurryOn(seq k) = true
 music          n < k,  hurryOn(seq n) = false,  hurryOn(frame(seq n, inp n)) = true  ⟹  timer(seq n) ≤ u        （1 フレーム）
@@ -36,6 +35,8 @@ L, after       E < L
 
 ```
 Frames.late         :  s(0).t = t0,  n ≤ E + 1,  s(n).t ≤ u  ⟹  q · (t0 − u) ≤ E + 3q
+Run.zero            :  timer(seq 0) = t0                （title と確かめ title_check から）
+Run.quiet₀          :  hurryOn(seq 0) = false           （title と確かめ title_check から）
 Run.late            :  1 ≤ q  ⟹  q · (t0 − u) ≤ E + 3q
 Run.level_ge        :  1 ≤ q,  1748 + 3q ≤ q · (t0 − u)  ⟹  1748 ≤ L
 hurry_1_1（非公開）  :  q = 24,  t0 = 401,  u = 100  ⟹  1748 ≤ L
@@ -71,9 +72,10 @@ hurry_1_1（非公開）  :  q = 24,  t0 = 401,  u = 100  ⟹  1748 ≤ L
 
 * `music` は 1 フレームの仮定です。コードでは、急ぎの音楽をキューに入れるのは `RunGameTimer` だけで、タイマーが 100 のときです。`EventMusicBuffer` はキューから写します。`NoteLengthTblAdder` を 0 でない値にするのは、キューの急ぎの音楽を読み込むときだけです。これはコードから読んだもので、上の 108 フレームで確かめました。
 * `below` と `read₀` はカウンタと機械のつながりです。はみ出すフレームのない走りでは、`clock` のカウンタは機械から読んだ値なので、等号で成り立ちます。はみ出すフレームでは、境目の数字はルーチンが残す数字より小さくありません。ルーチンは数字を下げるだけだからです。これはコードから読んだもので、確かめていません。
+* `title` は [タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md) の仮定です。押したあとの機械の 1 つの条件と、操作できるまでのゲームコアのフレームで Start を押さないことです。`zero` と `quiet₀` はもうフィールドではありません。ここから証明します（`Run.zero`、`Run.quiet₀`）。
 * `clock` の `step` と `plan` は `Route.Run` と同じ仮定です（[1-1 全体](0-1-Route-ja.md)）。パワーアップのある走りと死ぬ走りは `plan` に従わないので、ここにも入りません。
 
-**ファイル.** `Theorems/HurryMusic.lean`、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、非公開の `Proof/HurryMusic.lean`。
+**ファイル.** `Theorems/HurryMusic.lean`、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、`Theorems/TitleStart.lean`、非公開の `Proof/HurryMusic.lean` と `Proof/TitleStart.lean`。
 
 **再現.**
 ```

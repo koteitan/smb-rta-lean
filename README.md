@@ -14,7 +14,7 @@ Theorems that several stages use.
 |---|---|---|---|
 | 0-0-0-1 | [Top speed bound](0-0/0-1-TopSpeed.md) | Away from platforms, vines, pipes and similar objects, Mario never moves right by more than 2.5 px per frame. | per-routine checks: theorems; the routines being the only writers: from the disassembly |
 | 0-0-0-2 | [Reach](0-0/0-2-Reach.md) | From the start of 1-1, in the open area, Mario moves right at most 2.5·n − 38.375 px in n ≥ 28 frames. | theorems under the assumptions of the top speed bound and of the horizontal frame; the TAS inputs move 2.5·n − 41.94 px |
-| 0-0-0-3-2 | [A real frame and the horizontal model](0-0/0-3-2-FrameModel.md) | From the player's routine to the scroll handler, a real frame changes the horizontal state as `hstep` says and moves the position by 16·v'. | the movement by a walk of two machines; the check by `native_decide` (about 2 s). Not proved: the rest of the frame (`Clean`, `ReadFrame`) |
+| 0-0-0-3-2 | [A real frame and the horizontal and vertical models](0-0/0-3-2-FrameModel.md) | From the player's routine to the scroll handler, a real frame changes the horizontal state as `hstep` says, moves the position by 16·v', and changes the vertical state as `vstep` says. | the movement by a walk of two machines, the vertical part with detours where the two run apart; the checks by `native_decide` (about 2 s and 0.1 s). Not proved: the rest of the frame (`Clean`, `ReadFrame`), and for `vstep` two conditions at the player's routine |
 
 Each page gives the statement, what Lean proves, the assumptions and how they were checked,
 and how to reproduce it. A theorem is `Theorems/Name.lean` (the statement and how it follows from a computation) and the pages `<stage>/<part>-<number>-Name.md`, `<stage>/<part>-<number>-Name-ja.md`.
@@ -50,7 +50,9 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - 🚨 1-1-0-5 Assumptions of the whole
     - 🚨 1-1-0-5-1 Each frame follows the rule of its kind (`step`)
     - 🚨 1-1-0-5-2 The kinds of frame come in the order of the parts (`plan`)
-    - 🚨 1-1-0-5-3 The timer and the phase of the machine of frame 0 (`zero`)
+    - ✅ 1-1-0-5-3 The timer and the phase at frame 0 (`zero` removed; from one state after the press on the title)
+    - 🚨 1-1-0-5-4 The machine after Start on the title meets the condition (`title.press`)
+    - 🚨 1-1-0-5-5 No Start on the 2 game-core frames before control (`title.noPause`)
   - 🚨 1-1-0-6 Runs not in the theorem
     - 🚨 1-1-0-6-1 Runs that do not go through the two pipes
     - 🚨 1-1-0-6-2 Runs with a power-up
@@ -70,10 +72,13 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - 🚨 1-1-a-5-2-2 Each instruction up to the write meets `Clean` (`clean`)
     - 🚨 1-1-a-5-3 The pipe's right tile is only at its place (`tiles`)
     - 🚨 1-1-a-5-4 The bound on the opening's position (`openP`, `openB`)
-    - 🚨 1-1-a-5-5 The frames after: read from the machines (`reads`, `still`)
+    - 🚨 1-1-a-5-5 The frames after: read from the machines (`own`, `lags`)
       - ✅ 1-1-a-5-5-1 The frames follow each other, with the top speed (`next`, `speed` are theorems)
-      - 🚨 1-1-a-5-5-2 The speed at control is 0 (`still`)
-      - 🚨 1-1-a-5-5-3 Frames not counted change neither speed nor position (`reads`)
+      - ✅ 1-1-a-5-5-2 The speed at control is 0 (`still` removed; from `title`)
+      - 🚨 1-1-a-5-5-3 Frames not counted keep the speed and the position (`lags`)
+        - ✅ 1-1-a-5-5-3-1 A frame that does not call the mode's routine (a pause) keeps them (`keeps_frame`)
+        - 🚨 1-1-a-5-5-3-2 It starts in the idle loop; its instructions before the call are `Clean` (`lags.start`, `lags.clean`)
+        - 🚨 1-1-a-5-5-3-3 A frame that calls the routine keeps them (`lags.game`)
     - 🚨 1-1-a-5-6 Open flat ground, in the air only during a jump
     - 🚨 1-1-a-5-7 A jump's length depends only on the takeoff speed
     - 🚨 1-1-a-5-8 The gain bound of the relaxed model (`GainBound`)
@@ -92,7 +97,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-b-3-6 No pause after the pipe (`chg.noStart₁`)
     - 🚨 1-1-b-3-7 No pause sound or square sound effects, and the song and the screen buffer in the tables, at the exit (`chg.quiet₁`)
     - 🚨 1-1-b-3-8 A `lag` frame ends paused (`chg.paused₁`)
-    - 🚨 1-1-b-3-9 `left₁` is not 0 before control (`chg.first₁`)
+    - 🚨 1-1-b-3-9 The time is not up at the exit (`chg.time₁`, `chg.ctlFirst₁`); `left₁` not 0 before control is proved
   - 🚨 1-1-b-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-b-4-1 The same for every input (`Merge`)
     - 🚨 1-1-b-4-2 The bytes, size and timer at frame 50 (`Cond`)
@@ -107,10 +112,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - 🚨 1-1-c-7 Assumptions of part c
     - ✅ 1-1-c-7-1 Each frame follows `hstep` or stops him (from `clean`)
     - ✅ 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`): from the change's rows
-    - 🚨 1-1-c-7-3 The entry frame follows the routine (`entry`, `entered`)
+    - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
     - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_long`, `stand_row`, `vfall`, `floor_at`, `vframes`, `low_at`)
-    - 🚨 1-1-c-7-6 The stored speed (`ab_ge`, `ab_follow`)
+    - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
     - 🚨 1-1-c-7-7 Takeoff and landing (`Approach`)
     - 🚨 1-1-c-7-8 The ways off the block (`Off`)
     - 🚨 1-1-c-7-9 A jump over the whole block (`Over`)
@@ -119,23 +124,26 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-c-7-12 The block map is the one written by hand
     - 🚨 1-1-c-7-13 Standing during the fall (`facing`, `stand_fast`, `stand_P`)
     - 🚨 1-1-c-7-14 No run jumps from the wall and clears the block with no landing (`way`)
-    - 🚨 1-1-c-7-15 The first machine is the change's, and the vertical state and stored speed are read from it (`roomCtl`, `vs_C`, `ab_C`)
+    - 🚨 1-1-c-7-15 The first machine is the change's, and the vertical state is read from it (`roomCtl`, `vs_C`)
+    - 🚨 1-1-c-7-16 Only that instruction writes the routine, at the end of a pass (`pass`)
+    - 🚨 1-1-c-7-17 The pipe's tiles are only in its column (`TilesOK`)
+    - 🚨 1-1-c-7-18 The position at the side check is the frame's position (`pos`)
 - 🚨 1-1-d Back above ground (570 → 852)
   - ✅ 1-1-d-1 The length of the change (listed entry states)
   - ✅ 1-1-d-2-1 The bytes that decide the last 122 frames
   - ✅ 1-1-d-2-2 The first 160 frames (under the condition at the entry, any inputs)
   - ✅ 1-1-d-2-3 The last 122 frames (under the condition at the exit, no Start on the game core's frames)
   - 🚨 1-1-d-2-4 The screen stays on the first page, the entry has the long timer
-    - 🚨 1-1-d-2-4-1 5 bytes at the first control in the room (`chg.roomRest`); the rest from the change's rows
+    - ✅ 1-1-d-2-4-1 `Room` at the first control in the room: from the change's rows of the time (`chg.roomRest` removed)
     - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (`chg.roomSites`)
-    - 🚨 1-1-d-2-4-3 Each frame before the entry starts in the player's routine (`chg.roomStay`)
-  - 🚨 1-1-d-2-5 A real entry meets the condition (`chg.entry₂`)
+    - ✅ 1-1-d-2-4-3 Each frame up to the entry starts in the player's routine (from the definition of `a₂`)
+  - 🚨 1-1-d-2-5 21 bytes at the entry (`chg.entry₂`); the rest from the room's walk
   - 🚨 1-1-d-3 Assumptions of part d
     - ✅ 1-1-d-3-1 `change₂` proved from `chg`
     - 🚨 1-1-d-3-2 A `lag` frame ends paused (`chg.paused₂`); that it keeps `left` is proved
     - 🚨 1-1-d-3-3 No pause after the pipe (`chg.noStart₂`)
     - 🚨 1-1-d-3-4 No pause sound at the exit (`chg.quiet₂`)
-    - 🚨 1-1-d-3-5 The time is not up at the exit (`chg.time₂`, `chg.ctlFirst₂`); `left` not 0 before control is proved
+    - 🚨 1-1-d-3-5 The time is not up at the exit (`chg.time₂`); `left` not 0 before control is proved; `b₂` is the first control by definition
   - 🚨 1-1-d-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-d-4-1 The same for every input (`GMerge`)
     - 🚨 1-1-d-4-2 The bytes when the timer has run out (H3)
@@ -147,15 +155,18 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-e-2-1 Stopped at control (from the change's last row)
     - ✅ 1-1-e-2-2 `hstep` up to the first hit (from `step`)
     - ✅ 1-1-e-2-3 A hit leaves the speed at 0 or below (from `step`)
-    - ✅ 1-1-e-2-4 Frames 1 to 8 stay in the checked box (from `vert`, `box`)
+    - ✅ 1-1-e-2-4 Frames 1 to 8 stay in the checked box (from `vert_of`, `box`)
     - ✅ 1-1-e-2-5 He leaves the model only by a collision (from `step`)
     - ✅ 1-1-e-2-6 The frames follow each other (from `reads`)
     - ✅ 1-1-e-2-7 The left edge of the screen stopping him (`Frame`, `Hit`)
     - 🚨 1-1-e-2-8 One frame is `hstep` and the collision routine
       - ✅ 1-1-e-2-8-1 The movement is `hstep` (`move_model`, `one_of_moves`)
-      - 🚨 1-1-e-2-8-2 The rest of the frame (`moves`: `AtCtrl`, the input, `After`)
+      - 🚨 1-1-e-2-8-2 The rest of the frame (`moves`: `AtCtrl`, `After`); the input is the one the routine reads
       - 🚨 1-1-e-2-8-3 Frames whose pressed side is masked (`masked`)
-    - 🚨 1-1-e-2-9 Frames 1 to 8 are `vstep` and the machine at control (`vert`, `box`)
+    - 🚨 1-1-e-2-9 Frames 1 to 8 are `vstep` and the machine at control
+      - ✅ 1-1-e-2-9-1 The movement routine is `vstep` (`vert_model`, `vert_of`)
+      - 🚨 1-1-e-2-9-2 The rest of the frame keeps the vertical bytes (`vBefore`, `vAfter`)
+      - 🚨 1-1-e-2-9-3 The collision routine as on the machine at control (`box`)
     - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `ends`, `atCtl`)
 - 🚨 1-1-f The flag (1085 → 1218)
   - ✅ 1-1-f-1 The bound on the push back
@@ -165,7 +176,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-f-5 Joining parts e and f
   - 🚨 1-1-f-6 Assumptions of part f
     - ✅ 1-1-f-6-1 The touch on real frames: one pass of the side check
-    - 🚨 1-1-f-6-2 No castle flag up to the touch (`noCastle`, `atCastle`)
+    - 🚨 1-1-f-6-2 No castle flag up to the touch (`noCastle`, `atCastle`; with `keep`, only at control)
     - 🚨 1-1-f-6-3 The path of the jump (`path`, `atY`, `atRising`)
     - 🚨 1-1-f-6-4 He comes from the left and falls below the base's top (`order`, `left`, `air`)
     - 🚨 1-1-f-6-5 One frame of the fall (`fall`)
@@ -182,7 +193,9 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-16 Only that instruction writes the routine, at the end of a pass (`pass`)
     - 🚨 1-1-f-6-17 The pole's tiles are only in its column (`TilesOK`)
     - 🚨 1-1-f-6-18 The position at the side check is the frame's (`pos`)
-    - 🚨 1-1-f-6-19 Each frame moves the position by a multiple of 1/16 px (`fracStep`)
+    - ✅ 1-1-f-6-19 Each frame moves the position by a multiple of 1/16 px (one whole frame by the walk, from `keep`)
+    - 🚨 1-1-f-6-20 The frames up to the touch are real frames in control (`keep`: `ends`, `start`, `lag`)
+    - 🚨 1-1-f-6-21 Each instruction of those frames (`keep.clean`, `CleanK`)
 - 🚨 1-1-g From the castle to 1-2 (1218 → 1748)
   - ✅ 1-1-g-1 The timer and the grid
   - 🚨 1-1-g-2 Assumptions of part g
@@ -196,7 +209,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 0-0-0-2 Reach
   - 🚨 0-0-0-3 Common assumptions
     - 🚨 0-0-0-3-1 Real frames have the form of `Frame`: `frame_read` (`ReadFrame` remains)
-    - ✅ 0-0-0-3-2 `hstep` is the horizontal part of one frame (`move_model`)
+    - ✅ 0-0-0-3-2 `hstep` and `vstep` are the horizontal and vertical parts of one frame (`move_model`, `vert_model`)
     - 🚨 0-0-0-3-3 Only the 5 checked routines write the speed and position: proved in the movement (`before`, `after`, `collide` remain)
     - 🚨 0-0-0-3-4 Each routine depends only on the checked bytes: proved in the movement, not for `ImpedePlayerMove`
     - 🚨 0-0-0-3-5 Runs that press Start or Select

@@ -1,8 +1,8 @@
 [← Back](../README.md) | [English](0-3-2-FrameModel.md) | [Japanese](0-3-2-FrameModel-ja.md)
 
-# A real frame and the horizontal model
+# A real frame and the horizontal and vertical models
 
-**Statement.** `hstep` is the horizontal part of one frame. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The parts before the player's routine and after the scroll handler are assumptions on one frame.
+**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). The parts before the player's routine and after the scroll handler are assumptions on one frame.
 
 `tr(n)` is the machine `n` instructions into `frame(M, i)`. `HS(m)` is the horizontal state read from machine `m` (speed, subspeed, facing, moving direction, whether `RunningSpeed` is 0). `P(m)` is the position. `In(m)` is the input read from the machine at the player's routine. `v'` is the speed of `HS(frame(M, i))`.
 
@@ -18,7 +18,7 @@ frame_read  :  modelOK,  frictionCheck,  ReadFrame(M, i, n₀)
 
 From `frame_read` and `TopSpeed`'s `Frame.bound`: with `|v| ≤ v_top`, `|v'| ≤ v_top` and `P' − P ≤ 16·v_top`. So `move_top` of `RoomJoin` is now a theorem.
 
-Lean: `Theorems/FrameWalk.lean` (the walk over two machines: `tstep_spec`, `walkT_spec`, `piece_spec`, `leaf_spec`), `Theorems/FrameModel.lean` (`move_model`, `clean_frame`, `frame_read`), private `frame_model` (`modelOK`, `native_decide`). Neither file has game values. The check takes about 2 s natively.
+Lean: `Theorems/FrameWalk.lean` (the walk over two machines: `tstep_spec`, `walkT_spec`, `piece_spec`, `leaf_spec`; with detours: `lk_detour`, `walkD_spec`, `leafD_spec`), `Theorems/FrameModel.lean` (`move_model`, `clean_frame`, `frame_read`), `Theorems/VertModel.lean` (`vert_model`), private `frame_model` (`modelOK`, `native_decide`). `vertOK` is a part of `SurfaceFrames.numbersCheck`. No file has game values. The checks take about 2 s and 0.1 s natively.
 
 ## The walk over two machines
 
@@ -27,6 +27,41 @@ Instructions advance on two machines at the same place at once. For each registe
 * Each instruction form is proved once (`tstep_spec`). The ROM is looked at only in the check.
 * With a real machine next to the machine of `runSub`, a routine does the same in both (`leaf_spec`). Their stack pointers and times may differ.
 * With one machine given twice, a piece of code is shown to leave bytes alone and to reach a place (`piece_spec`).
+
+## Two machines that run apart for a while
+
+At some places the code reads a byte that is not the same on the two machines, and what it writes there is of no interest. A detour (`Detour`) says: from the cut `c`, each machine alone (the walk of one machine) reaches the cut `c'` and leaves the bytes of `keep`. `walkD` follows the two machines as above, and at the start of a detour it lets each machine run its own way. Then the two are at different counts of instructions.
+
+```
+lk_detour  :  Detour.ok(d),  the walk's state at d.c holds of m, n
+              →  ∃ k₁ k₂ ≤ fuel(d),  the state after d holds of stepN(k₁, m), stepN(k₂, n)
+walkD_spec :  walkD(f, Q) = true,  Q holds of m, n
+              →  ∃ k₁ k₂ ≤ f,  stop ∧ goal  and the end state holds of stepN(k₁, m), stepN(k₂, n)
+leafD_spec :  walkD from a routine's entry, the stack pointer the same on both
+              →  at the routine's return the tags relate the real machine and the result of runSub
+```
+
+`leaf_spec` needs a routine that calls no other routine. `leafD_spec` allows calls, because the stack pointer is known.
+
+## The vertical model
+
+`vstepV(s, A, abs)` is `Jump.vstep` on the machine `vmach`: `m0` with the stack pointer `S` of the player's routine and `DiffToHaltJump = 1`. `A(R)` is bit 7 of `SavedJoypadBits` at `R`. `vs(m)` is the vertical state read from the machine.
+
+```
+vert_model :  vertOK,  AtCtrl(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
+              →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), abs(R))
+                             ∧  (st = 1 → DTHJ = 1)  at stepN(k, R)
+```
+
+`DTHJ` is `DiffToHaltJump`, `PrevA` is `PreviousA_B_Buttons`, `A_B` is `A_B_Buttons`. The check `vertOK`:
+
+* from the player's routine to `PlayerMovementSubs`: one machine, 4608 cases (3 values of `Player_State`, 3 of `AreaType`, 256 of the buttons, 2 of the previous A).
+* `PlayerMovementSubs`: the real machine next to the machine of `vstep`, 24 cases (3 states, 4 values of A and B, 2 of the previous A). 6 detours: the crouch's test (it reads `PlayerSize`), `X_Physics`, the jump's sound (`PlayerSize`), the ground's routine, Left and Right in the air, the first test of the vertical move (`TimerControl`).
+* from the routine's return to the scroll handler: one machine.
+
+Why the two conditions. `DiffToHaltJump` is 0 at control above ground and 1 after any jump; `m0`, at the start of the level, has 0. The routine compares with it in a jump, and the walk needs it the same on both machines. `vstep` writes A of the frame before from `s.prevA`, which reads `A_B_Buttons`; the real routine reads `PreviousA_B_Buttons`. The game copies the first into the second at the end of the game engine (`SaveAB`).
+
+Found while the check ran as a program first: with only some bits of the buttons known, the walk of one machine cannot branch on their other bits, so the buttons are 256 cases. `MovePlayerHorizontally` indexes by a register loaded from `JumpspringAnimCtrl`, so that byte is known to be 0 at the start of two detours. The ground's routine and the air's Left and Right call routines at the routine's own stack level, so they write the two stack bytes below it.
 
 ## The pieces
 
@@ -102,14 +137,16 @@ The writers of the horizontal bytes after the scroll handler, seen on the 3442 f
 ## What is not proved
 
 * `before`: from the pad's read to the player's routine the walk closes, as the table shows; this is not a theorem in Lean. The screen update and the sound do not close.
+* For `vert_model`: the two conditions at the player's routine, and that the vertical bytes are those of the frame before there and stay so after the scroll handler (`SurfaceFrames.OnFrames.vBefore`, `vAfter`).
 * `after`, `collide`: the collision routine and the game engine do not close. `after` says that there was no hit.
 * The stack pointer, no NMI, `AreaType` and so on in `at_ctrl`: not derived from the state at the frame's start.
 * Runs with a frame that runs over. `clean` does not hold on such a frame. None was seen in the room. Even the shortest frame had 1469 instructions after the arrival.
 * That the emulator is the same as the real machine.
 
-**Files.** `Theorems/FrameWalk.lean`, `Theorems/FrameModel.lean`, private `Proof/FrameModel.lean`.
+**Files.** `Theorems/FrameWalk.lean`, `Theorems/FrameModel.lean`, `Theorems/VertModel.lean`, private `Proof/FrameModel.lean`.
 
 **Reproduce.**
 ```
 .lake/build/bin/smbrta frame-model-check FM2 300
+.lake/build/bin/smbrta vert-model-check          # vertOK and each case, about 0.1 s
 ```

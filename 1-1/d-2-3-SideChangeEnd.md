@@ -62,7 +62,7 @@ EndRun.first    :  a run with the fields of `EndRun`, (∀ n ∈ [a, b],  Exit(s
 lagPaused  :  ∀ n ∈ [a, b),  lag(n) → Paused(seq (n + 1))
 ```
 
-The two hypotheses of `EndRun.first` are `chg.time₂` and `chg.ctlFirst₂` of `Route`. `EndRun.first` takes the place of `chg.first₂` (`left` is not 0 before control).
+The two hypotheses of `EndRun.first` are `chg.time₂` and `Changes.ctlFirst₂` of `Route`. The second is a theorem: `Route` defines `chg.b₂` as the first state with control from the entry on. `EndRun.first` takes the place of `chg.first₂` (`left` is not 0 before control).
 
 Lean: `Theorems/SideChangeEnd.lean` (`s_xtick`, `s_xbr`, `s_xstep1`, `xframe_of_walk`, `link_frame`, `chain_step`, `exit_cover`, `during_step`, `sim_normD`, `link_frameD`, `chain_stepD`, `ctl_of_zero`, `TimeOK`, `timeRows`, `InRowsT`, `Paused`, `pause_keeps`, `not_paused_rows`, `EndStatement`, `endStatement_of_check`, `no_control_exit`, `EndRun`, `st_step_paused`, `EndRun.fall`, `EndRun.bound`, `EndRun.first`), private `side_end_checks` (`native_decide`), `side_end`, `side_exit_no_control`, `side_change_end`.
 
@@ -129,12 +129,12 @@ So the rows would serve the last 41 frames from frame 50. The state at frame 50 
 
 ## Assumptions (not proved in Lean)
 
-* `Entry2` on the state at the entry of a real run, or `ExitCond` at the exit. The bytes `X` are read from the code: nothing in the room writes them once the room is set up. `NoteLengthTblAdder` does not hold after the hurry-up music. Item 1-1-d-2-5.
+* `Entry2` on the state at the entry of a real run, or `ExitCond` at the exit. The route gets `Entry2` from the frames in the room and 21 bytes at the entry ([The screen's page in the room](d-2-4-ScreenPage.md), `ScreenPage.entry_rest`). `NoteLengthTblAdder`, one of these 21 bytes, does not hold after the hurry-up music. Item 1-1-d-2-5.
 * `Quiet`: no pause sound is running at the exit. On the runs measured it fails when Start was pressed in the last frames of the pipe. `left` still falls by exactly one on those runs, measured only.
 * `NoStart`: no Start on the frames of the game core after the pipe.
 * `lagPaused`: a `lag` frame ends paused. `lag` is a label of `Frames`, and this field is its only link to the machine. On the real runs, every frame of the pipe where the timers do not run ended paused. After the exit the only such frame is the `setup` frame, which is not a `lag` frame. A `lag` frame where the timers do not run for another reason does not meet this field: a frame with `TimerControl` not 0, or the frame after a handler that runs past its frame. For the frames of the pipe the check shows that every frame ends in the idle loop, so none runs past. Neither kind was seen on the runs measured. Item 1-1-d-3-2.
 * `Time`: at the exit the game timer is not 000 and the sound's pause flag is 0. A run with 000 has used 400 seconds. For the flag: no real exit with `Quiet` and `ExitCond` had the flag not 0. Item 1-1-d-3-5.
-* `b` is the first state with control after the entry (`chg.ctlFirst₂` of `Route`).
+* `b` is the first state with control after the entry. In the route this holds by the definition of `chg.b₂` (`Changes.ctlFirst₂`).
 * [The whole route](0-1-Route.md) uses this theorem: `Changes.run₂` is an `EndRun`.
 
 **Files.** `Theorems/SideChangeEnd.lean`, private `Proof/SideChangeEnd.lean`.

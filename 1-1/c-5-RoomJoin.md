@@ -33,7 +33,8 @@ floor_low    :  no wall touched,  T ≤ C + 40,  C + 37 ≤ n ≤ T  →  LowAt(
 early_of     :  no wall touched,  T ≤ C + 40  →  the frames up to T are those of FastTakeoff
 stand_gap    :  C ≤ i < j < C + 34,  standing at i and at j  →  i + 8 ≤ j
 run_short    :  stop(h),  C + 37 ≤ h ≤ C + 40,  RunningSpeed(h) ≠ 0,  t₀ ≤ C + 98  →  P(t₀) < G_P
-mouth_at     :  P(E) ≥ M_P
+mouth_of     :  P(E) ≥ M_P
+ab_clean     :  frame n + 1 follows the model  →  ab(n) = |v(n)|
 ```
 
 Lean: `Theorems/RoomJoin.lean`, private `room_nums`, `room_checks`, `room_join`, `room_floor_arcs`. `#print axioms room_join` shows no `sorryAx`; it has the `native_decide` axioms.
@@ -152,16 +153,25 @@ moving left fast at the end of the fall :  backD: P(C + 34) is small; P(h) ≤ b
 
 `safeFrom` is a small search: only the states not decided by the bound on `Φ` go on to the next inputs. A frame that does not follow `hstep` leaves `RunningSpeed` 0 (`stop_run`). A frame that follows `hstep` has `stepOk`.
 
-**`slow_capped`, `stale`.** The takeoff reads the stored speed `ab` (`x_ab`), and `ab ≥ |v|` (`ab_ge`). A slow jump has `ab < v_A`, so `|v| < v_A`. For a fast jump with no wall hit and no stop: every frame follows `hstep` and has `ab = |v|` or changes neither (`ab_follow`), so `ab = |v|` or `ab < v_A` (`ab_or`). So `|v| ≥ v_A`.
+**`slow_capped`, `stale`.** `ab(n)` is the stored speed that frame `n + 1` reads when it comes to the player's routine (`read_ab`). The takeoff reads it (`x_ab`). On a frame that follows the model, `ab(n) = |v(n)|` (`ab_clean`): `AtCtrl` asks it, and nothing wrote the speed before the player's routine. Every other frame leaves him stopped (`clean`). So at the takeoff `T`:
 
-**`mouth`.** From `entered` (the routine enters), `entry_mem` and `entry_P`, `mouth_of_enters` of [Entering the side pipe](c-4-SidePipe.md) gives `P(E) ≥ M_P`. `entry_ground` is `ground_of_enters`: the entry state is on the ground.
+```
+frame T + 1 follows the model          :  ab(T) = |v(T)|
+otherwise                              :  stop(T + 1)
+```
+
+A slow jump has `ab < v_A`. In the first case `|v(T)| < v_A`. In the second, `stop(T + 1)` gives `|v(T + 1)| < v_A`, and the air speed cap starts one frame later. For a fast jump with no stop from `C + 37` on, the second case has `T + 1 < C + 37`, and then `ab < v_A` (`ab_early`). So only the first case is left, and `|v(T)| ≥ v_A`.
+
+The air speed cap does not do the fast case: a fast jump lands on the block 13 frames after the takeoff frame, and the air speed and then `capDist` give a bound 1727/256 px past the goal.
+
+**`mouth`.** Frame `E` is an entry on the real machines: one instruction writes the side pipe's routine (`enters`). That write ends one pass of the side check (`pass`), and `P(E)` is the position when the pass reads the page (`pos`). [The side pipe's entry on real frames](c-7-3-SideEntryRule.md) proves `P(E) ≥ M_P` from these (`mouth_of_pass`).
 
 ## Assumptions (not proved in Lean)
 
 Each is a field of `RoomRun` or of a structure in it. "One frame" below marks a fact about a single frame.
 
-* `fm`, `pad`, `arr`, `next`, `read_hs`, `read_P`, `read_in`, `clean` (one frame): the frames are a sequence of real machines, and the state, the position and the input are read from the machines. Every frame up to `t₀` is `FrameModel.Clean`, or it leaves him stopped (`Stop`) and is `FrameModel.ReadFrame`. That a `Clean` frame follows `hstep` (`Follow`) and that every frame moves at most the top speed (`move_top`) are proved from the theorems of [A real frame and the horizontal model](../0-0/0-3-2-FrameModel.md). What `Clean` and `ReadFrame` assume is on that page.
-* The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`) is no longer assumed: he is stopped, facing right, moving direction 0, running speed 0, at the start position with any fraction, falling, at most 50 px from the top, at most 2.375 px per frame down, with the machine's first fall force and stored speed 0. `RoomRun.entry_ge` takes `StartAt(fm C)` as an argument, and [The state at the first control in the room](c-7-2-RoomStart.md) proves it from the rows of the change. What remains is that at `C` the vertical state and the stored speed are read from the machine (`vs_C`, `ab_C`).
+* `fm`, `pad`, `arr`, `next`, `read_hs`, `read_P`, `read_in`, `read_ab`, `clean` (one frame): the frames are a sequence of real machines, and the state, the position, the input and the stored speed are read from the machines. The stored speed is read when the next frame comes to the player's routine. Every frame up to `t₀` is `FrameModel.Clean`, or it leaves him stopped (`Stop`) and is `FrameModel.ReadFrame`. That a `Clean` frame follows `hstep` (`Follow`) and that every frame moves at most the top speed (`move_top`) are proved from the theorems of [A real frame and the horizontal model](../0-0/0-3-2-FrameModel.md). What `Clean` and `ReadFrame` assume is on that page.
+* The state at first control (`start`, `startP0`, `startP1`, `v_start`) is no longer assumed: he is stopped, facing right, moving direction 0, running speed 0, at the start position with any fraction, falling, at most 50 px from the top, at most 2.375 px per frame down, with the machine's first fall force and stored speed 0 (the proof no longer uses the stored speed at `C`). `RoomRun.entry_ge` takes `StartAt(fm C)` as an argument, and [The state at the first control in the room](c-7-2-RoomStart.md) proves it from the rows of the change. What remains is that at `C` the vertical state is read from the machine (`vs_C`).
 * `wall` (one frame): a frame before `C + 37` that does not follow `hstep` is stopped by the left wall: `P ≤ P_w` before and after it, `RunningSpeed` 0. That this is the only case (he cannot reach the corner) is part of the assumption.
 * `late` (one frame): a frame from `C + 37` to `C + 41` that does not follow `hstep` is at the left wall, or `P + 16·v_top ≥ c_P`.
 * `stop_run` (one frame): a frame by `C + 40` that does not follow `hstep` leaves `RunningSpeed` 0.
@@ -175,8 +185,8 @@ Each is a field of `RoomRun` or of a structure in it. "One frame" below marks a 
 * `floor_at`: with no wall hit, he is on the floor at `C + 34`.
 * `vframes` (one frame): with no wall hit, the frames from `C + 34` to `C + 49` are `VFrame`.
 * `low_at` (one frame): a frame from `C + 37` to `C + 43` with the feet low is `LowAt`. This is a fact of the collision routine; it is not derived from the routine.
-* `ab_ge`, `ab_follow` (one frame): the stored speed is at least `|v|`. A frame that follows `hstep` stores `|v|`, or changes neither.
-* `entry`, `entry_mem`, `entered`, `entry_P` (one frame): at `E` the routine enters, on a state in the domain of `sideCheck`, with the frame's `x`. The speed is replaced by one of the 4 speeds of the domain: this path of the routine does not read the speed, which is not checked in Lean. That the machine `withPipe` has the same pipe column as the real machine is also assumed.
+* `ab_early` (one frame): a frame before `C + 37` that does not follow the model reads a stored speed below `v_A`. Such a frame is a wall hit, or comes right after one and reads the stored speed of before the hit. On real frames the stored speed before `C + 37` was at most 21, and `v_A` is 25 (`room-ab-check`: the TAS and 2800 runs of own inputs from first control, with 10,184 such frames; on every frame that follows the model the stored speed read is `|v|`, and it is the one the frame before left).
+* `enters`, `pass`, `pos` (one frame): frame `E` enters the side pipe on the real machines; the write ends one pass of the side check, whose reads meet `RowOK` and `TilesOK`; `P(E)` is the position at the read of the page. What stays assumed in them is on [The side pipe's entry on real frames](c-7-3-SideEntryRule.md).
 * `Approach`: asked only with no wall hit and no stop. The takeoff is from the floor (`T1_floor`), the jump and the landing are `vstep` frames (`Cert.Reach`, `x_vs`), the air frames are air, `low` is the collision routine on the low frames, `x_ab` (one frame) is that the takeoff reads the stored speed.
 * `Off`: the jump off the block is `vstep` frames up to `F`, the frame it would reach the floor if nothing stopped it. `F ≤ E` assumes that being stopped or landing on the way only delays the floor. A landing on the pipe's top really happens.
   * `slowJ`: if `F = E`, the frames of a slow jump are air frames of `hstep`, or move at most the air speed.
@@ -209,4 +219,5 @@ A run that does not touch the floor must stand in the fall. With no stand he rea
 **Reproduce.**
 ```
 .lake/build/bin/smbrta room-join-check     # the longest jumps, the floor check, and the margins (1 s)
+.lake/build/bin/smbrta room-ab-check FM2 [N]    # the stored speed read on real frames in the room, N runs of each of 4 kinds of input (N = 700: about 6 min)
 ```

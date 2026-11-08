@@ -188,6 +188,11 @@ structure Syms where
   ExHC : UInt16
   ContSChk : UInt16
   VineCollision : UInt16
+  OnGroundStateSub : UInt16
+  LRAir : UInt16
+  PJumpSnd : UInt16
+  MovePlayerVertically : UInt16
+  NoJSChk : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -368,7 +373,12 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("ExCSM", fun s => s.ExCSM),
   ("ExHC", fun s => s.ExHC),
   ("ContSChk", fun s => s.ContSChk),
-  ("VineCollision", fun s => s.VineCollision)]
+  ("VineCollision", fun s => s.VineCollision),
+  ("OnGroundStateSub", fun s => s.OnGroundStateSub),
+  ("LRAir", fun s => s.LRAir),
+  ("PJumpSnd", fun s => s.PJumpSnd),
+  ("MovePlayerVertically", fun s => s.MovePlayerVertically),
+  ("NoJSChk", fun s => s.NoJSChk)]
 
 set_option maxRecDepth 100000 in
 /-- Parse a symbol file (`key value` per line, decimal). -/
@@ -559,6 +569,11 @@ def Syms.parse (text : String) : Except String Syms := do
     ExHC := ← get "ExHC"
     ContSChk := ← get "ContSChk"
     VineCollision := ← get "VineCollision"
+    OnGroundStateSub := ← get "OnGroundStateSub"
+    LRAir := ← get "LRAir"
+    PJumpSnd := ← get "PJumpSnd"
+    MovePlayerVertically := ← get "MovePlayerVertically"
+    NoJSChk := ← get "NoJSChk"
   }
 
 def Syms.load (path : String) : IO Syms := do

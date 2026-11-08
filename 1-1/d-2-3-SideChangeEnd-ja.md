@@ -62,7 +62,7 @@ EndRun.first    :  `EndRun` のフィールドを持つ走りで、(∀ n ∈ [a
 lagPaused  :  ∀ n ∈ [a, b),  lag(n) → Paused(seq (n + 1))
 ```
 
-`EndRun.first` の 2 つの仮定は、`Route` の `chg.time₂` と `chg.ctlFirst₂` です。`EndRun.first` が `chg.first₂`（操作の前に `left` は 0 にならない）を置き換えます。
+`EndRun.first` の 2 つの仮定は、`Route` の `chg.time₂` と `Changes.ctlFirst₂` です。2 つめは定理です。`Route` は `chg.b₂` を、入ってから最初に操作できる状態と定めます。`EndRun.first` が `chg.first₂`（操作の前に `left` は 0 にならない）を置き換えます。
 
 Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe_of_walk`、`link_frame`、`chain_step`、`exit_cover`、`during_step`、`sim_normD`、`link_frameD`、`chain_stepD`、`ctl_of_zero`、`TimeOK`、`timeRows`、`InRowsT`、`Paused`、`pause_keeps`、`not_paused_rows`、`EndStatement`、`endStatement_of_check`、`no_control_exit`、`EndRun`、`st_step_paused`、`EndRun.fall`、`EndRun.bound`、`EndRun.first`）、非公開の `side_end_checks`（`native_decide`）、`side_end`、`side_exit_no_control`、`side_change_end`。
 
@@ -129,12 +129,12 @@ Lean: `Theorems/SideChangeEnd.lean`（`s_xtick`、`s_xbr`、`s_xstep1`、`xframe
 
 ## 前提（Lean では証明していない）
 
-* 本物の走りの入る状態での `Entry2`、または出口での `ExitCond`。バイト `X` はコードから読みました。部屋が準備されたあと、部屋の中で書くものはありません。`NoteLengthTblAdder` は急ぎの音楽のあとは成り立ちません。項目 1-1-d-2-5 です。
+* 本物の走りの入る状態での `Entry2`、または出口での `ExitCond`。ルートでは `Entry2` を部屋のフレームと入るときの 21 バイトから出します（[部屋の画面のページ](d-2-4-ScreenPage-ja.md)、`ScreenPage.entry_rest`）。この 21 バイトの 1 つ `NoteLengthTblAdder` は、急ぎの音楽のあとは成り立ちません。項目 1-1-d-2-5 です。
 * `Quiet`。出口でポーズの音が鳴っていないことです。測った走りでは、土管の最後のほうのフレームで Start を押すと成り立ちません。そのような走りでも `left` はちょうど 1 ずつ減ります。これは測っただけです。
 * `NoStart`。土管のあとのゲームコアのフレームで Start を押さないことです。
 * `lagPaused`。`lag` のフレームがポーズで終わることです。`lag` は `Frames` の記号で、機械とつながるのはこのフィールドだけです。本物の走りでは、土管のフレームでタイマーが動かないフレームはどれもポーズで終わりました。出口のあとでタイマーが動かないフレームは `setup` のフレームだけで、これは `lag` ではありません。ほかの理由でタイマーが動かない `lag` のフレームは、このフィールドに合いません。`TimerControl` が 0 でないフレームと、ハンドラがフレームからはみ出したあとのフレームです。土管のフレームについては、確認がどのフレームも待ちの繰り返しで終わることを示すので、はみ出しはありません。測った走りには、どちらもありませんでした。項目 1-1-d-3-2 です。
 * `Time`。出口でゲームタイマーが 000 でなく、音のポーズのフラグが 0 であることです。000 の走りは 400 秒を使っています。フラグについては、`Quiet` と `ExitCond` を満たす本物の出口で、フラグが 0 でないものはありませんでした。項目 1-1-d-3-5 です。
-* `b` は入ってから最初に操作できる状態であること（`Route` の `chg.ctlFirst₂`）。
+* `b` は入ってから最初に操作できる状態であること。ルートでは `chg.b₂` の定義からこれが成り立ちます（`Changes.ctlFirst₂`）。
 * [1-1 全体](0-1-Route-ja.md) はこの定理を使います。`Changes.run₂` は `EndRun` です。
 
 **ファイル.** `Theorems/SideChangeEnd.lean`、非公開の `Proof/SideChangeEnd.lean`。

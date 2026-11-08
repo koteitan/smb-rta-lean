@@ -22,8 +22,12 @@ no_entry_of_reads :  16 ≤ v_top,  1 ≤ N,  (∀ t,  Enter t → L ≤ fr(t).P
                      Reads,  v(fm 1) = 0,  B + 16·v_top·(T − N) < L,  Enter E   →   T < E
 
 Pipe.next, Pipe.speed（Route）       :  前のフィールド next と speed を定理として
-pipe_no_entry_real（非公開）          :  start, clean, tiles, pos, openP, openB,  Enters(fm E, inp E),  reads,  still   →   367 < E
+Pipe.reads（Route）                   :  Reads を、自分の機械から読むフレームと数えないフレームから（own、lags、lag_check）
+pipe_no_entry_real（非公開）          :  start, clean, tiles, pos, openP, openB,  Enters(fm E, inp E),  Reads,  still   →   367 < E
 ```
+
+`Reads` はもうフィールドではありません。[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) が、`Pipe.own`（数えるフレームはそのフレーム自身の機械で終わる）と
+`Pipe.lags`（そのあいだの数えないフレーム）から証明します。
 
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
@@ -53,7 +57,9 @@ Lean: `Theorems/PipeFrames.lean`、`Theorems/Route.lean` の `Pipe`、非公開�
 * 操作できるときの速さ: タイトル画面で Start を押すフレームを 120 通りに変えて、120 回とも 0 です。横の状態と位置も、120 回とも非公開の証明の機械 `m₀` と同じです。TAS も 0 です。
 * TAS では、フレーム 32 までの `P₂` は `P₀ + 9744` 以下で、フレーム 33 の始まりの位置はちょうど `P₀ + 9744` です（`openP`、`openB`）。
 * 数えないフレームは、ポーズのあいだと、大きくなる、小さくなる、死ぬときに出ます。`TimerControl` が 0 でないあいだ、ゲームはインターバルタイマーを減らさないからです（コードから読みました）。
-  どの数えないフレームも、速さ、端数、位置を変えません。乱数の 300 回のうち、51 回は死んで終わり、12 回は大きさが変わりました。
+  測ったどの数えないフレームも、速さ、端数、位置を変えません。乱数の 300 回のうち、51 回は死んで終わり、12 回は大きさが変わりました。
+  **訂正（この回）:** 走りは、操作できない状態で終わる最初の数えるフレームで止めています。なので、大きくなる、けが、死のあとの数えないフレームはここでは測っていません。
+  けがのあとの点滅のあいだは、値が変わります（[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md)）。
 * **(a) が成り立たない 3 フレーム.** どれも、穴に落ちて画面より下にいるときです。スクロールが止まり、`KeepOnscr` が画面の右端でマリオを止めます。
   たとえば `v₂ = 24 > 0`、`P' = P₂ − 512`、`v' = 0` です。`Frame` の `impedeP` は画面の左端の場合しか含みません。画面より下に落ちると、そのあと死にます（コードから読みました）。なので入るフレームより前には来ません。
   同じ両端の `Frame` はあります（`v₂ = 0`）。
@@ -62,11 +68,12 @@ Lean: `Theorems/PipeFrames.lean`、`Theorems/Route.lean` の `Pipe`、非公開�
 
 * **各フレームは `Frame` である.** `fr` の型です。前からの前提で、項目 0-0-0-3-1 です（`FrameModel.frame_read` は `ReadFrame` のもとでこれを出します）。上の本物のフレームで確かめました。
   新しいのは、フレーム 1 から `N` までにもこれを使うことです。
-* **数えないフレームは 3 つの値を変えない.** `Reads` の形に入っています。フレーム `t` の終わりを、次に数えるフレームの始まりの機械 `fm(t+1)` から読むからです。上で測りました。
-* **`still`: 操作できるときの速さは 0.** 1 つの状態の条件です。面の始まりまでの道は Lean で追っていません。
+* **数えないフレームは 3 つの値を変えない.** まとめての仮定ではなくなりました。モードのルーチンを呼ばないフレーム（ポーズ）では証明しました。
+  残る仮定は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) の `lags.start`、`lags.clean`、`lags.game` です。
+* **`still`: 操作できるときの速さは 0.** いまはタイトルで Start を押したところから証明しています（`Route.Run.still`、[タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md)）。
 * **この項目でないもの.** `openP`、`openB`（項目 1-1-a-5-4）と `pos`（項目 1-1-a-5-9）は、仮定のままです。
 
-**ファイル.** `Theorems/PipeFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/PipeWrites.lean`。
+**ファイル.** `Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/PipeWrites.lean`。
 
 **再現.**
 ```

@@ -34,7 +34,7 @@ gives the touch + 125. A grab by a fast jump gives the touch + 1 or + 2. Touches
 * `GMerge`: states equal except for the bytes that echo the buttons behave the same. This is a hypothesis of `allInputs`, as in [The change into the bonus room](b-1-PipeTransition.md).
 * All inputs ran from one touch state only. The other states ran with no input.
 * The states at the pole are overwritten at the end of a real run; they are not shown reachable as they are. Other runs differ in enemies, scroll and timers, and these are not covered.
-* `anyFraction` covers the 16 multiples of 1/16 px (a position moves by `16·v` in 1/256 px) and the largest fraction. That the fraction of a real touch is such a multiple is the theorem `PoleJoin.Run.frac`, from the hypothesis `fracStep` on single frames ([From control to the castle](f-5-PoleJoin.md)).
+* `anyFraction` covers the 16 multiples of 1/16 px (a position moves by `16·v` in 1/256 px) and the largest fraction. That the fraction of a real touch is such a multiple is the theorem `PoleJoin.Run.frac`, from the walk of one whole frame in control ([One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md)). Checking all 256 fractions here instead would take about 17 s more (measured: 18,212 ms against 1,196 ms for these 17).
 * Start and Select are not in the input set.
 
 **Files.** `Theorems/CastleWalk.lean`, private `Proof/CastleWalk.lean`.

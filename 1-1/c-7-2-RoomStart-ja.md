@@ -2,7 +2,7 @@
 
 # 部屋で最初に操作できる状態
 
-**主張.** [地下の部屋をつなぐ](c-5-RoomJoin-ja.md) は、最初の操作での横の状態、位置、縦の状態、覚えている速さを仮定していました（`start`、`startP0`、`startP1`、`v_start`、`ab_start`）。これは本物の機械で証明しました。[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md) の段から出ます。条件はその切り替えの条件と、操作の前に `left₁` が 0 にならないこと（`chg.first₁`）です。部屋の機械と切り替えの機械が同じであること（`roomCtl`）と、最初の操作の縦の状態と覚えている速さを機械から読むこと（`vs_C`、`ab_C`）は、つなぎのフィールドです。
+**主張.** [地下の部屋をつなぐ](c-5-RoomJoin-ja.md) は、最初の操作での横の状態、位置、縦の状態、覚えている速さを仮定していました（`start`、`startP0`、`startP1`、`v_start`、`ab_start`）。これは本物の機械で証明しました。[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md) の段から出ます。条件はその切り替えの条件と、操作の前に `left₁` が 0 にならないことです。これはいまは定理（`Changes.first₁`）で、出口の時間（`chg.time₁`）と最初の操作（`chg.ctlFirst₁`）から出ます。[b-3-2](b-3-2-PipeChangeEnd-ja.md) と同じです。部屋の機械と切り替えの機械が同じであること（`roomCtl`）と、最初の操作の縦の状態を機械から読むこと（`vs_C`）は、つなぎのフィールドです。覚えている速さは今はどのフレームでも機械から読み（`read_ab`）、証明は `C` の覚えている速さを使いません（[地下の部屋をつなぐ](c-5-RoomJoin-ja.md)）。
 
 ## 文
 
@@ -24,12 +24,13 @@ start_of_rows    :  startCheck ∧ InRows(m) ∧ ctl(m)  →  StartAt(m)
 left_during      :  During(m)  →  left(m) ≠ 0
 PipeRun.inRows   :  EndStatement ∧ PipeRun ∧ (∀ n ∈ [a, b), left(seq n) ≠ 0)  →  InRows(seq b)
 PipeRun.start    :  EndStatement ∧ startCheck ∧ PipeRun ∧ (∀ n ∈ [a, b), left(seq n) ≠ 0)  →  StartAt(seq b)
+Route.Changes.first₁ :  pipe_end ∧ Changes  →  ∀ n ∈ [a₁, b₁), left₁(seq n) ≠ 0       （time₁、ctlFirst₁ から）
 Route.Run.roomStart :  pipe_end ∧ room_start ∧ Run  →  StartAt(room.fm room.C)
 ```
 
-`PipeRun.inRows` は、入るときから操作までのどの機械も、土管のフレームの状態（`During`）か段の中（`InRows`）にあることを、フレームごとの帰納法で示します。土管のフレームは `step`、段のフレームは `rows` です。`rows` は「`left` がもう 0」か「次も段の中」を返します。前のほうを `first₁` が除きます。最後の機械は操作できるので `left = 0`（`atControl`）です。土管のフレームの状態では `left = timer + 43 > 0` なので、段の中です。
+`PipeRun.inRows` は、入るときから操作までのどの機械も、土管のフレームの状態（`During`）か段の中（`InRows`）にあることを、フレームごとの帰納法で示します。土管のフレームは `step`、段のフレームは `rows` です。`rows` は「`left` がもう 0」か「次も段の中」を返します。前のほうを `Changes.first₁` が除きます。最後の機械は操作できるので `left = 0`（`atControl`）です。土管のフレームの状態では `left = timer + 43 > 0` なので、段の中です。
 
-`RoomRun.toCore` と `RoomRun.entry_ge` は `StartAt(fm C)` を引数に取ります。`read_hs`、`read_P`、`vs_C`、`ab_C` で `start`、`startP0`、`startP1`、`v_start`、`ab_start` になります。
+`RoomRun.toCore` と `RoomRun.entry_ge` は `StartAt(fm C)` を引数に取ります。`read_hs`、`read_P`、`vs_C` で `start`、`startP0`、`startP1`、`v_start` になります。
 
 ## 確認
 
@@ -48,9 +49,9 @@ Route.Run.roomStart :  pipe_end ∧ room_start ∧ Run  →  StartAt(room.fm roo
 
 ## 前提（Lean では証明していない）
 
-* **`chg.first₁`.** 操作の前に `left₁` は 0 にならない。時間切れで死ぬ走りでは成り立ちません。その走りはこの部屋では操作できません。
+* **`chg.time₁`、`chg.ctlFirst₁`.** 出口で音のポーズのフラグが 0 で、ゲームのタイマーが 000 でない。`b₁` は入ったあと最初の操作。この 2 つから、操作の前に `left₁` が 0 にならないことが出ます（`Changes.first₁`）。出口でタイマーが 000 の走りは `time₁` を満たしません。入るときにタイマーを 000 に書くと、フレーム 91 で `left₁` が 0 になり、そこでのルーチンは死ぬルーチンで、操作できません。
 * **`roomCtl`.** `room.fm room.C = chg.seq chg.b₁`。部屋の最初の機械は切り替えの最後の機械です。列の作り方から来ます。
-* **`vs_C`、`ab_C`.** `fr.vs C = vs(fm C)`、`fr.ab C = ab(fm C)`。`read_hs`、`read_P` と同じ、機械から読むことです。`C` のフレームだけです。
+* **`vs_C`.** `fr.vs C = vs(fm C)`。`read_hs`、`read_P` と同じ、機械から読むことです。`C` のフレームだけです。
 * 切り替えの条件（`chg.entry₁`、`places₁`、`quiet₁`、`noStart₁`）。[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md) の前提です。
 
-**ファイル.** `Theorems/RoomStart.lean`、`Theorems/RoomJoin.lean`（`StartAt`、`vs_C`、`ab_C`）、`Theorems/Route.lean`（`first₁`、`roomCtl`、`Run.roomStart`）、非公開の `Proof/RoomStart.lean`。
+**ファイル.** `Theorems/RoomStart.lean`、`Theorems/RoomJoin.lean`（`StartAt`、`vs_C`）、`Theorems/Route.lean`（`Changes.first₁`、`time₁`、`ctlFirst₁`、`roomCtl`、`Run.roomStart`）、非公開の `Proof/RoomStart.lean`。

@@ -34,7 +34,8 @@ The last three theorems are the arithmetic of [the 1-1 route](../docs/route-1-1.
 ## Assumptions (not proved in Lean)
 
 * The routine is checked alone, not joined to the rest of the frame. That real frames follow `rule` is the same kind of assumption
-  as in [Top speed bound](../0-0/0-1-TopSpeed.md).
+  as in [Top speed bound](../0-0/0-1-TopSpeed.md). The left end that the route uses (an entry has `x₀ ≤ x`) comes on real frames from one pass of
+  the side check, in [The side pipe's entry on real frames](c-7-3-SideEntryRule.md). The route does not use `rule` of this page.
 * The block buffer is written by hand, from the tiles of the collision code and the column in the level data, on page 0.
 * The domain is small Mario, from 4 px left of the mouth to the last `x` with his right side in it, heights from where his side
   reaches the part above the mouth to below the landing depth. Further right his left side reaches the mouth too, and he can enter

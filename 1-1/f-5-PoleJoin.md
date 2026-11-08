@@ -78,27 +78,30 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 `seq j` is the machine at the end of the counted frame `j`. `castle(m)` says that `StarFlagTaskControl` is not 0. `frac(P) = P mod 256` is the byte that `CastleWalk.atPole` writes, and `fracs` are the 16 multiples of 16 and 255.
 
 ```
-fracStep        :  ∀ j,  1 ≤ j < g  →  (P'(j) − P(j)) mod 16 = 0                 (field)
+keep            :  FrameKeep.Frames: the frames up to the touch on the real machine   (field)
 fracCheck       :  posP(B.m) mod 16 = 0                                       (pole_frac, native_decide)
-Run.fracP       :  Start(seq 0),  fracCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
-Run.frac        :  Start(seq 0),  fracCheck,  Run  →  P₂(g) mod 16 = 0
-Run.frac_mem    :  Start(seq 0),  fracCheck,  Run  →  frac(P₂(g)) ∈ fracs
+keepCheck       :  the walk of one whole frame in control                     (keep_check, native_decide)
+Run.fracP       :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
+Run.frac        :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  P₂(g) mod 16 = 0
+Run.frac_mem    :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  frac(P₂(g)) ∈ fracs
 atCastle        :  castle(seq c) = true                                       (field)
 noCastle        :  ∀ j ≤ g,  castle(seq j) = false                            (field)
 Run.afterTouch  :  Run  →  g < c
+Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,  Run  →  ∀ j ≤ g,  castle(seq j) = false
 ```
 
-`Run.fracP` is an induction: `P(1) = posP(B.m)` (`Run.startP`), and `P(j + 1) = P'(j)` (`Run.next`). `Run.frac` adds `P₂ = P + 16·v₂`. So the fraction that `CastleWalk.Statement.anyFraction` checks is now the fraction of the run: `flagAny` and `flagTight` name the checked touch with `frac(P₂(g))`, and `castle_of_direct` takes `frac(P₂(g)) ∈ fracs` from `Run.frac_mem`. The flag of `flagAny`, `flagTight`, `other` is `castle(seq ·)`, not a function of its own.
+`Run.fracP` reads `P(j) = posP(seq(j − 1))` from the machines. At control the castle flag is down (`noCastle` at `j = 0`) and `posP(seq 0) = posP(B.m)` is a multiple of 16 (`Start.P`, `fracCheck`). Each frame up to the touch keeps both: the walk of one whole frame in control on the frames of `keep` ([One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md)). `Run.frac` adds `P₂ = P + 16·v₂`. So the fraction that `CastleWalk.Statement.anyFraction` checks is now the fraction of the run: `flagAny` and `flagTight` name the checked touch with `frac(P₂(g))`, and `castle_of_direct` takes `frac(P₂(g)) ∈ fracs` from `Run.frac_mem`. The flag of `flagAny`, `flagTight`, `other` is `castle(seq ·)`, not a function of its own.
 
-Why `fracStep` holds, read from the code. The fraction of the position is the byte `SprObject_X_MoveForce` of the player. Only `MoveObjectHorizontally` writes it, and it adds the speed's low 4 bits times 16. The other writes of the position (`KeepOnscr` at the screen's left edge, `ImpedePlayerMove`, the climb, the vine, the platforms) write the pixel and the page only. At the left edge the move still changes the fraction by `16·v₂`, and the edge puts the pixel back.
+The fraction of the position is the byte `SprObject_X_MoveForce` of the player. `MoveObjectHorizontally` adds the speed's low 4 bits times 16 to it. That a whole frame keeps its low 4 bits is now proved by the walk, under a condition on each instruction (`FrameKeep.CleanK`). It was the field `fracStep`, read from the code.
 
-Why `noCastle` holds, read from the code. `StarFlagTaskControl` leaves 0 only in `PlayerEndLevel`, the end of the level. The star flag's object does nothing while it is 0. The end of the level comes only from `GiveFPScr` in the flag's routine, after the pole's routine is set.
+Why `noCastle` holds. `StarFlagTaskControl` leaves 0 only in `PlayerEndLevel`, the end of the level. The star flag's object does nothing while it is 0. The same walk proves that a whole frame in control keeps the flag down, so with `keep` and the check only `castle(seq 0) = false` is needed (`Run.noCastle_of`). `noCastle` stays a field: `Route` uses `Run.afterTouch`, which takes no check.
 
 The fields changed:
 
 * Removed: `flag` (a function of its own), `afterTouch` (now the theorem `Run.afterTouch`).
 * Added: `fracStep`, `noCastle`. `atCastle` now reads the machine: `castle(seq c) = true`. `flagAny`, `flagTight` take the fraction of `P₂(g)`.
 * New arguments of `direct_castle`, `castle_ge`, `touch_castle`: `(hfq : fracCheck sy (above m0 n) = true)`, after `hc`.
+* Then removed: `fracStep`. Added: `keep : FrameKeep.Frames sy m0 g seq`. New argument of `direct_castle`, `castle_ge`, `touch_castle`: `(hkc : FrameKeep.keepCheckOf sy m0 = true)`, after `hfq`. `Run.fracP`, `Run.frac`, `Run.frac_mem` take `(hk : FrameKeep.keepCheckOf sy m0 = true)` after `hq`.
 
 On real frames (`pole-frac-check`, after the last change, exit 0, bad 0):
 
@@ -124,7 +127,7 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 | `frames.step` | one frame from a clean state is a `OneFrame`; `model`, `hit`, `stop`, `off` are theorems | real runs on that page |
 | `frames.vert`, `frames.box` | frames before `J` follow `vstep`, and the collision routine does what it does on the machine at control; `box` is a theorem | real runs on that page |
 | `fm`, `inp`, `touches`, `pass`, `pos` | frame `g` is a touch on real machines; the write ends one pass of the side check; `P₂(g)` is the position when the page is read; `P₀ ≤ P₂(g)` is the theorem `Run.inRange` from these | [Touching the pole on real frames](f-6-1-PoleEntryRule.md) |
-| `fracStep` | each frame before the touch moves `P` by a multiple of 1/16 px; `16 ∣ P₂(g)` is the theorem `Run.frac` | the code; real runs above |
+| `keep` | the frames up to the touch on the real machine: each ends at `seq j`, starts in control (`FrameStart`), meets `CleanK` on each instruction, and the `lag` frames before it keep the castle flag and the fraction's low 4 bits; `16 ∣ P₂(g)` is the theorem `Run.frac` | [One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md) |
 | `atCastle`, `noCastle` | the castle flag of the machines: set on `c`, on none up to the touch; `g < c` is the theorem `Run.afterTouch` | the code; real runs above |
 | `other` | not a direct grab: for 131 frames the flag is that of a checked touch at another height | measured: at least the touch + 153 |
 | `path`, `atY`, `atRising` | the jump's frames are a path of `Jump.arcSucc` from the ground | `Jump.md`; the jump starts from the ground: no enemy to bounce off near the pole |
@@ -165,5 +168,6 @@ Not proved: that every run satisfies `Run`. The bound `B` of the position is in 
 ```
 .lake/build/bin/smbrta pole-join-check FM2                  # every field of Run on the movie's frames (2 s)
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # the same with the inputs from frame 1036 replaced
-.lake/build/bin/smbrta pole-frac-check FM2 300               # fracStep, fracCheck, noCastle on real runs (about 4 min)
+.lake/build/bin/smbrta pole-frac-check FM2 300               # 16 ∣ P' − P, fracCheck, noCastle on real runs (about 4 min)
+.lake/build/bin/smbrta keep-frames-check FM2 100            # the conditions of keep on real runs
 ```

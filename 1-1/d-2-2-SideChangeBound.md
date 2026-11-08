@@ -83,7 +83,7 @@ The program ran real frames from these entries.
 
 ## Assumptions (not proved in Lean)
 
-* `EntryCond` on the state at the entry of a real run. The bytes of `K` are constant in the room on the runs sampled. That they hold on every run is read from the code. In particular:
+* `EntryCond` on the state at the entry of a real run. The bytes of `K` are constant in the room on the runs sampled. That they hold on every run is read from the code. The route now gets `EntryCond` from the room's frames and 21 bytes at the entry ([The screen's page in the room](d-2-4-ScreenPage.md), `ScreenPage.entry_rest`). In particular:
   * `timer ≥ 160` means that the screen is on the first page on the entry frame. [The screen's page in the room, and the long timer](d-2-4-ScreenPage.md) derives it from the room's frames.
   * `Player_Y_Position` is the floor's, because the mouth's tile is only at the floor.
   * The object bytes are as above. `Block_State` needs that no brick breaks just before the entry.

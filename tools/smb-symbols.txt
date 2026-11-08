@@ -196,3 +196,9 @@ ExCSM
 ExHC
 ContSChk
 VineCollision
+# the movement routine's places that the vertical walk goes around: the ground's routine, the air's left and right, the jump's sound, the vertical move
+OnGroundStateSub
+LRAir
+PJumpSnd
+MovePlayerVertically
+NoJSChk

@@ -78,27 +78,30 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 `seq j` は数えたフレーム `j` の終わりの機械です。`castle(m)` は `StarFlagTaskControl` が 0 でないことです。`frac(P) = P mod 256` は `CastleWalk.atPole` が書くバイトです。`fracs` は 16 の倍数の 16 個と 255 です。
 
 ```
-fracStep        :  ∀ j,  1 ≤ j < g  →  (P'(j) − P(j)) mod 16 = 0                 （フィールド）
+keep            :  FrameKeep.Frames: 触るまでの本物の機械のフレーム          （フィールド）
 fracCheck       :  posP(B.m) mod 16 = 0                                       （pole_frac、native_decide）
-Run.fracP       :  Start(seq 0),  fracCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
-Run.frac        :  Start(seq 0),  fracCheck,  Run  →  P₂(g) mod 16 = 0
-Run.frac_mem    :  Start(seq 0),  fracCheck,  Run  →  frac(P₂(g)) ∈ fracs
+keepCheck       :  操作中の 1 フレーム全体の歩き                              （keep_check、native_decide）
+Run.fracP       :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
+Run.frac        :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  P₂(g) mod 16 = 0
+Run.frac_mem    :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  frac(P₂(g)) ∈ fracs
 atCastle        :  castle(seq c) = true                                       （フィールド）
 noCastle        :  ∀ j ≤ g,  castle(seq j) = false                            （フィールド）
 Run.afterTouch  :  Run  →  g < c
+Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,  Run  →  ∀ j ≤ g,  castle(seq j) = false
 ```
 
-`Run.fracP` は帰納法です。`P(1) = posP(B.m)`（`Run.startP`）、`P(j + 1) = P'(j)`（`Run.next`）。`Run.frac` は `P₂ = P + 16·v₂` を足します。ですから `CastleWalk.Statement.anyFraction` が確かめる端数は、走りの端数になりました。`flagAny` と `flagTight` は、確かめた触り方を端数 `frac(P₂(g))` で名指しします。`castle_of_direct` は `frac(P₂(g)) ∈ fracs` を `Run.frac_mem` から受け取ります。`flagAny`、`flagTight`、`other` の旗は `castle(seq ·)` です。別の関数ではありません。
+`Run.fracP` は機械から `P(j) = posP(seq(j − 1))` を読みます。操作できるときに城の旗は立っていません（`j = 0` の `noCastle`）。`posP(seq 0) = posP(B.m)` は 16 の倍数です（`Start.P`、`fracCheck`）。触るまでの各フレームは両方を保ちます。`keep` のフレームでの、操作中の 1 フレーム全体の歩きです（[操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md)）。`Run.frac` は `P₂ = P + 16·v₂` を足します。ですから `CastleWalk.Statement.anyFraction` が確かめる端数は、走りの端数になりました。`flagAny` と `flagTight` は、確かめた触り方を端数 `frac(P₂(g))` で名指しします。`castle_of_direct` は `frac(P₂(g)) ∈ fracs` を `Run.frac_mem` から受け取ります。`flagAny`、`flagTight`、`other` の旗は `castle(seq ·)` です。別の関数ではありません。
 
-`fracStep` が成り立つわけ（コードから読みました）。位置の端数はプレイヤーの `SprObject_X_MoveForce` のバイトです。これを書くのは `MoveObjectHorizontally` だけで、速さの下 4 ビットの 16 倍を足します。位置を書くほかの命令（画面の左端の `KeepOnscr`、`ImpedePlayerMove`、よじ登り、つる、リフト）はピクセルとページだけを書きます。左端でも移動は端数を `16·v₂` だけ変え、左端はピクセルを戻します。
+位置の端数はプレイヤーの `SprObject_X_MoveForce` のバイトです。`MoveObjectHorizontally` はこれに速さの下 4 ビットの 16 倍を足します。1 フレーム全体がその下 4 ビットを保つことは、いまは歩きで証明しています。各命令の条件（`FrameKeep.CleanK`）のもとでです。前はコードから読んだフィールド `fracStep` でした。
 
-`noCastle` が成り立つわけ（コードから読みました）。`StarFlagTaskControl` が 0 から変わるのは面の終わりの `PlayerEndLevel` だけです。星の旗の物は、それが 0 のあいだ何もしません。面の終わりは旗のルーチンの `GiveFPScr` からだけ来ます。それは旗のルーチンになったあとです。
+`noCastle` が成り立つわけ。`StarFlagTaskControl` が 0 から変わるのは面の終わりの `PlayerEndLevel` だけです。星の旗の物は、それが 0 のあいだ何もしません。同じ歩きが、操作中の 1 フレーム全体は旗を立てないことを証明します。ですから `keep` とチェックがあれば、`castle(seq 0) = false` だけで足ります（`Run.noCastle_of`）。`noCastle` はフィールドのままです。`Route` はチェックをとらない `Run.afterTouch` を使うからです。
 
 フィールドは次のように変わりました。
 
 * なくなったもの: `flag`（別の関数）、`afterTouch`（定理 `Run.afterTouch` になった）。
 * 増えたもの: `fracStep`、`noCastle`。`atCastle` は機械を読みます: `castle(seq c) = true`。`flagAny`、`flagTight` は `P₂(g)` の端数を使います。
 * `direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `hc` のあとの `(hfq : fracCheck sy (above m0 n) = true)`。
+* そのあと、なくなったもの: `fracStep`。増えたもの: `keep : FrameKeep.Frames sy m0 g seq`。`direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `hfq` のあとの `(hkc : FrameKeep.keepCheckOf sy m0 = true)`。`Run.fracP`、`Run.frac`、`Run.frac_mem` は `hq` のあとに `(hk : FrameKeep.keepCheckOf sy m0 = true)` をとります。
 
 本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
 
@@ -124,7 +127,7 @@ Run.afterTouch  :  Run  →  g < c
 | `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
 | `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
 | `fm`、`inp`、`touches`、`pass`、`pos` | フレーム `g` は本物の機械で触る。書き込みは横の判定の 1 回の通過の終わり。`P₂(g)` はページを読むときの位置。`P₀ ≤ P₂(g)` はこれらからの定理 `Run.inRange` | [旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md) |
-| `fracStep` | 触る前の各フレームは `P` を 1/16 ピクセルの倍数だけ動かす。`16 ∣ P₂(g)` は定理 `Run.frac` | コード。上の本物の走り |
+| `keep` | 触るまでの本物の機械のフレーム: それぞれ `seq j` で終わり、操作中に始まり（`FrameStart`）、各命令は `CleanK` を満たし、その前の `lag` のフレームは城の旗と端数の下 4 ビットを保つ。`16 ∣ P₂(g)` は定理 `Run.frac` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
 | `atCastle`、`noCastle` | 機械の城の旗: `c` で立ち、触るまではどの機械にもない。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
 | `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |
@@ -165,5 +168,6 @@ Run.afterTouch  :  Run  →  g < c
 ```
 .lake/build/bin/smbrta pole-join-check FM2                  # ムービーのフレームで Run の全部のフィールド（2 秒）
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # フレーム 1036 からの入力を入れ替えて同じことを
-.lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで fracStep、fracCheck、noCastle（約 4 分）
+.lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで 16 ∣ P' − P、fracCheck、noCastle（約 4 分）
+.lake/build/bin/smbrta keep-frames-check FM2 100            # 本物の走りで keep の条件
 ```

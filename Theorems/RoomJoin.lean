@@ -1,6 +1,7 @@
 import Theorems.FastTakeoff
 import Theorems.AirCap
 import Theorems.SidePipe
+import Theorems.SideEntryRule
 import Theorems.FrameModel
 import Theorems.SurfaceFrames
 
@@ -16,7 +17,7 @@ The arcs are hypotheses: that real frames follow `vstep` is not proved. What fol
 here, with the theorems of `AirCap`, `FastTakeoff` and `Jump`. Most fields are about one frame: the input and the height of a frame, standing, what the
 left wall does to a frame, the stored speed, the entry. From these and small checks: before `hitF` he is left of the corner (`corner_late`), his feet are
 low by the earliest jump (`low_by`), with no wall hit he stays on the floor up to an early takeoff (`floor_low`), `RunningSpeed` is 0 at a stop by `runF` or
-he is far back (`run_short`), the entry is at the mouth (`mouth_at`).
+he is far back (`run_short`). The entry frame is defined on the real machines, and one pass of the side check puts it at the mouth (`RoomRun.mouth_of`, `SideEntryRule`).
 
 The case split, all by `cases` and `by_cases`:
 * over the block in one jump (no landing): impossible, `no_landing`;
@@ -118,7 +119,7 @@ structure Frames where
   /-- the vertical state at the end of frame `n`, and A on frame `n` -/
   vs : Nat → VS
   a : Nat → Bool
-  /-- `Player_XSpeedAbsolute` at the end of frame `n`: the stored speed, which a jump reads -/
+  /-- `Player_XSpeedAbsolute` when frame `n + 1` comes to the player's routine: the stored speed, which a jump on that frame reads -/
   ab : Nat → Nat
 
 /-- frame `n + 1` follows `hstep` in the open area -/
@@ -267,12 +268,8 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   fr : Frames
   /-- first control -/
   C : Nat
-  /-- the entry frame: the collision routine enters the side pipe on a state of the domain of `SidePipe.sideCheck`, with the frame's `x` -/
+  /-- the entry frame: `RoomRun.enters` defines it on the real machines -/
   E : Nat
-  entry : SidePipe.Case
-  entry_mem : entry ∈ SidePipe.cases sy
-  entered : SidePipe.enters sy (SidePipe.withPipe sy m) entry = true
-  entry_P : ∃ f : Int, 0 ≤ f ∧ fr.P E = 256 * (256 * ((0 : Nat) : Int) + (entry.x.toNat : Int)) + f
   /-- the first frame past the block's right end -/
   t0 : Nat
   t0_ge : C ≤ t0
@@ -307,11 +304,6 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   vframes : NoWall sy m N fr C → ∀ n, C + N.fall ≤ n → n < C + N.fall + N.lastG + 1 + N.rise → VFrame sy m N fr n
   /-- what the collision routine gives with the feet at or below the corner -/
   low_at : ∀ n, C + N.hitF ≤ n → n ≤ C + N.fall + 1 + N.rise → n ≤ t0 → cornerY sy N.h ≤ (fr.vs n).y.toNat → LowAt sy m N fr n
-  /-- the stored speed is at least `|v|` -/
-  ab_ge : ∀ n, C ≤ n → n ≤ t0 → (sbyte (fr.hs n).v).natAbs ≤ fr.ab n
-  /-- a frame that follows `hstep` stores `|v|`, or changes neither -/
-  ab_follow : ∀ n, C ≤ n → n < t0 → Follow sy m fr n →
-    fr.ab (n + 1) = (sbyte (fr.hs (n + 1)).v).natAbs ∨ (fr.ab (n + 1) = fr.ab n ∧ (fr.hs (n + 1)).v = (fr.hs n).v)
   way : Way sy m N fr C t0 E
 
 /-- the frames as numbers: what the theorems below use. `RoomRun.toCore` makes them from real machines -/
@@ -322,12 +314,15 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m 
   startP1 : fr.P C ≤ (room sy N).P1
   /-- he starts in the air -/
   v_start : (fr.vs C).st = 2 ∧ VY (fr.vs C) ≤ N.startY ∧ VW (fr.vs C) ≤ N.startW ∧ (fr.vs C).vfd.toNat = N.fallF
-  /-- the stored speed is 0 at first control -/
-  ab_start : fr.ab C = 0
   /-- every frame up to `t0` follows `hstep` or leaves him stopped -/
   frames : ∀ n, C ≤ n → n < t0 → Follow sy m fr n ∨ Stop sy m N fr (n + 1)
   /-- every frame moves him at most the top speed -/
   move_top : ∀ n, C ≤ n → n < t0 → fr.P (n + 1) ≤ fr.P n + 16 * (top sy : Int)
+  /-- on the entry frame he is at the mouth, or past its left end -/
+  mouth : SidePipe.mouthP sy 0 ≤ fr.P E
+  /-- the stored speed that frame `n + 1` reads is `|v|`; or that frame leaves him stopped, and before `hitF` the stored speed is below the threshold -/
+  ab_of : ∀ n, C ≤ n → n < t0 → fr.ab n = (sbyte (fr.hs n).v).natAbs ∨
+    (Stop sy m N fr (n + 1) ∧ (n + 1 < C + N.hitF → fr.ab n < sy.AirFastSpeed.toNat))
 
 /-- **The state at first control**, on the machine: the horizontal state of the room's start, the position of its pixel, in the air with the start's height and fall, and the stored speed 0.
 `RoomStart.PipeRun.start` proves it from the change into the room. -/
@@ -349,15 +344,28 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N
   /-- the state and the position are those of the machine -/
   read_hs : ∀ n, C ≤ n → n ≤ t0 → fr.hs n = FrameModel.readHS sy (fm n)
   read_P : ∀ n, C ≤ n → n ≤ t0 → fr.P n = posP sy (fm n)
-  /-- at first control, the vertical state and the stored speed are those of the machine -/
+  /-- at first control, the vertical state is that of the machine -/
   vs_C : fr.vs C = SurfaceFrames.vsOf sy (fm C)
-  ab_C : fr.ab C = (peek (fm C) sy.Player_XSpeedAbsolute).toNat
+  /-- the stored speed of frame `n` is what frame `n + 1` reads when it comes to the player's routine -/
+  read_ab : ∀ n, C ≤ n → n < t0 → fr.ab n = (peek (PipeEntryRule.trace (fm n) (pad (n + 1)) (arr n)) sy.Player_XSpeedAbsolute).toNat
   /-- a frame that follows the model has the input read from the machine -/
   read_in : ∀ n, C ≤ n → n < t0 → FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) →
     fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (fm n) (pad (n + 1)) (arr n))
   /-- each frame up to `t0` is one that follows the model; or it leaves him stopped, and it is a `TopSpeed.Frame` -/
   clean : ∀ n, C ≤ n → n < t0 → FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) ∨
     (Stop sy m N fr (n + 1) ∧ FrameModel.ReadFrame sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n))
+  /-- a frame before `hitF` that does not follow the model reads a stored speed below the air threshold -/
+  ab_early : ∀ n, C ≤ n → n + 1 < C + N.hitF → n < t0 →
+    ¬FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) → fr.ab n < sy.AirFastSpeed.toNat
+  /-- frame `E` enters the side pipe: an instruction of it, from `fm (E - 1)` with the input `pad E`, writes the side pipe's routine -/
+  enters : SideEntryRule.Enters sy (fm (E - 1)) (pad E)
+  /-- each such write ends one pass of the side check, with reads `ReadOK` -/
+  pass : ∀ n, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n →
+    PoleEntryRule.Pass (SideEntryRule.spots sy m) (PipeEntryRule.envOf m) (PipeEntryRule.trace (fm (E - 1)) (pad E)) n
+  /-- `P(E)` is the position when the block buffer routine reads the page for the side check, before the write -/
+  pos : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j < n →
+    PoleEntryRule.AtEntry (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) →
+    ∃ f : Int, 0 ≤ f ∧ fr.P E = 256 * (PoleEntryRule.px (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) : Int) + f
 
 /-! ## What the computation provides -/
 
@@ -544,8 +552,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   lenB : arcCheck sy m (standY sy N.h) N.h (lenOk N.lenB N.lenB) = true
   /-- every jump from the floor -/
   floor : ∃ hop, arcCheck sy m (groundY sy) N.h (floorArcOk sy N.h N.rise hop) = true
-  /-- the entry -/
-  side : SidePipe.sideCheck sy m = true
+  /-- the entry: one pass of the side check -/
+  sideRule : SideEntryRule.ruleCheck sy m = true
   /-- the frames of the fall -/
   fall : airCheck sy m = true
   safe : safeCheck sy m (phi sy m (room sy N).s0 + a1 sy m * (N.fall : Int)) (N.runF - N.fall - 1) = true
@@ -1945,25 +1953,6 @@ theorem early_of (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C)
     rw [show a.T1 + 1 + (n - (a.T1 + 1)) = n by omega] at h3
     exact (arc_next H h3 (by omega) (r.vframes hw n (by omega) (by omega))).2
 
-/-- with no wall hit and no stop from `hitF` on, the stored speed is `|v|`, or below the threshold. So a fast jump reads `|v|` -/
-theorem ab_or (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) (hs : ∀ n, r.C + N.hitF ≤ n → n ≤ r.t0 → ¬Stop sy m N r.fr n) :
-    ∀ d, r.C + d ≤ r.t0 → r.fr.ab (r.C + d) = (sbyte (r.fr.hs (r.C + d)).v).natAbs ∨ r.fr.ab (r.C + d) < sy.AirFastSpeed.toNat
-  | 0, _ => by
-    have h1 := r.ab_start
-    have h2 := H.nums.air_pos
-    exact Or.inr (by simpa using (by omega : r.fr.ab r.C < sy.AirFastSpeed.toNat))
-  | d + 1, h => by
-    have ih := ab_or H hw hs d (by omega)
-    rw [show r.C + (d + 1) = r.C + d + 1 by omega]
-    by_cases hf : Follow sy m r.fr (r.C + d)
-    · rcases r.ab_follow (r.C + d) (by omega) (by omega) hf with h1 | ⟨h1, h2⟩
-      · exact Or.inl h1
-      · rw [h1, h2]
-        exact ih
-    · by_cases h1 : r.C + d + 1 < r.C + N.hitF
-      · exact absurd (hw _ (by omega) h1) hf
-      · exact absurd ((r.frames _ (by omega) (by omega)).resolve_left hf) (hs _ (by omega) (by omega))
-
 /-! ### A wall hit: short of the goal with no jump analysis -/
 
 /-- the distance to `t0` from a frame, with every frame following `hstep` -/
@@ -2497,16 +2486,19 @@ theorem landed_short (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) (hs : ∀
     -- a slow takeoff: the air speed cap from the last low frame
     rw [hf] at hq
     simp only [Bool.false_eq_true, if_false] at hq
-    have hc0 : capped sy (r.fr.hs a.T1) = true := by
-      have h1 := a.x_ab
-      rw [hf] at h1
-      have h2 := r.ab_ge a.T1 (by omega) (by omega)
-      have h3 : ¬sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
-      simp only [capped, decide_eq_true_eq]
-      omega
-    have hcap := capped_along r H (u := a.T1) (w := a.L) (by omega) hLt hc0 (fun n h1 h2 => Or.inl (a.air n h1 h2))
-      (s - a.T1) (by omega)
-    rw [show a.T1 + (s - a.T1) = s by omega] at hcap
+    -- below the threshold from the takeoff, or from the stop right after it
+    obtain ⟨u, hu1, hu2, hc0⟩ : ∃ u, a.T1 ≤ u ∧ u ≤ a.T1 + 1 ∧ capped sy (r.fr.hs u) = true := by
+      rcases r.ab_of a.T1 (by omega) (by omega) with h2 | ⟨h2, _⟩
+      · have h1 := a.x_ab
+        rw [hf] at h1
+        have h3 : ¬sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
+        refine ⟨a.T1, Nat.le_refl _, by omega, ?_⟩
+        simp only [capped, decide_eq_true_eq]
+        omega
+      · exact ⟨a.T1 + 1, by omega, Nat.le_refl _, capped_of_stop r H h2⟩
+    have hcap := capped_along r H (u := u) (w := a.L) (by omega) hLt hc0 (fun n h1 h2 => Or.inl (a.air n (by omega) h2))
+      (s - u) (by omega)
+    rw [show u + (s - u) = s by omega] at hcap
     have hD := inD_at r H (n := s) (by omega) (by omega)
     have hF : ∀ j, s ≤ j → j < s + (r.t0 - s) → Follow sy m r.fr j := fun j h1 h2 =>
       hfol j (by omega) (by omega) (by omega)
@@ -2535,9 +2527,13 @@ theorem landed_short (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) (hs : ∀
       have h1 := a.x_ab
       rw [hf] at h1
       have h2 : sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
-      have h3 := ab_or r H hw hs (a.T1 - r.C) (by omega)
-      rw [show r.C + (a.T1 - r.C) = a.T1 by omega] at h3
-      omega
+      rcases r.ab_of a.T1 (by omega) (by omega) with h3 | ⟨h3, h4⟩
+      · omega
+      · -- a stop right after the takeoff: before `hitF`, so the stored speed is below the threshold
+        by_cases h5 : a.T1 + 1 < r.C + N.hitF
+        · have := h4 h5
+          omega
+        · exact absurd h3 (hs (a.T1 + 1) (by omega) (by omega))
     have E := early_of r H hw a hearly
     have hF : ∀ j, r.C ≤ j → j < r.t0 → Follow sy m r.fr j := fun j h1 h2 => by
       by_cases h3 : j + 1 < r.C + N.hitF
@@ -2648,18 +2644,6 @@ theorem slow_move (H : Checks sy m N) {u F : Nat} (hc : capped sy (r.fr.hs u) = 
         omega
     · exact ⟨h4, h5, by omega⟩
 
-/-- **`mouth`**: on the entry frame he is at the mouth, or past its left end -/
-theorem mouth_at (H : Checks sy m N) : SidePipe.mouthP sy 0 ≤ r.fr.P r.E := by
-  obtain ⟨f, h1, h2⟩ := r.entry_P
-  have h3 := (SidePipe.mouth_of_enters H.side r.entry_mem r.entered).1
-  rw [h2]
-  simp only [SidePipe.mouthP]
-  omega
-
-/-- the entry frame lands on the ground, or stands on it. This is the reason why the fall of `Off` ends by `E` -/
-theorem entry_ground (H : Checks sy m N) : SidePipe.onGround sy r.entry = true :=
-  SidePipe.ground_of_enters H.side r.entry_mem r.entered
-
 /-- **The bonus room.** From a run and the checks: the entry comes at least `goalF + aboveF` frames after first control -/
 theorem entry_ge (H : Checks sy m N) : r.C + N.goalF + N.aboveF ≤ r.E := by
   have hN := past_late r H
@@ -2706,7 +2690,7 @@ theorem entry_ge (H : Checks sy m N) : r.C + N.goalF + N.aboveF ≤ r.E := by
           obtain ⟨_, _, h7⟩ := slow_move r H h5 h6 (F := F) (fun i h8 h9 => hfr i (by omega) h9) N.aboveS (by omega)
           rw [← hFv, hFE] at h7
           have h8 := r.first (r.C + N.goalF) (by omega) hN
-          have h9 := mouth_at r H
+          have h9 := r.mouth
           have h10 := hn.slow_mouth
           omega
     | step F f d f_mem hF F_le =>
@@ -2798,15 +2782,33 @@ theorem start_v (st : StartAt sy N (r.fm r.C)) :
   rw [r.vs_C]
   exact st.v
 
-theorem start_ab (st : StartAt sy N (r.fm r.C)) : r.fr.ab r.C = 0 := by
-  rw [r.ab_C, st.ab]
+/-- a frame that follows the model reads the stored speed `|v|`: `AtCtrl.abs`, and nothing wrote the speed before the player's routine -/
+theorem ab_clean {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0)
+    (hc : FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.pad (n + 1)) (r.arr n)) :
+    r.fr.ab n = (sbyte (r.fr.hs n).v).natAbs := by
+  have e1 := hc.at_ctrl.abs
+  have e2 := hc.before sy.Player_X_Speed (by simp [FrameModel.hBytes])
+  rw [e2] at e1
+  rw [r.read_ab n hC h2, e1, SurfaceFrames.absB_natAbs, r.read_hs n hC (by omega)]
   rfl
+
+/-- the stored speed that each frame reads is `|v|`, or the frame leaves him stopped and, before `hitF`, the stored speed is below the threshold -/
+theorem ab_of_run : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.hs n).v).natAbs ∨
+    (Stop sy m N r.fr (n + 1) ∧ (n + 1 < r.C + N.hitF → r.fr.ab n < sy.AirFastSpeed.toNat)) := by
+  intro n h1 h2
+  by_cases hc : FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.pad (n + 1)) (r.arr n)
+  · exact Or.inl (r.ab_clean h1 h2 hc)
+  · exact Or.inr ⟨((r.clean n h1 h2).resolve_left hc).1, fun h3 => r.ab_early n h1 h3 h2 hc⟩
+
+/-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `SideEntryRule.mouth_of_pass`: one pass of the side check on the real frame -/
+theorem mouth_of (H : Checks sy m N) : SidePipe.mouthP sy 0 ≤ r.fr.P r.E :=
+  SideEntryRule.mouth_of_pass H.sideRule r.enters r.pass r.pos
 
 /-- the frames as numbers -/
 def toCore (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) : RoomCore sy m N :=
   { r.toRoomFields with
-    start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st, ab_start := r.start_ab st
-    frames := r.frames_of H, move_top := r.move_top_of H st }
+    start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
+    frames := r.frames_of H, move_top := r.move_top_of H st, mouth := r.mouth_of H, ab_of := r.ab_of_run }
 
 /-- **The entry comes at least `goalF + aboveF` frames after first control.** `st` is the state at first control on the machine. -/
 theorem entry_ge (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) : r.C + N.goalF + N.aboveF ≤ r.E := (r.toCore H st).entry_ge H

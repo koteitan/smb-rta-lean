@@ -1,8 +1,8 @@
 [← Back](../README-ja.md) | [English](0-3-2-FrameModel.md) | [Japanese](0-3-2-FrameModel-ja.md)
 
-# 本物のフレームと横のモデル
+# 本物のフレームと横と縦のモデル
 
-**主張.** `hstep` は 1 フレームの横の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
+**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
 
 `tr(n)` は `frame(M, i)` の `n` 命令あとの機械です。`HS(m)` は機械 `m` から読んだ横の状態（速さ、subspeed、向き、動く向き、`RunningSpeed` が 0 かどうか）です。`P(m)` は位置です。`In(m)` はプレイヤーのルーチンに来た機械から読んだ入力です。`v'` は `HS(frame(M, i))` の速さです。
 
@@ -18,7 +18,7 @@ frame_read  :  modelOK,  frictionCheck,  ReadFrame(M, i, n₀)
 
 `frame_read` と `TopSpeed` の `Frame.bound` から、`|v| ≤ v_top` のとき `|v'| ≤ v_top`、`P' − P ≤ 16·v_top` です。`RoomJoin` の `move_top` はこれで定理になりました。
 
-Lean: `Theorems/FrameWalk.lean`（2 台の機械の歩き。`tstep_spec`、`walkT_spec`、`piece_spec`、`leaf_spec`）、`Theorems/FrameModel.lean`（`move_model`、`clean_frame`、`frame_read`）、非公開の `frame_model`（`modelOK`、`native_decide`）。どちらのファイルにもゲームの値はありません。チェックはネイティブで約 2 秒です。
+Lean: `Theorems/FrameWalk.lean`（2 台の機械の歩き。`tstep_spec`、`walkT_spec`、`piece_spec`、`leaf_spec`。回り道つき: `lk_detour`、`walkD_spec`、`leafD_spec`）、`Theorems/FrameModel.lean`（`move_model`、`clean_frame`、`frame_read`）、`Theorems/VertModel.lean`（`vert_model`）、非公開の `frame_model`（`modelOK`、`native_decide`）。`vertOK` は `SurfaceFrames.numbersCheck` の一部です。どのファイルにもゲームの値はありません。チェックはネイティブで約 2 秒と 0.1 秒です。
 
 ## 2 台の機械の歩き
 
@@ -27,6 +27,41 @@ Lean: `Theorems/FrameWalk.lean`（2 台の機械の歩き。`tstep_spec`、`walk
 * 使う命令ごとに 1 回証明します（`tstep_spec`）。ROM はチェックのときだけ見ます。
 * 本物の機械と `runSub` の機械を並べると、ルーチンが両方で同じことをすると分かります（`leaf_spec`）。スタックポインタと時間が違っていても構いません。
 * 同じ機械を 2 回渡すと、コードの区間がどのバイトを書かないか、どこに着くかが分かります（`piece_spec`）。
+
+## しばらく別々に進む 2 台の機械
+
+コードが 2 台で違うバイトを読み、そこで書くものは要らない、という場所があります。回り道（`Detour`）は次のことを言います。切れ目 `c` から、それぞれの機械が 1 台で（1 台の機械の歩きで）切れ目 `c'` に着き、`keep` のバイトを書きません。`walkD` は 2 台を上と同じに進め、回り道の始まりでは、それぞれの機械を自分の道で進めます。そのあと 2 台の命令の数は違ってよいです。
+
+```
+lk_detour  :  Detour.ok(d),  d.c での歩きの状態が m, n で成り立つ
+              →  ∃ k₁ k₂ ≤ fuel(d),  d のあとの状態が stepN(k₁, m), stepN(k₂, n) で成り立つ
+walkD_spec :  walkD(f, Q) = true,  Q が m, n で成り立つ
+              →  ∃ k₁ k₂ ≤ f,  stop ∧ goal で、終わりの状態が stepN(k₁, m), stepN(k₂, n) で成り立つ
+leafD_spec :  ルーチンの入口からの walkD、スタックポインタは 2 台で同じ
+              →  ルーチンが戻るところで、タグが本物の機械と runSub の結果をつなぐ
+```
+
+`leaf_spec` はほかのルーチンを呼ばないルーチンにしか使えません。`leafD_spec` は呼んでもよいです。スタックポインタが分かっているからです。
+
+## 縦のモデル
+
+`vstepV(s, A, abs)` は機械 `vmach` の上の `Jump.vstep` です。`vmach` は `m0` で、スタックポインタをプレイヤーのルーチンの `S` にし、`DiffToHaltJump = 1` にしたものです。`A(R)` は `R` での `SavedJoypadBits` の 7 ビット目です。`vs(m)` は機械から読んだ縦の状態です。
+
+```
+vert_model :  vertOK,  AtCtrl(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
+              →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), abs(R))
+                             ∧  stepN(k, R) で (st = 1 → DTHJ = 1)
+```
+
+`DTHJ` は `DiffToHaltJump`、`PrevA` は `PreviousA_B_Buttons`、`A_B` は `A_B_Buttons` です。チェック `vertOK` の中身です。
+
+* プレイヤーのルーチンから `PlayerMovementSubs` まで: 1 台の機械、4608 の場合（`Player_State` 3、`AreaType` 3、ボタン 256、前のフレームの A 2）。
+* `PlayerMovementSubs`: 本物の機械と `vstep` の機械を並べて、24 の場合（状態 3、A と B の 4 通り、前の A 2）。回り道は 6 つです。しゃがみの判定（`PlayerSize` を読む）、`X_Physics`、ジャンプの音（`PlayerSize`）、地面の処理、空中の左右、縦の移動の最初の判定（`TimerControl`）。
+* ルーチンが戻ってからスクロールの処理まで: 1 台の機械。
+
+2 つの条件がある理由です。`DiffToHaltJump` は地上で操作できるときは 0 で、ジャンプのあとは 1 です。レベルの最初の `m0` では 0 です。ルーチンはジャンプ中にこれと比べるので、歩きでは 2 台で同じでないといけません。`vstep` は前のフレームの A を `s.prevA` から書きます。`s.prevA` は `A_B_Buttons` を読みます。本物のルーチンは `PreviousA_B_Buttons` を読みます。ゲームはゲームエンジンの最後で前者を後者に写します（`SaveAB`）。
+
+チェックをまずプログラムとして動かして分かったことです。ボタンの一部のビットだけが分かっていると、1 台の機械の歩きはほかのビットで分かれられません。なのでボタンは 256 通りにしました。`MovePlayerHorizontally` は `JumpspringAnimCtrl` から読んだレジスタで番地を決めるので、2 つの回り道の始まりでそのバイトが 0 と分かっていることにしました。地面の処理と空中の左右は、ルーチン自身のスタックの高さからほかのルーチンを呼ぶので、そのすぐ下の 2 バイトを書きます。
 
 ## 分け方
 
@@ -102,14 +137,16 @@ TAS の操作できる 3442 フレームでは、`Clean` は 3404 で、モデ�
 ## まだ証明していないこと
 
 * `before`: パッドの読み取りからプレイヤーのルーチンまでは、上の表のとおり歩きが閉じます。Lean の定理にはしていません。画面の更新と音は閉じません。
+* `vert_model` について: プレイヤーのルーチンでの 2 つの条件と、そこで縦のバイトが前のフレームのものであること、スクロールの処理のあとも変わらないこと（`SurfaceFrames.OnFrames.vBefore`、`vAfter`）。
 * `after`、`collide`: 当たり判定とゲームエンジンの中は閉じません。`after` は当たりがなかったことを言います。
 * `at_ctrl` のうちスタックポインタ、NMI なし、`AreaType` など。フレームが始まる状態からは導いていません。
 * フレームがあふれる走り（1 フレームで処理が終わらない）。`clean` はそのフレームでは成り立ちません。部屋では見ていません。一番短いフレームでも来てから 1469 命令ありました。
 * エミュレータが本物の機械と同じこと。
 
-**ファイル.** `Theorems/FrameWalk.lean`、`Theorems/FrameModel.lean`、非公開の `Proof/FrameModel.lean`。
+**ファイル.** `Theorems/FrameWalk.lean`、`Theorems/FrameModel.lean`、`Theorems/VertModel.lean`、非公開の `Proof/FrameModel.lean`。
 
 **再現.**
 ```
 .lake/build/bin/smbrta frame-model-check FM2 300
+.lake/build/bin/smbrta vert-model-check          # vertOK と各場合、約 0.1 秒
 ```

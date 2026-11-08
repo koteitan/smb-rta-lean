@@ -808,34 +808,48 @@ end
 
 /-! ## What a frame leaves -/
 
-/-- at the frame's end: a start state; or the page and the lock are those of the reference machine and another routine runs, and if it is the pipe's, the timer is the long one -/
-def finR (P : Places) (r : Machine) (K : List (Nat × UInt8)) (B : AS) : Bool :=
-  (startsR r K).any (fun S => ({ B with k := 0 } : AS).le S) ||
-  (knownIs B (P.pageI, r.ram.get! P.pageI) && knownIs B (P.lockI, r.ram.get! P.lockI) && decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI &&
-    ((B.getK P.rtI).v != P.eng || knownIs B (P.timerI, P.long)))
+/-- the frame's end is under a start state of the condition for `r` and `K` -/
+def endUnder (r : Machine) (K : List (Nat × UInt8)) (B : AS) : Bool := (startsR r K).any (fun S => ({ B with k := 0 } : AS).le S)
 
-/-- **What a frame leaves when it leaves the condition.** -/
-structure Leaves (P : Places) (r m : Machine) : Prop where
+/-- at the frame's end: a start state; or the page and the lock are those of the reference machine and another routine runs, and if it is the pipe's, the timer is the long one and the end is
+under a start state of each reference `W` of the entry -/
+def finR (P : Places) (r : Machine) (K : List (Nat × UInt8)) (W : List (Machine × List (Nat × UInt8))) (B : AS) : Bool :=
+  endUnder r K B ||
+  (knownIs B (P.pageI, r.ram.get! P.pageI) && knownIs B (P.lockI, r.ram.get! P.lockI) && decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI &&
+    ((B.getK P.rtI).v != P.eng || (knownIs B (P.timerI, P.long) && W.all fun w => endUnder w.1 w.2 B)))
+
+/-- **What a frame leaves when it leaves the condition.** If it enters the pipe, the state meets the condition of each reference `W` of the entry. -/
+structure Leaves (E : Env) (P : Places) (r : Machine) (W : List (Machine × List (Nat × UInt8))) (m : Machine) : Prop where
   page : m.ram.get! P.pageI = r.ram.get! P.pageI
   lock : m.ram.get! P.lockI = r.ram.get! P.lockI
   other : m.ram.get! P.rtI ≠ r.ram.get! P.rtI
   long : m.ram.get! P.rtI = P.eng → m.ram.get! P.timerI = P.long
+  entry : m.ram.get! P.rtI = P.eng → ∀ w ∈ W, RoomCond E w.1 w.2 m
 
 /-- what the check says -/
-structure RoomOK (E : Env) (P : Places) (r : Machine) (K : List (Nat × UInt8)) (C : CfgS) (Fu : Nat) : Prop where
+structure RoomOK (E : Env) (P : Places) (r : Machine) (K : List (Nat × UInt8)) (W : List (Machine × List (Nat × UInt8))) (C : CfgS) (Fu : Nat) : Prop where
   places : PlacesOK E P
   pad : E.pad = AB.top
   mask : MaskOK r K
+  masks : ∀ w ∈ W, MaskOK w.1 w.2
   env : C.E = E
   pl : C.P = P
   ops : C.ops = (aRows C.E).toArray
-  fin : C.fin = finR P r K
+  fin : C.fin = finR P r K W
   table : C.t.all (walkS C Fu) = true
   starts : ∀ S ∈ startsR r K, walkS C Fu S = true
 
+/-- a frame's end under a start state meets the condition -/
+theorem room_of_end {E : Env} {r : Machine} {K : List (Nat × UInt8)} (hM : MaskOK r K) {B : AS} {m : Machine} {f : Nat} (hs : Sim E (f, 2) B m) (h : endUnder r K B = true) :
+    RoomCond E r K m := by
+  simp only [endUnder, List.any_eq_true] at h
+  obtain ⟨D, hD, hle⟩ := h
+  have hs2 : Sim E (m.frame, 2) ({ B with k := 0 } : AS) m := { hs with fr := rfl }
+  exact room_of_sim hM hD (sim_le hle hs2)
+
 /-- **One frame in the room.** -/
-theorem room_step {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : RoomOK E P r K C Fu) {m : Machine} {i : UInt8}
-    (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) : RoomCond E r K (frame m i) ∨ Leaves P r (frame m i) := by
+theorem room_step {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {W : List (Machine × List (Nat × UInt8))} {C : CfgS} {Fu : Nat} (h : RoomOK E P r K W C Fu)
+    {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) : RoomCond E r K (frame m i) ∨ Leaves E P r W (frame m i) := by
   obtain ⟨S, hS, hs⟩ := sim_of_room (F := (m.frame, 2)) h.mask h.pad hm rfl
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hw := h.starts S hS
@@ -844,32 +858,36 @@ theorem room_step {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)}
   rw [h.env] at h4
   rw [h.fin] at h2
   unfold finR at h2
-  simp only [Bool.or_eq_true, Bool.and_eq_true, List.any_eq_true, bne_iff_ne, decide_eq_true_eq] at h2
-  rcases h2 with ⟨D, hD, hle⟩ | ⟨⟨⟨⟨⟨a1, a2⟩, a3⟩, a4⟩, a5⟩, a6⟩
+  simp only [Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, decide_eq_true_eq, List.all_eq_true] at h2
+  rcases h2 with h2 | ⟨⟨⟨⟨⟨a1, a2⟩, a3⟩, a4⟩, a5⟩, a6⟩
   · left
-    have hs2 : Sim E ((frame m i).frame, 2) ({ B with k := 0 } : AS) (frame m i) := { h4 with fr := rfl }
-    exact room_of_sim h.mask hD (sim_le hle hs2)
+    exact room_of_end h.mask h4 h2
   · right
     have e := PipeEntryRule.known_eq a4 (h4.ram _ a3)
-    refine ⟨sim_known h4 a1, sim_known h4 a2, ?_, ?_⟩
+    refine ⟨sim_known h4 a1, sim_known h4 a2, ?_, ?_, ?_⟩
     · rw [e]
       exact a5
     · intro hq
       rw [e] at hq
       rcases a6 with a7 | a7
       · exact absurd hq a7
-      · exact sim_known h4 a7
+      · exact sim_known h4 a7.1
+    · intro hq w hw
+      rw [e] at hq
+      rcases a6 with a7 | a7
+      · exact absurd hq a7
+      · exact room_of_end (h.masks w hw) h4 (a7.2 w hw)
 
 /-- **Every frame from the start in the room up to the entry.** `seq` lists the frames of a run. The state at frame `c` meets the condition. Each frame before `e` meets `SiteOK` on each instruction and
-starts in the player's routine. `e` has the pipe's routine. Then the frame before `e` was in the condition, and the timer at `e` is the long one. -/
-theorem room_run {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : RoomOK E P r K C Fu)
+starts in the player's routine. `e` has the pipe's routine. Then every frame before `e` starts in the condition, and the frame before `e` leaves it as `Leaves` says. -/
+theorem room_leaves {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {W : List (Machine × List (Nat × UInt8))} {C : CfgS} {Fu : Nat} (h : RoomOK E P r K W C Fu)
     (hrt : (P.rtI, (0xFF : UInt8)) ∈ K) (hne : r.ram.get! P.rtI ≠ P.eng)
     {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {c e : Nat} (hce : c ≤ e)
     (h0 : RoomCond E r K (seq c))
     (hs : ∀ n, c ≤ n → n < e → ∀ j, SiteOK P (trace (seq n) (inp n) j))
     (hr : ∀ n, c ≤ n → n < e → (seq n).ram.get! P.rtI = r.ram.get! P.rtI)
     (he : (seq e).ram.get! P.rtI = P.eng) :
-    (∀ n, c ≤ n → n < e → RoomCond E r K (seq n)) ∧ (seq e).ram.get! P.timerI = P.long ∧ (seq e).ram.get! P.pageI = r.ram.get! P.pageI ∧ (seq e).ram.get! P.lockI = r.ram.get! P.lockI := by
+    (∀ n, c ≤ n → n < e → RoomCond E r K (seq n)) ∧ Leaves E P r W (seq e) := by
   have rtOf : ∀ {m : Machine}, RoomCond E r K m → m.ram.get! P.rtI = r.ram.get! P.rtI := by
     intro m hm
     have := hm.bytes _ hrt
@@ -879,7 +897,7 @@ theorem room_run {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} 
       intro j hj
       rw [bt_and, TaintRun.bt_ff hj, Bool.and_true]
     rwa [e1, e1] at this
-  have key : ∀ d, c + d ≤ e → RoomCond E r K (seq (c + d)) ∨ (c + d = e ∧ Leaves P r (seq e)) := by
+  have key : ∀ d, c + d ≤ e → RoomCond E r K (seq (c + d)) ∨ (c + d = e ∧ Leaves E P r W (seq e)) := by
     intro d
     induction d with
     | zero => exact fun _ => Or.inl h0
@@ -910,7 +928,19 @@ theorem room_run {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} 
       have := rtOf h3
       rw [he] at this
       exact hne this.symm
-    · exact ⟨h3.long he, h3.page, h3.lock⟩
+    · exact h3
+
+/-- **Every frame from the start in the room up to the entry**: the frames before `e` start in the condition, and the timer at `e` is the long one. -/
+theorem room_run {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {W : List (Machine × List (Nat × UInt8))} {C : CfgS} {Fu : Nat} (h : RoomOK E P r K W C Fu)
+    (hrt : (P.rtI, (0xFF : UInt8)) ∈ K) (hne : r.ram.get! P.rtI ≠ P.eng)
+    {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {c e : Nat} (hce : c ≤ e)
+    (h0 : RoomCond E r K (seq c))
+    (hs : ∀ n, c ≤ n → n < e → ∀ j, SiteOK P (trace (seq n) (inp n) j))
+    (hr : ∀ n, c ≤ n → n < e → (seq n).ram.get! P.rtI = r.ram.get! P.rtI)
+    (he : (seq e).ram.get! P.rtI = P.eng) :
+    (∀ n, c ≤ n → n < e → RoomCond E r K (seq n)) ∧ (seq e).ram.get! P.timerI = P.long ∧ (seq e).ram.get! P.pageI = r.ram.get! P.pageI ∧ (seq e).ram.get! P.lockI = r.ram.get! P.lockI := by
+  obtain ⟨h1, h3⟩ := room_leaves h hrt hne next hce h0 hs hr he
+  exact ⟨h1, h3.long he, h3.page, h3.lock⟩
 
 /-! ## Finding the table: a search, no part of the proof -/
 
@@ -1052,14 +1082,14 @@ def searchOf (P : Places) (Z : Aids) (E : Env) (r : Machine) (K : List (Nat × U
   searchS P Z E ops ((startsR r K).foldl (routeS P Z E) {})
 
 /-- the configuration from the table found: the states that two paths come into -/
-def cfgOf (P : Places) (Z : Aids) (E : Env) (r : Machine) (K : List (Nat × UInt8)) : CfgS :=
+def cfgOf (P : Places) (Z : Aids) (E : Env) (r : Machine) (K : List (Nat × UInt8)) (W : List (Machine × List (Nat × UInt8))) : CfgS :=
   let X := searchOf P Z E r K
   let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2
   let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
       (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
     (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
   let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd]).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
-  { E, ops := (aRows E).toArray, P, fin := finR P r K, t := q.1, key := Z.key E, idx := q.2.1, cut := q.2.2, norm := Z.norm, normAt := at0 }
+  { E, ops := (aRows E).toArray, P, fin := finR P r K W, t := q.1, key := Z.key E, idx := q.2.1, cut := q.2.2, norm := Z.norm, normAt := at0 }
 
 /-- the fuel of a walk -/
 def fuelS : Nat := 100000
@@ -1075,20 +1105,21 @@ theorem placesOK_spec {E : Env} {P : Places} (h : placesOK E P = true) : PlacesO
   exact ⟨h1, h2, h3, h4, h5, h6, h7⟩
 
 /-- **The check.** -/
-def walkCheck (P : Places) (Z : Aids) (E : Env) (r : Machine) (K : List (Nat × UInt8)) : Bool :=
-  let C := cfgOf P Z E r K
-  placesOK E P && E.pad.v == 0 && E.pad.k == 0 && maskOK r K && C.t.all (walkS C fuelS) && (startsR r K).all (walkS C fuelS)
+def walkCheck (P : Places) (Z : Aids) (E : Env) (r : Machine) (K : List (Nat × UInt8)) (W : List (Machine × List (Nat × UInt8))) : Bool :=
+  let C := cfgOf P Z E r K W
+  placesOK E P && E.pad.v == 0 && E.pad.k == 0 && maskOK r K && W.all (fun w => maskOK w.1 w.2) && C.t.all (walkS C fuelS) && (startsR r K).all (walkS C fuelS)
 
-theorem roomOK_of_check {P : Places} {Z : Aids} {E : Env} {r : Machine} {K : List (Nat × UInt8)} (h : walkCheck P Z E r K = true) : RoomOK E P r K (cfgOf P Z E r K) fuelS := by
+theorem roomOK_of_check {P : Places} {Z : Aids} {E : Env} {r : Machine} {K : List (Nat × UInt8)} {W : List (Machine × List (Nat × UInt8))} (h : walkCheck P Z E r K W = true) :
+    RoomOK E P r K W (cfgOf P Z E r K W) fuelS := by
   simp only [walkCheck, Bool.and_eq_true, List.all_eq_true, beq_iff_eq] at h
-  obtain ⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h3⟩, h4⟩, h5⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h3⟩, h3'⟩, h4⟩, h5⟩ := h
   have hp : E.pad = AB.top := by
     show E.pad = ⟨0, 0⟩
     cases hq : E.pad
     rw [hq] at h2 h2'
     simp only at h2 h2'
     rw [h2, h2']
-  exact ⟨placesOK_spec h1, hp, maskOK_spec h3, rfl, rfl, rfl, rfl, h4, h5⟩
+  exact ⟨placesOK_spec h1, hp, maskOK_spec h3, fun w hw => maskOK_spec (h3' w hw), rfl, rfl, rfl, rfl, h4, h5⟩
 
 /-! ## The places of the game, from the symbols -/
 
@@ -1193,17 +1224,37 @@ def roomNames : List (String × Nat × Nat × UInt8) :=
    ("SwimmingFlag", 0, 1, 255), ("JumpspringAnimCtrl", 0, 1, 255), ("FireballThrowingTimer", 0, 1, 255), ("ScreenLeft_PageLoc", 0, 1, 255), ("ScreenRight_PageLoc", 0, 1, 255),
    ("ScreenRight_X_Pos", 0, 1, 255), ("AreaParserTaskNum", 0, 1, 255), ("ScrollLock", 0, 1, 255), ("EnemyDataOffset", 0, 1, 255), ("EnemyObjectPageLoc", 0, 1, 255),
    ("ScrollThirtyTwo", 0, 1, 255), ("CloudTypeOverride", 0, 1, 255), ("AreaType", 0, 1, 255), ("CurrentPlayer", 0, 1, 255), ("PlayerStatus", 0, 1, 254),
-   ("WorldNumber", 0, 1, 255), ("OperMode", 0, 1, 255), ("OperMode_Task", 0, 1, 255), ("StarInvincibleTimer", 0, 1, 255), ("AreaMusicBuffer_Alt", 0, 1, 251)]
+   ("WorldNumber", 0, 1, 255), ("OperMode", 0, 1, 255), ("OperMode_Task", 0, 1, 255), ("StarInvincibleTimer", 0, 1, 255), ("AreaMusicBuffer_Alt", 0, 1, 251),
+   ("ScreenRoutineTask", 0, 1, 255), ("DisableScreenFlag", 0, 1, 255), ("Fireball_State", 0, 2, 255), ("JoypadOverride", 0, 1, 255), ("GameTimerExpiredFlag", 0, 1, 255)]
 
 /-- the list of bits, as RAM indices -/
 def knownOf (nm : Names) : List (Nat × UInt8) :=
   roomNames.flatMap fun p => (List.range p.2.2.1).map fun j => (((nm.ad p.1).toNat + p.2.1 + j) &&& 0x7FF, p.2.2.2)
 
+/-- the bytes of the condition at the entry of the side pipe that the walk does not give: a name, an offset, a number of bytes. The routine is the entry itself; the player's state and
+height; the screen's buffer; the sound; the next area, which the room's frames do not know. -/
+def restNames : List (String × Nat × Nat) :=
+  [("GameEngineSubroutine", 0, 1), ("Player_State", 0, 1), ("Player_Y_HighPos", 0, 1), ("Player_Y_Position", 0, 1), ("VRAM_Buffer1_Offset", 0, 1), ("VRAM_Buffer1", 0, 3), ("VRAM_Buffer1", 7, 1),
+   ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("MusicData", 0, 2), ("MusicOffset_Square1", 0, 1), ("NoiseSoundBuffer", 0, 1), ("EventMusicQueue", 0, 1), ("NoteLengthTblAdder", 0, 1),
+   ("AreaPointer", 0, 1), ("EntrancePage", 0, 1), ("AreaNumber", 0, 1), ("PrimaryHardMode", 0, 1)]
+
+/-- these bytes as RAM indices -/
+def restIdx (nm : Names) : List Nat :=
+  restNames.flatMap fun p => (List.range p.2.2).map fun j => ((nm.ad p.1).toNat + p.2.1 + j) &&& 0x7FF
+
 /-- the names this file needs -/
 def namesOf (text : String) : Names :=
   let ls := text.splitOn "\n"
-  ((["VRAM_Buffer1_Offset", "ScreenLeft_PageLoc", "ScrollLock", "ChangeAreaTimer", "FrameCounter", "GamePauseStatus", "PlayerStatus", "CoinTally", "PlayerScoreDisplay", "GameTimerDisplay", "HalfwayPage", "Hidden1UpFlag", "PseudoRandomBitReg"] ++ roomNames.map (·.1)).eraseDups).filterMap fun n =>
+  ((["VRAM_Buffer1_Offset", "ScreenLeft_PageLoc", "ScrollLock", "ChangeAreaTimer", "FrameCounter", "GamePauseStatus", "PlayerStatus", "CoinTally", "PlayerScoreDisplay", "GameTimerDisplay", "HalfwayPage", "Hidden1UpFlag", "PseudoRandomBitReg"] ++ roomNames.map (·.1) ++ restNames.map (·.1)).eraseDups).filterMap fun n =>
     (PipeTransitionAll.asmValue ls n).map (n, ·)
+
+/-- the references `V` of the condition at the entry, without the bytes `restIdx`, as known bits -/
+def entryW (nm : Names) (V : List (Machine × List Nat)) : List (Machine × List (Nat × UInt8)) :=
+  V.map fun v => (v.1, (v.2.filter fun i => !(restIdx nm).contains i).map fun i => (i, (0xFF : UInt8)))
+
+/-- **The condition on the bytes `restIdx` at the entry**: they have the values of a reference machine of the condition at the entry -/
+def EntryRest (nm : Names) (V : List (Machine × List Nat)) (m : Machine) : Prop :=
+  ∃ v ∈ V, ∀ i ∈ v.2, i ∈ restIdx nm → m.ram.get! i = v.1.ram.get! i
 
 /-- the reference machine: the real machine on the frame before the entry into the side pipe -/
 abbrev refR (m0 : Machine) : Machine := SideTransition.pre m0
@@ -1215,12 +1266,13 @@ abbrev envR (sy : Syms) (nm : Names) (m0 : Machine) : Env := envOf nm sy (refR m
 /-- **The condition at a frame's start in the room.** -/
 abbrev Room (sy : Syms) (nm : Names) (m0 m : Machine) : Prop := RoomCond (envR sy nm m0) (refR m0) (knownOf nm) m
 
-/-- **The check on the ROM.** The walks, and: the routine, the page and the lock are known bytes; the reference has the player's routine, the first page and the lock on; the long timer is at least `A`. -/
-def roomCheck (sy : Syms) (nm : Names) (m0 : Machine) (A : Nat) : Bool :=
+/-- **The check on the ROM.** The walks, with the references `V` of the condition at the entry, and: the routine, the page and the lock are known bytes; the reference has the player's routine,
+the first page and the lock on; the long timer is at least `A`. -/
+def roomCheck (sy : Syms) (nm : Names) (m0 : Machine) (A : Nat) (V : List (Machine × List Nat)) : Bool :=
   let P := placesR sy nm m0
   let r := refR m0
   let K := knownOf nm
-  walkCheck P (aidsOf sy nm m0) (envR sy nm m0) r K &&
+  walkCheck P (aidsOf sy nm m0) (envR sy nm m0) r K (entryW nm V) &&
     K.contains (P.rtI, 0xFF) && K.contains (P.pageI, 0xFF) && K.contains (P.lockI, 0xFF) &&
     r.ram.get! P.rtI != P.eng && r.ram.get! P.pageI == 0 && r.ram.get! P.lockI != 0 && decide (A ≤ P.long.toNat)
 
@@ -1241,11 +1293,12 @@ structure RoomRun (sy : Syms) (nm : Names) (m0 : Machine) where
   /-- the frame before `e` is the entry -/
   enter : (seq e).ram.get! (placesR sy nm m0).rtI = (placesR sy nm m0).eng
 
-variable {sy : Syms} {nm : Names} {m0 : Machine} {A : Nat}
+variable {sy : Syms} {nm : Names} {m0 : Machine} {A : Nat} {V : List (Machine × List Nat)}
 
 /-- what the check gives -/
-structure RoomFacts (sy : Syms) (nm : Names) (m0 : Machine) (A : Nat) : Prop where
-  ok : RoomOK (envR sy nm m0) (placesR sy nm m0) (refR m0) (knownOf nm) (cfgOf (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (knownOf nm)) fuelS
+structure RoomFacts (sy : Syms) (nm : Names) (m0 : Machine) (A : Nat) (V : List (Machine × List Nat)) : Prop where
+  ok : RoomOK (envR sy nm m0) (placesR sy nm m0) (refR m0) (knownOf nm) (entryW nm V)
+    (cfgOf (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (knownOf nm) (entryW nm V)) fuelS
   rt : ((placesR sy nm m0).rtI, (0xFF : UInt8)) ∈ knownOf nm
   page : ((placesR sy nm m0).pageI, (0xFF : UInt8)) ∈ knownOf nm
   lock : ((placesR sy nm m0).lockI, (0xFF : UInt8)) ∈ knownOf nm
@@ -1254,7 +1307,7 @@ structure RoomFacts (sy : Syms) (nm : Names) (m0 : Machine) (A : Nat) : Prop whe
   lock1 : (refR m0).ram.get! (placesR sy nm m0).lockI ≠ 0
   long : A ≤ (placesR sy nm m0).long.toNat
 
-theorem roomFacts_of_check (h : roomCheck sy nm m0 A = true) : RoomFacts sy nm m0 A := by
+theorem roomFacts_of_check (h : roomCheck sy nm m0 A V = true) : RoomFacts sy nm m0 A V := by
   simp only [roomCheck, Bool.and_eq_true, bne_iff_ne, beq_iff_eq, decide_eq_true_eq, List.contains_iff_mem] at h
   obtain ⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩ := h
   exact ⟨roomOK_of_check h1, h2, h3, h4, h5, h6, h7, h8⟩
@@ -1267,7 +1320,7 @@ theorem byte_of_ff {x y : UInt8} (h : x &&& 0xFF = y &&& 0xFF) : x = y := by
   rwa [e1, e1] at h
 
 /-- **One frame keeps the page and the lock.** -/
-theorem room_keeps (h : RoomFacts sy nm m0 A) {m : Machine} {i : UInt8} (hm : Room sy nm m0 m) (hk : ∀ j, SiteOK (placesR sy nm m0) (trace m i j)) :
+theorem room_keeps (h : RoomFacts sy nm m0 A V) {m : Machine} {i : UInt8} (hm : Room sy nm m0 m) (hk : ∀ j, SiteOK (placesR sy nm m0) (trace m i j)) :
     (frame m i).ram.get! (placesR sy nm m0).pageI = m.ram.get! (placesR sy nm m0).pageI ∧ (frame m i).ram.get! (placesR sy nm m0).lockI = m.ram.get! (placesR sy nm m0).lockI := by
   have p1 := byte_of_ff (hm.bytes _ h.page)
   have p2 := byte_of_ff (hm.bytes _ h.lock)
@@ -1278,7 +1331,7 @@ theorem room_keeps (h : RoomFacts sy nm m0 A) {m : Machine} {i : UInt8} (hm : Ro
   · exact ⟨h1.page, h1.lock⟩
 
 /-- **The screen and the lock in the room.** On every frame from the first control to the entry, the screen is on the first page and the scroll lock is on. -/
-theorem RoomRun.screen (h : RoomFacts sy nm m0 A) (R : RoomRun sy nm m0) :
+theorem RoomRun.screen (h : RoomFacts sy nm m0 A V) (R : RoomRun sy nm m0) :
     ∀ n, R.c ≤ n → n ≤ R.e → (R.seq n).ram.get! (placesR sy nm m0).pageI = 0 ∧ (R.seq n).ram.get! (placesR sy nm m0).lockI ≠ 0 := by
   obtain ⟨h1, _, h3, h4⟩ := room_run h.ok h.rt h.ne R.next R.order R.start R.sites R.stay R.enter
   intro n a b
@@ -1296,7 +1349,7 @@ theorem RoomRun.screen (h : RoomFacts sy nm m0 A) (R : RoomRun sy nm m0) :
     exact ⟨h.page0, h.lock1⟩
 
 /-- **The entry has the long timer.** -/
-theorem RoomRun.timer (h : RoomFacts sy nm m0 A) (R : RoomRun sy nm m0) : A ≤ ((R.seq R.e).ram.get! (placesR sy nm m0).timerI).toNat := by
+theorem RoomRun.timer (h : RoomFacts sy nm m0 A V) (R : RoomRun sy nm m0) : A ≤ ((R.seq R.e).ram.get! (placesR sy nm m0).timerI).toNat := by
   obtain ⟨_, h2, _, _⟩ := room_run h.ok h.rt h.ne R.next R.order R.start R.sites R.stay R.enter
   rw [h2]
   exact h.long
@@ -1310,7 +1363,7 @@ def entryRtOK (P : Places) (V : List (Machine × List Nat)) : Bool :=
   V.all fun v => v.2.contains P.rtI && v.1.ram.get! P.rtI == P.eng
 
 /-- **The replacement of the timer in the condition at the entry.** From the condition at the entry without the timer, and the fields of `RoomRun` other than `enter`, comes the condition with the timer. -/
-theorem entry_long {E : Env} {V : List (Machine × List Nat)} (h : RoomFacts sy nm m0 A) (hE : E.rkI = (placesR sy nm m0).timerI) (hV : entryRtOK (placesR sy nm m0) V = true)
+theorem entry_long {E : Env} {V V' : List (Machine × List Nat)} (h : RoomFacts sy nm m0 A V') (hE : E.rkI = (placesR sy nm m0).timerI) (hV : entryRtOK (placesR sy nm m0) V = true)
     {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {c e : Nat} (order : c ≤ e)
     (start : Room sy nm m0 (seq c))
     (sites : ∀ n, c ≤ n → n < e → ∀ j, SiteOK (placesR sy nm m0) (trace (seq n) (inp n) j))
@@ -1325,6 +1378,38 @@ theorem entry_long {E : Env} {V : List (Machine × List Nat)} (h : RoomFacts sy 
   refine entry_of_timer h0 ?_
   rw [hE]
   exact RoomRun.timer h ⟨seq, inp, next, c, e, order, start, sites, stay, enter⟩
+
+/-- the condition at the entry and the room: the references know the routine and it is the pipe's; the routine is one of the bytes `restIdx`; the environment has the room's ROM -/
+def entryEnvOK (sy : Syms) (nm : Names) (m0 : Machine) (E : Env) (V : List (Machine × List Nat)) : Bool :=
+  entryRtOK (placesR sy nm m0) V && (restIdx nm).contains (placesR sy nm m0).rtI && decide (E.prg.data = (envR sy nm m0).prg.data) && E.mask == (envR sy nm m0).mask
+
+/-- **The condition at the entry, from the room.** From the condition at the first control, `SiteOK` and the player's routine on each frame up to the entry, and the bytes `restIdx` at the
+entry, comes the whole condition at the entry, with the timer at least `A`. -/
+theorem entry_rest {E : Env} (h : RoomFacts sy nm m0 A V) (hE : E.rkI = (placesR sy nm m0).timerI) (hV : entryEnvOK sy nm m0 E V = true)
+    {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {c e : Nat} (order : c ≤ e)
+    (start : Room sy nm m0 (seq c))
+    (sites : ∀ n, c ≤ n → n < e → ∀ j, SiteOK (placesR sy nm m0) (trace (seq n) (inp n) j))
+    (stay : ∀ n, c ≤ n → n < e → (seq n).ram.get! (placesR sy nm m0).rtI = (refR m0).ram.get! (placesR sy nm m0).rtI)
+    (rest : EntryRest nm V (seq e)) : EntryCond E V A (seq e) := by
+  simp only [entryEnvOK, entryRtOK, Bool.and_eq_true, List.all_eq_true, beq_iff_eq, decide_eq_true_eq, List.contains_iff_mem] at hV
+  obtain ⟨⟨⟨hV1, hV2⟩, hV3⟩, hV4⟩ := hV
+  obtain ⟨v, hv, hb⟩ := rest
+  have enter : (seq e).ram.get! (placesR sy nm m0).rtI = (placesR sy nm m0).eng := by
+    obtain ⟨a1, a2⟩ := hV1 v hv
+    rw [hb _ a1 hV2]
+    exact a2
+  obtain ⟨_, hL⟩ := room_leaves h.ok h.rt h.ne next order start sites stay enter
+  have hw : (v.1, (v.2.filter fun i => !(restIdx nm).contains i).map fun i => (i, (0xFF : UInt8))) ∈ entryW nm V := List.mem_map.2 ⟨v, hv, rfl⟩
+  have hc := hL.entry enter _ hw
+  have hp := SideTransition.byteArray_eq hV3
+  refine ⟨hc.dot, hc.flags, hc.s0, hc.ctrl, hc.strobe, hc.halted, hc.trk, hc.prg.trans hp.symm, hc.mask.trans hV4.symm, hc.size, ⟨v, hv, hc.pc, hc.s, fun i hi => ?_⟩, ?_⟩
+  · by_cases hr : i ∈ restIdx nm
+    · exact hb i hi hr
+    · have hf : (i, (0xFF : UInt8)) ∈ (v.2.filter fun i => !(restIdx nm).contains i).map fun i => (i, (0xFF : UInt8)) :=
+        List.mem_map.2 ⟨i, List.mem_filter.2 ⟨hi, by simp [hr]⟩, rfl⟩
+      exact byte_of_ff (hc.bytes _ hf)
+  · rw [hE, hL.long enter]
+    exact h.long
 
 end
 
@@ -1358,13 +1443,33 @@ structure Report where
   other : Nat := 0
   /-- pause frames among the frames -/
   paused : Nat := 0
+  /-- entries where the bytes `restIdx` are not those of a reference; entries where they are but the whole condition at the entry fails, on frames with every instruction `SiteOK`, and on others -/
+  restNo : Nat := 0
+  condNo : Nat := 0
+  condNoBad : Nat := 0
   deriving Inhabited
 
 def Report.show (r : Report) : String :=
-  s!"frames {r.frames} (paused {r.paused}); not SiteOK by part (dot, register read, tile, head tile, erase, offset, x) {r.bad}; last dot {r.maxDot}; out of the condition and of Leaves {r.left}, and on frames not SiteOK {r.leftBad}; entries {r.entries}, short timer {r.shortT}; other routines {r.other}"
+  s!"frames {r.frames} (paused {r.paused}); not SiteOK by part (dot, register read, tile, head tile, erase, offset, x) {r.bad}; last dot {r.maxDot}; out of the condition and of Leaves {r.left}, and on frames not SiteOK {r.leftBad}; entries {r.entries}, short timer {r.shortT}, without the bytes left to the entry {r.restNo}, with them but not the condition at the entry {r.condNo} (on frames not SiteOK {r.condNoBad}); other routines {r.other}"
 
-/-- one real frame with the bits `pad` of the controller -/
-def scanFrame (P : Places) (E : Env) (r : Machine) (K : List (Nat × UInt8)) (pauseI : Nat) (m : Machine) (pad : UInt8) (r0 : Report) : Report × Machine := Id.run do
+/-- the frame ends of the walk from one state, for a program -/
+def walkEnds (C : CfgS) : Nat → AS → List AS
+  | 0, _ => []
+  | n + 1, A => (preS C.P (clampS C.P A)).flatMap fun A₁ => (stepS C.P C.E C.ops A₁).flatMap fun r =>
+    match r with
+    | none => []
+    | some B =>
+      if B.k == A.k then
+        if C.cut.get! (weaken C B).pc.toNat != 0 && coverS C (clampS C.P (weaken C B)) then [] else walkEnds C n (weaken C B)
+      else [B]
+
+/-- `EntryRest` as a check, for a program -/
+def restOK (nm : PipeTransitionAll.Names) (V : List (Machine × List Nat)) (m : Machine) : Bool :=
+  V.any fun v => v.2.all fun i => !(restIdx nm).contains i || m.ram.get! i == v.1.ram.get! i
+
+/-- one real frame with the bits `pad` of the controller. `ent` says of the machine after an entry whether the bytes left to the entry and the whole condition at the entry hold. -/
+def scanFrame (P : Places) (E : Env) (r : Machine) (K : List (Nat × UInt8)) (pauseI : Nat) (m : Machine) (pad : UInt8) (r0 : Report)
+    (ent : Machine → Bool × Bool := fun _ => (true, true)) : Report × Machine := Id.run do
   let t := m.frame + 1
   let mut c : Machine := { m with pad }
   let mut R := { r0 with frames := r0.frames + 1, paused := r0.paused + (if m.ram.get! pauseI &&& 1 != 0 then 1 else 0) }
@@ -1384,7 +1489,12 @@ def scanFrame (P : Places) (E : Env) (r : Machine) (K : List (Nat × UInt8)) (pa
     if !page || rt == r.ram.get! P.rtI then
       R := if clean then { R with left := R.left + 1 } else { R with leftBad := R.leftBad + 1 }
     else if rt == P.eng then
+      let q := ent c
+      let n1 : Nat := if q.1 then 0 else 1
+      let n2 : Nat := if q.1 && !q.2 && clean then 1 else 0
+      let n3 : Nat := if q.1 && !q.2 && !clean then 1 else 0
       R := { R with entries := R.entries + 1, shortT := R.shortT + (if c.ram.get! P.timerI == P.long then 0 else 1) }
+      R := { R with restNo := R.restNo + n1, condNo := R.condNo + n2, condNoBad := R.condNoBad + n3 }
     else R := { R with other := R.other + 1 }
   return (R, c)
 

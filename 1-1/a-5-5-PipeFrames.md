@@ -23,8 +23,12 @@ no_entry_of_reads :  16 ≤ v_top,  1 ≤ N,  (∀ t,  Enter t → L ≤ fr(t).P
                      Reads,  v(fm 1) = 0,  B + 16·v_top·(T − N) < L,  Enter E   →   T < E
 
 Pipe.next, Pipe.speed (Route)        :  the old fields next and speed, as theorems
-pipe_no_entry_real (private)         :  start, clean, tiles, pos, openP, openB,  Enters(fm E, inp E),  reads,  still   →   367 < E
+Pipe.reads (Route)                   :  Reads, from the frames read from their own machines and the frames not counted (own, lags, lag_check)
+pipe_no_entry_real (private)         :  start, clean, tiles, pos, openP, openB,  Enters(fm E, inp E),  Reads,  still   →   367 < E
 ```
+
+`Reads` is no longer a field. [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) proves it from `Pipe.own` (each counted frame ends at its own machine) and
+`Pipe.lags` (the frames not counted between them).
 
 The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
@@ -56,7 +60,9 @@ the speed, the subspeed and the position.
   proof all 120 times. On the TAS it is 0 too.
 * On the TAS, `P₂` up to frame 32 is at most `P₀ + 9744`, and the position at the start of frame 33 is exactly `P₀ + 9744` (`openP`, `openB`).
 * Frames that are not counted come during a pause, and while he grows, shrinks or dies. While `TimerControl` is not 0, the game does not count down the interval timer (read from the
-  code). None of these frames changes the speed, the subspeed or the position. Of the 300 random runs, 51 end in a death and 12 change his size.
+  code). None of the measured frames changes the speed, the subspeed or the position. Of the 300 random runs, 51 end in a death and 12 change his size.
+  **Correction (this round):** a run stops at the first counted frame that ends out of control. So the frames not counted after a growth, an injury or a death were not measured
+  here. During the injury blink they do change the values ([Frames not counted, up to the pipe](a-5-5-3-LagFrames.md)).
 * **The 3 frames where (a) fails.** All are while he has fallen into a pit and is below the screen. The scroll stops, and `KeepOnscr` holds him at the screen's right edge.
   For example `v₂ = 24 > 0`, `P' = P₂ − 512`, `v' = 0`. `impedeP` of `Frame` has only the case of the screen's left edge. Once he has fallen below the screen, a death follows (read from the code), so such a frame never comes before an entry.
   A `Frame` with the same two ends exists (`v₂ = 0`).
@@ -65,12 +71,12 @@ the speed, the subspeed and the position.
 
 * **Each frame is a `Frame`.** This is the type of `fr`. It was assumed before; it is item 0-0-0-3-1 (`FrameModel.frame_read` gives it under `ReadFrame`). It is checked on the real frames above.
   New is that it is used for frames 1 to `N` as well.
-* **A frame that is not counted changes none of the three values.** This is in the form of `Reads`: the end of frame `t` is read from `fm(t+1)`, the machine at the start of the next
-  counted frame. Measured above.
-* **`still`: the speed at control is 0.** A condition on one state. The way to the start of the level is not followed in Lean.
+* **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
+  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md): `lags.start`, `lags.clean`, `lags.game`.
+* **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
 * **Not in this item.** `openP`, `openB` (item 1-1-a-5-4) and `pos` (item 1-1-a-5-9) stay hypotheses.
 
-**Files.** `Theorems/PipeFrames.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.
+**Files.** `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.
 
 **Reproduce.**
 ```
