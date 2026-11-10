@@ -2,7 +2,7 @@
 
 # Above ground: the frames from control, one by one
 
-**Claim.** [From control to the castle](f-5-PoleJoin.md) assumed the statements about a whole run `model`, `hit`, `stop`, `box`, `off`, `next`, `startP`, `startV`. They are theorems now. The assumptions that stay are about one frame. On frames 1 to 8 the vertical step (`vstep`) is a theorem on real machines too; what stays there is that the rest of the frame keeps the vertical bytes. A frame where the side he presses is masked is a theorem too: the field `masked` is gone. `startP`, `startV` are proved on real machines. They come from the last row of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). The conditions are those of that change, and that `left` is not 0 before control.
+**Claim.** [From control to the castle](f-5-PoleJoin.md) assumed the statements about a whole run `model`, `hit`, `stop`, `box`, `off`, `next`, `startP`, `startV`. They are theorems now. The assumptions that stay are about one frame. On frames 1 to 8 the vertical step (`vstep`) is a theorem on real machines too; what stays there is that the frame after the scroll handler keeps the vertical bytes. The part of each frame from its start to the player's routine is a theorem now: a walk of that part ([`CtrlKeep`](#the-frame-up-to-the-players-routine)) shows that it keeps 25 bytes and comes to the routine in the state the movement needs. So the fields `vBefore`, `Moves.at_ctrl`, `Moves.before`, `Moves.bits` are gone; what stays of them is on the frame's ends. The frames are those of the field `keep` of `Run` ([One whole frame in control](f-6-19-FrameKeep.md)), so the field `ends` is gone too. A frame where the side he presses is masked is a theorem too: the field `masked` is gone. `startP`, `startV` are proved on real machines. They come from the last row of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). The conditions are those of that change, and that `left` is not 0 before control.
 
 The unit is 1/256 px. `seq j` is the machine at the end of the counted frame `j`. `seq 0` is the machine at control. `B.m` is the machine at control that the private proof holds.
 
@@ -33,7 +33,7 @@ OneFrame(i, a, b) : MaskStop(a, b) ∨ (Pre(i, a, b) ∧ Coll(i, a, b))
 
 [`FrameModel.move_model`](../0-0/0-3-2-FrameModel.md) proves the movement of a real frame: from the player's routine to the scroll handler, `hs` follows `hstep` and `P` moves by `16·v₂`. So `OneFrame` is a theorem from what the frame does outside the movement.
 
-`fm j` is the machine when the counted frame `j` begins: `seq (j − 1)`, or later by `lag` frames. `pad j` is its input, and `arr j` the instruction at which it comes to the player's routine. `R` is the machine there, and `Q` the machine when the frame comes to the scroll handler. `b = frame(M, i)` is the machine at the frame's end.
+`fm j` is the machine when the counted frame `j` begins: `seq (j − 1)`, or later by `lag` frames. `pad j` is its input. Both come from the field `keep` of `Run` (`FrameKeep.Frames`). `arr j` is the instruction at which the frame comes to the player's routine. `R` is the machine there, and `Q` the machine when the frame comes to the scroll handler. `b = frame(M, i)` is the machine at the frame's end.
 
 ```
 Masked(i, a)       : bits(a) & lr ≠ lr            lr = the Left/Right that hstep reads from i
@@ -43,47 +43,57 @@ After(a, Q, b)     : f, fd, md of b are those of Q ∧ (RunningSpeed(b) = 0 ⟺ 
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
 
-Moves(a, M, x, n₀) : AtCtrl0(R)                                  the state at the player's routine, as FrameModel needs it, but the mask
-                     ∧ the 8 horizontal bytes of R are those of a    nothing writes them from a to R
-                     ∧ bits(R) = bits(a)                             nor the collision bits
-                     ∧ the frame does not end within 728 instructions after R
-                     ∧ 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
-                     ∧ After(a, Q, b) at every Q at the scroll handler
+MovesAt(a, M, x, n₀) : AtCtrl0(R)                                  the state at the player's routine, as FrameModel needs it, but the mask
+                       ∧ the 8 horizontal bytes of R are those of a    nothing writes them from a to R
+                       ∧ bits(R) = bits(a)                             nor the collision bits
+                       ∧ longer ∧ far ∧ after                          as in Moves below
 
-at_subs       : modelOK ∧ Moves ∧ ¬Masked  →  ∃ Q at the scroll handler, hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
-one_of_moves  : modelOK ∧ Moves ∧ ¬Masked  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
-at_subsM      : modelOK ∧ maskOK ∧ Moves ∧ Clean(a) ∧ Masked  →  ∃ Q at the scroll handler, (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
-                                                                ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
-one_of_movesM : modelOK ∧ maskOK ∧ Moves ∧ Clean(a) ∧ Masked  →  OneFrame(inAt(M, x, n₀), a, b)
-one_of_frames : OnFrames ∧ Clean(seq (j − 1))  →  OneFrame(inp j, seq (j − 1), seq j)
+CtlState(a)        : AreaType(a) ∈ {1, 2, 3} ∧ Player_State(a) ∈ {0, 1, 2} ∧ JumpspringAnimCtrl(a) = 0 ∧ SwimmingFlag(a) = 0
+                     ∧ PlayerChangeSizeFlag(a) = 0 ∧ PrevA(a) & 80 = A_B(a) & 80
+
+Moves(a, M, x, n₀) : arrive   pc(R) = PlayerCtrlRoutine, in the frame of M, and no instruction before n₀ is there
+                     lag      ∀ y ∈ keepA,  y(M) = y(a)                 the frames not counted between a and M keep the 25 bytes
+                     state    CtlState(a)
+                     longer   the frame does not end within 728 instructions after R
+                     far      2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
+                     after    After(a, Q, b) at every Q at the scroll handler
+
+Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Moves  →  MovesAt
+at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  ∃ Q at the scroll handler, hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_moves  : modelOK ∧ MovesAt ∧ ¬Masked  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
+at_subsM      : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  ∃ Q at the scroll handler, (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
+                                                                  ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_movesM : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  OneFrame(inAt(M, x, n₀), a, b)
+one_of_frames : OnFrames ∧ (∀ j, StartK(fm j)) ∧ Clean(seq (j − 1))  →  OneFrame(inp j, seq (j − 1), seq j)
 ```
+
+`keepA` and `StartK`, `CleanK`, `ctrlCheck` are in the next section. `StartK(fm j)` is the theorem `FrameKeep.Frames.start`, from the machine at control; `CleanK` on each instruction is the field `keep.clean`.
 
 `modelOK` is the check on the ROM of `FrameModel`. It is a part of `numbersCheck` now, so the private proof computes it by `native_decide` (about 3 s more). `move_model` needs that the side he presses is not masked; with `bits(R) = bits(a)` this is `¬Masked`.
 
 **The masked frames.** On a frame where the side he presses is masked (`Masked`), the routine of the friction reads the mask and `hstep` does not. [`FrameModel.move_masked`](../0-0/0-3-2-FrameModel.md) proves that the frame still follows `hstep`, or it leaves the speed 0. A clean state with the side masked has the bits of a block of Left and moves right (`masked_clean`). With the speed 0 at the scroll handler, `After` gives `MaskStop`. `maskOK` is the check on the ROM of `move_masked` (about 0.1 s); it is a part of `numbersCheck`.
 
-The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`. `fm`, `pad`, `arr` are data in it.
+The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`. `arr` is data in it; `fm`, `pad` are those of `keep`.
 
 ```
-reads  : 1 ≤ j ≤ g   →  v, f, P at the start of fr j are those of seq (j − 1)
-         1 ≤ j < g   →  v', f', P' at the end of fr j are those of seq j
-ends   : 1 ≤ j ≤ T, j < g  →  seq j = frame(fm j, pad j)
+reads   : 1 ≤ j ≤ g   →  v, f, P at the start of fr j are those of seq (j − 1)
+          1 ≤ j < g   →  v', f', P' at the end of fr j are those of seq j
 moves   : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)
-vBefore : 1 ≤ j < J, j < g  →  at R: y, mf, vy, dummy, vf, vfd, origin, st, DTHJ and A are those of seq (j − 1),
-                               and PrevA & 80 = A_B & 80
-vAfter  : 1 ≤ j < J, j < g, Q at the scroll handler  →  at seq j these bytes and A are those of Q
+vAfter  : 1 ≤ j < J, j < g, Q at the scroll handler  →  at seq j the vertical bytes and A are those of Q
 box     : 1 ≤ j < J, j < g, Q at the scroll handler  →  from Q to seq j the collision routine does what it does
           on B.m at (pix P(Q), y, w, vy, st)          (y, vy, st) is vstep's result, w stands for the speed's sign
 ```
 
-`R` is the machine at the player's routine, `inAt(fm j, pad j, arr j)`'s machine. `DTHJ` is `DiffToHaltJump`, `A` is bit 7 of `A_B_Buttons`, `PrevA` is `PreviousA_B_Buttons`.
+The frame's end is the field `keep.ends` of `Run`: `1 ≤ j ≤ g → seq j = frame(fm j, pad j)` (`OnFrames.ends`, a theorem). The vertical bytes are `y, mf, vy, dummy, vf, vfd, origin, st, DTHJ`. `DTHJ` is `DiffToHaltJump`, `A` is bit 7 of `A_B_Buttons`, `PrevA` is `PreviousA_B_Buttons`.
 
 **The vertical step is a theorem.** [`VertModel.vert_model`](../0-0/0-3-2-FrameModel.md) proves that from the player's routine to the scroll handler the vertical bytes follow `vstepV`: `vstep` on the machine with the stack pointer of the player's routine and `DTHJ = 1`.
 
 ```
 HaltOK(m)  : st(m) = 1 → DTHJ(m) = 1
 vNext(a, b) = vstepV(vs(a), A(b), abs(a))
-vert_of    : vertOK ∧ moves ∧ vBefore ∧ vAfter ∧ HaltOK(seq (j − 1))  →  vs(seq j) = vNext(seq (j − 1), seq j) ∧ HaltOK(seq j)
+Moves.vBefore : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Moves  →  at R the vertical bytes and A are those of a,
+                and PrevA(R) & 80 = A_B(R) & 80                       (the old field vBefore)
+vert_of    : vertOK ∧ ctrlCheck ∧ moves ∧ StartK(fm j) ∧ vAfter ∧ HaltOK(seq (j − 1))  →  vs(seq j) = vNext(seq (j − 1), seq j) ∧ HaltOK(seq j)
 ```
 
 `HaltOK(seq 0)` holds because the state at control is not a jump (in `numbersCheck`). So `quiet_upto` proves `vs(seq j) = vNext(...)` and `HaltOK(seq j)` for every `j < J` by induction, with the other facts. `vertOK` is a part of `numbersCheck` (about 0.1 s more).
@@ -96,6 +106,34 @@ vert_of    : vertOK ∧ moves ∧ vBefore ∧ vAfter ∧ HaltOK(seq (j − 1))  
 | `box` on `fr j` | `box` on the real machines, from the scroll handler |
 | `Moves.input`: the routine reads `readIn(a, b)` | gone. The model's input is the one the routine reads |
 | `vert`: frames 1 to 8 follow `vstep` | theorem `vert_of`. New: `vBefore`, `vAfter` (the frame outside the movement routine keeps the vertical bytes) |
+| `vBefore`: up to the player's routine the vertical bytes and A are those of the frame before, and PrevA is A | theorem `Moves.vBefore`, by the walk of `CtrlKeep`. It uses `Moves.lag` and `CtlState.prevA` |
+| `Moves.at_ctrl`: `AtCtrl0` at the player's routine | theorem `Moves.toAt`, by the walk. New: `Moves.arrive` (the frame comes to the routine at `arr j`, the first time), `Moves.state` (`CtlState` at the end of the frame before) |
+| `Moves.before`, `Moves.bits`: nothing writes the horizontal bytes and the collision bits up to the routine | theorem `Moves.toAt`, by the walk. New: `Moves.lag` (the frames not counted keep the 25 bytes of `keepA`) |
+| `ends`, and the data `fm`, `pad` | `keep.ends`, `keep.fm`, `keep.pad` of `Run`: one set of frames for both |
+
+## The frame up to the player's routine
+
+A frame in control runs the screen update, the sound, the pad, the pause and the timers, then the mode's routine, which calls the player's routine. `CtrlKeep` follows this part with the abstract machine of `TaintRun`, as [Frames not counted](a-5-5-3-LagFrames.md) follows a frame to the call of the mode's routine. One byte is followed as the counter of `TaintRun` (`Env.rkI`): the walk fails on any write to it. The walk stops the first time the frame comes to the player's routine (the cut), and there it asks that the byte is still followed. There is one walk for each of the 25 bytes of `keepA`.
+
+```
+keepA      = the 8 horizontal bytes (FrameModel.hBytes), Player_CollisionBits, Player_XSpeedAbsolute, AreaType, JumpspringAnimCtrl,
+             SwimmingFlag, PlayerChangeSizeFlag, the 9 vertical bytes (vKeep), A_B_Buttons, PreviousA_B_Buttons
+StartK(m)  : m is in the idle loop at the start of a frame in control (FrameKeep: the stack, the dot, the PPU, the routine, the mode, the task)
+CleanK(m)  : the condition of FrameKeep on one instruction
+trM(n)     : the machine n instructions into the frame of M
+
+ctrl_keep  : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ pc(trM(k)) = PlayerCtrlRoutine ∧ trM(k) in the frame of M ∧ (∀ j < k, pc(trM(j)) ≠ PlayerCtrlRoutine)
+             →  ∀ y ∈ keepA, y(trM(k)) = y(M)
+                ∧ S(trM(k)) = the stack of the player's routine ∧ no NMI pending ∧ the NMI off ∧ GameEngineSubroutine(trM(k)) = control
+```
+
+At the cut the walk also asks the stack pointer, no NMI pending, bit 7 of the PPU's control 0, and the routine byte. With these, `ctrl_keep` gives `AtCtrl0` at `R` but the values of `AreaType`, `Player_State`, the jumpspring, swimming and the change of size, and the stored speed. Those come from `Moves.lag` and `Moves.state`, and the stored speed from `Clean(a)` (`Moves.toAt`).
+
+* **The condition on each instruction.** It is `CleanK`, the field `keep.clean`, with the move routine's store not before the cut (the walk checks the `pc`). A store with a target not known makes the walk forget the followed byte, and the walk then fails at the cut. So the walk shows that before the cut every store knows its target.
+* **The search.** It is no part of the proof: the check walks every state of its table. The search of `LagFrames` forgets the bytes outside `prot` and joins the passes of a loop. Then the loops of the timers (`DEC abs,X`), the random bits (`ROR abs,X`) and the top score (`STA abs,Y`) store through an index not known, and the followed byte is lost. The search of `CtrlKeep` forgets no byte of RAM and keeps both index registers in the key. One table serves every byte.
+* **Numbers.** The search: 108,736 steps, 7,157 forks, 0 failures, a table of 7,851 states, 2 arrivals at the cut, 6 frame ends (paused frames), 0.2 s. The check of the 25 bytes: 2.3 s natively. It is a part of `numbersCheck` (`Numbers.ctrl`).
+
+`surface_of_frames` and the theorems before it take `StartK(fm j)` for each frame up to `g`. In `PoleJoin` it is `keep.start` (`FrameKeep.Frames.start`) from the machine at control (`FrameKeep.AtCtl`), the walk's check `keepCheckOf` and `fracCheck`. So `PoleJoin.hB_run`, `base_late` and `touch_ge` take these three now, as `direct_castle` did.
 
 ## The statements about the whole run are theorems
 
@@ -104,7 +142,7 @@ step_of_one       : Clean(a) ∧ OneFrame(a, b)  →  (Follow(a, b) ∧ Clean(b)
 next_of_reads     : reads  →  ∀ j ∈ [1, g), Next(fr j, fr (j + 1))
 quiet_upto        : 1 ≤ j < J, j < g  →  frames 1..j are Follow ∧ seq 0..j are Clean ∧ bits(seq j) = FF
                                          ∧ frames 1..j are vNext ∧ seq 0..j are HaltOK
-surface_of_frames : OnFrames ∧ Start(B, seq 0) ∧ noHitCheck ∧ numbersCheck ∧ J ≤ T
+surface_of_frames : OnFrames ∧ Start(B, seq 0) ∧ (∀ j ∈ [1, g], StartK(fm j)) ∧ noHitCheck ∧ numbersCheck ∧ J ≤ T
                     →  ∃ w h, Surface(w, h)
 Run.next, Run.startP, Run.startV                                 PoleJoin
 ```
@@ -163,7 +201,8 @@ The program `surface-frames-check FM2 N`, `N = 200`, exit code 0, about 7 minute
 | running to the left edge | 53,398 | 3,804 | 0 | 47,629 | 0 | 1,835 | 13 | 0 |
 | overwritten states around the stairs | 103,680 | 5,908 | 0 | 88,917 | 2,653 | 6,202 | 0 | 0 |
 
-* On frames 1 to 8 (3,194 frames) also `vs(seq j) = vNext(seq (j − 1), seq j)`, `vBefore`, `vAfter`, `HaltOK` at both ends, `box`, and that `(y, vy, st)` on entering the collision routine is `vstepV`'s result. No difference.
+* On frames 1 to 8 (3,194 frames) also `vs(seq j) = vNext(seq (j − 1), seq j)`, the old `vBefore`, `vAfter`, `HaltOK` at both ends, `box`, and that `(y, vy, st)` on entering the collision routine is `vstepV`'s result. No difference.
+* On every frame checked on `Moves` also the new fields `lag`, `state` (with `PrevA & 80 = A_B & 80` at the end of the frame before), `arrive` (the program takes the first arrival), and what `ctrl_keep` proves: the 25 bytes of `keepA` at the routine are those of `fm j`. No difference, also on the 8,070 `lag` frames with Start.
 * On every frame the input that the player's routine reads is `readIn(a, b)` of the two ends (the old field `input`): no difference.
 * On 2,375 of the 3,194 frames 1 to 8 a byte of the vertical state takes another value between the scroll handler and the frame's end, and is back at the end. On the ground the collision routine sets `Player_State` to 2 and lands him again. So `vAfter` cannot come from a walk that forbids writes to these bytes.
 * The pressed side is masked on 329 frames (3 from control, 326 around the stairs). All are `OneFrame` and all meet `Moves`. At the mover 182 have the model's speed and 147 the speed 0 where the model's is not 0 (`move_masked`'s second case; the kinds column counts them as `Hit`). These 147 are not `Pre ∧ Coll` and need `MaskStop`; this page said before that none needs it, which was false. `bits(R) = bits(a)` fails on no frame.
@@ -186,18 +225,19 @@ So frame 1 alone closes. It is one frame of 233, and the states grow on the next
 
 ## Assumptions (not proved in Lean)
 
-* `moves`: the frame outside the movement: `AtCtrl0` at the player's routine, nothing writes the horizontal bytes and the collision bits before it, the frame does not end during the movement, the position is far from the ends, and `After`. The movement is proved ([`FrameModel`](../0-0/0-3-2-FrameModel.md)), also with the pressed side masked.
-* `ends`: `seq j` is the end of the frame of `fm j` with `pad j`.
-* `vBefore`, `vAfter`: on frames 1 to 8, the frame outside the movement routine keeps the vertical bytes. That the routine follows `vstep` is proved (`vert_of`).
+* `moves`: the frame outside the movement. Up to the player's routine it is proved (`ctrl_keep`) from the frame's start in control and `CleanK`; what stays: the frame comes to the routine (`arrive`), the frames not counted keep the 25 bytes (`lag`), the values at the end of the frame before (`state`), the frame does not end during the movement (`longer`), the position is far from the ends (`far`), and `After`. The movement is proved ([`FrameModel`](../0-0/0-3-2-FrameModel.md)), also with the pressed side masked.
+* `vAfter`: on frames 1 to 8, the frame after the scroll handler keeps the vertical bytes. That the routine follows `vstep` is proved (`vert_of`), and the part before it (`Moves.vBefore`). A walk cannot give `vAfter` as it gives the part before: on 2,375 of the 3,194 frames 1 to 8 measured, a vertical byte takes another value after the scroll handler and is back at the frame's end (the collision routine sets `Player_State` to 2 and lands him again). After the collision routine the enemies' code can write the vertical speed (a stomp), and the walk knows no enemy.
+* `keep.ends`, `keep.clean` and the theorem `keep.start` of [One whole frame in control](f-6-19-FrameKeep.md): the frames are the same, so `ends` is not a field here any more.
 * `box`: on frames 1 to 8 the collision routine gives the same result as on the machine at control.
 * `reads`: `fr` is read from the machines. That it is a `Frame` stays an assumption of [Top speed](../0-0/0-1-TopSpeed.md).
 * `chg.time₂`, `chg.ctlFirst₂`, `atCtl`.
 
-**Files.** `Theorems/SurfaceFrames.lean`, `Theorems/VertModel.lean`, `Theorems/FrameModel.lean` (`move_masked`), private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`).
+**Files.** `Theorems/SurfaceFrames.lean`, `Theorems/CtrlKeep.lean`, `Theorems/VertModel.lean`, `Theorems/FrameModel.lean` (`move_masked`), private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`, which now includes `ctrlCheck`).
 
 **Reproduce.**
 ```
 .lake/build/bin/smbrta surface-frames-check FM2 200    # the table above, about 7 minutes of CPU
 .lake/build/bin/smbrta vert-model-check                # vertOK and each of its cases, about 0.1 s
 .lake/build/bin/smbrta mask-model-check                # maskOK and its parts, about 0.1 s
+.lake/build/bin/smbrta ctrl-keep-check                 # the walk up to the player's routine, each of the 25 bytes, about 3 s
 ```

@@ -11,6 +11,7 @@
 数えるフレーム `t` はフレーム `ix(t)` です。`tr(m, i, k)` は、入力 `i` での `m` のフレームの `k` 命令あとの機械、`frame(m, i)` はその終わりの機械です。
 `c` はモードのルーチンの呼び出しで、`SkipMainOper` の前の命令です。`V(m) = (v(m), f(m), P(m))` は速さ、端数、位置です。
 `FrameStart₀(m)` は、わかっているバイトのない `PipeWrites.FrameStart` です。`m` はアイドルループにいて、スタックポインタはそこでの値、フレームの始まりで、NMI が有効です。
+`FrameStart(m)` は、操作できるときのルーチン、モード、タスクもわかっているものです。ここの `Clean` は `V` の 5 バイトも守ります。`Clean_G` は `PipeWrites.guardOf` の `Clean` で、5 バイトは守りません。
 
 ```
 keeps_frame   :  lagCheck,  FrameStart₀(m),
@@ -18,14 +19,18 @@ keeps_frame   :  lagCheck,  FrameStart₀(m),
                  →   (∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c)   ∨   V(frame(m, i)) = V(m)
 
 Lags          :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,   ix t < ix(t + 1)
-                 そして 1 ≤ t < E,  ix t < n < ix(t + 1) で:
-                   start :  FrameStart₀(seq n)
-                   clean :  ∀ k,  frame(tr k) = frame(seq n)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)   →   Clean(tr k)
+                 そして操作から入るまでの各フレーム  ix 1 ≤ n < ix E  で:
+                   ctl   :  seq(n + 1) は操作できる
+                   clean :  ∀ k,  Clean_G(tr k)              （G = guardOf、5 バイトは守らない）
+                 そして数えないフレーム  1 ≤ t < E,  ix t < n < ix(t + 1)  で:
+                   store :  ∀ k,  frame(tr k) = frame(seq n)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)  ∧  tr k の書き込みの行き先が a   →   a は 5 バイトのどれでもない
                    game  :  (∃ k,  frame(tr k) = frame(seq n)  ∧  pc(tr k) = c)   →   V(seq(n + 1)) = V(seq n)
 
-lags_keep     :  lagCheck,  Lags   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
+lagStart      :  walkCheck,  Lags,  FrameStart(fm 1)   →   FrameStart₀(seq n)                                    （StartRun）
+lagClean      :  Lags   →   ∀ k,  frame(tr k) = frame(seq n)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)   →   Clean(tr k)
+lags_keep     :  lagCheck,  walkCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
 ReadsOwn      :  ∀ t ∈ [1, E],  fr(t) の始まりは V(fm t);   ∀ t ∈ [1, E),  fr(t) の終わりは V(frame(fm t, inp t))
-reads_of_lags :  lagCheck,  ReadsOwn,  Lags   →   Reads
+reads_of_lags :  lagCheck,  walkCheck,  ReadsOwn,  Lags,  FrameStart(fm 1)   →   Reads
 Pipe.reads    :  前のフィールド reads を定理として（Route）
 ```
 
@@ -69,10 +74,12 @@ Lean: `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean` の `ReadsOwn`、`L
 
 ## 前提（Lean では証明していない）
 
-* **`start`、`clean`**: 数えないフレームはアイドルループで始まり、呼び出しまでの各命令は `Clean` です。1 つの状態と、1 命令ごとの条件です。
+* **前の `start`、`clean` は定理になりました**（`Lags.lagStart`、`Lags.lagClean`）: [操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md)。
+  かわりに、操作から入るまでの各フレームの `ctl` と `clean`、数えないフレームの `store` があります。上の表は前のフィールドを測ったものです。新しいフィールドは `start-check` で測ります。
 * **`game`**: モードのルーチンを呼ぶ数えないフレームは `V` を変えません。土管まででは、タイマーの制御のフレームです（大きくなる、けが、死）。
   けがのあとの点滅では成り立ちません（上）。コードから読んだこと: タイマーの制御が 0 でない値になるのは、ルーチンが変わるときだけです（`SetPRout`）。なので、数えるフレームが
-  どれも操作できる状態で終わるなら、`c` を呼ぶ数えないフレームはないはずです。これは証明していません。
+  どれも操作できる状態で終わるなら、`c` を呼ぶ数えないフレームはないはずです。これは証明していません。いまは `ctl` が、入るまでのどのフレームも操作できる状態で終わることを求めます。
+  しかし `ix` はインターバルタイマーとつながっておらず、歩きはタイマーの制御を追いません。
 * **この項目でないもの.** 数えるフレームが `clock` のものであること（前と同じく、フレームの番号だけでつながります）。数えるフレームが `Frame` であること（項目 0-0-0-3-1）。
 
 **ファイル.** `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean`、`Theorems/Route.lean`、`Theorems/PipeWrites.lean`、非公開の `Proof/PipeWrites.lean`。

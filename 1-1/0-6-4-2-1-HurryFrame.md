@@ -2,11 +2,11 @@
 
 # The frame that starts the hurry-up music
 
-**Claim.** Take one whole frame that starts in control or in the player's entrance, with the hurry-up music off. If each of its instructions meets one condition on the machine, the frame ends with the music off, or with the timer at 100 or less.
+**Claim.** Take one whole frame that starts in control or in the player's entrance, with the hurry-up music off. If each of its instructions meets one condition on the machine, the frame ends with the music off, or with the timer at 100 or less. If it also ends with control, it ends with the music in the queue, or at the start of a frame in control with the music off: so the next frame starts as the first one did.
 
 **This theorem has hypotheses.** They are conditions on this one frame: how it starts (`Start`) and a condition on each instruction (`CleanM`). They are checked on real frames. They are not proved for every run.
 
-`HurryMusic.Run` had the field `music`: a frame that starts the music begins with the timer at 100 or less. It is now a theorem (`HurryMusic.Run.music`), from this walk. The timer is now read when the frame ends, not when it begins.
+`HurryMusic.Run` had the field `music`: a frame that starts the music begins with the timer at 100 or less. It is now a theorem (`HurryMusic.Run.music`), from this walk. The timer is now read when the frame ends, not when it begins. `HurryMusic.Run` also had the field `start` on the frame that starts the music. It is now a theorem (`HurryMusic.Run.startAt`) by induction over the frames in control before it, from the same walk (`frame_start`).
 
 ## What the game does
 
@@ -28,7 +28,11 @@ CleanM(m) :  PipeWrites.Clean, with the music bytes, the digits and the bytes of
              the digits and the bytes of DigitModifier are not protected
 
 frame_music :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j))   ⟹   off(frame(m, i))  ∨  timer(frame(m, i)) ≤ 100
+frame_start :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j)),  ctl(frame(m, i))   ⟹
+               EventMusicQueue(frame(m, i)) & v ≠ 0  ∨  (Start(frame(m, i))  ∧  off(frame(m, i)))
 ```
+
+`ctl(m)` says that `m` has control: the routine of control, the game's mode and the game core.
 
 The frame may start with the routine of the entrance: on the first frame after a pipe, the entrance routine ends and the routine of control runs in the same frame, before the timer routine.
 
@@ -41,9 +45,10 @@ The walk is the abstract machine of `TaintRun`, over one whole frame, as in `Pip
 * **The digits.** At the timer routine's load of the first digit into `Y`, the walk splits the digit into its 256 values. At its load of the second digit, the second and the third are split into 0 or their lowest bit 1. So on the path that queues the music the digits are known, 1, 0, 0, and the routine lowers them to 0, 9, 9.
 * **The death music.** The game queues one more than a register: `X` holds the player's status, or `Y` the flag of the death music. At those two loads the byte is split into 0 or its lowest bit 1, so the queued value is known.
 * **The digits routine.** It writes the digits and the six bytes through an index. On real frames it does so on the frame that starts the music. So at these stores the walk forgets the digits and the six bytes when the index is not known. `CleanM` asks there only that the store does not hit the other protected bytes.
-* At the end of every path the music bits are off, or the digits are known and their value is at most 100.
+* At the end of every path the music bits are off, or the digits are known and their value is at most 100 (`finM`).
+* Also at the end of every path (`finS`): the music's bit is known to be set in the queue, or the path is at the start of the next frame (`FrameKeep.endOK`: the idle loop, the stack, the dot, the NMI, the joypad's strobe) with the six bytes known 0 and the music bits off. With the routine, the mode and the task of a machine with control, this is `Start` again (`frame_start`).
 
-The check (`music_check`, by `native_decide`): the search finds a table of 75,437 states in 1,321,935 steps. The check walks every state of the table and the 4 start states (control or entrance, just before or just after the frame's first event). It takes 3 to 9 seconds natively, depending on the load of the machine. `Proof/HurryFrame.lean` builds in 4.2 seconds.
+The check (`music_check`, by `native_decide`): the search finds a table of 75,437 states in 1,321,935 steps. The check walks every state of the table and the 4 start states (control or entrance, just before or just after the frame's first event), with both ends (`finS`). It takes 3 to 9 seconds natively, depending on the load of the machine (3.9 seconds with `finS`). `Proof/HurryFrame.lean` builds in 4.7 seconds.
 
 ## On real frames
 
@@ -62,10 +67,10 @@ the movie's frames in control or entrance     833 frames, Start 833, off 833, Cl
 
 ## What is not proved
 
-* `Start` and `CleanM` on the frame that starts the music. They are conditions on one frame and its instructions, of the same kind as those of `PipeWrites` and `FrameKeep`, checked above.
+* `Start` and `CleanM` on the frame that starts the music. They are conditions on one frame and its instructions, of the same kind as those of `PipeWrites` and `FrameKeep`, checked above. In `HurryMusic.Run`, `Start` on that frame is now a theorem by `frame_start`, from the first frame of the frames in control before it ([runs with the hurry-up music](0-6-4-HurryMusic.md)).
 * That the stores of the digits routine are the only stores through an index that hit the digits or the six bytes: this is part of `CleanM`, checked above.
 
-**Files.** `Theorems/HurryFrame.lean` (`CleanM`, `Start`, `CleanAt`, `frame_music`), the private `Proof/HurryFrame.lean` (`music_check`). The symbol `Eng_PlayerEntrance` (`tools/smb-symbols.txt`).
+**Files.** `Theorems/HurryFrame.lean` (`CleanM`, `Start`, `CleanAt`, `finS`, `frame_music`, `frame_start`), the private `Proof/HurryFrame.lean` (`music_check`). The symbol `Eng_PlayerEntrance` (`tools/smb-symbols.txt`).
 
 **Reproduce.**
 ```

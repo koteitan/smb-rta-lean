@@ -1580,6 +1580,27 @@ theorem entry_right_of_leftS {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : rule
         exact (hp n hw j hj).2.2⟩⟩)
     exact hn hw.2
 
+/-- **The rule on one frame**: an entering frame that starts in the idle loop in control, under the conditions on its instructions up to the write, is at or right of the pipe's
+window at the end of its move (`P₂`). -/
+theorem rule_on_frameS {top amax : Int} {sy : Syms} {m0 : Machine} (hc : ruleCheckS sy m0 = true) (f : TopSpeed.Frame top amax) (m : Machine) (i : UInt8)
+    (he : Enters sy m i) (h0 : FrameStart (guardOf sy m0) (envOf m0) m)
+    (hcl : ∀ n, WriteStep sy m i n → ∀ j, j ≤ n → Clean (guardOf sy m0) (trace m i j))
+    (ht : ∀ n, WriteStep sy m i n → ∀ j, j ≤ n → AtRead (guardOf sy m0).P (trace m i j) → TilesOK (guardOf sy m0).P (trace m i j))
+    (hedge : ∀ n, WriteStep sy m i n → ∀ j, j ≤ n → (trace m i j).pc ≠ edgeStore sy m0 ∧ (trace m i j).pc ≠ headAt sy m0)
+    (hmoved : ∀ n j, WriteStep sy m i n → j ≤ n → (trace m i j).pc = sy.PlayerSubs → f.P₂ = posP sy (trace m i j)) :
+    PipeEntry.windowP sy (PipeEntry.pipePage sy m0) ≤ f.P₂ := by
+  obtain ⟨n, j, h1, h2, h3, h4⟩ := entry_right_of_leftS hc he h0 (fun n hw j hj => ⟨hcl n hw j hj, ht n hw j hj, hedge n hw j hj⟩)
+  have h5 := hmoved n j h1 h2 h3
+  rw [h5]
+  have h6 : (guardOf sy m0).P.left = 256 * PipeEntry.pipePage sy m0 + PipeEntry.xLo sy := rfl
+  have h7 : (guardOf sy m0).P.xI = (sy.Player_X_Position &&& 0x7FF).toNat := rfl
+  have h8 : (guardOf sy m0).P.pI = (sy.Player_PageLoc &&& 0x7FF).toNat := rfl
+  rw [h6] at h4
+  unfold px at h4
+  rw [h7, h8] at h4
+  unfold PipeEntry.windowP posP peek
+  omega
+
 /-- **The rule on frames, with the position at the end of the move.** `moved`: `P₂` is the position at the end of the move (`PlayerSubs`) before the write, as in the frame model.
 `edge`: before the write the frame does not come to the scroll handler's store of the position. -/
 theorem rule_on_framesS {top amax : Int} {sy : Syms} {m0 : Machine} (hc : ruleCheckS sy m0 = true) (fr : Nat → TopSpeed.Frame top amax)
@@ -1590,19 +1611,8 @@ theorem rule_on_framesS {top amax : Int} {sy : Syms} {m0 : Machine} (hc : ruleCh
     (hedge : ∀ t, Enters sy (fm t) (inp t) → ∀ n, WriteStep sy (fm t) (inp t) n → ∀ j, j ≤ n → (trace (fm t) (inp t) j).pc ≠ edgeStore sy m0 ∧ (trace (fm t) (inp t) j).pc ≠ headAt sy m0)
     (hmoved : ∀ t, Enters sy (fm t) (inp t) → ∀ n j, WriteStep sy (fm t) (inp t) n → j ≤ n → (trace (fm t) (inp t) j).pc = sy.PlayerSubs →
       (fr t).P₂ = posP sy (trace (fm t) (inp t) j)) :
-    ∀ t, Enters sy (fm t) (inp t) → PipeEntry.windowP sy (PipeEntry.pipePage sy m0) ≤ (fr t).P₂ := by
-  intro t he
-  obtain ⟨n, j, h1, h2, h3, h4⟩ := entry_right_of_leftS hc he (h0 t he) (fun n hw j hj => ⟨hcl t he n hw j hj, ht t he n hw j hj, hedge t he n hw j hj⟩)
-  have h5 := hmoved t he n j h1 h2 h3
-  rw [h5]
-  have h6 : (guardOf sy m0).P.left = 256 * PipeEntry.pipePage sy m0 + PipeEntry.xLo sy := rfl
-  have h7 : (guardOf sy m0).P.xI = (sy.Player_X_Position &&& 0x7FF).toNat := rfl
-  have h8 : (guardOf sy m0).P.pI = (sy.Player_PageLoc &&& 0x7FF).toNat := rfl
-  rw [h6] at h4
-  unfold px at h4
-  rw [h7, h8] at h4
-  unfold PipeEntry.windowP posP peek
-  omega
+    ∀ t, Enters sy (fm t) (inp t) → PipeEntry.windowP sy (PipeEntry.pipePage sy m0) ≤ (fr t).P₂ :=
+  fun t he => rule_on_frameS hc (fr t) (fm t) (inp t) he (h0 t he) (hcl t he) (ht t he) (hedge t he) (hmoved t he)
 
 /-! ## The tile, by single instructions
 

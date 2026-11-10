@@ -31,7 +31,7 @@ rule_on_framesS      :  ruleCheckS,  start, clean, tiles as in rule_on_frames,
                         moved:  ∀ t,  Enters(fm t, inp t) → ∀ n j,  WriteStep(n) → j ≤ n → pc(tr_t(j)) = PlayerSubs → P₂(t) = posP(tr_t(j))
                         →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 pipe_frame_check (private)   :  ruleCheckS(sy, m₀) = true (native_decide)
-pipe_no_entry_real (private) :  start, clean, tiles, edge, moved,  openP, openB,  the frames read from the machines,  Enters(fm E, inp E)  →  367 < E
+pipe_no_entry_real (private) :  Enters(fm E, inp E),  FrameStart(fm E),  clean, tiles, edge, moved,  openP, openB,  the frames read from the machines  →  367 < E
 ```
 
 `ruleCheckS` is `PlayerSubs ≠ 0` and the check of the walk with `G_S`. The old `entry_right_of_left` and `rule_on_frames` (the split at the right foot) are kept; `Route` no longer uses them.

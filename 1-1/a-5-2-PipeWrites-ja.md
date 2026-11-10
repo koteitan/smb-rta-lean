@@ -38,7 +38,7 @@ rule_on_frames      :  ruleCheckG,  ∀ t,  Enters(fm t, inp t) → FrameStart(f
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 tiles_of_steps      :  TilesAll(s(0)),  (∀ k < N,  TileStep(s(k), s(k + 1)))         →  ∀ k ≤ N,  TilesOK(s(k))
 pipe_frame_check（非公開）   :  ruleCheckS(sy, m₀) = true（native_decide。移動の終わりで分ける抽象機械、項目 1-1-a-5-9）
-pipe_no_entry_real（非公開） :  start, clean, tiles, edge, moved,  openP, openB,  機械から読むフレーム（[次の項目](a-5-5-PipeFrames-ja.md)）,  Enters(fm E, inp E)  →  367 < E
+pipe_no_entry_real（非公開） :  Enters(fm E, inp E),  FrameStart(fm E),  clean, tiles, edge, moved,  openP, openB,  機械から読むフレーム（[次の項目](a-5-5-PipeFrames-ja.md)）  →  367 < E
 ```
 
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
@@ -92,7 +92,7 @@ Lean: `Theorems/PipeWrites.lean`、非公開の `Proof/PipeWrites.lean`。
 
 ## 前提（Lean では証明していない）
 
-* **`FrameStart`（項目 1-1-a-5-2-1）.** 入るフレームは、アイドルループで、操作できる状態で始まる。
+* **`FrameStart`（項目 1-1-a-5-2-1）** は、もう `Route.Pipe` のフィールドではありません。入るフレームはアイドルループで、操作できる状態で始まります。これは操作から入るまでの全部のフレームについての帰納法で証明しました（[操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md)、`Pipe.startE`）。`rule_on_frameS` はフレーム `E` 1 つでの規則です。
 * **`Clean`（項目 1-1-a-5-2-2）.** 書き込みまでの各命令について上の 4 つ。添字とポインタの範囲が要る場所は、これで 1 つの条件にまとまりました。添字が小さいことからの証明はしていません。`time` はフレームの最後の 64 dot についてです。
 * **`TilesOK`（項目 1-1-a-5-3）.** `tiles_of_steps` は、これを 1 命令ずつの条件 `TileStep` にします。`Route` は使っていません。`T_R` がブロックバッファに入るのは面の読み込みからです。面の読み込みのバイトは追っていません。
 * **`pos`（項目 1-1-a-5-9）** は、もう仮定しません。抽象機械は位置を移動の終わりで分けるようになりました: [移動の終わりの位置](a-5-9-MoveEnd-ja.md)。かわりは `moved`（`P₂` は移動の終わりの位置）と `edge` です。

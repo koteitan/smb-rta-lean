@@ -33,7 +33,37 @@ room_map (private)              :  map_of_rows with the two checks
 
 `InRowsT(m)` says that `m` is a machine of the rows of the time of the change into the room. `Route.Changes` gives it at the first control (`Changes.roomAt` uses the same), with `SiteOK` (`roomSites`) and the player's routine (`roomStay`) on the frames up to the entry `a₂`.
 
-Lean: `Theorems/RoomMap.lean`; private `Proof/RoomMap.lean`. In `Theorems/SideEntryRule.lean`: `PassR` and `pass_of`. In `Theorems/RoomJoin.lean`: the field `pass` gives `PassR`, and the field `tiles` gives `TilesOK`.
+Lean: `Theorems/RoomMap.lean`; private `Proof/RoomMap.lean`. In `Theorems/RoomJoin.lean`: `RoomRun.TilesE`, the tiles at the reads of frame `E`, a hypothesis of `RoomRun.mouth_of` (no longer a field). In `Theorems/Route.lean`: the link `roomEnter` and `Run.roomTiles`.
+
+```
+roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          (a field of Route.Run)
+Run.roomTiles   :  the checks,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ n → AtRead(tr(j)) → TilesOK(tr(j))
+```
+
+`Run.roomTiles` is `map_of_rows` on the frames `b₁ … a₂ − 1` of `Route.Changes` (from the rows of the change into the room, `roomSites`, `roomStay`), at the frame `k` of `roomEnter`.
+
+The same walk gives that each frame of the room starts in control, as the walk of [one whole frame](c-7-16-SideFrame.md) asks:
+
+```
+startCheckF        :  the reference machine is in the idle loop with the guard's stack pointer, Cond knows the guard's three bytes whole and with its values,
+                      the program is the same, 9 < the dot where vblank ends
+frameStart_of_cond :  startCheckF,  Cond(m)  →  FrameStart(m)
+start_of_rowsF     :  the hypotheses of map_of_rows,  startCheckF  →  ∀ n ∈ [b, a),  FrameStart(seq(n))
+Run.roomStartE     :  the checks,  Run  →  FrameStart(fm(E − 1))          (StartE; the old field room.startE)
+map_startF (private) :  startCheckF = true  (native_decide)
+```
+
+The walk also checks, at every state, the conditions of `Clean` ([One whole frame](a-5-2-PipeWrites.md)) that `SiteOK` does not give. A store through an index or a pointer has a known target outside the guard's bytes, or it is the erase of a coin, whose target `SiteOK` puts in the block buffers. At the jump routine the index is known and in its table. `SiteOK` gives the reads through a pointer and the time. So every instruction of every frame of the room is `Clean`, with no new assumption:
+
+```
+cleanS(A)          :=  pc(A) ≥ 0x8000  ∧  (pc(A) = erase  ∨  the store's target is known and Plain)  ∧  (pc(A) = JumpEngine → A known, A < the length of its table)
+clean_of_sim       :  CleanFacts,  A covers m,  cleanS(A),  SiteOK(m)  →  Clean(m)
+clean_of_rows      :  the hypotheses of map_of_rows  →  ∀ n ∈ [b, a),  ∀ j,  Clean(tr_n(j))
+Run.roomCleanE     :  the checks,  Run  →  CleanE                       (the old field room.cleanE)
+Run.inRoom         :  the checks,  Run  →  TilesE ∧ StartE ∧ CleanE     (RoomRun.InRoom)
+```
+
+`CleanFacts` is part of `mapCheck`: the idle loop of the places is the guard's, their last dot is at most the guard's, and no byte of the block buffers is a byte of the guard. With these checks `mapCheck` still takes about 2.6 s in a program.
 
 ## How it works
 
@@ -66,7 +96,7 @@ Program `room-map-check FM2 [N]`. Each frame of the room before it leaves the pl
 ## Assumptions (not proved in Lean)
 
 * **`SiteOK`** on each instruction of the frames from the first control to the entry, and the player's routine on each of those frames. These are what [The screen's page in the room, and the long timer of the side pipe](d-2-4-ScreenPage.md) assumes (`Route.Changes.roomSites`; `roomStay` is a theorem).
-* **The join to `RoomRun`.** `map_of_rows` is about the machines of `Route.Changes`. The field `tiles` of `RoomRun` is about its frame `E` (`fm(E − 1)`, `pad(E)`). That this frame is the frame `a₂ − 1` of `Route.Changes` is not stated in Lean yet. With it, `tiles` follows from `room_map`.
+* **The link `roomEnter`.** Frame `E` of `RoomRun` (`fm(E − 1)`, `pad(E)`) is a frame of `Route.Changes` in the room. This is a link between two numberings of the same frames, as `roomCtl` is (item 1-1-0-4). The field `tiles` of `RoomRun` is gone: `Run.roomTiles` proves it from `room_map` and this link.
 * **The rest of the map** (item 1-1-c-7-12). Only the bits that are 0 in the map are proved. That bricks, the floor and the wall stay as they are, and that the numbers of the other fields are those of the map, are not proved.
 
 **Files.** `Theorems/RoomMap.lean`, private `Proof/RoomMap.lean`.

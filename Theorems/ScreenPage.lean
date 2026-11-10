@@ -310,6 +310,12 @@ structure Places where
   /-- the pipe's routine and the long timer -/
   eng : UInt8
   long : UInt8
+  /-- the player's state, and the place where the side pipe's code reads it -/
+  stI : Nat
+  stAt : UInt16
+  /-- the player's height on the screen, and the place where the collision routine reads it -/
+  hpI : Nat
+  hpAt : UInt16
   deriving Inhabited
 
 /-- **What stays assumed about one instruction of a frame.** -/
@@ -333,10 +339,13 @@ structure SiteOK (P : Places) (m : Machine) : Prop where
 def clampS (P : Places) (A : AS) : AS :=
   if A.pc != P.idle && decide (P.late < A.hi) then { A with hi := P.late } else A
 
-/-- the pieces before a step -/
+/-- the pieces before a step. At the places that use the screen buffer's offset: its values below 64. At the side pipe's read of the position: a set low bit. At the side pipe's read
+of the player's state: its two low bits. At the collision routine's read of the player's height on the screen: all its bits. -/
 def preS (P : Places) (A : AS) : List AS :=
   if P.offAt.contains A.pc then PipeEntryRule.splitAll P.offI (A.setK P.offI ((A.getK P.offI).and (AB.known 0x3F)))
   else if A.pc == P.xAt then [1, 2, 4, 8].map fun b => A.setK P.xI ((A.getK P.xI).or (AB.known b))
+  else if A.pc == P.stAt then (TaintRun.splitBit P.stI 1 A).flatMap (TaintRun.splitBit P.stI 2)
+  else if A.pc == P.hpAt then PipeEntryRule.splitAll P.hpI A
   else [A]
 
 /-- the tiles of a read -/
@@ -410,6 +419,8 @@ structure PlacesOK (E : Env) (P : Places) : Prop where
   offI : P.offI < 2048
   xI : P.xI < 2048
   saveI : P.saveI < 2048
+  stI : P.stI < 2048
+  hpI : P.hpI < 2048
   noD : E.D = []
 
 theorem sim_clamp {A : AS} {m : Machine} (hP : P.late < dotsPerFrame) (hs : Sim E F A m) (hh : m.pc ≠ P.idle → m.fdot ≤ P.late) : Sim E F (clampS P A) m := by
@@ -472,7 +483,19 @@ theorem cov_preS (hO : PlacesOK E P) {A : AS} {m : Machine} (hs : Sim E F A m) (
       have := TaintRun.mem_or (hs.ram _ hO.xI) (mem_known_self b)
       rwa [he] at this
     · rw [if_neg h2]
-      exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+      by_cases h3 : (A.pc == P.stAt) = true
+      · rw [if_pos h3]
+        have c1 : TaintRun.Cov E F (TaintRun.splitBit P.stI 1) := TaintRun.cov_bit hO.stI (by decide)
+        have c2 : TaintRun.Cov E F (TaintRun.splitBit P.stI 2) := TaintRun.cov_bit hO.stI (by decide)
+        obtain ⟨B, hB, hs1, hk1⟩ := c1 A m hs
+        obtain ⟨D, hD, hs2, hk2⟩ := c2 B m hs1
+        exact ⟨D, List.mem_flatMap.2 ⟨B, hB, hD⟩, hs2, hk2.trans hk1⟩
+      · rw [if_neg h3]
+        by_cases h4 : (A.pc == P.hpAt) = true
+        · rw [if_pos h4]
+          exact PipeEntryRule.cov_all hO.hpI A m hs
+        · rw [if_neg h4]
+          exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
 
 theorem mem_tilesFor {A : AS} {m : Machine} {x : UInt8} (hO : PlacesOK E P) (hs : Sim E F A m) (h1 : x ∈ P.tiles) (h2 : m.ram.get! P.saveI ∈ P.heads → x ∈ P.headTiles) : x ∈ tilesFor P A := by
   unfold tilesFor
@@ -1097,12 +1120,13 @@ def fuelS : Nat := 100000
 /-- the places as a check -/
 def placesOK (E : Env) (P : Places) : Bool :=
   let opAt := fun (a : UInt16) (o : UInt8) => decide (0x8000 ≤ a) && E.prg.get! (a &&& E.mask).toNat == o
-  decide (P.late < dotsPerFrame) && opAt P.read 0xB1 && opAt P.erase 0x91 && decide (P.offI < 2048) && decide (P.xI < 2048) && decide (P.saveI < 2048) && E.D.isEmpty
+  decide (P.late < dotsPerFrame) && opAt P.read 0xB1 && opAt P.erase 0x91 && decide (P.offI < 2048) && decide (P.xI < 2048) && decide (P.saveI < 2048) &&
+    decide (P.stI < 2048) && decide (P.hpI < 2048) && E.D.isEmpty
 
 theorem placesOK_spec {E : Env} {P : Places} (h : placesOK E P = true) : PlacesOK E P := by
   simp only [placesOK, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, List.isEmpty_iff] at h
-  obtain ⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩ := h
-  exact ⟨h1, h2, h3, h4, h5, h6, h7⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h8⟩, h9⟩, h7⟩ := h
+  exact ⟨h1, h2, h3, h4, h5, h6, h8, h9, h7⟩
 
 /-- **The check.** -/
 def walkCheck (P : Places) (Z : Aids) (E : Env) (r : Machine) (K : List (Nat × UInt8)) (W : List (Machine × List (Nat × UInt8))) : Bool :=
@@ -1143,6 +1167,11 @@ def nextStore (m0 : Machine) (a : UInt16) : Nat → UInt16
   | 0 => a
   | n + 1 => if romByte m0 a == 0x85 then a else nextStore m0 (a + 1) n
 
+/-- the first `op z` (an instruction on the zero page byte `z`) from `a` on, within `n` bytes -/
+def findOpZ (m0 : Machine) (a : UInt16) (op z : UInt8) : Nat → UInt16
+  | 0 => a
+  | n + 1 => if romByte m0 a == op && romByte m0 (a + 1) == z then a else findOpZ m0 (a + 1) op z n
+
 /-- the tiles in the block buffers of the reference machine, and the empty tile -/
 def tilesOf (lo n : Nat) (r : Machine) : List UInt8 :=
   (((List.range n).map fun j => r.ram.get! (lo + j)) ++ [0]).eraseDups
@@ -1171,7 +1200,11 @@ def placesOf (sy : Syms) (nm : Names) (m0 r : Machine) : Places :=
     rtI := (sy.GameEngineSubroutine &&& 0x7FF).toNat
     timerI := ((nm.ad "ChangeAreaTimer") &&& 0x7FF).toNat
     eng := sy.EngSidePipe.toUInt8
-    long := romByte m0 sy.AreaChangeTimerData }
+    long := romByte m0 sy.AreaChangeTimerData
+    stI := (sy.Player_State &&& 0x7FF).toNat
+    stAt := findOpZ m0 sy.ContSChk 0xA4 sy.Player_State.toUInt8 32
+    hpI := (sy.Player_Y_HighPos &&& 0x7FF).toNat
+    hpAt := findOpZ m0 sy.PlayerBGCollision 0xA5 sy.Player_Y_HighPos.toUInt8 64 }
 
 /-- what the search forgets and keeps apart -/
 def aidsOf (sy : Syms) (nm : Names) (m0 : Machine) : Aids :=
@@ -1198,7 +1231,7 @@ def aidsOf (sy : Syms) (nm : Names) (m0 : Machine) : Aids :=
     colEnd := findJsr m0 sy.PlayerSubs sy.PlayerBGCollision 64 + 3
     cutAY := cuts ++ jsrRets m0 sy.NonMaskableInterrupt sy.SkipMainOper
     cutX := cuts.drop 9
-    aAt := [read + 2, sy.MoveSubs, sy.JumpEngine]
+    aAt := [read + 2, sy.MoveSubs, sy.JumpEngine, findOpZ m0 sy.PlayerBGCollision 0xA5 sy.Player_Y_HighPos.toUInt8 64 + 2]
     aLo := sy.ProcMove
     aHi := sy.MoveSubs
     offR := [(sy.OutputNumbers, sy.ExitOutputN), (sy.ColorRotation, sy.ExitColorRot), (sy.UpdateNumber, sy.NoZSup), (sy.GetPlayerColors, sy.SetVRAMOffset)]
@@ -1232,10 +1265,11 @@ def roomNames : List (String × Nat × Nat × UInt8) :=
 def knownOf (nm : Names) : List (Nat × UInt8) :=
   roomNames.flatMap fun p => (List.range p.2.2.1).map fun j => (((nm.ad p.1).toNat + p.2.1 + j) &&& 0x7FF, p.2.2.2)
 
-/-- the bytes of the condition at the entry of the side pipe that the walk does not give: a name, an offset, a number of bytes. The routine is the entry itself; the player's state and
-height; the screen's buffer; the sound; the level's number, which the rows of the change into the room do not know. -/
+/-- the bytes of the condition at the entry of the side pipe that the walk does not give: a name, an offset, a number of bytes. The routine is the entry itself; the player's
+vertical position; the screen's buffer; the sound; the level's number, which the rows of the change into the room do not know. The walk gives the player's state and his height on
+the screen: the side pipe's code and the collision routine read them in pieces (`Places.stAt`, `Places.hpAt`). -/
 def restNames : List (String × Nat × Nat) :=
-  [("GameEngineSubroutine", 0, 1), ("Player_State", 0, 1), ("Player_Y_HighPos", 0, 1), ("Player_Y_Position", 0, 1), ("VRAM_Buffer1_Offset", 0, 1), ("VRAM_Buffer1", 0, 3), ("VRAM_Buffer1", 7, 1),
+  [("GameEngineSubroutine", 0, 1), ("Player_Y_Position", 0, 1), ("VRAM_Buffer1_Offset", 0, 1), ("VRAM_Buffer1", 0, 3), ("VRAM_Buffer1", 7, 1),
    ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("MusicData", 0, 2), ("MusicOffset_Square1", 0, 1), ("NoiseSoundBuffer", 0, 1), ("EventMusicQueue", 0, 1), ("NoteLengthTblAdder", 0, 1),
    ("AreaNumber", 0, 1)]
 

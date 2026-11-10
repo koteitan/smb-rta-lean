@@ -99,9 +99,10 @@ def spot : Spot := { entry := 0, store := 0, temps := [] }
 
 /-! ## The walk of one frame -/
 
-/-- **The frame's end**: the routine is known; if it is the player's, the bytes `W` are known with their values; if it is the pipe's, the bytes `W₃`, and `x` -/
-def finE (rtI : Nat) (ctl vp : UInt8) (W W₃ : List Watch) (x : AS → Bool) (B : AS) : Bool :=
-  decide (rtI < 2048) && (B.getK rtI).isK && ((B.getK rtI).v != ctl || watchOK W B) && ((B.getK rtI).v != vp || (watchOK W₃ B && x B))
+/-- **The frame's end**: the routine is known; if it is the player's, the bytes `W` are known with their values, and `y` (on the ROM: the idle loop as a frame in control
+starts, `FrameKeep.endOK`); if it is the pipe's, the bytes `W₃`, and `x` -/
+def finE (rtI : Nat) (ctl vp : UInt8) (W W₃ : List Watch) (y x : AS → Bool) (B : AS) : Bool :=
+  decide (rtI < 2048) && (B.getK rtI).isK && ((B.getK rtI).v != ctl || (watchOK W B && y B)) && ((B.getK rtI).v != vp || (watchOK W₃ B && x B))
 
 /-- the state is at a frame's start in the idle loop, as `IdleAt` asks: the dots, the flags, the control register's top bit, the strobe, the program counter and the stack of `e` -/
 def idleOK (e : Machine) (B : AS) : Bool :=
@@ -238,7 +239,7 @@ def fuelE : Nat := 20000
 
 /-- the end of a frame on the ROM -/
 def finOf (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : AS → Bool :=
-  finE (guardOf sy m0 d e).rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) (kept sy d e) (atEntry d e) (idleOK e)
+  finE (guardOf sy m0 d e).rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) (kept sy d e) (atEntry d e) (FrameKeep.endOK (guardOf sy m0 d e)) (idleOK e)
 
 /-- the table on the ROM -/
 def cfgOf (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : CfgE :=
@@ -255,9 +256,11 @@ def keepCheck (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) 
     decide ((PipeEntryRule.envOf m0).prg.data = (PipeChangeEnd.envOf d e).prg.data) && (PipeEntryRule.envOf m0).mask == (PipeChangeEnd.envOf d e).mask &&
     C.t.all (walkE C fuelE) && walkE C fuelE (startK G W false) && walkE C fuelE (startK G W true)
 
-/-- **The check of frame 0**: from each state of `TitleStart`'s near group, the frame ends with control and the speed 0, and with the kept bytes at their values -/
-def nearCheck (sy : Syms) (c : TitleStart.Ctx) (W : List Watch) : Bool :=
-  TitleStart.grpOK sy c (TitleStart.setsOf sy c).near (fun B => TitleStart.finNear sy B && watchOK W B)
+/-- **The check of frame 0**: the title's program is that of the frames from control; from each state of `TitleStart`'s near group, the frame ends with control and the speed 0,
+with the kept bytes at their values, and in the idle loop as a frame in control starts (`FrameKeep.endOK`) -/
+def nearCheck (sy : Syms) (m0 : Machine) (c : TitleStart.Ctx) (W : List Watch) : Bool :=
+  decide (c.E.prg.data = (PipeEntryRule.envOf m0).prg.data) && c.E.mask == (PipeEntryRule.envOf m0).mask &&
+    TitleStart.grpOK sy c (TitleStart.setsOf sy c).near (fun B => TitleStart.finNear sy B && watchOK W B && FrameKeep.endOK (PipeWrites.guardOf sy m0) B)
 
 /-- **The check of the lists**: the names of `restNames` are known; the reference entry has the pipe's routine and lists it among the bytes of `Rest`; the masks are in RAM -/
 def listCheck (sy : Syms) (d : PipeChangeEnd.Data) (e : Machine) : Bool :=
@@ -267,7 +270,7 @@ def listCheck (sy : Syms) (d : PipeChangeEnd.Data) (e : Machine) : Bool :=
 
 /-- what the checks on the ROM give -/
 structure Checks (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (c : TitleStart.Ctx) : Prop where
-  near : nearCheck sy c (kept sy d (PipeTransition.entry m0)) = true
+  near : nearCheck sy m0 c (kept sy d (PipeTransition.entry m0)) = true
   keep : keepCheck sy m0 d (PipeTransition.entry m0) = true
   lists : listCheck sy d (PipeTransition.entry m0) = true
 
@@ -430,13 +433,12 @@ theorem idle_of {F : Nat × UInt8} {B : AS} {m : Machine} (hC : KeepOK sy m0 d e
     have : (9 : Nat) < dotVblClr := by decide
     omega
 
-/-- **One frame from control.** A frame that starts in the idle loop in control with the kept bytes at their values, and whose every instruction is `Clean` for the guard, ends with the
-kept bytes at their values if it ends with the player's routine, and with the bytes `atEntry` at their values if it ends with the pipe's. -/
-theorem keep_frame (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
+/-- **The walk of one frame from control**: a frame that starts in the idle loop in control with the kept bytes at their values, and whose every instruction is `Clean` for
+the guard, ends in a state that `finOf` accepts -/
+theorem fin_frame (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
     (h0 : FrameStart (guardOf sy m0 d e) (PipeEntryRule.envOf m0) m) (hw : Watched (kept sy d e) m)
     (hk : ∀ j, Clean (guardOf sy m0 d e) (trace m i j)) :
-    ((frame m i).ram.get! (guardOf sy m0 d e).rtI = sy.Eng_PlayerCtrl.toUInt8 → Watched (kept sy d e) (frame m i)) ∧
-    ((frame m i).ram.get! (guardOf sy m0 d e).rtI = PipeEntryRule.vp sy → Watched (atEntry d e) (frame m i) ∧ IdleAt (PipeChangeEnd.envOf d e) e (frame m i)) := by
+    ∃ B, finOf sy m0 d e B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) := by
   have hC := keepOK_of_check hc
   obtain ⟨b, hs⟩ := FrameKeep.sim_startK (W := kept sy d e) rfl h0 hw
   have hw0 : walkE (cfgOf sy m0 d e) fuelE (startK (guardOf sy m0 d e) (kept sy d e) b) = true := by
@@ -445,17 +447,49 @@ theorem keep_frame (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
     | true => exact hC.s1
   obtain ⟨_, B, h1, _, h2⟩ := frame_of_walkE (C := cfgOf sy m0 d e) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) rfl hw0 hs
     (fun j => cleanK_of (hk j))
+  exact ⟨B, h1, h2⟩
+
+/-- **One frame from control.** A frame that starts in the idle loop in control with the kept bytes at their values, and whose every instruction is `Clean` for the guard, ends with the
+kept bytes at their values if it ends with the player's routine, and with the bytes `atEntry` at their values if it ends with the pipe's. -/
+theorem keep_frame (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
+    (h0 : FrameStart (guardOf sy m0 d e) (PipeEntryRule.envOf m0) m) (hw : Watched (kept sy d e) m)
+    (hk : ∀ j, Clean (guardOf sy m0 d e) (trace m i j)) :
+    ((frame m i).ram.get! (guardOf sy m0 d e).rtI = sy.Eng_PlayerCtrl.toUInt8 → Watched (kept sy d e) (frame m i)) ∧
+    ((frame m i).ram.get! (guardOf sy m0 d e).rtI = PipeEntryRule.vp sy → Watched (atEntry d e) (frame m i) ∧ IdleAt (PipeChangeEnd.envOf d e) e (frame m i)) := by
+  have hC := keepOK_of_check hc
+  obtain ⟨B, h1, h2⟩ := fin_frame hc h0 hw hk
   have hf : finOf sy m0 d e B = true := h1
   simp only [finOf, finE, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, bne_iff_ne, ne_eq] at hf
   obtain ⟨⟨⟨a1, a2⟩, a3⟩, a4⟩ := hf
   have er := rt_of h2 a1 a2
   refine ⟨fun hr => ?_, fun hr => ?_⟩
-  · rcases a3 with a3 | a3
+  · rcases a3 with a3 | ⟨a3, _⟩
     · exact absurd (er.symm.trans hr) a3
     · exact FrameKeep.watched_of a3 h2
   · rcases a4 with a4 | ⟨a4, a5⟩
     · exact absurd (er.symm.trans hr) a4
     · exact ⟨FrameKeep.watched_of a4 h2, idle_of hC h2 a5⟩
+
+/-- **One frame from control that ends in control ends at the start of a frame in control** (`FrameStart`), with the kept bytes at their values: the walk gives the idle loop,
+and control gives the routine, the mode and the task -/
+theorem keep_start (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
+    (h0 : FrameStart (guardOf sy m0 d e) (PipeEntryRule.envOf m0) m) (hw : Watched (kept sy d e) m)
+    (hk : ∀ j, Clean (guardOf sy m0 d e) (trace m i j)) (hr : controllable sy (frame m i) = true) :
+    FrameStart (guardOf sy m0 d e) (PipeEntryRule.envOf m0) (frame m i) ∧ Watched (kept sy d e) (frame m i) := by
+  obtain ⟨B, h1, h2⟩ := fin_frame hc h0 hw hk
+  have hf : finOf sy m0 d e B = true := h1
+  simp only [finOf, finE, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, bne_iff_ne, ne_eq] at hf
+  obtain ⟨⟨⟨a1, a2⟩, a3⟩, _⟩ := hf
+  have er := rt_of h2 a1 a2
+  have hkn : ∀ p ∈ (guardOf sy m0 d e).known, (frame m i).ram.get! p.1 = p.2 := FrameKeep.known_of_ctl (m0 := m0) hr
+  have hrt : (frame m i).ram.get! (guardOf sy m0 d e).rtI = sy.Eng_PlayerCtrl.toUInt8 := hkn _ (keepOK_of_check hc).known
+  rcases a3 with a3 | ⟨a3, a5⟩
+  · exact absurd (er.symm.trans hrt) a3
+  · exact ⟨FrameKeep.start_of_sim h2 a5 rfl rfl hkn, FrameKeep.watched_of a3 h2⟩
+
+/-- a frame start of this guard is one of `PipeWrites`: the guards differ only in the bytes a store does not touch -/
+theorem start_to {m : Machine} (h : FrameStart (guardOf sy m0 d e) (PipeEntryRule.envOf m0) m) : FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) m :=
+  ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, h.known⟩
 
 end
 
@@ -464,10 +498,10 @@ end
 section
 variable {sy : Syms} {c : TitleStart.Ctx} {t0 : Nat} {seq : Nat → Machine} {inp : Nat → UInt8}
 
-/-- **The machine at control has the bytes `W` at their values**: frame 0 begins in a near state of `TitleStart` (from the press of Start, `Begin`), and the walk of its frame ends
-with them -/
-theorem Begin.watched {W : List Watch} (hB : TitleStart.check sy c t0 = true) (hN : nearCheck sy c W = true) (B : TitleStart.Begin sy c seq inp)
-    (hn : seq 1 = frame (seq 0) (inp 0)) : Watched W (seq 1) := by
+/-- **Frame 1 starts in the idle loop in control, with the bytes `W` at their values**: frame 0 begins in a near state of `TitleStart` (from the press of Start, `Begin`), and the
+walk of its frame ends with them, in the idle loop as `FrameStart` asks. Control at frame 1 gives the routine, the mode and the task. -/
+theorem Begin.start {m0 : Machine} {W : List Watch} (hB : TitleStart.check sy c t0 = true) (hN : nearCheck sy m0 c W = true) (B : TitleStart.Begin sy c seq inp)
+    (hn : seq 1 = frame (seq 0) (inp 0)) : FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq 1) ∧ Watched W (seq 1) := by
   have P : TitleStart.Parts sy c t0 (TitleStart.setsOf sy c) := TitleStart.parts_of_check hB
   obtain ⟨⟨S, hS, hs⟩, _⟩ := B.near P hn
   have hi : TitleStart.inCore sy (seq 0) = true → SideChangeEnd.noStart (inp 0) = true := by
@@ -475,11 +509,20 @@ theorem Begin.watched {W : List Watch} (hB : TitleStart.check sy c t0 = true) (h
     have := B.noPause B.pre (Nat.le_refl _)
     rw [B.atZero.1, B.atZero.2] at this
     exact this h
-  have hN' : TitleStart.grpOK sy c (TitleStart.setsOf sy c).near (fun B => TitleStart.finNear sy B && watchOK W B) = true := hN
+  unfold nearCheck at hN
+  rw [Bool.and_eq_true, Bool.and_eq_true] at hN
+  obtain ⟨⟨hp, hm⟩, hN'⟩ := hN
   obtain ⟨B', h1, h2⟩ := TitleStart.grp_frame hN' hS hs (TitleStart.grp_pad hN' hS hs hi)
   simp only [Bool.and_eq_true] at h1
-  rw [hn]
-  exact FrameKeep.watched_of h1.2 h2
+  have hk : ∀ p ∈ (PipeWrites.guardOf sy m0).known, (seq 1).ram.get! p.1 = p.2 := FrameKeep.known_of_ctl (m0 := m0) B.ctl
+  rw [hn] at hk ⊢
+  exact ⟨FrameKeep.start_of_sim h2 h1.2 (SideTransition.byteArray_eq (of_decide_eq_true hp)) (beq_iff_eq.1 hm) hk, FrameKeep.watched_of h1.1.2 h2⟩
+
+/-- **The machine at control has the bytes `W` at their values**: frame 0 begins in a near state of `TitleStart` (from the press of Start, `Begin`), and the walk of its frame ends
+with them -/
+theorem Begin.watched {m0 : Machine} {W : List Watch} (hB : TitleStart.check sy c t0 = true) (hN : nearCheck sy m0 c W = true) (B : TitleStart.Begin sy c seq inp)
+    (hn : seq 1 = frame (seq 0) (inp 0)) : Watched W (seq 1) :=
+  (Begin.start hB hN B hn).2
 
 end
 
@@ -545,6 +588,37 @@ theorem entry_of_rest (hl : listCheck sy d e = true) {m : Machine} (hi1 : IdleAt
 theorem u8_of_u16 {x : UInt8} {y : UInt16} (h : x.toUInt16 = y) : x = y.toUInt8 := by
   subst h
   simp
+
+/-- **Each frame from control to the entry starts in the idle loop in control**, with the kept bytes at their values: by induction from frame 1. Frame `n`, for `1 ≤ n < a`,
+has `Clean` instructions, and its machine has control when it begins. -/
+theorem start_up (hc : keepCheck sy m0 d e = true) (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {a : Nat}
+    (stay : ∀ n, 1 ≤ n → n < a → controllable sy (seq n) = true)
+    (clean : ∀ n, 1 ≤ n → n < a → ∀ j, Clean (guardOf sy m0 d e) (trace (seq n) (inp n) j))
+    (h1s : FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq 1)) (h1 : Watched (kept sy d e) (seq 1)) :
+    ∀ n, 1 ≤ n → n < a → FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq n) ∧ Watched (kept sy d e) (seq n) := by
+  intro n
+  induction n with
+  | zero => intro h; omega
+  | succ k ih =>
+    intro ha hb
+    by_cases hk : k = 0
+    · subst hk
+      exact ⟨h1s, h1⟩
+    · obtain ⟨s1, w1⟩ := ih (by omega) (by omega)
+      have hr := stay (k + 1) ha hb
+      rw [next k] at hr ⊢
+      obtain ⟨s2, w2⟩ := keep_start hc (start_of s1) w1 (clean k (by omega) (by omega)) hr
+      exact ⟨start_to s2, w2⟩
+
+/-- **Each frame from control to the entry starts in the idle loop in control** (`FrameStart`), from the press of Start on the title: frame `n`, for `1 ≤ n < a`, has `Clean`
+instructions, and its machine has control when it begins. -/
+theorem starts_of_title {c : TitleStart.Ctx} {t0 : Nat} (hB : TitleStart.check sy c t0 = true) (hK : Checks sy m0 d c)
+    (T : TitleStart.Begin sy c seq inp) (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {a : Nat}
+    (stay : ∀ n, 1 ≤ n → n < a → controllable sy (seq n) = true)
+    (clean : ∀ n, 1 ≤ n → n < a → ∀ j, Clean (guardOf sy m0 d (PipeTransition.entry m0)) (trace (seq n) (inp n) j)) :
+    ∀ n, 1 ≤ n → n < a → FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq n) := by
+  have h1 := Begin.start hB hK.near T (next 0)
+  exact fun n ha hb => (start_up hK.keep next stay clean h1.1 h1.2 n ha hb).1
 
 /-- **The condition at the entry, from the press of Start on the title.** Frame 0 begins as `Begin` says; each frame from control to the entry starts in control and its instructions
 are `Clean` for the guard; at the entry `Rest` holds. Then `Entry` holds. -/

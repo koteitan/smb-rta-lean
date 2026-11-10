@@ -2,13 +2,19 @@
 
 # 縦の土管に入るときの状態を、タイトルから出す
 
-**主張.** これは部分的な結果です。`Entry` は、縦の土管に入るフレームの終わりの状態についての条件です（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)）。フレームが待ちの繰り返しの中で終わっていて、土管のタイマーが 48 以上で、115 バイトとマスクつきの 13 バイトが基準の入る状態の値です。ここでは、待ちの繰り返しと、この 128 のうち 67 を、タイトルで Start を押したことと、操作できるときから入るまでのフレームから出します。[ルート全体](0-1-Route-ja.md)のフィールド `entry₁` はなくなりました。代わりに `Changes` には次の 3 つのフィールドが入ります。
+**主張.** これは部分的な結果です。`Entry` は、縦の土管に入るフレームの終わりの状態についての条件です（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)）。フレームが待ちの繰り返しの中で終わっていて、土管のタイマーが 48 以上で、115 バイトとマスクつきの 13 バイトが基準の入る状態の値です。ここでは、待ちの繰り返しと、この 128 のうち 67 を、タイトルで Start を押したことと、操作できるときから入るまでのフレームから出します。[ルート全体](0-1-Route-ja.md)のフィールド `entry₁` はなくなりました。代わりに `Changes` には次の 2 つのフィールドが入ります。
 
 * `entryRest₁`: 残りの 61 バイトだけについての `Entry` の条件と、土管のタイマー（`Rest`）。1 つの状態についての条件です。
-* `upStart₁`: 操作できるときから入るまでの各フレームは、待ちの繰り返しの中で、操作できる状態で始まる（`FrameStart`）。
-* `upClean₁`: それらのフレームの各命令は `Clean` を満たす。ここでは、インデックスやポインタを通す書き込みが触らないバイトに、保つ 65 バイトが入ります。
+* `upClean₁`: 操作できるときから入るまでのフレームの各命令は `Clean` を満たす。ここでは、インデックスやポインタを通す書き込みが触らないバイトに、保つ 65 バイトが入ります。
 
-記号です。`seq n` はフレーム `n` が始まるときの機械で、`seq (n+1) = frame(seq n, inp n)` です。フレーム 0 は操作できる前のフレームなので、`seq 1` は操作できます。`a` は `a₁`、入るフレームのあとの機械です。`e` は基準の入る状態です。見張るバイトは `(i, k, v)` で、番地、条件にするビット、`e` での値です。
+それらの各フレームが待ちの繰り返しの中で操作できる状態で始まること（`FrameStart`）も証明しました（項目 1-1-b-3-4-3）。Start を押したところから、`upClean₁` のもとで帰納法で出します。フィールド `upStart₁` はなくなりました。そのため、入るとき `a₁` は、操作できるときから見て最初の操作できない機械のフレームにしました（`a₂` と `b₂` が最初のフレームであるのと同じです）。`Changes` には数 `a₁` の代わりに上限 `dA` が入ります。
+
+記号です。`seq n` はフレーム `n` が始まるときの機械で、`seq (n+1) = frame(seq n, inp n)` です。フレーム 0 は操作できる前のフレームなので、`seq 1` は操作できます。`ctl(m)` は `m` が操作できることです: モードがゲーム、タスクがゲームコア、ルーチンがプレイヤーのもの。`a` は `a₁`、入るフレームのあとの機械です。
+
+```
+a₁ = upEnd(seq, dA) = 1 ≤ n ≤ 1 + dA で (¬ctl(seq n) または n = 1 + dA) となる最小の n
+```
+`e` は基準の入る状態です。見張るバイトは `(i, k, v)` で、番地、条件にするビット、`e` での値です。
 
 ```
 Watched(W, m)  :  ∀ (i, k, v) ∈ W,  m[i] & k = v & k
@@ -19,7 +25,16 @@ IdleAt(m)      :  m は待ちの繰り返しの中でフレームを終えてい
 Rest(m)        :  48 ≤ m[ChangeAreaTimer]  ∧  restNames の Entry のバイトは e の値      (61)
 ```
 
-**定理.** `entry_of_title` です。確認は `hB`（`TitleStart.check`）と `hK`（`EntryKeep.Checks`）です。
+**定理.** `starts_of_title` と `entry_of_title` です。確認は `hB`（`TitleStart.check`）と `hK`（`EntryKeep.Checks`）です。
+
+```
+Begin(seq, inp)
+∧ ∀ n, seq (n+1) = frame(seq n, inp n)
+∧ ∀ n, 1 ≤ n < a → ctl(seq n)
+∧ ∀ n, 1 ≤ n < a → ∀ j, Clean_G(trace(seq n, inp n, j))
+→ ∀ n, 1 ≤ n < a → FrameStart(seq n)
+```
+
 
 ```
 Begin(seq, inp)                                             （タイトルで Start を押す。TitleStart のとおり）
@@ -31,33 +46,38 @@ Begin(seq, inp)                                             （タイトルで S
 → Entry(seq a)
 ```
 
-これは 3 つの段から出ます。
+これらは次の段から出ます。
 
 ```
-Begin.watched  :  Begin(seq, inp) → Watched(kept, seq 1)
+Begin.start    :  Begin(seq, inp) → FrameStart(seq 1) ∧ Watched(kept, seq 1)
 keep_frame     :  FrameStart(m) ∧ Watched(kept, m) ∧ (∀ j, Clean_G(trace(m, i, j)))
                     → (rt(frame(m, i)) = player → Watched(kept, frame(m, i)))
                     ∧ (rt(frame(m, i)) = pipe   → Watched(atEntry, frame(m, i)) ∧ IdleAt(frame(m, i)))
+keep_start     :  FrameStart(m) ∧ Watched(kept, m) ∧ (∀ j, Clean_G(trace(m, i, j))) ∧ ctl(frame(m, i))
+                    → FrameStart(frame(m, i)) ∧ Watched(kept, frame(m, i))
+start_up       :  keep_start のフレーム 1 からの帰納法:  ∀ n, 1 ≤ n < a → FrameStart(seq n) ∧ Watched(kept, seq n)
 entry_of_rest  :  IdleAt(m) ∧ Watched(atEntry, m) ∧ Rest(m) → Entry(m)
 ```
 
-帰納法で、`1 ≤ n < a` について `Watched(kept, seq n)` です。`seq (n+1)` のルーチンは、`FrameStart(seq (n+1))` からプレイヤーのものです。`seq a` のルーチンは `Rest` から土管のものです。だから `Watched(atEntry, seq a)` と `IdleAt(seq a)` です。`a = 1` なら、`seq 1` は操作できるのでルーチンはプレイヤーのもので、`Rest` と食い違います。
+`start_up` は `n` についての帰納法です。フレーム 1 は `Begin.start` から出ます。フレーム `n` が保つバイトをもって `FrameStart` で始まるなら、終わりのルーチンがプレイヤーのものであるとき、歩きはそのフレームを保つバイトをもって待ちの繰り返しの中で終えます（`keep_start`）。`seq (n+1)` で操作できることから、ルーチン、モード、タスクが出ます。それから `Watched(atEntry, seq a)` と `IdleAt(seq a)` です。`seq a` のルーチンは `Rest` から土管のものです。`a = 1` なら、`seq 1` は操作できるのでルーチンはプレイヤーのもので、`Rest` と食い違います。
 
-`Route` では、`Run.entry₁` が `title`、`upStart₁`、`upClean₁`、`entryRest₁` から `Entry(chg.seq chg.a₁)` を出します。`Changes.run₁` はそれを引数にとります。`Run.change₁`、`Run.change₂`、`Run.start`、`Run.roomStart`、`level_ge_of_parts` は 2 つの確認をとります。`route_1_1` の結論は `1748 + j ≤ L` のままです。
+`Route` では、`Changes.upStay` が `a₁` の選び方から `1 ≤ n < a₁` で `ctl(seq n)` を出します。`Run.upStart₁` が `title` と `upClean₁` から `1 ≤ n < a₁` で `FrameStart(seq n)` を出します。`Run.entry₁` が `title`、`Run.upStart₁`、`upClean₁`、`entryRest₁` から `Entry(chg.seq chg.a₁)` を出します。`Changes.run₁` はそれを引数にとります。`Run.change₁`、`Run.change₂`、`Run.start`、`Run.roomStart`、`level_ge_of_parts` は 2 つの確認をとります。`route_1_1` の結論は `1748 + j ≤ L` のままです。
 
-Lean: `Theorems/EntryKeep.lean`（`restNames`、`atEntry`、`kept`、`Rest`、`IdleAt`、`guardOf`、`walkE`、`keepCheck`、`nearCheck`、`listCheck`、`Checks`、`keep_frame`、`Begin.watched`、`watched_up`、`watched_entry`、`entry_of_rest`、`entry_of_title`）、`Theorems/Route.lean`（`Changes.entryRest₁`、`Changes.upStart₁`、`Changes.upClean₁`、`Changes.one_le`、`Changes.run₁`、`Run.entry₁`）。非公開の証明: `native_decide` による `entry_near`、`entry_keep`、`entry_lists` と、`entry_checks`。
+Lean: `Theorems/EntryKeep.lean`（`restNames`、`atEntry`、`kept`、`Rest`、`IdleAt`、`guardOf`、`finE`、`walkE`、`keepCheck`、`nearCheck`、`listCheck`、`Checks`、`fin_frame`、`keep_frame`、`keep_start`、`start_to`、`Begin.start`、`Begin.watched`、`watched_up`、`watched_entry`、`start_up`、`starts_of_title`、`entry_of_rest`、`entry_of_title`）、`Theorems/Route.lean`（`upEnd`、`Changes.dA`、`Changes.a₁`、`Changes.upStay`、`Changes.entryRest₁`、`Changes.upClean₁`、`Changes.one_le`、`Changes.run₁`、`Run.upStart₁`、`Run.entry₁`）。非公開の証明: `native_decide` による `entry_near`、`entry_keep`、`entry_lists` と、`entry_checks`。
 
 ## しくみ
 
-**フレーム 0.** `TitleStart` は、押してからフレーム 0 までのすべての機械をおおうフレームの始まりの状態の集まりを作ります。フレーム 0 は、その近いグループの状態で始まります。`nearCheck` は近いグループのフレームをもう一度歩き、各終わりで、操作できることと速さ 0 のほかに、保つ 65 バイトが `e` の値で分かっていることを調べます。近い状態はこれらのバイトを知っています。押してから操作できるまでに、ゲームが分かる値を書くからです。
+**フレーム 0.** `TitleStart` は、押してからフレーム 0 までのすべての機械をおおうフレームの始まりの状態の集まりを作ります。フレーム 0 は、その近いグループの状態で始まります。`nearCheck` は近いグループのフレームをもう一度歩き、各終わりで、操作できることと速さ 0 のほかに、保つ 65 バイトが `e` の値で分かっていることと、状態が操作中のフレームの始まりのとおり待ちの繰り返しの中にあること（`FrameKeep.endOK`: プログラムカウンタとスタック、ドットとそのフラグ、NMI が有効、ストローブなし）を調べます。タイトルのプログラムが操作できるときからのフレームのプログラムと同じことも調べます。近い状態はこれらのバイトを知っています。押してから操作できるまでに、ゲームが分かる値を書くからです。
 
 **操作できるときからの 1 フレーム.** 歩き方は [FrameKeep](f-6-19-FrameKeep-ja.md) と同じです。フレームは待ちの繰り返しで、プレイヤーのルーチン、モード、タスクが分かっていて、保つバイトが分かっている状態で始まります。ほかのバイトは分かっていません。インデックスやポインタを通す書き込みは、ガードのリストにないバイトをすべて忘れます。`Clean` は、その書き込みがリストのバイトに触らないことです。フレームの終わりは、ルーチンが分かっていて次のとおりなら合格です。
 
-* プレイヤーのルーチンなら、保つバイトがその値で分かっている。
+* プレイヤーのルーチンなら、保つバイトがその値で分かっていて、状態は操作中のフレームの始まりのとおり待ちの繰り返しの中にある（`FrameKeep.endOK`）。
 * 土管のルーチンなら、`atEntry` のバイトがその値で分かっていて、状態は `IdleAt` のとおり待ちの繰り返しの中にある（ドット、フラグ、`e` のプログラムカウンタとスタック）。
 * ほかのルーチン（死ぬ、パワーアップ、旗、横の土管、…）なら、それ以上はいらない。
 
 表を作る探索は、ルーチンとして書かれる直前のアキュムレータを分けたままにします。そうしないと、死ぬときのルーチンとパワーアップのときのルーチンがまとめられて、110 の終わりでルーチンが分かりませんでした。
+
+**`a₁` が最初の操作できないフレームであるわけ.** 歩きは終わりでモードとタスクを求めません。操作できるときの値を求めると、1 つの終わりで失敗します。ルーチンはプレイヤーのものですが、モードは 2、タスクは 0 です。これは城の終わりの斧です（`HandleAxeMetatile` はモードとタスクを書き、ルーチンはそのままです）。歩きは地図を知らないので、これを除けません。だから帰納法は、`seq (n+1)` で操作できることを `a₁` の選び方からとり、歩きは待ちの繰り返しだけを求めます。
 
 **61 バイトが残るわけ.** 歩きは画面の物について何も知りません。だから、新しい物が出るフレーム、イベントの音楽が始まるフレーム、新しいエリアが決まるフレームも見つけます。
 
@@ -71,14 +91,14 @@ Lean: `Theorems/EntryKeep.lean`（`restNames`、`atEntry`、`kept`、`Rest`、`I
 
 土管のタイマーも証明していません。土管のルーチンで終わる 4 つの終わりのうち 2 つでは、同じフレームで横の土管のコードも動き、分からないインデックスで表からタイマーを読んでいます。そこでは、歩きはタイマーのいくつかのビットしか知りません。値は 32、36、48、52、160、164、176、180 のどれかです。本当の値は 48、52、160 ですが、歩きには分かりません。
 
-**確認.** ネイティブで `nearCheck` 1.2 秒、`keepCheck` 4.1 秒（1,104,799 ステップの探索と 49,733 状態の表、そのあとの歩き）、`listCheck` はすぐです。
+**確認.** ネイティブで（`entry-walk-check`、exit 0）`nearCheck` 1.3 秒、`keepCheck` 4.2 秒（1,104,799 ステップの探索と 49,733 状態の表、そのあとの歩き）、`listCheck` はすぐです。探索は失敗する終わりを見つけず、プレイヤーの終わりで待ちの繰り返しを求めないときと同じ大きさです。そのような終わりはもともと待ちの繰り返しの中でした。証明のビルドでは 3 つの確認で 7.1 秒です。
 
 ## 測ったこと
 
 `entry-keep-check FM2`（exit 0）:
 
 * タイトルの 100 のフレームで Start を押し、ほかの入力なし: 79 の走りが操作できるところまで行き、すべて保つバイトがあります。
-* TAS の、操作できるときから入るまで: 368 フレーム。すべて `FrameStart`、すべての命令（1,917,255）が `Clean`、どのフレームでも保つバイトがあります。入るときに `Rest`、`atEntry`、`IdleAt`、`Entry` が成り立ちます。
+* TAS の、操作できるときから入るまで: 368 フレーム。すべて `FrameStart`、すべての命令（1,917,255）が `Clean`、どのフレームでも保つバイトがあります。入るときに `Rest`、`atEntry`、`IdleAt`、`Entry` が成り立ちます。だから TAS では、操作できるようになってから最初の操作できないフレームは入るときで、`a₁` は前と同じ入るフレームです。
 * 基準の入る状態: 440 フレームで、同じです。
 * 操作できるときからの乱数の入力（300 の走り、127,841 フレーム、うち 5,390 はポーズ）と、TAS のフレームからの乱数の入力（300 の走り、75,241 フレーム）: `FrameStart` や `Clean` に反するフレームも、保つバイトをなくすフレームもありません。命令の最大のドットは 70,697 です（上限は 89,278）。
 * 基準の入力で、最後のジャンプの前に 0〜39 フレーム立ち止まるもの: 38 回入り、すべて `Rest`、`atEntry`、`IdleAt`、`Entry` が成り立ちます。
@@ -88,5 +108,6 @@ Lean: `Theorems/EntryKeep.lean`（`restNames`、`atEntry`、`kept`、`Rest`、`I
 ## 仮定（Lean では証明していないこと）
 
 * `entryRest₁`: 入るときの `Rest`。土管のタイマーと 61 バイトです。前の `entry₁` は、待ちの繰り返し、タイマー、128 バイトを仮定していました。
-* `upStart₁`: 操作できるときから入るまでの各フレームは、待ちの繰り返しの中で、操作できる状態で始まる。新しい仮定です。
-* `upClean₁`: それらのフレームの各命令は `Clean`。インデックスやポインタを通す書き込みは、保つ 65 バイトに触らない。新しい仮定です。入る前に次の枠を使う走りは定理の外です: 敵の枠 3 と 6 と枠 4 の状態、ファイアボール、ブロック 2 と 3、その他の物 0〜7、大砲 1〜5、得点 3、4、6。ここで調べた本物の走りでは使いません。
+* `upClean₁`: 操作できるときから入るまでのフレームの各命令は `Clean`。インデックスやポインタを通す書き込みは、保つ 65 バイトに触らない。入る前に次の枠を使う走りは定理の外です: 敵の枠 3 と 6 と枠 4 の状態、ファイアボール、ブロック 2 と 3、その他の物 0〜7、大砲 1〜5、得点 3、4、6。ここで調べた本物の走りでは使いません。
+
+`upClean₁` はここでは減らしていません。`entry-clean-use`（exit 0）は、歩きの状態では決まらないので歩きが命令を `Clean` に任せる場所を数えます。ドットの上限（`late`）は、歩きが通る 9,068 の場所すべてで使います。インデックスやポインタを通す書き込みで、行き先が分からないもの: 710 の場所。物、絵、つる、花火、橋、得点などの 324 のルーチンにあります。ポインタが分からない `LDA (zp),Y`: 47 の場所（エリアの解析、敵のデータ、音楽）。番号が分からないジャンプ: 1 つの場所。そのような書き込みのある 724 の場所のうち、どの訪問でも歩きが行き先を知っているのは 14 の場所だけです。だから、歩きが知らないところだけで `Clean` を求めても、減るのは 14 の場所です。

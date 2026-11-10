@@ -10,7 +10,8 @@ own machine. The frames not counted between two counted frames keep the three va
 Notation. `fm(t)` and `inp(t)` are the machine and the input of counted frame `t`. `seq(n)` and `sin(n)` are the machine and the input of frame `n`, every frame counted.
 Counted frame `t` is frame `ix(t)`. `tr(m, i, k)` is the machine after `k` instructions of the frame of `m` with the input `i`, and `frame(m, i)` is the machine at its end.
 `c` is the call of the mode's routine: the instruction before `SkipMainOper`. `V(m) = (v(m), f(m), P(m))` are the speed, the subspeed and the position.
-`FrameStart₀(m)` is `PipeWrites.FrameStart` with no byte known: `m` is in the idle loop with its stack pointer, at the frame's start, with the NMI on.
+`FrameStart₀(m)` is `PipeWrites.FrameStart` with no byte known: `m` is in the idle loop with its stack pointer, at the frame's start, with the NMI on. `FrameStart(m)` also knows
+the routine, the mode and the task of control. `Clean` here protects the five bytes of `V` as well; `Clean_G` is the `Clean` of `PipeWrites.guardOf`, which does not.
 
 ```
 keeps_frame   :  lagCheck,  FrameStart₀(m),
@@ -18,14 +19,18 @@ keeps_frame   :  lagCheck,  FrameStart₀(m),
                  →   (∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c)   ∨   V(frame(m, i)) = V(m)
 
 Lags          :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,   ix t < ix(t + 1)
-                 and for 1 ≤ t < E,  ix t < n < ix(t + 1):
-                   start :  FrameStart₀(seq n)
-                   clean :  ∀ k,  frame(tr k) = frame(seq n)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)   →   Clean(tr k)
+                 and for every frame from control to the entry,  ix 1 ≤ n < ix E:
+                   ctl   :  seq(n + 1) has control
+                   clean :  ∀ k,  Clean_G(tr k)              (G = guardOf, without the five bytes)
+                 and for a frame not counted,  1 ≤ t < E,  ix t < n < ix(t + 1):
+                   store :  ∀ k,  frame(tr k) = frame(seq n)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)  ∧  a store of tr k goes to a   →   a is none of the five bytes
                    game  :  (∃ k,  frame(tr k) = frame(seq n)  ∧  pc(tr k) = c)   →   V(seq(n + 1)) = V(seq n)
 
-lags_keep     :  lagCheck,  Lags   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
+lagStart      :  walkCheck,  Lags,  FrameStart(fm 1)   →   FrameStart₀(seq n)                                    (StartRun)
+lagClean      :  Lags   →   ∀ k,  frame(tr k) = frame(seq n)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)   →   Clean(tr k)
+lags_keep     :  lagCheck,  walkCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
 ReadsOwn      :  ∀ t ∈ [1, E],  the start of fr(t) is V(fm t);   ∀ t ∈ [1, E),  the end of fr(t) is V(frame(fm t, inp t))
-reads_of_lags :  lagCheck,  ReadsOwn,  Lags   →   Reads
+reads_of_lags :  lagCheck,  walkCheck,  ReadsOwn,  Lags,  FrameStart(fm 1)   →   Reads
 Pipe.reads    :  the old field reads, a theorem (Route)
 ```
 
@@ -69,10 +74,12 @@ before the call, whether the frame calls `c`, and whether `V` changes. A run sto
 
 ## Assumed (not proved in Lean)
 
-* **`start`, `clean`**: each frame not counted starts in the idle loop, and each of its instructions before the call is `Clean`. Conditions on one state and on single instructions.
+* **`start`, `clean` of before are theorems now** (`Lags.lagStart`, `Lags.lagClean`): [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md).
+  In their place: `ctl` and `clean` on every frame from control to the entry, and `store` on a frame not counted. The table above measured the old fields; `start-check` measures the new ones.
 * **`game`**: a frame not counted that calls the mode's routine keeps `V`. Before the pipe these are the frames of the master timer control: growth, injury, death.
   It is false during the injury blink (above). Read from the code: the timer control gets a value other than 0 only together with a change of the routine (`SetPRout`). So, if every counted
-  frame ends in control, no frame not counted should call `c`. This is not proved.
+  frame ends in control, no frame not counted should call `c`. This is not proved. `ctl` now asks that every frame up to the entry ends in control, but `ix` is not tied to the
+  interval timer, and the walk does not follow the timer control.
 * **Not in this item.** That the counted frames are those of `clock` (only the frame numbers join them, as before). That each counted frame is a `Frame` (item 0-0-0-3-1).
 
 **Files.** `Theorems/LagFrames.lean`, `Theorems/PipeFrames.lean`, `Theorems/Route.lean`, `Theorems/PipeWrites.lean`, private `Proof/PipeWrites.lean`.

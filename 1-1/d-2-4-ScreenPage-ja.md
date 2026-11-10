@@ -2,7 +2,7 @@
 
 # 部屋の画面のページと、横の土管の長いタイマー
 
-**主張.** これは部分的な結果です。部屋で最初に操作できるフレームの状態が 1 つの条件 `Room` を満たし、そこから入るまでの各フレームの各命令が条件 `SiteOK` を満たし、入るまでの各フレームがプレイヤーのルーチンで始まるとします。このとき、入るまでのどのフレームでも画面は最初のページにあり、スクロールロックはオンです。入るフレームの終わりのタイマーは長い値で、160 以上です。さらに入るフレームの終わりの 18 バイトが参照の値なら（`EntryRest`）、そこでの状態は横の土管に入るときの条件 `Entry2` 全体を満たします（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。`Entry2` は 90 バイト（画面のバッファに記録があるときは 93 バイト）、プログラムカウンタ、スタックポインタ、フレームがアイドルループで終わることを求めます。証明は部屋の 1 フレーム全部を抽象機械で追います。フレームの部分には分けません。`Room`、`SiteOK`、ルーチンの条件、`EntryRest` は仮定です。本物のフレームで確かめました。
+**主張.** これは部分的な結果です。部屋で最初に操作できるフレームの状態が 1 つの条件 `Room` を満たし、そこから入るまでの各フレームの各命令が条件 `SiteOK` を満たし、入るまでの各フレームがプレイヤーのルーチンで始まるとします。このとき、入るまでのどのフレームでも画面は最初のページにあり、スクロールロックはオンです。入るフレームの終わりのタイマーは長い値で、160 以上です。さらに入るフレームの終わりの 16 バイトが参照の値なら（`EntryRest`）、そこでの状態は横の土管に入るときの条件 `Entry2` 全体を満たします（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。`Entry2` は 90 バイト（画面のバッファに記録があるときは 93 バイト）、プログラムカウンタ、スタックポインタ、フレームがアイドルループで終わることを求めます。証明は部屋の 1 フレーム全部を抽象機械で追います。フレームの部分には分けません。`Room`、`SiteOK`、ルーチンの条件、`EntryRest` は仮定です。本物のフレームで確かめました。
 
 `m₀` は 1-1 の開始の機械です。`r` は参照の機械で、本物の走りの入る 1 フレーム前です（[横の土管から地上への切り替え](d-1-SideTransition-ja.md) の `P`）。`frame(m, i)` は入力 `i` の本物の 1 フレームです。`tr(n)` はそのフレームの `n` 命令あとの機械です。`page(m)` は `ScreenLeft_PageLoc`、`lock(m)` は `ScrollLock`、`rt(m)` は `GameEngineSubroutine`、`timer(m)` は `ChangeAreaTimer`、`x(m)` は `Player_X_Position` です。`e_s` は横の土管のルーチンの番号、`long` は `AreaChangeTimerData` のはじめの値です。`L` はフレームの終わりの 6000 ドット前です。
 
@@ -25,7 +25,7 @@ Leaves(m')  :=  page(m') = page(r) ∧ lock(m') = lock(r) ∧ rt(m') ≠ rt(r)
 EntryRest(m) :=  ∃ (v, X) ∈ V,  ∀ b ∈ X ∩ R,  m[b] = v[b]
 ```
 
-`K` は 82 バイトの既知のビットです。下に挙げます。`T` は `r` のブロックバッファにあるタイルと 0 です。`V` は `Entry2` の 2 つの参照の機械と、それぞれのバイトのリスト `X` です（`SideChangeEnd.refs2`）。`RoomCond(v, Y)` は、`Room` の `r` を `v` にし、バイト `Y` の全部のビットを知るものです。`R` は下の 18 バイトのリストです（`restIdx`）。
+`K` は 82 バイトの既知のビットです。下に挙げます。`T` は `r` のブロックバッファにあるタイルと 0 です。`V` は `Entry2` の 2 つの参照の機械と、それぞれのバイトのリスト `X` です（`SideChangeEnd.refs2`）。`RoomCond(v, Y)` は、`Room` の `r` を `v` にし、バイト `Y` の全部のビットを知るものです。`R` は下の 16 バイトのリストです（`restIdx`）。
 
 ```
 room_step    :  Room(m) ∧ (∀ j, SiteOK(tr(j)))  →  Room(frame(m, i)) ∨ Leaves(frame(m, i))
@@ -43,7 +43,7 @@ screen_check（非公開）: roomCheck(sy, nm, m₀, 160, V) = true（native_dec
 
 `GameEngineSubroutine` は `R` に入っているので、`entry_rest` は `rt(seq(e)) = e_s` を `EntryRest` から出します。
 
-Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_writeStep`、`SiteOK`、`walkS`、`frame_of_walkS`、`RoomCond`、`Leaves`、`room_step`、`room_keeps`、`room_leaves`、`room_run`、`RoomRun`、`RoomRun.screen`、`RoomRun.timer`、`entry_long`、`EntryRest`、`entry_rest`）、非公開の `Proof/ScreenPage.lean`（`screen_check`、`screen_first_page`、`screen_long_timer`、`screen_entry`）。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
+Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_writeStep`、`SiteOK`、`preS`、`cov_preS`、`walkS`、`frame_of_walkS`、`RoomCond`、`Leaves`、`room_step`、`room_keeps`、`room_leaves`、`room_run`、`RoomRun`、`RoomRun.screen`、`RoomRun.timer`、`entry_long`、`EntryRest`、`entry_rest`）、非公開の `Proof/ScreenPage.lean`（`screen_check`、`screen_first_page`、`screen_long_timer`、`screen_entry`）。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
 ## この項目のこと
 
@@ -55,19 +55,26 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 
 **(4) 入るときの条件.** フレームの終わりの抽象状態が `rt = e_s` なら、確認はさらに、その状態が各参照 `(v, X ∖ R)` の始まりの状態の下にあることを求めます。つまりプログラムカウンタ、スタックポインタ、ドット、フラグを知り、`X ∖ R` の各バイトを `v` の値で知っていることです。すると `Entry2` に要るのは `R` のバイトだけです（`entry_rest`）。
 
-歩きは入るフレームを 2 つの抽象状態で終えます（ドット 0 と、ドット 1〜9）。どちらでも、歩きは `Entry2` の 90 バイトのうち 76 バイトを参照と同じ値で知っています。記録があるときは 93 バイトのうち 76 バイトです（`screen-check` で測りました）。知らない 14 バイト（17 バイト）と `GameEngineSubroutine` が `R` です。前の回の 79 バイトの `K` では、知らないのは 17 バイト（20 バイト）、その前の 73 バイトでは 23 バイトでした。
+歩きは入るフレームを 2 つの抽象状態で終えます（ドット 0 と、ドット 1〜9）。どちらでも、歩きは `Entry2` の 90 バイトのうち 78 バイトを参照と同じ値で知っています。記録があるときは 93 バイトのうち 78 バイトです（`screen-check` で測りました）。知らない 12 バイト（15 バイト）と `GameEngineSubroutine` が `R` です。この回の前は 76 バイトでした。下のプレイヤーの 2 バイトを知らなかったからです。前の回の 79 バイトの `K` では、知らないのは 17 バイト（20 バイト）、その前の 73 バイトでは 23 バイトでした。
 
 | `R` のバイト | 歩きが知らない理由 |
 |---|---|
 | `GameEngineSubroutine` | 歩きは知っています。`seq(e)` で入ったことを言うので `R` に入れました |
-| `Player_State`、`Player_Y_HighPos`、`Player_Y_Position` | プレイヤーの状態と高さ。`K` は状態の上のビットだけを知ります。高さは部屋の中で変わります |
+| `Player_Y_Position` | プレイヤーの高さ。部屋の中で変わります。歩きではタイルの読みが場所によらないので、歩きは土管の段を見分けられません |
 | `VRAM_Buffer1_Offset`、`VRAM_Buffer1`（+0、+1、+2、+7） | 画面のバッファ。歩きは添字を 64 未満に分けるだけです |
 | `AreaMusicBuffer`、`EventMusicBuffer`、`MusicData` (2)、`MusicOffset_Square1`、`NoiseSoundBuffer`、`EventMusicQueue`、`NoteLengthTblAdder` | 音。`K` は音のエンジンを追いません。急ぎの音楽はこれらのバイトを変えます |
 | `AreaNumber` | 面の番号。部屋に入る切り替えの段は、操作のときにこれを知りません。縦の土管に入るときの条件にないからです |
 
-これらのバイトの 1 つを `K` に足すと、歩きは失敗します。`Player_Y_HighPos` で失敗 1、`VRAM_Buffer1_Offset` で 3、`EventMusicBuffer` で 1、`MusicOffset_Square1` で 1、`NoiseSoundBuffer` で 1、`VRAM_Buffer1` で 2 です。最後の組と `MusicData`、`EventMusicQueue`、`Player_Y_Position`、`Player_State`、`AreaMusicBuffer` は、部屋に入る切り替えの段が操作のときに参照の値を知りません（操作できる 4 つの状態のうち 0 か 2）。6 バイトは両方の確かめを通ったので `K` に入れました。`ScreenRoutineTask`、`DisableScreenFlag`、`Fireball_State` (2)、`JoypadOverride`、`GameTimerExpiredFlag` です。段は操作のときにこれらを知っていて、[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md) の確認はこれらを入れても通ります。
+これらのバイトの 1 つを `K` に足すと、歩きは失敗します（前の回に、`Player_State` と `Player_Y_HighPos` がまだ `R` にあったときに測りました）。`Player_Y_HighPos` で失敗 1、`VRAM_Buffer1_Offset` で 3、`EventMusicBuffer` で 1、`MusicOffset_Square1` で 1、`NoiseSoundBuffer` で 1、`VRAM_Buffer1` で 2 です。最後の組と `MusicData`、`EventMusicQueue`、`Player_Y_Position`、`Player_State`、`AreaMusicBuffer` は、部屋に入る切り替えの段が操作のときに参照の値を知りません（操作できる 4 つの状態のうち 0 か 2）。6 バイトは両方の確かめを通ったので `K` に入れました。`ScreenRoutineTask`、`DisableScreenFlag`、`Fireball_State` (2)、`JoypadOverride`、`GameTimerExpiredFlag` です。段は操作のときにこれらを知っていて、[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md) の確認はこれらを入れても通ります。
 
-この回、さらに 3 バイトを `K` に入れました。`AreaPointer`、`EntrancePage`、`PrimaryHardMode` で、次の面とハードモードです。部屋に入る切り替えの時間の段は、操作のときにこれらを参照の値で知っています（操作できる 2 つの状態の両方）。これらを `K` に入れても歩きは失敗 0 で、表も同じです。[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md) の確認も通ります。ですから `EntryRest` はもうこれらを求めません。`AreaNumber` も歩きは通りますが、段がこれを知りません。部屋の本物の走り（113 回、入るのは 36 回。一時的なプログラムで測り、残していません）では、この 4 バイトと `Player_Y_HighPos` と `R` の音のバイトは変わりません。音のバイトを `K` に入れると歩きは通りますが、入るフレームの終わりではこれらを知りません。探索が、これらの違う状態をまとめるからです。
+前の回、さらに 3 バイトを `K` に入れました。`AreaPointer`、`EntrancePage`、`PrimaryHardMode` で、次の面とハードモードです。部屋に入る切り替えの時間の段は、操作のときにこれらを参照の値で知っています（操作できる 2 つの状態の両方）。これらを `K` に入れても歩きは失敗 0 で、表も同じです。[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md) の確認も通ります。ですから `EntryRest` はもうこれらを求めません。`AreaNumber` も歩きは通りますが、段がこれを知りません。ルートのほかの部分も `AreaNumber` を追っていません。縦の土管に入るときの条件、パート a の 1 フレーム全部で保つこと、部屋に入る切り替えの段のどれにもありません。ゲームの始まりから 0 で、これらのフレームのコードはこれを書きませんが、証明していません。部屋の本物の走り（113 回、入るのは 36 回。一時的なプログラムで測り、残していません）では、この 4 バイトと `Player_Y_HighPos` と `R` の音のバイトは変わりません。音のバイトを `K` に入れると歩きは通りますが、入るフレームの終わりではこれらを知りません。探索が、これらの違う状態をまとめるからです。
+
+**この回: プレイヤーの状態と画面の上での高さ.** `K` は `Player_State` の上のビットだけを知り、`Player_Y_HighPos` は知りません。どちらも部屋の中で変わるからです。けれども土管に入る道では、コードがこれらを確かめます。
+
+* 横の土管のコードは状態を `LDY`、`CPY #0`、`BNE` で確かめます。`TaintRun` の機械がバイトを分けて読むのは `LDA` のときだけなので、`Y` での分岐から歩きはこのバイトを知りませんでした。いまは、この `LDY` で状態の低い 2 ビットを分けます（`preS`、`Places.stAt`）。土管に入る道では状態は 0 です。
+* 当たりのルーチンは高さの上のバイトを `LDA`、`CMP #1`、`BNE` で確かめ、1 でなければ出ます。土管のコードは当たりのルーチンの中です。いまは、この `LDA` で上のバイトの全部のビットを分けます（`Places.hpAt`）。値 1 の部分だけが当たりのコードに進みます。探索は `CMP` で部分をアキュムレータで分けたままにします（`Aids.aAt`）。そうしないとすぐにまとめてしまいます。
+
+分けることは安全です。どの機械もどれかの部分の下にあります（`cov_preS`。`TaintRun.cov_bit` と `PipeEntryRule.cov_all` から）。新しい仮定はありません。入るフレームの終わりで、歩きはいま状態 0 と上のバイト 1 を、参照と同じ値で知っています。ですから `EntryRest` はもうこの 2 バイトを求めません。`R` は 16 バイトで、前は 18 バイトでした。探索は 208,238 ステップ（前は 210,934）、表は 9,276 個（前は 9,378）です。[部屋のブロックの地図](c-7-12-RoomMap-ja.md)（パート c）の歩きも同じ分け方を使います。その確認も通ります（`room-map-check`: `mapCheck` は true、表も同じ）。
 
 ## しくみ
 
@@ -75,11 +82,11 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 
 * `LDA (zp),Y` でポインタがわからないとき（`readStep`、`s_readStep`）。読む番地が RAM か ROM なら、機械はほかに何も変わりません。読んだ値はわからないとします。ブロックバッファの読みでは、値を `T` の各値に分けます。
 * `STA (zp),Y` でコインを消すとき（`writeStep`、`s_writeStep`）。ブロックバッファに既知のビットがないので、どこに書いても抽象状態は変わりません。
-* 分けること（`preS`）。`dot ≤ L` で時間の幅を切ります。画面のバッファの添字は 64 未満の値に分けます。`x` は低い 4 ビットのどれかが立っている 4 つに分けます。
+* 分けること（`preS`）。`dot ≤ L` で時間の幅を切ります。画面のバッファの添字は 64 未満の値に分けます。`x` は低い 4 ビットのどれかが立っている 4 つに分けます。プレイヤーの状態は横の土管のコードが読む場所で低い 2 ビットに、上のバイトは当たりのルーチンが読む場所で全部のビットに分けます。この 2 つは条件が要りません。
 
 **表.** 探索が抽象状態の表を作ります。確認は表の各状態から歩き、どの道も表の状態に入るか、フレームの終わりで `Room` か `Leaves` になることを確かめます（`walkS`、`finR`）。探索が忘れるものは、確認が `AS.le` で確かめます。ですから探索は証明の一部ではありません。
 
-**大きさ.** 探索 210,934 ステップ、8,750 の枝分かれ、失敗 0、表 9,378 個。プログラムで確認全体が約 5 秒です。
+**大きさ.** 探索 208,238 ステップ、8,862 の枝分かれ、失敗 0、表 9,276 個。プログラムで確認全体が約 5 秒です。
 
 **1 フレームが閉じた理由.** 前の測定（[縦の土管に入るフレームを本物のフレームで](a-5-1-PipeEntryRule-ja.md)）で、パッドだけわからなくても失敗 179 でした。失敗の場所はポインタの読み、ジャンプ表、時間です。ここでは次の 4 つで閉じました。
 
@@ -136,7 +143,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 
 ## 前提（Lean では証明していない）
 
-* **`EntryRest(seq(e))`.** 入るフレームの終わりで `R` の 18 バイトが `Entry2` の参照の値であること（(4) を見てください）。急ぎの音楽が鳴ると成り立ちません（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。項目 1-1-d-2-5 です。
+* **`EntryRest(seq(e))`.** 入るフレームの終わりで `R` の 16 バイトが `Entry2` の参照の値であること（(4) を見てください）。急ぎの音楽が鳴ると成り立ちません（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。項目 1-1-d-2-5 です。
 * **`Room(seq(c))`.** 部屋で最初に操作できる状態の 82 バイト。ルートでは 1 つ目の切り替えの時間の段から証明しました（[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md)）。以下はこのページを書いたときの説明です。走りが違っても変わらないバイトだけを `K` に残しました。ファイアマリオ（`PlayerStatus` が 2）では成り立ちません。1-1 のこの土管より前のパワーアップは 1 つです。部屋に入る切り替えの段を歩けば出るはずです。切り替えのあとの状態はほとんど知られているからです。項目 1-1-b-3-2 の段の最後の状態が `K` の値を知っていれば、`AS.le` の確認 1 つで済みます。`K` のうち面の準備が消さないバイトは `AreaType`、`CurrentPlayer`、`PlayerStatus`、`WorldNumber`、`OperMode`、`OperMode_Task`、`AreaMusicBuffer_Alt` です。その段の出口の条件がこれらを知る必要があります。ここではその段に頼っていません。動かしてもいません。
 * **`SiteOK` の時間.** 部屋のフレームがはみ出さないことです。
 * **読みの番地.** `LDA (zp),Y` がレジスタを読まないこと。
@@ -153,7 +160,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 
 ```
 a₂         := first(n ≥ b₁, n ≤ b₁ + dR : rt(seq n) ≠ rt(r))     （Changes.a₂。なければ b₁ + dR）
-entry₂     : EntryRest(seq a₂)                       （18 バイト）
+entry₂     : EntryRest(seq a₂)                       （16 バイト）
 Room(seq b₁)                                           （Changes.roomAt。1 つ目の切り替えの時間の段、chg.time₁、chg.ctlFirst₁ から）
 roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
 roomOrder  : b₁ ≤ a₂                                   （定理。a₂ の定義から）
@@ -164,7 +171,7 @@ roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)        （定理。a₂ 
 
 `GameEngineSubroutine`、`Enemy_Flag` (6)、`Enemy_ID+5`、`Player_State`（ビット 0xfc）、`Block_State` (2)、`Misc_State` (9)、`EnemyData`、`EnemyDataHigh`、`AreaMusicBuffer`（ビット 0xfb）、`AreaMusicQueue`、`FloateyNum_Timer` (6)、`VineFlagOffset`、`Block_RepFlag` (2)、`Cannon_PageLoc` (6)、`Cannon_X_Position` (6)、`Cannon_Y_Position` (4)、`EnemyFrenzyBuffer`、`SecondaryHardMode`、`EnemyFrenzyQueue`、`SprDataOffset`、`SwimmingFlag`、`JumpspringAnimCtrl`、`FireballThrowingTimer`、`ScreenLeft_PageLoc`、`ScreenRight_PageLoc`、`ScreenRight_X_Pos`、`AreaParserTaskNum`、`ScrollLock`、`EnemyDataOffset`、`EnemyObjectPageLoc`、`ScrollThirtyTwo`、`CloudTypeOverride`、`AreaType`、`CurrentPlayer`、`PlayerStatus`（ビット 0xfe）、`WorldNumber`、`OperMode`、`OperMode_Task`、`StarInvincibleTimer`、`AreaMusicBuffer_Alt`（ビット 0xfb）、`ScreenRoutineTask`、`DisableScreenFlag`、`Fireball_State` (2)、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaPointer`、`EntrancePage`、`PrimaryHardMode`
 
-**リスト `R`**（名前）: `GameEngineSubroutine`、`Player_State`、`Player_Y_HighPos`、`Player_Y_Position`、`VRAM_Buffer1_Offset`、`VRAM_Buffer1`（+0、+1、+2、+7）、`AreaMusicBuffer`、`EventMusicBuffer`、`MusicData` (2)、`MusicOffset_Square1`、`NoiseSoundBuffer`、`EventMusicQueue`、`NoteLengthTblAdder`、`AreaNumber`
+**リスト `R`**（名前）: `GameEngineSubroutine`、`Player_Y_Position`、`VRAM_Buffer1_Offset`、`VRAM_Buffer1`（+0、+1、+2、+7）、`AreaMusicBuffer`、`EventMusicBuffer`、`MusicData` (2)、`MusicOffset_Square1`、`NoiseSoundBuffer`、`EventMusicQueue`、`NoteLengthTblAdder`、`AreaNumber`
 
 **ファイル.** `Theorems/ScreenPage.lean`、非公開の `Proof/ScreenPage.lean`。
 

@@ -31,7 +31,7 @@ rule_on_framesS      :  ruleCheckS,  start, clean, tiles は rule_on_frames の�
                         moved:  ∀ t,  Enters(fm t, inp t) → ∀ n j,  WriteStep(n) → j ≤ n → pc(tr_t(j)) = PlayerSubs → P₂(t) = posP(tr_t(j))
                         →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 pipe_frame_check（非公開）   :  ruleCheckS(sy, m₀) = true（native_decide）
-pipe_no_entry_real（非公開） :  start, clean, tiles, edge, moved,  openP, openB,  機械から読むフレーム,  Enters(fm E, inp E)  →  367 < E
+pipe_no_entry_real（非公開） :  Enters(fm E, inp E),  FrameStart(fm E),  clean, tiles, edge, moved,  openP, openB,  機械から読むフレーム  →  367 < E
 ```
 
 `ruleCheckS` は `PlayerSubs ≠ 0` と、`G_S` での抽象機械の確認です。前の `entry_right_of_left` と `rule_on_frames`（右足で分ける）も残しています。`Route` はもう使いません。

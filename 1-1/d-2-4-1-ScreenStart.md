@@ -56,6 +56,6 @@ In each of the 41 runs without `Room`, only `AreaMusicQueue` differs, and none m
 ## Assumptions (not proved in Lean)
 
 * **`chg.time₁`, `chg.ctlFirst₁`.** The time is not up at the exit, and `b₁` is the first control. See [b-3-2](b-3-2-PipeChangeEnd.md).
-* **The conditions of the change** (the condition at the entry `Run.entry₁`: `chg.entryRest₁`, `upStart₁`, `upClean₁` with `title`; `places₁`, `quiet₁`, `noStart₁`). The condition at the entry now also asks `WorldNumber`, `PrimaryHardMode` and the bits of `AreaMusicBuffer_Alt` at the entry. A fire Mario (`PlayerStatus` 2) does not meet `chg.entry₁`.
+* **The conditions of the change** (the condition at the entry `Run.entry₁`: `chg.entryRest₁`, `upClean₁` with `title`; `places₁`, `quiet₁`, `noStart₁`). The condition at the entry now also asks `WorldNumber`, `PrimaryHardMode` and the bits of `AreaMusicBuffer_Alt` at the entry. A fire Mario (`PlayerStatus` 2) does not meet `chg.entry₁`.
 
 **Files.** `Theorems/ScreenStart.lean`, `Theorems/PipeChangeEnd.lean` (`timeRows`, `PipeRun.inRowsT`), `Theorems/Route.lean` (`RoomChecks`, `Changes.roomAt`), private `Proof/ScreenStart.lean`.

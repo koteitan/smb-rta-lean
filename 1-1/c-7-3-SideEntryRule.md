@@ -4,6 +4,8 @@
 
 **Claim.** This is a partial result. An entry into the side pipe is defined on the real machines. If a frame enters, then when the side check of that frame reads the page, Mario is at or right of the left end of the pipe's mouth. So the hypotheses `entry`, `entry_mem`, `entered`, `entry_P` of `RoomJoin` are gone. These four said that the collision routine, run alone on a hand-written block buffer (`SidePipe.withPipe`), enters. The proof follows one pass of the side check with an abstract machine. It does not follow the rest of the frame. What is left is the hypotheses `Pass` and `pos`.
 
+**Now.** `RoomRun` no longer uses this page's theorem. [The side pipe's entry: one whole frame](c-7-16-SideFrame.md) follows the whole frame, and `Pass` and `pos` are no longer fields. The theorems here stay, and the pieces of a byte read (`pieces`) are used there.
+
 The method is that of [Touching the pole on real frames](f-6-1-PoleEntryRule.md). The side check is the same. The write, the tiles, the exits and the page are other ones.
 
 `frame(m, i)` is a real frame with input `i`. `tr(n)` is the machine `n` instructions into that frame. `rt(m)` is `GameEngineSubroutine`. `e_s` is the number of the side pipe's routine. `page(m)` is `Player_PageLoc`, `x(m)` is `Player_X_Position`. `w` is the instruction in `ChkGERtn` that writes `rt`. `T₁` is the side pipe's tile, `T₂` the value of the first compare after `ContSChk`. The routine enters by either of the two. `col` is the pipe's column, and `d_C` the top of that column in the block buffers. `R` is the number of rows of a block buffer. `x₀` is the first `x` with his right side in the mouth, and `P₀ = 256·x₀` is the position of the mouth's left end ([Entering the side pipe](c-4-SidePipe.md)).
@@ -98,8 +100,8 @@ A program (`side-rule-check`).
 * **The write in `Pass`.** Only `w` makes `rt` equal `e_s`. Earlier in that frame the side check started, and from there it did not go to an exit. Read from the code, and checked on the real frames above. The rest of the frame (NMI, sound, screen, enemies) is not followed.
 * **`Start`.** The stack pointer, the adders' offset, the dot, the flags. As for the pole.
 * **`RowOK`.** Read from the code, as for the pole.
-* **`TilesOK`.** The two tiles are only in the pipe's column of the block buffers. [The block map in the room](c-7-12-RoomMap.md) proves it at every read of every frame of the room, on the machines of the change into the room and out of it (`Route.Changes`), from what the room's frames already assume there (`SiteOK`). It stays a field of `RoomRun` (`tiles`) until frame `E` of `RoomRun` is joined to those machines.
-* **`pos`.** `P(E)` is the position at the read of the page. This is part of making a `Frame` from a real frame.
+* **`TilesOK`.** The two tiles are only in the pipe's column of the block buffers. [The block map in the room](c-7-12-RoomMap.md) proves it at every read of every frame of the room, on the machines of the change into the room and out of it (`Route.Changes`), from what the room's frames already assume there (`SiteOK`). `Route.Run.roomTiles` joins frame `E` of `RoomRun` to those machines by the link `roomEnter`; the field `tiles` is gone.
+* **`pos`.** `P(E)` is the position at the read of the page. This is part of making a `Frame` from a real frame. No longer a field of `RoomRun`: [one whole frame](c-7-16-SideFrame.md) needs `P(E)` only at the end of the move (`movedE`).
 * **The right end, the height, the ground.** Only the left end comes out here. `RoomJoin` uses only the left end.
 
 **Files.** `Theorems/SideEntryRule.lean`, private `Proof/SideEntryRule.lean`.

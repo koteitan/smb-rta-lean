@@ -33,7 +33,37 @@ room_map（非公開）              :  2 つの確認をつけた map_of_rows
 
 `InRowsT(m)` は、`m` が部屋への切り替えの時間の段の機械であることです。`Route.Changes` は最初の操作でこれを与えます（`Changes.roomAt` も同じものを使います）。入るフレーム `a₂` までのフレームでの `SiteOK`（`roomSites`）と操作のルーチン（`roomStay`）も与えます。
 
-Lean: `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。`Theorems/SideEntryRule.lean` に `PassR` と `pass_of`。`Theorems/RoomJoin.lean` ではフィールド `pass` が `PassR` を、フィールド `tiles` が `TilesOK` を与えます。
+Lean: `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。`Theorems/RoomJoin.lean` に `RoomRun.TilesE`（フレーム `E` の読みでのタイル。`RoomRun.mouth_of` の仮定で、もう欄ではない）。`Theorems/Route.lean` につなぎ `roomEnter` と `Run.roomTiles`。
+
+```
+roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          （Route.Run の欄）
+Run.roomTiles   :  確認,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ n → AtRead(tr(j)) → TilesOK(tr(j))
+```
+
+`Run.roomTiles` は、`Route.Changes` のフレーム `b₁ … a₂ − 1` での `map_of_rows`（部屋に入る切り替えの段、`roomSites`、`roomStay` から）を、`roomEnter` のフレーム `k` で使います。
+
+同じ抽象機械から、部屋のどのフレームも操作できる状態で始まることが出ます。[1 フレーム全部](c-7-16-SideFrame-ja.md) の抽象機械が求める形です。
+
+```
+startCheckF        :  基準の機械は待ちのループにいてスタックポインタはガードの値、Cond はガードの 3 つのバイトを全部その値で知っている、
+                      プログラムは同じ、9 < vblank が終わるドット
+frameStart_of_cond :  startCheckF,  Cond(m)  →  FrameStart(m)
+start_of_rowsF     :  map_of_rows の仮定,  startCheckF  →  ∀ n ∈ [b, a),  FrameStart(seq(n))
+Run.roomStartE     :  確認,  Run  →  FrameStart(fm(E − 1))          （StartE。前の欄 room.startE）
+map_startF（非公開） :  startCheckF = true（native_decide）
+```
+
+抽象機械はまた、どの状態でも、`SiteOK` が与えない `Clean`（[1 フレーム全部](a-5-2-PipeWrites-ja.md)）の条件を確かめます。添字やポインタを通す書き込みは、行き先がわかっていてガードのバイトの外にあるか、コインを消す書き込みです。コインを消す書き込みの行き先は、`SiteOK` がブロックバッファの中に置きます。ジャンプのルーチンでは、番号がわかっていて表の中にあります。ポインタを通す読みと時間は `SiteOK` が与えます。だから部屋のどのフレームのどの命令も、新しい仮定なしに `Clean` です。
+
+```
+cleanS(A)          :=  pc(A) ≥ 0x8000  ∧  (pc(A) = erase  ∨  書き込みの行き先がわかっていて Plain)  ∧  (pc(A) = JumpEngine → A がわかっていて表の長さより小さい)
+clean_of_sim       :  CleanFacts,  A が m を覆う,  cleanS(A),  SiteOK(m)  →  Clean(m)
+clean_of_rows      :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  Clean(tr_n(j))
+Run.roomCleanE     :  確認,  Run  →  CleanE                       （前の欄 room.cleanE）
+Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE     （RoomRun.InRoom）
+```
+
+`CleanFacts` は `mapCheck` の一部です。場所の待ちのループはガードのもので、最後のドットはガードのもの以下で、ブロックバッファのどのバイトもガードのバイトではありません。この確認を足しても、`mapCheck` はプログラムで約 2.6 秒です。
 
 ## しくみ
 
@@ -66,7 +96,7 @@ Lean: `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。`Theorems/Si
 ## 前提（Lean では証明していない）
 
 * **`SiteOK`.** 最初の操作から入るまでのフレームの各命令で。それらの各フレームは操作のルーチンで始まる。これは [部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md) が仮定しているものです（`Route.Changes.roomSites`。`roomStay` は定理）。
-* **`RoomRun` へのつなぎ.** `map_of_rows` は `Route.Changes` の機械についての定理です。`RoomRun` のフィールド `tiles` は、そのフレーム `E`（`fm(E − 1)`、`pad(E)`）についてです。このフレームが `Route.Changes` のフレーム `a₂ − 1` であることは、まだ Lean に書いていません。それがあれば、`tiles` は `room_map` から出ます。
+* **つなぎ `roomEnter`.** `RoomRun` のフレーム `E`（`fm(E − 1)`、`pad(E)`）は、部屋の中の `Route.Changes` のフレームの 1 つです。同じフレームの 2 つの番号づけのつなぎで、`roomCtl` と同じ種類です（項目 1-1-0-4）。`RoomRun` の欄 `tiles` はなくなりました。`Run.roomTiles` が `room_map` とこのつなぎから証明します。
 * **地図の残り**（項目 1-1-c-7-12）. 証明したのは、地図で 0 のビットだけです。レンガ、床、壁がそのまま残ることと、ほかのフィールドの数が地図のものであることは、証明していません。
 
 **ファイル.** `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。

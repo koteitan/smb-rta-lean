@@ -2,13 +2,19 @@
 
 # The state at the vertical pipe's entry, from the title
 
-**Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 115 bytes and 13 bytes under a mask have the values of the reference entry. Here the idle loop and 67 of these 128 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has three fields:
+**Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 115 bytes and 13 bytes under a mask have the values of the reference entry. Here the idle loop and 67 of these 128 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has two fields:
 
 * `entryRest₁`: the condition `Entry` on the other 61 bytes only, and the pipe's timer (`Rest`). This is a condition on one state.
-* `upStart₁`: each frame from control to the entry starts in the idle loop, in control (`FrameStart`).
-* `upClean₁`: each instruction of these frames meets `Clean` with the 65 kept bytes among the bytes that a store through an index or a pointer does not touch.
+* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 65 kept bytes among the bytes that a store through an index or a pointer does not touch.
 
-The notation: `seq n` is the machine when frame `n` begins, and `seq (n+1) = frame(seq n, inp n)`. Frame 0 is the frame before control, so `seq 1` has control. `a` is `a₁`, the machine after the entry frame. `e` is the reference entry. A watched byte is `(i, k, v)`: its index, the bits it asks, and the value of `e`.
+That each of these frames starts in the idle loop in control (`FrameStart`) is proved too (item 1-1-b-3-4-3): by induction from the press of Start, under `upClean₁`. The field `upStart₁` is gone. For this, the entry `a₁` is now the first frame from control on whose machine has no control (as `a₂` and `b₂` are first frames), and `Changes` has the bound `dA` in place of the number `a₁`.
+
+The notation: `seq n` is the machine when frame `n` begins, and `seq (n+1) = frame(seq n, inp n)`. Frame 0 is the frame before control, so `seq 1` has control. `ctl(m)` says that `m` has control: the mode is the game's, the task is the game core, the routine is the player's. `a` is `a₁`, the machine after the entry frame:
+
+```
+a₁ = upEnd(seq, dA) = the least n with 1 ≤ n ≤ 1 + dA and (¬ctl(seq n) or n = 1 + dA)
+```
+ `e` is the reference entry. A watched byte is `(i, k, v)`: its index, the bits it asks, and the value of `e`.
 
 ```
 Watched(W, m)  :  ∀ (i, k, v) ∈ W,  m[i] & k = v & k
@@ -19,7 +25,16 @@ IdleAt(m)      :  m has ended a frame in the idle loop, with the pc and the stac
 Rest(m)        :  48 ≤ m[ChangeAreaTimer]  ∧  Entry's bytes of restNames have the values of e      (61)
 ```
 
-**The statement.** `entry_of_title`, with the checks `hB` (`TitleStart.check`) and `hK` (`EntryKeep.Checks`):
+**The statements.** `starts_of_title` and `entry_of_title`, with the checks `hB` (`TitleStart.check`) and `hK` (`EntryKeep.Checks`):
+
+```
+Begin(seq, inp)
+∧ ∀ n, seq (n+1) = frame(seq n, inp n)
+∧ ∀ n, 1 ≤ n < a → ctl(seq n)
+∧ ∀ n, 1 ≤ n < a → ∀ j, Clean_G(trace(seq n, inp n, j))
+→ ∀ n, 1 ≤ n < a → FrameStart(seq n)
+```
+
 
 ```
 Begin(seq, inp)                                             (Start on the title, as TitleStart says)
@@ -31,33 +46,38 @@ Begin(seq, inp)                                             (Start on the title,
 → Entry(seq a)
 ```
 
-It comes from three steps:
+They come from these steps:
 
 ```
-Begin.watched  :  Begin(seq, inp) → Watched(kept, seq 1)
+Begin.start    :  Begin(seq, inp) → FrameStart(seq 1) ∧ Watched(kept, seq 1)
 keep_frame     :  FrameStart(m) ∧ Watched(kept, m) ∧ (∀ j, Clean_G(trace(m, i, j)))
                     → (rt(frame(m, i)) = player → Watched(kept, frame(m, i)))
                     ∧ (rt(frame(m, i)) = pipe   → Watched(atEntry, frame(m, i)) ∧ IdleAt(frame(m, i)))
+keep_start     :  FrameStart(m) ∧ Watched(kept, m) ∧ (∀ j, Clean_G(trace(m, i, j))) ∧ ctl(frame(m, i))
+                    → FrameStart(frame(m, i)) ∧ Watched(kept, frame(m, i))
+start_up       :  the induction of keep_start from frame 1:  ∀ n, 1 ≤ n < a → FrameStart(seq n) ∧ Watched(kept, seq n)
 entry_of_rest  :  IdleAt(m) ∧ Watched(atEntry, m) ∧ Rest(m) → Entry(m)
 ```
 
-By induction, `Watched(kept, seq n)` for `1 ≤ n < a`: the routine at `seq (n+1)` is the player's, by `FrameStart(seq (n+1))`. At `seq a` the routine is the pipe's, by `Rest`. So `Watched(atEntry, seq a)` and `IdleAt(seq a)`. If `a = 1`, `seq 1` has control and the routine is the player's, which contradicts `Rest`.
+`start_up` is an induction on `n`. `Begin.start` gives frame 1. If frame `n` starts as `FrameStart` with the kept bytes, the walk ends it in the idle loop with the kept bytes when its routine at the end is the player's (`keep_start`). Control at `seq (n+1)` gives the routine, the mode and the task. Then `Watched(atEntry, seq a)` and `IdleAt(seq a)`: the routine at `seq a` is the pipe's, by `Rest`. If `a = 1`, `seq 1` has control and the routine is the player's, which contradicts `Rest`.
 
-In `Route`, `Run.entry₁` gives `Entry(chg.seq chg.a₁)` from `title`, `upStart₁`, `upClean₁` and `entryRest₁`. `Changes.run₁` takes it as an argument. `Run.change₁`, `Run.change₂`, `Run.start`, `Run.roomStart` and `level_ge_of_parts` take the two checks. `route_1_1` still concludes `1748 + j ≤ L`.
+In `Route`, `Changes.upStay` gives `ctl(seq n)` for `1 ≤ n < a₁` from the choice of `a₁`. `Run.upStart₁` gives `FrameStart(seq n)` for `1 ≤ n < a₁` from `title` and `upClean₁`. `Run.entry₁` gives `Entry(chg.seq chg.a₁)` from `title`, `Run.upStart₁`, `upClean₁` and `entryRest₁`. `Changes.run₁` takes it as an argument. `Run.change₁`, `Run.change₂`, `Run.start`, `Run.roomStart` and `level_ge_of_parts` take the two checks. `route_1_1` still concludes `1748 + j ≤ L`.
 
-Lean: `Theorems/EntryKeep.lean` (`restNames`, `atEntry`, `kept`, `Rest`, `IdleAt`, `guardOf`, `walkE`, `keepCheck`, `nearCheck`, `listCheck`, `Checks`, `keep_frame`, `Begin.watched`, `watched_up`, `watched_entry`, `entry_of_rest`, `entry_of_title`), `Theorems/Route.lean` (`Changes.entryRest₁`, `Changes.upStart₁`, `Changes.upClean₁`, `Changes.one_le`, `Changes.run₁`, `Run.entry₁`). The private proof: `entry_near`, `entry_keep`, `entry_lists` by `native_decide`, and `entry_checks`.
+Lean: `Theorems/EntryKeep.lean` (`restNames`, `atEntry`, `kept`, `Rest`, `IdleAt`, `guardOf`, `finE`, `walkE`, `keepCheck`, `nearCheck`, `listCheck`, `Checks`, `fin_frame`, `keep_frame`, `keep_start`, `start_to`, `Begin.start`, `Begin.watched`, `watched_up`, `watched_entry`, `start_up`, `starts_of_title`, `entry_of_rest`, `entry_of_title`), `Theorems/Route.lean` (`upEnd`, `Changes.dA`, `Changes.a₁`, `Changes.upStay`, `Changes.entryRest₁`, `Changes.upClean₁`, `Changes.one_le`, `Changes.run₁`, `Run.upStart₁`, `Run.entry₁`). The private proof: `entry_near`, `entry_keep`, `entry_lists` by `native_decide`, and `entry_checks`.
 
 ## How it works
 
-**Frame 0.** `TitleStart` makes a set of frame-start states that covers every machine from the press to frame 0. Frame 0 begins in a state of its near group. `nearCheck` walks the near group's frames again and asks at each end, besides control and the speed 0, that the 65 kept bytes are known with the values of `e`. The near states know these bytes, because the game writes them with known values between the press and control.
+**Frame 0.** `TitleStart` makes a set of frame-start states that covers every machine from the press to frame 0. Frame 0 begins in a state of its near group. `nearCheck` walks the near group's frames again and asks at each end, besides control and the speed 0, that the 65 kept bytes are known with the values of `e`, and that the state is in the idle loop as a frame in control starts (`FrameKeep.endOK`: the program counter and the stack, the dot and its flags, NMI on, no strobe). It also asks that the title's program is the program of the frames from control. The near states know these bytes, because the game writes them with known values between the press and control.
 
 **One frame from control.** The walk is that of [FrameKeep](f-6-19-FrameKeep.md). The frame starts in the idle loop with the player's routine, the mode and the task known, and the kept bytes known. Every other byte is not known. A store through an index or a pointer forgets every byte but those of the guard's list. `Clean` says that it does not touch them. The end of a frame is good if the routine is known and:
 
-* if it is the player's routine, the kept bytes are known with their values;
+* if it is the player's routine, the kept bytes are known with their values, and the state is in the idle loop as a frame in control starts (`FrameKeep.endOK`);
 * if it is the pipe's routine, the bytes of `atEntry` are known with their values, and the state is in the idle loop as `IdleAt` asks (the dots, the flags, the program counter and the stack of `e`);
 * any other routine (a death, a power-up, the flagpole, a side pipe, ...) is good with no more.
 
 The search for the table keeps the accumulator apart where it is about to be stored as the routine. Without this, the routine of a death and that of a power-up were joined, and the routine was not known at 110 ends.
+
+**Why `a₁` is the first frame without control.** The walk does not ask the mode and the task at the end. If it asks them with the values at control, it fails at one end: the routine is the player's, but the mode is 2 and the task 0. This is the axe at the end of a castle (`HandleAxeMetatile` writes the mode and the task and keeps the routine). The walk knows no map, so it cannot exclude it. So the induction takes control at `seq (n+1)` from the choice of `a₁`, and the walk asks only the idle loop.
 
 **Why 61 bytes stay.** The walk knows nothing of the objects on the screen. So it finds frames where a new object comes, an event's music starts, or a new area is set.
 
@@ -71,14 +91,14 @@ The search for the table keeps the accumulator apart where it is about to be sto
 
 The pipe's timer is not proved either. At two of the four ends with the pipe's routine, the side pipe's code has also run in the frame and has read its timer from a table with an index not known. There the walk knows only some bits of the timer: the value is one of 32, 36, 48, 52, 160, 164, 176, 180. The real values are 48, 52 and 160, but the walk cannot tell.
 
-**The checks.** Natively: `nearCheck` 1.2 s, `keepCheck` 4.1 s (a search of 1,104,799 steps and a table of 49,733 states, then the walks), `listCheck` at once.
+**The checks.** Natively (`entry-walk-check`, exit 0): `nearCheck` 1.3 s, `keepCheck` 4.2 s (a search of 1,104,799 steps and a table of 49,733 states, then the walks), `listCheck` at once. The search finds no end that fails, and is the same size as without the idle loop at the player's ends: every such end was already in the idle loop. In the proof build the three checks take 7.1 s.
 
 ## Measured
 
 `entry-keep-check FM2` (exit 0):
 
 * Start on the title on 100 frames, no other input: 79 runs reach control, all with the kept bytes.
-* The TAS from control to the entry: 368 frames, all `FrameStart`, every instruction `Clean` (1,917,255), the kept bytes on every frame. At the entry `Rest`, `atEntry`, `IdleAt` and `Entry` hold.
+* The TAS from control to the entry: 368 frames, all `FrameStart`, every instruction `Clean` (1,917,255), the kept bytes on every frame. At the entry `Rest`, `atEntry`, `IdleAt` and `Entry` hold. So on the TAS the first frame without control after control is the entry, and `a₁` is the frame of the entry as before.
 * The reference entry: 440 frames, the same.
 * Random inputs from control (300 runs, 127,841 frames, 5,390 of them paused) and from frames of the TAS (300 runs, 75,241 frames): no frame against `FrameStart` or `Clean`, no frame that loses a kept byte. The largest dot of an instruction is 70,697 (the limit is 89,278).
 * The reference's inputs with 0 to 39 frames of standing before the last jump: 38 entries, all with `Rest`, `atEntry`, `IdleAt` and `Entry`.
@@ -88,5 +108,6 @@ The six bytes written through an index were found this way. With them among the 
 ## Assumptions (not proved in Lean)
 
 * `entryRest₁`: `Rest` at the entry: the pipe's timer and 61 bytes. Before, `entry₁` asked the idle loop, the timer and 128 bytes.
-* `upStart₁`: each frame from control to the entry starts in the idle loop in control. New.
-* `upClean₁`: each instruction of these frames is `Clean`; a store through an index or a pointer does not touch the 65 kept bytes. New. A run that fills one of these slots before the entry is outside the theorem: the enemy slots 3 and 6 and the state of slot 4, the fireballs, the blocks 2 and 3, the misc objects 0 to 7, the cannons 1 to 5, the scores 3, 4 and 6. No real run here does.
+* `upClean₁`: each instruction of these frames is `Clean`; a store through an index or a pointer does not touch the 65 kept bytes. A run that fills one of these slots before the entry is outside the theorem: the enemy slots 3 and 6 and the state of slot 4, the fireballs, the blocks 2 and 3, the misc objects 0 to 7, the cannons 1 to 5, the scores 3, 4 and 6. No real run here does.
+
+`upClean₁` is not reduced here. `entry-clean-use` (exit 0) counts the places where the walk leaves an instruction to `Clean`, because its state does not decide it. The bound on the dot (`late`) is used at all 9,068 places that the walk passes. A store through an index or a pointer with a target not known: 710 places, in 324 routines of objects, drawings, the vine, the fireworks, the bridge, the scores and others. `LDA (zp),Y` with a pointer not known: 47 places (the area parser, the enemy data, the music). The jump with an index not known: 1 place. Of the 724 places with such a store, the walk knows the target on every visit at 14 places only. So asking `Clean` only where the walk does not know it would take 14 places off.

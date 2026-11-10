@@ -2,6 +2,7 @@ import Theorems.FastTakeoff
 import Theorems.AirCap
 import Theorems.SidePipe
 import Theorems.SideEntryRule
+import Theorems.SideFrame
 import Theorems.FrameModel
 import Theorems.SurfaceFrames
 
@@ -17,7 +18,7 @@ The arcs are hypotheses: that real frames follow `vstep` is not proved. What fol
 here, with the theorems of `AirCap`, `FastTakeoff` and `Jump`. Most fields are about one frame: the input and the height of a frame, standing, what the
 left wall does to a frame, the stored speed, the entry. From these and small checks: before `hitF` he is left of the corner (`corner_late`), his feet are
 low by the earliest jump (`low_by`), with no wall hit he stays on the floor up to an early takeoff (`floor_low`), `RunningSpeed` is 0 at a stop by `runF` or
-he is far back (`run_short`). The entry frame is defined on the real machines, and one pass of the side check puts it at the mouth (`RoomRun.mouth_of`, `SideEntryRule`).
+he is far back (`run_short`). The entry frame is defined on the real machines, and the walk of the whole frame puts it at the mouth (`RoomRun.mouth_of`, `SideFrame`).
 
 The case split, all by `cases` and `by_cases`:
 * over the block in one jump (no landing): impossible, `no_landing`;
@@ -359,16 +360,12 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N
     ¬FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) → fr.ab n < sy.AirFastSpeed.toNat
   /-- frame `E` enters the side pipe: an instruction of it, from `fm (E - 1)` with the input `pad E`, writes the side pipe's routine -/
   enters : SideEntryRule.Enters sy (fm (E - 1)) (pad E)
-  /-- each such write ends one pass of the side check, with reads `RowOK` -/
-  pass : ∀ n, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n →
-    SideEntryRule.PassR (SideEntryRule.spots sy m) (PipeEntryRule.envOf m) (PipeEntryRule.trace (fm (E - 1)) (pad E)) n
-  /-- at each read of the block buffer routine before the write, the side pipe's tiles are only in the pipe's column. `RoomMap.map_of_rows` proves it on the frames of the room. -/
-  tiles : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j < n → PoleEntryRule.AtRead (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) →
-    PoleEntryRule.TilesOK (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j)
-  /-- `P(E)` is the position when the block buffer routine reads the page for the side check, before the write -/
-  pos : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j < n →
-    PoleEntryRule.AtEntry (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) →
-    ∃ f : Int, 0 ≤ f ∧ fr.P E = 256 * (PoleEntryRule.px (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) : Int) + f
+  /-- up to the write, frame `E` does not come to the scroll handler's store of the position or to the routine of the head's collision with a block -/
+  edgeE : ∀ n, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → ∀ j, j ≤ n →
+    (PipeEntryRule.trace (fm (E - 1)) (pad E) j).pc ≠ PipeWrites.edgeStore sy m ∧ (PipeEntryRule.trace (fm (E - 1)) (pad E) j).pc ≠ PipeWrites.headAt sy m
+  /-- `P(E)` is the position at the end of the move (`PlayerSubs`), before the write -/
+  movedE : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j ≤ n → (PipeEntryRule.trace (fm (E - 1)) (pad E) j).pc = sy.PlayerSubs →
+    fr.P E = posP sy (PipeEntryRule.trace (fm (E - 1)) (pad E) j)
 
 /-! ## What the computation provides -/
 
@@ -555,8 +552,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   lenB : arcCheck sy m (standY sy N.h) N.h (lenOk N.lenB N.lenB) = true
   /-- every jump from the floor -/
   floor : ∃ hop, arcCheck sy m (groundY sy) N.h (floorArcOk sy N.h N.rise hop) = true
-  /-- the entry: one pass of the side check -/
-  sideRule : SideEntryRule.ruleCheck sy m = true
+  /-- the entry: one whole frame -/
+  sideFrame : SideFrame.sideFrameCheck sy m = true
   /-- the frames of the fall -/
   fall : airCheck sy m = true
   safe : safeCheck sy m (phi sy m (room sy N).s0 + a1 sy m * (N.fall : Int)) (N.runF - N.fall - 1) = true
@@ -2803,18 +2800,40 @@ theorem ab_of_run : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.h
   · exact Or.inl (r.ab_clean h1 h2 hc)
   · exact Or.inr ⟨((r.clean n h1 h2).resolve_left hc).1, fun h3 => r.ab_early n h1 h3 h2 hc⟩
 
-/-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `SideEntryRule.mouth_of_pass`: one pass of the side check on the real frame -/
-theorem mouth_of (H : Checks sy m N) : SidePipe.mouthP sy 0 ≤ r.fr.P r.E :=
-  SideEntryRule.mouth_of_pass H.sideRule r.enters (fun n hw => SideEntryRule.pass_of (r.pass n hw) (r.tiles n · hw)) r.pos
+/-- at each read of the block buffer routine before the write in frame `E`, the side pipe's tiles are only in the pipe's column. No longer a field of `RoomRun`: `RoomMap.map_of_rows` proves it
+on the frames of the room, and `Route.Run.roomTiles` joins frame `E` to them. -/
+def TilesE (r : RoomRun sy m N) : Prop :=
+  ∀ n j, SideEntryRule.WriteStep sy (r.fm (r.E - 1)) (r.pad r.E) n → j ≤ n → PoleEntryRule.AtRead (SideEntryRule.spots sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j) →
+    PoleEntryRule.TilesOK (SideEntryRule.spots sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j)
+
+/-- frame `E` starts in the idle loop, in control. No longer a field of `RoomRun`: `RoomMap.start_of_rowsF` proves it on the frames of the room, and `Route.Run.roomStartE` joins
+frame `E` to them. -/
+def StartE (r : RoomRun sy m N) : Prop := PipeWrites.FrameStart (PipeWrites.guardOf sy m) (PipeEntryRule.envOf m) (r.fm (r.E - 1))
+
+/-- each instruction of frame `E` up to the write is `Clean`. No longer a field of `RoomRun`: `RoomMap.clean_of_rows` proves it on the frames of the room, and
+`Route.Run.roomCleanE` joins frame `E` to them. -/
+def CleanE (r : RoomRun sy m N) : Prop :=
+  ∀ n, SideEntryRule.WriteStep sy (r.fm (r.E - 1)) (r.pad r.E) n → ∀ j, j ≤ n → PipeWrites.Clean (PipeWrites.guardOf sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j)
+
+/-- what the walk of the room's frames gives about frame `E`: the tiles at its reads, the start in control, `Clean` on each instruction up to the write (`Route.Run.inRoom`) -/
+structure InRoom (r : RoomRun sy m N) : Prop where
+  tiles : r.TilesE
+  start : r.StartE
+  clean : r.CleanE
+
+/-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `SideFrame.mouth_of_frame`: the walk of the whole frame `E`; `hr`: what the room's frames give about it -/
+theorem mouth_of (H : Checks sy m N) (hr : r.InRoom) : SidePipe.mouthP sy 0 ≤ r.fr.P r.E :=
+  SideFrame.mouth_of_frame H.sideFrame r.enters hr.start (fun n hw j hj => ⟨hr.clean n hw j hj, hr.tiles n j hw hj, r.edgeE n hw j hj⟩) r.movedE
 
 /-- the frames as numbers -/
-def toCore (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) : RoomCore sy m N :=
+def toCore (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) (hr : r.InRoom) : RoomCore sy m N :=
   { r.toRoomFields with
     start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
-    frames := r.frames_of H, move_top := r.move_top_of H st, mouth := r.mouth_of H, ab_of := r.ab_of_run }
+    frames := r.frames_of H, move_top := r.move_top_of H st, mouth := r.mouth_of H hr, ab_of := r.ab_of_run }
 
-/-- **The entry comes at least `goalF + aboveF` frames after first control.** `st` is the state at first control on the machine. -/
-theorem entry_ge (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) : r.C + N.goalF + N.aboveF ≤ r.E := (r.toCore H st).entry_ge H
+/-- **The entry comes at least `goalF + aboveF` frames after first control.** `st` is the state at first control on the machine, `hr` what the room's frames give about frame
+`E`. -/
+theorem entry_ge (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) (hr : r.InRoom) : r.C + N.goalF + N.aboveF ≤ r.E := (r.toCore H st hr).entry_ge H
 
 end RoomRun
 

@@ -17,6 +17,8 @@ import Theorems.ScreenStart
 import Theorems.TitleStart
 import Theorems.EntryKeep
 import Theorems.ControlStart
+import Theorems.StartRun
+import Theorems.RoomMap
 
 /-!
 # The whole route: 1-2 does not start before frame 1748
@@ -43,18 +45,17 @@ namespace Smbrta.Route
 open CastleToLevel (ticks wait level_ge Frames Segs Flag Kind seen)
 open PipeTransitionAll (Names)
 
-/-- Up to the vertical pipe: the hypotheses of `PipeFrames.no_entry_of_reads`, with the entry on real frames (`PipeWrites.rule_on_framesS`: the walk takes the position at the end of the move,
+/-- Up to the vertical pipe: the hypotheses of `PipeFrames.no_entry_of_reads`, with the entry on real frames (`PipeWrites.rule_on_frameS`: the walk takes the position at the end of the move,
 the frame model's `P₂`), and the frame `E` on which he enters. The frames up to `E`
 are read from their own machines (`own`), and the frames not counted between them keep the speed and the position (`lags`, `LagFrames`): `Pipe.reads`. So they follow each other
-and keep the top speed: `Pipe.next`, `Pipe.speed`. That he stands still at control is `Run.still`. -/
+and keep the top speed: `Pipe.next`, `Pipe.speed`. That he stands still at control is `Run.still`. That every frame from control to the entry, and so the entering frame,
+starts in the idle loop in control is a theorem from the machine at control (`Pipe.startE`, `Run.pipeStart₁`). -/
 structure Pipe (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) where
   amax : Int
   fr : Nat → TopSpeed.Frame (TopSpeed.top sy : Int) amax
   /-- the machine when counted frame `t` begins, and its input -/
   fm : Nat → Machine
   inp : Nat → UInt8
-  /-- a frame that enters starts in the idle loop, in control -/
-  start : ∀ t, PipeEntryRule.Enters sy (fm t) (inp t) → PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (fm t)
   /-- its instructions up to the routine's write: stores through an index or a pointer, reads through a pointer, jumps, time -/
   clean : ∀ t, PipeEntryRule.Enters sy (fm t) (inp t) → ∀ n, PipeEntryRule.WriteStep sy (fm t) (inp t) n → ∀ j, j ≤ n →
     PipeWrites.Clean (PipeWrites.guardOf sy m0) (PipeEntryRule.trace (fm t) (inp t) j)
@@ -72,27 +73,40 @@ structure Pipe (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) where
   openB : (fr N).P' ≤ posP sy m0 + D
   /-- the frame he enters the vertical pipe -/
   E : Nat
+  /-- it is a frame from control on -/
+  one_le : 1 ≤ E
   enter : PipeEntryRule.Enters sy (fm E) (inp E)
   /-- the frames from 1 to `E` are read from the machines: frame `t` begins with the speed, subspeed and position of `fm t`, and before `E` it ends with those of its own end -/
   own : PipeFrames.ReadsOwn sy E fm inp fr
-  /-- the frames not counted between them: each starts in the idle loop and its instructions are `Clean`; if it calls the routine of the mode, it keeps the three values -/
+  /-- every frame from control to the entry, counted or not: it ends in control and each of its instructions is `Clean`. In a frame not counted, a store through an index
+  or a pointer before the call of the mode's routine does not touch the speed, the subspeed or the position; if it calls the routine of the mode, it keeps the three values -/
   lags : PipeFrames.Lags sy m0 E fm inp
 
 /-- the frames from 1 to `E` read from the machines, the end of frame `t` from the machine of the next counted frame: the old field `reads`, from the frames not counted.
-`hc` is the check on the ROM. -/
-theorem Pipe.reads {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hc : LagFrames.lagCheck sy m0 = true) (p : Pipe sy m0 N D) : PipeFrames.Reads sy p.E p.fm p.fr :=
-  PipeFrames.reads_of_lags hc p.own p.lags
+`hc` and `hk` are checks on the ROM, `hs` the start of the machine at control (`Run.pipeStart₁`). -/
+theorem Pipe.reads {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (p : Pipe sy m0 N D)
+    (hs : PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (p.fm 1)) : PipeFrames.Reads sy p.E p.fm p.fr :=
+  PipeFrames.reads_of_lags hc hk p.own p.lags hs
+
+/-- **The entering frame starts in the idle loop, in control**: the old field `start`, by induction from the machine at control over every frame up to the entry
+(`PipeFrames.Lags.starts`). `hk` is the walk's check on the ROM, `hs` the start of the machine at control (`Run.pipeStart₁`). -/
+theorem Pipe.startE {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hk : StartRun.walkCheck sy m0 = true) (p : Pipe sy m0 N D)
+    (hs : PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (p.fm 1)) :
+    PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (p.fm p.E) :=
+  p.lags.startE hk p.one_le hs
 
 /-- the frames up to the entry follow each other: the old field `next`, from the frames read from the machines -/
-theorem Pipe.next {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hc : LagFrames.lagCheck sy m0 = true) (p : Pipe sy m0 N D) :
+theorem Pipe.next {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (p : Pipe sy m0 N D)
+    (hs : PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (p.fm 1)) :
     ∀ t, 1 ≤ t → t < p.E → PoleGrab.Next (p.fr t) (p.fr (t + 1)) :=
-  PipeFrames.next_of_reads (p.reads hc)
+  PipeFrames.next_of_reads (p.reads hc hk hs)
 
 /-- the speed at the end of frame `N` is at most the top speed, when `1 ≤ N ≤ E` and he stands still at control (`Run.still`): the old field `speed` -/
-theorem Pipe.speed {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hc : LagFrames.lagCheck sy m0 = true) (p : Pipe sy m0 N D) (hs : SurfaceFrames.vOf sy (p.fm 1) = 0)
+theorem Pipe.speed {sy : Syms} {m0 : Machine} {N : Nat} {D : Int} (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (p : Pipe sy m0 N D)
+    (hs₀ : PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (p.fm 1)) (hs : SurfaceFrames.vOf sy (p.fm 1) = 0)
     (h16 : 16 ≤ (TopSpeed.top sy : Int)) (h1 : 1 ≤ N) (h2 : N ≤ p.E) :
     -(TopSpeed.top sy : Int) ≤ (p.fr N).v' ∧ (p.fr N).v' ≤ (TopSpeed.top sy : Int) :=
-  PipeFrames.speed_end h16 (p.reads hc) hs N h1 h2
+  PipeFrames.speed_end h16 (p.reads hc hk hs₀) hs N h1 h2
 
 /-- the frames left in the change into the room, read from a machine: `PipeChangeBound.leftOf` with the table of the reference entry -/
 abbrev left₁ (sy : Syms) (nm : Names) (m0 : Machine) : Machine → Nat :=
@@ -146,6 +160,9 @@ if there is none -/
 abbrev roomEnd (sy : Syms) (nmS : Names) (m0 : Machine) (seq : Nat → Machine) (b d : Nat) : Nat :=
   firstWith (fun n => (seq n).ram.get! (ScreenPage.placesR sy nmS m0).rtI != (ScreenPage.refR m0).ram.get! (ScreenPage.placesR sy nmS m0).rtI) b d
 
+/-- the entry into the vertical pipe: the first frame from 1 (the first control) on, within `d` frames, whose machine has no control; `1 + d` if there is none -/
+abbrev upEnd (sy : Syms) (seq : Nat → Machine) (d : Nat) : Nat := firstWith (fun n => !controllable sy (seq n)) 1 d
+
 /-- The two changes of area on the real machines of a run. There is one sequence of machines, for both changes, numbered as `kind` numbers the frames. `e₁`, `c₂`, `e₂`, `c₃` count frames without
 the `lag` frames, as `Segs` does. -/
 structure Changes (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (nm₂ nx₂ nmS : Names) (kind : Nat → Kind) (e₁ c₂ e₂ c₃ : Nat) where
@@ -154,34 +171,34 @@ structure Changes (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeE
   /-- the input of frame `n` -/
   inp : Nat → UInt8
   next : ∀ n, seq (n + 1) = PipeTransition.frame (seq n) (inp n)
-  /-- the first change: the machine after frame `e₁`, and the machine after frame `c₂` -/
-  a₁ : Nat
+  /-- the first change: the machine after frame `e₁`, the first from the first control on that has no control (`Changes.a₁`), and the machine after frame `c₂`. `dA` is a
+  bound on the frames to the entry. -/
+  dA : Nat
   b₁ : Nat
-  order₁ : a₁ ≤ b₁
-  ha₁ : seen kind a₁ = e₁ + 1
+  order₁ : upEnd sy seq dA ≤ b₁
+  ha₁ : seen kind (upEnd sy seq dA) = e₁ + 1
   hb₁ : seen kind b₁ = c₂ + 1
   /-- the part of the condition on the machine at the entry that the press of Start and the frames from control do not give: the pipe's timer and the bytes of
   `EntryKeep.restNames` (`Run.entry₁` gives the whole condition) -/
-  entryRest₁ : EntryKeep.Rest d₁ (PipeTransition.entry m0) (seq a₁)
-  /-- each frame from control to the entry starts in the idle loop, in control -/
-  upStart₁ : ∀ n, 1 ≤ n → n < a₁ → PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq n)
-  /-- each instruction of these frames is `Clean`, with the bytes that the frames keep among the bytes that a store through an index or a pointer does not touch -/
-  upClean₁ : ∀ n, 1 ≤ n → n < a₁ → ∀ j, PipeWrites.Clean (EntryKeep.guardOf sy m0 d₁ (PipeTransition.entry m0)) (PipeEntryRule.trace (seq n) (inp n) j)
+  entryRest₁ : EntryKeep.Rest d₁ (PipeTransition.entry m0) (seq (upEnd sy seq dA))
+  /-- each instruction of the frames from control to the entry is `Clean`, with the bytes that the frames keep among the bytes that a store through an index or a pointer does not
+  touch (that each of these frames starts in the idle loop in control is `Run.upStart₁`) -/
+  upClean₁ : ∀ n, 1 ≤ n → n < upEnd sy seq dA → ∀ j, PipeWrites.Clean (EntryKeep.guardOf sy m0 d₁ (PipeTransition.entry m0)) (PipeEntryRule.trace (seq n) (inp n) j)
   /-- control at the end -/
   ctl₁ : controllable sy (seq b₁) = true
   /-- a `lag` frame is a paused frame: the low bit of the pause byte is set when it ends -/
-  paused₁ : ∀ n, a₁ ≤ n → n < b₁ → kind n = .lag → PipeChangeEnd.Paused d₁ (seq (n + 1))
+  paused₁ : ∀ n, upEnd sy seq dA ≤ n → n < b₁ → kind n = .lag → PipeChangeEnd.Paused d₁ (seq (n + 1))
   /-- on a frame of the pipe's routine, each instruction meets the condition at the places -/
-  places₁ : ∀ n, a₁ ≤ n → n < b₁ → PipeChangeBound.inPipe sy sy.EngVerticalPipe (seq n) = true → ∀ j, PipeChangeEnd.PlaceOK d₁.places (PipeEntryRule.trace (seq n) (inp n) j)
+  places₁ : ∀ n, upEnd sy seq dA ≤ n → n < b₁ → PipeChangeBound.inPipe sy sy.EngVerticalPipe (seq n) = true → ∀ j, PipeChangeEnd.PlaceOK d₁.places (PipeEntryRule.trace (seq n) (inp n) j)
   /-- at the exit, the sound's bytes, the song and the screen buffer are as the condition says -/
-  quiet₁ : ∀ n, a₁ ≤ n → n ≤ b₁ → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (seq n) →
+  quiet₁ : ∀ n, upEnd sy seq dA ≤ n → n ≤ b₁ → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (seq n) →
     SideChangeEnd.Quiet (PipeChangeEnd.quietQ d₁ (PipeTransition.entry m0)) (seq n) ∧ PipeChangeEnd.SongAt d₁.song (seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (seq n)
   /-- no Start on the frames of the game core after the pipe -/
-  noStart₁ : ∀ n, a₁ ≤ n → n < b₁ → SideChangeEnd.coreFrame sy sy.EngVerticalPipe (seq n) = true → SideChangeEnd.noStart (inp n) = true
+  noStart₁ : ∀ n, upEnd sy seq dA ≤ n → n < b₁ → SideChangeEnd.coreFrame sy sy.EngVerticalPipe (seq n) = true → SideChangeEnd.noStart (inp n) = true
   /-- `b₁` is the first control after the entry -/
-  ctlFirst₁ : ∀ n, a₁ ≤ n → n < b₁ → controllable sy (seq n) = false
+  ctlFirst₁ : ∀ n, upEnd sy seq dA ≤ n → n < b₁ → controllable sy (seq n) = false
   /-- at the exit, the sound's pause flag is 0 and the game timer is not 000: the time is not up on the way -/
-  time₁ : ∀ n, a₁ ≤ n → n ≤ b₁ → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (seq n) → SideChangeEnd.TimeOK d₁.nx (seq n)
+  time₁ : ∀ n, upEnd sy seq dA ≤ n → n ≤ b₁ → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (seq n) → SideChangeEnd.TimeOK d₁.nx (seq n)
   /-- the second change: the machine after frame `e₂`, the first from `b₁` on that has left the player's routine (`Changes.a₂`), and the machine after frame `c₃`, the first with control from
   there on (`Changes.b₂`). `dR` and `d₂` are bounds on the frames to them. -/
   dR : Nat
@@ -189,7 +206,7 @@ structure Changes (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeE
   ha₂ : seen kind (roomEnd sy nmS m0 seq b₁ dR) = e₂ + 1
   hb₂ : seen kind (firstCtl sy seq (roomEnd sy nmS m0 seq b₁ dR) d₂) = c₃ + 1
   /-- at the entry, the bytes of the condition that the room does not give have the values of a reference machine: the routine (so the routine that the room left for is the side pipe's),
-  the player's state and height, the screen's buffer, the sound, the level's number. The room gives the rest (`ScreenPage.entry_rest`). -/
+  the player's vertical position, the screen's buffer, the sound, the level's number (16 bytes). The room gives the rest (`ScreenPage.entry_rest`). -/
   entry₂ : ScreenPage.EntryRest nmS (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (seq (roomEnd sy nmS m0 seq b₁ dR))
   /-- the room, from control to the side pipe: each instruction (the rows of the first change give `ScreenPage.Room` at control) -/
   roomSites : ∀ n, b₁ ≤ n → n < (roomEnd sy nmS m0 seq b₁ dR) → ∀ j, ScreenPage.SiteOK (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (seq n) (inp n) j)
@@ -208,6 +225,14 @@ structure Changes (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeE
 
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
+
+/-- **The entry into the vertical pipe**: the first machine from the first control on that has no control -/
+def Changes.a₁ (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS kind e₁ c₂ e₂ c₃) : Nat := upEnd sy C.seq C.dA
+
+/-- each frame from the first control to the entry begins with control: it holds by the choice of `a₁` -/
+theorem Changes.upStay (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS kind e₁ c₂ e₂ c₃) : ∀ n, 1 ≤ n → n < C.a₁ → controllable sy (C.seq n) = true := fun n h1 h2 => by
+  have h := firstWith_first _ 1 C.dA n h1 h2
+  simpa using h
 
 /-- **The entry into the side pipe**: the first machine from the room's first control on that has left the player's routine -/
 def Changes.a₂ (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS kind e₁ c₂ e₂ c₃) : Nat := roomEnd sy nmS m0 C.seq C.b₁ C.dR
@@ -258,12 +283,7 @@ theorem counted_ge {kind : Nat → Kind} {seq : Nat → Machine} {left : Machine
 
 /-- the entry is after control: `a₁` is not 0 -/
 theorem Changes.one_le {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat} (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS kind e₁ c₂ e₂ c₃) :
-    1 ≤ C.a₁ := by
-  rcases Nat.eq_zero_or_pos C.a₁ with h | h
-  · have := C.ha₁
-    rw [h] at this
-    simp [seen] at this
-  · exact h
+    1 ≤ C.a₁ := firstWith_ge _ 1 C.dA
 
 /-- the first change as `PipeChangeEnd.PipeRun`, with the condition at the entry (`Run.entry₁`) -/
 def Changes.run₁ {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat} (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS kind e₁ c₂ e₂ c₃)
@@ -379,6 +399,8 @@ structure Run (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) (rN : RoomJoin.Nums
   atCtl : pole.seq 0 = chg.seq chg.b₂
   /-- the machine of `room` at first control is the machine at the end of the first change -/
   roomCtl : room.fm room.C = chg.seq chg.b₁
+  /-- the frame of `room` that enters the side pipe is a frame of `chg` in the room, from its first control to the entry -/
+  roomEnter : ∃ k, chg.b₁ ≤ k ∧ k < chg.a₂ ∧ room.fm (room.E - 1) = chg.seq k ∧ room.pad room.E = chg.inp k
   /-- the level change -/
   L : Nat
   /-- the frames after the castle entry, up to the level change, on the real machines of `chg`: one condition at the castle entry, no Start, and the level change
@@ -398,11 +420,17 @@ def Run.T (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nm
 /-- the interval timer's phase at the castle entry -/
 def Run.c (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) : Nat := R.clock.c
 
-/-- **The condition at the vertical pipe's entry**, from the press of Start on the title (`title`), the frames from control to the entry (`upStart₁`, `upClean₁`) and the part
+/-- **Each frame from control to the vertical pipe's entry starts in the idle loop in control**: by induction from the press of Start on the title (`title`), under `upClean₁`.
+Each of these frames begins with control, by the choice of `a₁`. `hB` and `hK` are the checks on the ROM. The old field `upStart₁`. -/
+theorem Run.upStart₁ (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    ∀ n, 1 ≤ n → n < R.chg.a₁ → PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (R.chg.seq n) :=
+  EntryKeep.starts_of_title hB hK R.title R.chg.next R.chg.upStay R.chg.upClean₁
+
+/-- **The condition at the vertical pipe's entry**, from the press of Start on the title (`title`), the frames from control to the entry (`Run.upStart₁`, `upClean₁`) and the part
 that stays assumed (`entryRest₁`). `hB` and `hK` are the checks on the ROM. The old field `entry₁`. -/
 theorem Run.entry₁ (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (R.chg.seq R.chg.a₁) :=
-  EntryKeep.entry_of_title hB hK R.title R.chg.next R.chg.one_le R.chg.upStart₁ R.chg.upClean₁ R.chg.entryRest₁
+  EntryKeep.entry_of_title hB hK R.title R.chg.next R.chg.one_le (R.upStart₁ hB hK) R.chg.upClean₁ R.chg.entryRest₁
 
 /-- the change into the room takes at least 91 frames -/
 theorem Run.change₁ {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
@@ -446,6 +474,13 @@ theorem Run.still (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ 
     SurfaceFrames.vOf sy (R.pipe.fm 1) = 0 := by
   rw [R.pipeAt]
   exact R.title.still hB (R.chg.next 0)
+
+/-- **The machine at control of `pipe` starts a frame in the idle loop, in control**: from the press of Start on the title. `hB` and `hT` are checks on the ROM. -/
+theorem Run.pipeStart₁ (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hB : TitleStart.check sy tc t0 = true)
+    (hT : StartRun.titleCheck sy tc (PipeWrites.guardOf sy m0) m0 = true) :
+    PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (R.pipe.fm 1) := by
+  rw [R.pipeAt]
+  exact StartRun.Begin.start₁G hB hT R.title (R.chg.next 0)
 
 /-- the timer before frame 0, read from the machine when frame 0 begins -/
 theorem Run.s_zero (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hB : TitleStart.check sy tc t0 = true) : (R.clock.s 0).t = t0 :=
@@ -506,6 +541,56 @@ theorem Run.roomStart {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement
     RoomJoin.StartAt sy rN (R.room.fm R.room.C) := by
   rw [R.roomCtl]
   exact RoomStart.PipeRun.start hT₁ hc (R.chg.run₁ (R.entry₁ hB hK)) (R.chg.first₁ hT₁ (R.entry₁ hB hK))
+
+/-- **The side pipe's tiles at the reads of the room's entering frame**, on the real machines: `RoomMap.map_of_rows` on the frames of `chg` in the room, from the rows of the change into
+the room, and `roomEnter`. `hT₁`, `hM`, `hS` are checks on the ROM. The old field `room.tiles`. -/
+theorem Run.roomTiles {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    R.room.TilesE := by
+  obtain ⟨k, h1, h2, e1, e2⟩ := R.roomEnter
+  have he := R.entry₁ hB hK
+  have h := (RoomMap.map_of_rows (a := R.chg.a₂) hM hS R.chg.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+    R.chg.roomSites R.chg.roomStay).2 k h1 h2
+  intro n j _ _ ha
+  rw [e1, e2] at ha ⊢
+  exact h j ha
+
+/-- **The room's entering frame starts in control**, on the real machines: `RoomMap.start_of_rowsF` on the frames of `chg` in the room, from the rows of the change into the room,
+and `roomEnter`. `hT₁`, `hM`, `hS`, `hF` are checks on the ROM. The old field `room.startE`. -/
+theorem Run.roomStartE {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hF : RoomMap.startCheckF sy nmS m0 = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    R.room.StartE := by
+  obtain ⟨k, h1, h2, e1, _⟩ := R.roomEnter
+  have he := R.entry₁ hB hK
+  have h := RoomMap.start_of_rowsF (a := R.chg.a₂) hM hS hF R.chg.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+    R.chg.roomSites R.chg.roomStay k h1 h2
+  show PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (R.room.fm (R.room.E - 1))
+  rw [e1]
+  exact h
+
+/-- **`Clean` on each instruction of the room's entering frame up to the write**, on the real machines: `RoomMap.clean_of_rows` on the frames of `chg` in the room, and
+`roomEnter`. The old field `room.cleanE`. -/
+theorem Run.roomCleanE {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    R.room.CleanE := by
+  obtain ⟨k, h1, h2, e1, e2⟩ := R.roomEnter
+  have he := R.entry₁ hB hK
+  have h := RoomMap.clean_of_rows (a := R.chg.a₂) hM hS R.chg.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+    R.chg.roomSites R.chg.roomStay k h1 h2
+  intro n _ j _
+  show PipeWrites.Clean (PipeWrites.guardOf sy m0) (PipeEntryRule.trace (R.room.fm (R.room.E - 1)) (R.room.pad R.room.E) j)
+  rw [e1, e2]
+  exact h j
+
+/-- **What the room's frames give about its entering frame**: the tiles, the start in control, `Clean` -/
+theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hF : RoomMap.startCheckF sy nmS m0 = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    R.room.InRoom :=
+  ⟨R.roomTiles hT₁ hM hS hB hK, R.roomStartE hT₁ hM hS hF hB hK, R.roomCleanE hT₁ hM hS hB hK⟩
 
 /-- the frames after the timer's count: at least 33 -/
 theorem Run.hD (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hF : FlagRule.Checked fc (FlagRule.dataOf fc)) : 33 ≤ R.Df hF :=

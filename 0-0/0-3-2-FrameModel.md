@@ -89,7 +89,7 @@ move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr â‰
 
 | piece | result |
 |---|---|
-| (1) from the start of the frame to the player's routine | assumption (`at_ctrl`, `before`) |
+| (1) from the start of the frame to the player's routine | above ground: proved from the frame's start in control (`SurfaceFrames.Moves.toAt`, the walk of `CtrlKeep`); in the room: assumption (`at_ctrl`, `before`) |
 | (2) from the player's routine to the scroll handler | proved: `move_model` |
 | (3) from the scroll handler to the frame's end | assumption (`after` or `collide`) |
 
@@ -158,10 +158,10 @@ The writers of the horizontal bytes after the scroll handler, seen on the 3442 f
 
 ## What is not proved
 
-* `before`: from the pad's read to the player's routine the walk closes, as the table shows; this is not a theorem in Lean. The screen update and the sound do not close.
-* For `vert_model`: the two conditions at the player's routine, and that the vertical bytes are those of the frame before there and stay so after the scroll handler (`SurfaceFrames.OnFrames.vBefore`, `vAfter`).
+* `before`, in the room: from the pad's read to the player's routine the walk closes, as the table shows; this is not a theorem there. Above ground it is a theorem: with the condition `FrameKeep.CleanK` on each instruction (no store through a pointer or an index touches the kept bytes, a pointer read does not read a register), the walk of `CtrlKeep` closes from the frame's start, the screen update and the sound included, to the player's routine ([Above ground: the frames from control](../1-1/e-2-SurfaceFrames.md)).
+* For `vert_model`: that the vertical bytes stay after the scroll handler (`SurfaceFrames.OnFrames.vAfter`). Up to the player's routine they are those of the frame before, with the two conditions there: a theorem above ground (`SurfaceFrames.Moves.vBefore`), from the frames not counted (`Moves.lag`) and bit 7 of A of the frame before (`CtlState.prevA`).
 * `after`, `collide`: the collision routine and the game engine do not close. `after` says that there was no hit.
-* The stack pointer, no NMI, `AreaType` and so on in `at_ctrl`: not derived from the state at the frame's start.
+* The stack pointer, no NMI, `AreaType` and so on in `at_ctrl`: in the room not derived from the state at the frame's start. Above ground the stack pointer, no NMI and the routine come from the walk, and `AreaType` and the others from their values at the end of the frame before (`SurfaceFrames.CtlState`).
 * Runs with a frame that runs over. `clean` does not hold on such a frame. None was seen in the room. Even the shortest frame had 1469 instructions after the arrival.
 * That the emulator is the same as the real machine.
 

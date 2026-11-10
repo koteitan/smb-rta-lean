@@ -38,7 +38,7 @@ E + T + D + 107 + ((c_E − T − D) mod 21) ≤ L,  D ≥ 33          Run.hD、
 L ≥ 1748 + j                                                   level_ge_of_parts
 ```
 
-Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.change₂`、`Run.hE`、`Run.hT`、`Run.hc`、`Run.zero`、`Run.still`、`Run.s_zero`、`Run.ph_zero`、`Run.hD`、`Run.hL`、`Run.start`、`Run.atCtl₀`、`Run.entry₁`、`Run.roomStart`、`Changes.roomAt`、`RoomChecks`、`level_ge_of_parts`、非公開の `route_1_1`。`#print axioms route_1_1` に `sorryAx` はありません。`native_decide` の分があります。
+Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.change₂`、`Run.hE`、`Run.hT`、`Run.hc`、`Run.zero`、`Run.still`、`Run.s_zero`、`Run.ph_zero`、`Run.hD`、`Run.hL`、`Run.start`、`Run.atCtl₀`、`Run.entry₁`、`Run.upStart₁`、`Run.pipeStart₁`、`Run.roomStart`、`Run.inRoom`、`Changes.roomAt`、`RoomChecks`、`level_ge_of_parts`、非公開の `route_1_1`。`#print axioms route_1_1` に `sorryAx` はありません。`native_decide` の分があります。
 
 ## 仮定の一覧
 
@@ -46,22 +46,23 @@ Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.chang
 
 | パート | フィールド | 内容 | 確かめた範囲 |
 |---|---|---|---|
-| a | `pipe.fm`, `inp`, `start`, `clean`, `tiles`, `edge`, `moved` | 入るフレームは本物の機械の上にあり、操作できる状態で始まる。書き込みまでの各命令は `Clean`、右足の読みは `TilesOK`。書き込みまでに画面の端で位置を書かず、頭でブロックに当たらない。`P₂` は移動の終わり（`PlayerSubs`）の位置 | 本物の 68,311 フレーム、入る 177 回（[1 フレーム全部: ルーチンのバイトを書く命令](a-5-2-PipeWrites-ja.md)、[移動の終わりの位置](a-5-9-MoveEnd-ja.md)） |
+| a | `pipe.fm`, `inp`, `clean`, `tiles`, `edge`, `moved` | 入るフレームは本物の機械の上にある（操作できる状態で始まることは証明: `Pipe.startE`、`Run.pipeStart₁`）。書き込みまでの各命令は `Clean`、右足の読みは `TilesOK`。書き込みまでに画面の端で位置を書かず、頭でブロックに当たらない。`P₂` は移動の終わり（`PlayerSubs`）の位置 | 本物の 68,311 フレーム、入る 177 回（[1 フレーム全部: ルーチンのバイトを書く命令](a-5-2-PipeWrites-ja.md)、[移動の終わりの位置](a-5-9-MoveEnd-ja.md)） |
 | a | `pipe.openP`, `openB` | 出だしの位置の上限 | [縦の土管に入る](a-4-PipeEntry-ja.md) |
 | a | `pipe.own` | フレーム 1 から `E` までは、そのフレーム自身の機械から読む。操作できるときの速さが 0 であることは証明（`Run.still`） | 本物の 434,206 フレーム（[土管までのフレームを機械から読む](a-5-5-PipeFrames-ja.md)） |
-| a | `pipe.lags` | 数えるフレームのあいだの数えないフレームは本物のフレームの列。それぞれアイドルループで始まり、モードのルーチンの呼び出しまでの各命令は `Clean`。呼ぶなら速さと位置を変えない。呼ばないフレームは証明 | 範囲内の本物の 167,271 の数えないフレーム（[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md)） |
-| b | `chg.a₁`, `b₁`, `order₁`, `ha₁`, `hb₁`, `ctl₁` | `chg.seq` のどの機械が入るときと操作できるときか | 下の 2 つの走りで `route-check` |
-| b | `chg.entryRest₁` | 入るとき: 土管のタイマー ≥ 48 と `EntryKeep.restNames` の 61 バイト（待ちの繰り返しとほかの 67 バイトは `title`、`upStart₁`、`upClean₁` から: `Run.entry₁`） | 437 個の入る状態（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)、[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)） |
-| b | `chg.upStart₁` | 操作できるときから入るまでの各フレームは、待ちの繰り返しの中で操作できる状態で始まる（`FrameStart`） | TAS と本物の走り（[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)） |
+| a | `pipe.lags` | 操作から入るまでの各フレームは、数えるものも数えないものも、操作できる状態で終わり、各命令は `Clean`。数えないフレームでは、モードのルーチンの呼び出しまでの書き込みは速さと位置に触れず、呼ぶなら速さと位置を変えない。各フレームがアイドルループで始まることは証明（`Lags.starts`） | 本物の 193,149 フレーム、入る 134 回（[操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md)）、範囲内の本物の 167,271 の数えないフレーム（[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md)） |
+| a | `pipe.one_le` | 1 ≤ `E` | フレームの番号の付け方から |
+| b | `chg.dA`, `b₁`, `order₁`, `ha₁`, `hb₁`, `ctl₁` | `chg.seq` のどの機械が入るときと操作できるときか。`a₁` はフレーム 1 から最初に操作できない機械（定義。`dA` はそこまでの上限） | 下の 2 つの走りで `route-check` |
+| b | `chg.entryRest₁` | 入るとき: 土管のタイマー ≥ 48 と `EntryKeep.restNames` の 61 バイト（待ちの繰り返しとほかの 67 バイトは `title`、`upClean₁` から: `Run.entry₁`。各フレームが操作中に始まることは `Run.upStart₁` で証明） | 437 個の入る状態（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)、[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)） |
 | b | `chg.upClean₁` | それらのフレームの各命令は `Clean`（保つ 65 バイトを守る） | 同じ走り。入るまでに決まった物の枠を添字で埋める走りは定理の外 |
 | b | `chg.places₁` | 土管のフレームの表の各場所で、点の数が上限以下で、機械がその場所の行のどれかを持つ | 437 個の走りの土管の全部のフレーム、3 種類の入力。証明はしていません |
 | b | `chg.quiet₁` | 出口でポーズの音がなく、曲と画面のバッファが表の行にある | 土管のフレームで Start を押すと成り立たない（437 のうち 129）。押さない走りでは成り立つ |
 | b | `chg.noStart₁` | 土管のあとのゲームコアのフレームで Start を押さない | 入力についての条件。TAS では成り立つ |
 | b | `chg.paused₁` | 切り替えの `lag` のフレームはポーズで終わる（`GamePauseStatus` の最下位ビットが立つ） | Start のある 995 + 823 の `lag` のフレーム、TAS のポーズ（[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)）。証明はしていません |
 | b | `chg.time₁`, `ctlFirst₁` | 1 つ目の切り替えの出口で音のポーズのフラグが 0、ゲームのタイマーが 000 でない。`b₁` は最初の操作。`left₁` が操作の前に 0 にならないことは証明 | 入る状態 15 個 × 3 種類、615 回の走り、TAS（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)）。土管の中でポーズすると成り立たない（そのとき `quiet₁` も成り立たない） |
-| c | `room` | 部屋のフレームの構造。各フレームは `Clean` か、止めて `ReadFrame`。フレーム、縦の状態、覚えている速さは機械から読む（`read_vs`、`read_ab`）。入るフレームは本物の機械で入り、書き込みは横の判定の 1 回の通過の終わり（`enters`、`pass`、`pos`）。その読みのタイル（`tiles`）は部屋のフレームで `RoomMap` が証明し、`E` へのつなぎが残る。最初の機械は `chg` の部屋での操作の機械（`roomCtl`） | TAS と本物の走り（[地下の部屋をつなぐ](c-5-RoomJoin-ja.md)、[本物のフレームと横のモデル](../0-0/0-3-2-FrameModel-ja.md)）（[部屋のブロックの地図](c-7-12-RoomMap-ja.md)） |
+| c | `room` | 部屋のフレームの構造。各フレームは `Clean` か、止めて `ReadFrame`。フレーム、縦の状態、覚えている速さは機械から読む（`read_vs`、`read_ab`）。入るフレームは本物の機械で入る（`enters`）。1 フレーム全部の抽象機械は `edgeE`、`movedE` を使う。その始まり、`Clean`、タイルはつなぎ `roomEnter` を通して `RoomMap` から。最初の機械は `chg` の部屋での操作の機械（`roomCtl`） | TAS と本物の走り（[地下の部屋をつなぐ](c-5-RoomJoin-ja.md)、[本物のフレームと横のモデル](../0-0/0-3-2-FrameModel-ja.md)）（[部屋のブロックの地図](c-7-12-RoomMap-ja.md)、[横の土管に入るフレーム: 1 フレーム全部](c-7-16-SideFrame-ja.md)） |
+| c | `roomEnter` | `room` の入るフレーム `E` の機械と入力は、`chg` の部屋のフレームの 1 つのもの | 列の作り方から |
 | d | `chg.dR`, `d₂`, `ha₂`, `hb₂`, `ctlBy₂` | `a₂` は `b₁` のあとで最初にプレイヤーのルーチンを出た機械、`b₂` はそのあと最初に操作できる機械（定義）。そこまでのフレーム数の上限 | 下の 2 つの走りで `route-check` |
-| d | `chg.entry₂` | 入るときの 18 バイトが参照と同じ（ルーチン、プレイヤーの状態と高さ、画面のバッファ、音、面の番号）。ほかは部屋の歩きから（`ScreenPage.entry_rest`） | 部屋の 1 フレーム全部の歩きは入るフレームの終わりで `Entry2` の 90 バイトのうち 76 を知る（[部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md)） |
+| d | `chg.entry₂` | 入るときの 16 バイトが参照と同じ（ルーチン、プレイヤーの縦の位置、画面のバッファ、音、面の番号）。ほかは部屋の歩きから（`ScreenPage.entry_rest`） | 部屋の 1 フレーム全部の歩きは入るフレームの終わりで `Entry2` の 90 バイトのうち 78 を知る（[部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md)） |
 | d | `chg.roomSites` | 部屋の各命令の `SiteOK`。`Room` は 1 つ目の切り替えの時間の段から（`Changes.roomAt`）、入るまでプレイヤーのルーチンにいることは `a₂` の定義から | 本物の 130,030 フレームと書き換えた走り（[部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md)） |
 | d | `chg.noStart₂` | 土管のあとのゲームコアのフレームで Start を押さない | 入力についての条件。TAS では成り立つ |
 | d | `chg.quiet₂` | 出口でポーズの音が鳴っていない | 土管のフレームで Start を押すと成り立たない（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。押さない走りでは成り立つ |
@@ -85,13 +86,15 @@ Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.chang
 * 大きいマリオ、パワーアップのある走り。パワーアップはゲームを 59 フレーム止めるので、数の部分は `level_ge_of_late` にあります。つなぐのはまだです。
 * 旗の近くに敵がいる走り、旗を越えて戻ってくる走り。
 * 入るフレームが書き込みまでに、画面の端で位置を書くか、頭でブロックに当たる走り（`pipe.edge`）。
+* 横の土管に入るフレームが書き込みまでに、画面の端で位置を書くか、頭でブロックに当たる走り（`room.edgeE`）。
+* 操作から縦の土管までのフレームが、操作できない状態で終わる走り。大きくなる、けが、死ぬ、のどれかです（`pipe.lags.ctl`）。
 * 縦の土管に入るまでに、決まった物の枠（敵の枠 3 と 6、ファイアボール、ブロック 2 と 3 など）を添字で埋める走り（`chg.upClean₁`）。
 * 縦の土管のあとのゲームコアのフレームで Start を押す走り（`chg.noStart₁`）、出口でポーズの音か、表にない曲や画面のバッファがある走り（`chg.quiet₁`）、土管のフレームで次の敵が読み込まれるなど表の行にない走り（`chg.places₁`）、入るときファイアマリオの走り（`chg.entry₁`、`chg.roomStart`）。
 * 城に入ったあと Start を押す走り（`flag`）。ポーズは遅らせるだけです（80 フレームのポーズで 80 フレーム）が、Lean では示していません。
 * 横の土管のあとのゲームコアのフレームで Start を押す走り（`chg.noStart₂`）、出口でポーズの音が鳴っている走り（`chg.quiet₂`）。測った走りではそこでのポーズは操作を遅らせるだけですが、Lean では示していません。
 * 切り替えの中に、ポーズで終わらない `lag` のフレームがある走り（`chg.paused₁`、`chg.paused₂`）。
 * 操作できるまでのゲームコアのフレーム（2 フレーム）で Start を押す走り（`title.noPause`）、タイトルで押したあとの機械が条件を満たさない走り（`title.press`）。
-* 横の土管で `chg.entry₂` を満たさない走り。時間切れが近いときの音楽が鳴っている、ファイアボールが生きている、ブロックの物が生きている、入るフレームがはみ出す、のどれかです。音楽の場合は、別の定理が 1-2 は 1748 フレームより前に始まらないことを示します（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)。音楽を始める 1 フレームの仮定 `start`、`clean`、`below` のもと）。この土管までに 1-1 のパワーアップは 1 つだけですが、Lean では示していません。
+* 横の土管で `chg.entry₂` を満たさない走り。時間切れが近いときの音楽が鳴っている、ファイアボールが生きている、ブロックの物が生きている、入るフレームがはみ出す、のどれかです。音楽の場合は、別の定理が 1-2 は 1748 フレームより前に始まらないことを示します（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)。音楽を始める最初のフレームと、その前の操作中のフレームの仮定 `start`、`ctl`、`clean`、`below` のもと）。この土管までに 1-1 のパワーアップは 1 つだけですが、Lean では示していません。
 
 ## 2 つの切り替え（`chg`）
 
@@ -101,7 +104,7 @@ Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.chang
 seq(n + 1) = frame(seq n, inp n)
 r(a₁) = E_a + 1,   r(b₁) = C_r + 1,   r(a₂) = E_b + 1,   r(b₂) = C_s + 1
 entryRest₁ : Rest(seq a₁)                 ctl₁ : ctl(seq b₁)
-upStart₁ : 1 ≤ n < a₁ → FrameStart(seq n)      upClean₁ : 1 ≤ n < a₁ → ∀ j, Clean(trₙ(j))
+a₁ = 1 ≤ n ≤ 1 + dA で最初の ¬ctl(seq n)      upClean₁ : 1 ≤ n < a₁ → ∀ j, Clean(trₙ(j))
 a₂ = 最初の n ≥ b₁ で rt(seq n) ≠ rt(r)      b₂ = 最初の n ≥ a₂ で ctl(seq n)      ctlBy₂ : ctl(seq(a₂ + d₂))
 entry₂ : EntryRest(seq a₂)
 roomSites : b₁ ≤ n < a₂ → ∀ j, SiteOK(trₙ(j))

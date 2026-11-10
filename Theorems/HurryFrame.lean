@@ -135,6 +135,17 @@ def lowTimer (P : Places) (u : Nat) (B : AS) : Bool :=
 /-- the frame's end: the music bits off, or the timer at `u` or less -/
 def finM (P : Places) (u : Nat) (B : AS) : Bool := watchOK (watchOf P) B || lowTimer P u B
 
+/-- the bytes that the digits routine adds, watched: all bits 0 -/
+def modsW (P : Places) : List Watch := P.mods.map fun i => (i, 0xFF, 0)
+
+/-- the queue knows a bit of the music set -/
+def queuedOn (P : Places) (B : AS) : Bool := (B.getK P.queue).v &&& (B.getK P.queue).k &&& P.tro != 0
+
+/-- the frame's end as the walk checks it: `finM`, and either the music is queued, or the next frame starts as a frame in control asks (`FrameKeep.endOK`) with the bytes
+that the digits routine adds 0 and the music bits off -/
+def finS (G : Guard) (P : Places) (u : Nat) (B : AS) : Bool :=
+  finM P u B && (queuedOn P B || (FrameKeep.endOK G B && watchOK (modsW P ++ watchOf P) B))
+
 /-- the table -/
 structure CfgM where
   E : Env
@@ -156,7 +167,7 @@ def coverM (C : CfgM) (B : AS) : Bool :=
     | some D, some l => leK B D l
     | _, _ => false
 
-/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with `finM` -/
+/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with `finS` -/
 def walkM (C : CfgM) : Nat → AS → Bool
   | 0, _ => false
   | n + 1, A => (preM C.G C.P A).all fun A₁ => (mstep C.G C.GD C.P C.E C.ops A₁).all fun r =>
@@ -164,7 +175,7 @@ def walkM (C : CfgM) : Nat → AS → Bool
     | none => false
     | some B =>
       if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverM C B) || walkM C n B
-      else B.k == A.k + 1 && finM C.P C.u B
+      else B.k == A.k + 1 && finS C.G C.P C.u B
 
 /-! ## Finding the table: a search, no part of the proof -/
 
@@ -239,7 +250,7 @@ partial def runM (sy : Syms) (G GD : Guard) (E : Env) (P : Places) (u : Nat) (op
     X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
     let bad := rs.any fun r => match r with
       | none => true
-      | some B => B.k != cur.k && !finM P u B
+      | some B => B.k != cur.k && !finS G P u B
     if bad then
       X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur, failPcs := X.failPcs.insert cur.pc.toNat (X.failPcs.getD cur.pc.toNat 0 + 1) }
     let good := (rs.filterMap id).filter fun b => b.k == cur.k
@@ -300,7 +311,7 @@ def fuelM : Nat := 20000
 /-- **The check.** -/
 def musicCheck (sy : Syms) (G GD : Guard) (E : Env) (P : Places) (u : Nat) : Bool :=
   let C := cfgOfM sy G GD E P u
-  decide (G.late < dotsPerFrame) && decide (P.d0 < 2048) && decide (P.d1 < 2048) && decide (P.d2 < 2048) &&
+  decide (G.late < dotsPerFrame) && decide (P.d0 < 2048) && decide (P.d1 < 2048) && decide (P.d2 < 2048) && decide (P.queue < 2048) &&
     C.t.all (walkM C fuelM) && (startsM sy G P).all (walkM C fuelM)
 
 /-- the check on the ROM -/
@@ -474,7 +485,7 @@ theorem cover_liveM (ht : C.t.all (walkM C Fu) = true) (hkl : C.kl = C.t.map kno
 theorem live_stepM {pd : List Nat} (hGD : C.GD = { C.G with prot := pd }) (hd : C.P.d0 < 2048) (ht : C.t.all (walkM C Fu) = true) (hkl : C.kl = C.t.map knownOf)
     (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine} (hl : LiveM C F A m) (hh : CleanM C.G pd C.P.dset m) :
     (∃ A', LiveM C F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
-    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, finM C.P C.u B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
+    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, finS C.G C.P C.u B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
   obtain ⟨hs, n, hw⟩ := hl
   cases n with
   | zero => simp [walkM] at hw
@@ -508,10 +519,10 @@ theorem live_stepM {pd : List Nat} (hGD : C.GD = { C.G with prot := pd }) (hd : 
 theorem frame_of_walkM {pd : List Nat} (hGD : C.GD = { C.G with prot := pd }) (hd : C.P.d0 < 2048) (ht : C.t.all (walkM C Fu) = true) (hkl : C.kl = C.t.map knownOf)
     (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkM C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanM C.G pd C.P.dset (trace m i j)) :
-    (frame m i).frame = m.frame + 1 ∧ ∃ B, finM C.P C.u B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, finS C.G C.P C.u B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have key : ∀ j, (∃ A, LiveM C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
-      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, finM C.P C.u B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
+      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, finS C.G C.P C.u B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
     intro j
     induction j with
     | zero => exact Or.inl ⟨S, ⟨hs0, Fu, hw⟩, rfl, rfl, Nat.le_refl _⟩
@@ -572,6 +583,18 @@ theorem fin_ok {P : Places} {u : Nat} {B : AS} {m : Machine} (h1 : P.d1 < 2048) 
     rw [e0, e1, e2]
     exact hle
 
+/-- a queue that knows a bit of the music set: the music bits are not off -/
+theorem not_watched_of_queued {P : Places} {B : AS} {m : Machine} (hq : P.queue < 2048) (h : queuedOn P B = true) (hs : Sim E F B m) :
+    ¬ Watched (watchOf P) m := by
+  intro hw
+  have h1 : m.ram.get! P.queue &&& P.tro = 0 &&& P.tro := hw _ List.mem_cons_self
+  rw [UInt8.zero_and] at h1
+  have h2 : m.ram.get! P.queue &&& (B.getK P.queue).k = (B.getK P.queue).v &&& (B.getK P.queue).k := hs.ram P.queue hq
+  unfold queuedOn at h
+  simp only [bne_iff_ne, ne_eq] at h
+  apply h
+  rw [← h2, UInt8.and_assoc, UInt8.and_comm (B.getK P.queue).k P.tro, ← UInt8.and_assoc, h1, UInt8.zero_and]
+
 end
 
 /-- what the check says -/
@@ -580,19 +603,20 @@ structure MusicOK (sy : Syms) (G GD : Guard) (E : Env) (P : Places) (u : Nat) : 
   d0 : P.d0 < 2048
   d1 : P.d1 < 2048
   d2 : P.d2 < 2048
+  queue : P.queue < 2048
   table : (cfgOfM sy G GD E P u).t.all (walkM (cfgOfM sy G GD E P u) fuelM) = true
   starts : (startsM sy G P).all (walkM (cfgOfM sy G GD E P u) fuelM) = true
 
 theorem musicOK_of_check {sy : Syms} {G GD : Guard} {E : Env} {P : Places} {u : Nat} (h : musicCheck sy G GD E P u = true) : MusicOK sy G GD E P u := by
   simp only [musicCheck, Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := h
-  exact ⟨h1, h2, h3, h4, h5, h6⟩
+  obtain ⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h7⟩, h5⟩, h6⟩ := h
+  exact ⟨h1, h2, h3, h4, h7, h5, h6⟩
 
-/-- **One frame in control or in the entrance.** A frame that starts in the idle loop with the routine of control or of the entrance and the bytes of the digits routine 0
-(`FrameStart`), with the music bits off, and whose every instruction meets `CleanM`, ends with the music bits off, or with the timer at `u` or less. -/
-theorem frame_music_of {sy : Syms} {G : Guard} {pd : List Nat} {E : Env} {P : Places} {u : Nat} (hc : musicCheck sy G { G with prot := pd } E P u = true)
+/-- **One frame in control or in the entrance, as the walk ends it.** A frame that starts in the idle loop with the routine of control or of the entrance and the bytes of the
+digits routine 0 (`FrameStart`), with the music bits off, and whose every instruction meets `CleanM`, ends in a state of `finS`. -/
+theorem frame_end_of {sy : Syms} {G : Guard} {pd : List Nat} {E : Env} {P : Places} {u : Nat} (hc : musicCheck sy G { G with prot := pd } E P u = true)
     (hE : E.pad = AB.top) {m : Machine} {i : UInt8} (h0 : FrameStart G E m ∨ FrameStart (guardE sy G) E m) (hw : Watched (watchOf P) m)
-    (hk : ∀ j, CleanM G pd P.dset (trace m i j)) : Watched (watchOf P) (frame m i) ∨ timerAt P (frame m i) ≤ u := by
+    (hk : ∀ j, CleanM G pd P.dset (trace m i j)) : ∃ B, finS G P u B = true ∧ Sim E (m.frame, 2) B (frame m i) := by
   have hC := musicOK_of_check hc
   have hS : ∃ S ∈ startsM sy G P, Sim E (m.frame, 2) S m := by
     rcases h0 with h | h
@@ -608,7 +632,18 @@ theorem frame_music_of {sy : Syms} {G : Guard} {pd : List Nat} {E : Env} {P : Pl
   have hw0 := List.all_eq_true.1 hC.starts S hSm
   obtain ⟨_, B, h1, _, h2⟩ := frame_of_walkM (C := cfgOfM sy G { G with prot := pd } E P u) (F := (m.frame, 2)) (pd := pd) rfl hC.d0 hC.table rfl rfl
     (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
-  exact fin_ok hC.d1 hC.d2 hC.d0 h1 h2
+  exact ⟨B, h1, h2⟩
+
+/-- **One frame in control or in the entrance.** A frame that starts in the idle loop with the routine of control or of the entrance and the bytes of the digits routine 0
+(`FrameStart`), with the music bits off, and whose every instruction meets `CleanM`, ends with the music bits off, or with the timer at `u` or less. -/
+theorem frame_music_of {sy : Syms} {G : Guard} {pd : List Nat} {E : Env} {P : Places} {u : Nat} (hc : musicCheck sy G { G with prot := pd } E P u = true)
+    (hE : E.pad = AB.top) {m : Machine} {i : UInt8} (h0 : FrameStart G E m ∨ FrameStart (guardE sy G) E m) (hw : Watched (watchOf P) m)
+    (hk : ∀ j, CleanM G pd P.dset (trace m i j)) : Watched (watchOf P) (frame m i) ∨ timerAt P (frame m i) ≤ u := by
+  have hC := musicOK_of_check hc
+  obtain ⟨B, h1, h2⟩ := frame_end_of hc hE h0 hw hk
+  unfold finS at h1
+  rw [Bool.and_eq_true] at h1
+  exact fin_ok hC.d1 hC.d2 hC.d0 h1.1 h2
 
 /-! ## On the ROM -/
 
@@ -628,5 +663,35 @@ theorem frame_music {sy : Syms} {nm : Names} {m0 : Machine} {u : Nat} (hc : chec
     (h0 : Start sy nm m0 m) (hw : Watched (watchOf (placesOf sy nm m0)) m) (hk : ∀ j, CleanAt sy nm m0 (trace m i j)) :
     Watched (watchOf (placesOf sy nm m0)) (frame m i) ∨ CastleToLevel.timerOf nm (frame m i) ≤ u :=
   frame_music_of hc rfl h0 hw hk
+
+/-- the known bytes of the guard of the ROM, on a machine with control and the bytes of `Places.mods` 0 -/
+theorem known_of {sy : Syms} {nm : Names} {m0 m : Machine} (hc : controllable sy m = true) (hm : Watched (modsW (placesOf sy nm m0)) m) :
+    ∀ p ∈ (guardOf sy nm m0).known, m.ram.get! p.1 = p.2 := by
+  intro p hp
+  have e : (guardOf sy nm m0).known = (FrameKeep.guardK sy m0).known ++ (placesOf sy nm m0).mods.map (fun i => (i, (0 : UInt8))) := rfl
+  rw [e, List.mem_append] at hp
+  rcases hp with hp | hp
+  · exact FrameKeep.known_of_ctl hc p hp
+  · obtain ⟨i, hi, rfl⟩ := List.mem_map.1 hp
+    have h1 : m.ram.get! i &&& 0xFF = (0 : UInt8) &&& 0xFF := hm (i, 0xFF, 0) (List.mem_map.2 ⟨i, hi, rfl⟩)
+    rw [FrameKeep.and_ff, FrameKeep.and_ff] at h1
+    exact h1
+
+/-- **A frame in control or in the entrance that ends with control, on the ROM.** From the music bits off, it ends with the music in the queue, or at the start of a frame in
+control (`Start`) with the music bits off: the same walk as `frame_music`, whose ends know the start of the next frame and the bytes of `Places.mods`. `hc` is the walk's check. -/
+theorem frame_start {sy : Syms} {nm : Names} {m0 : Machine} {u : Nat} (hc : checkOf sy nm m0 u = true) {m : Machine} {i : UInt8}
+    (h0 : Start sy nm m0 m) (hw : Watched (watchOf (placesOf sy nm m0)) m) (hk : ∀ j, CleanAt sy nm m0 (trace m i j)) (hctl : controllable sy (frame m i) = true) :
+    ¬ Watched (watchOf (placesOf sy nm m0)) (frame m i) ∨ (Start sy nm m0 (frame m i) ∧ Watched (watchOf (placesOf sy nm m0)) (frame m i)) := by
+  obtain ⟨B, h1, h2⟩ := frame_end_of hc rfl h0 hw hk
+  have hC := musicOK_of_check hc
+  unfold finS at h1
+  rw [Bool.and_eq_true, Bool.or_eq_true] at h1
+  rcases h1.2 with h | h
+  · exact Or.inl (not_watched_of_queued hC.queue h h2)
+  · rw [Bool.and_eq_true] at h
+    have hw2 := FrameKeep.watched_of h.2 h2
+    have hm : Watched (modsW (placesOf sy nm m0)) (frame m i) := fun w hw' => hw2 w (List.mem_append_left _ hw')
+    have hwm : Watched (watchOf (placesOf sy nm m0)) (frame m i) := fun w hw' => hw2 w (List.mem_append_right _ hw')
+    exact Or.inr ⟨Or.inl (FrameKeep.start_of_sim h2 h.1 rfl rfl (known_of hctl hm)), hwm⟩
 
 end Smbrta.HurryFrame
