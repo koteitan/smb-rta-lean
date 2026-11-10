@@ -51,6 +51,7 @@ structure Syms where
   VictoryModeValue : UInt16
   Task_GameCore : UInt16
   Eng_PlayerCtrl : UInt16
+  Eng_PlayerEntrance : UInt16
   FrameTimersLast : UInt16
   RunTopSpeed : UInt16
   PlayerSize : UInt16
@@ -193,6 +194,7 @@ structure Syms where
   PJumpSnd : UInt16
   MovePlayerVertically : UInt16
   NoJSChk : UInt16
+  RghtFrict : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -237,6 +239,7 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("VictoryModeValue", fun s => s.VictoryModeValue),
   ("Task_GameCore", fun s => s.Task_GameCore),
   ("Eng_PlayerCtrl", fun s => s.Eng_PlayerCtrl),
+  ("Eng_PlayerEntrance", fun s => s.Eng_PlayerEntrance),
   ("FrameTimersLast", fun s => s.FrameTimersLast),
   ("RunTopSpeed", fun s => s.RunTopSpeed),
   ("PlayerSize", fun s => s.PlayerSize),
@@ -378,7 +381,8 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("LRAir", fun s => s.LRAir),
   ("PJumpSnd", fun s => s.PJumpSnd),
   ("MovePlayerVertically", fun s => s.MovePlayerVertically),
-  ("NoJSChk", fun s => s.NoJSChk)]
+  ("NoJSChk", fun s => s.NoJSChk),
+  ("RghtFrict", fun s => s.RghtFrict)]
 
 set_option maxRecDepth 100000 in
 /-- Parse a symbol file (`key value` per line, decimal). -/
@@ -432,6 +436,7 @@ def Syms.parse (text : String) : Except String Syms := do
     VictoryModeValue := ← get "VictoryModeValue"
     Task_GameCore := ← get "Task_GameCore"
     Eng_PlayerCtrl := ← get "Eng_PlayerCtrl"
+    Eng_PlayerEntrance := ← get "Eng_PlayerEntrance"
     FrameTimersLast := ← get "FrameTimersLast"
     RunTopSpeed := ← get "RunTopSpeed"
     PlayerSize := ← get "PlayerSize"
@@ -574,6 +579,7 @@ def Syms.parse (text : String) : Except String Syms := do
     PJumpSnd := ← get "PJumpSnd"
     MovePlayerVertically := ← get "MovePlayerVertically"
     NoJSChk := ← get "NoJSChk"
+    RghtFrict := ← get "RghtFrict"
   }
 
 def Syms.load (path : String) : IO Syms := do

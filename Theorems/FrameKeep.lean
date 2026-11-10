@@ -10,11 +10,16 @@ position's fraction (`SprObject_X_MoveForce`).
 
 Two steps are not the machine's usual abstract steps:
 * `ADC zp` with the low 4 bits of `A`, of the byte and the carry known: the low 4 bits of the sum are known (`aadcL`). The move routine adds the speed's low 4 bits times 16 to the fraction this way.
-* at the entry of the move routine an index that is not known is split into its 256 values, so that the routine's store of the fraction knows its target.
+* at the entry of the move routine an index that is not known is split into 9 pieces: 0, or its lowest bit 1 at bit `b` (`xPieces`). With the index 0 the routine's store of
+  the fraction knows its target; with an index not 0 the store is not the player's.
 
-The condition on one instruction is `PipeWrites.Clean` with the watched bytes and the jumpspring's control among the bytes that a store with a target not known does not touch, but the
+The condition on one instruction is `PipeWrites.Clean` with the watched bytes among the bytes that a store with a target not known does not touch, but the
 move routine's store with the index 0 is not asked: that is the player's own store of the fraction, and there the walk knows the target (`CleanK`). The frame starts as in `PipeWrites`
-(`FrameStart`), with the jumpspring's control 0, so that the player's move has the index 0 known. `Frames` lists what the frames of a run need for this, frame by frame.
+(`FrameStart`). The split of the index at the move routine covers the player's move (index 0) and the other objects' moves (index not 0).
+
+Every path of the walk ends at the start of the next frame (`endOK`): in the idle loop with the stack pointer of control, in one of the two windows of the dot, with the NMI on and the
+joypad's strobe off. With the known bytes on the machine at the frame's end (the routine, the mode, the task: `known_of_ctl`) this is `FrameStart` again
+(`start_of_sim`, `keep_frame_start`). `Frames` lists what the frames of a run need, frame by frame; that each frame starts in control is a theorem from the machine at control (`Frames.start`).
 There is no game data in this file. Page: `1-1/f-6-19-FrameKeep.md`.
 -/
 
@@ -124,7 +129,13 @@ def coverK (C : CfgK) (B : AS) : Bool :=
     | some D, some l => leK B D l
     | _, _ => false
 
-/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with the watched bits known -/
+/-- the state after the frame's end is the start of a frame as `FrameStart` asks, but for the known bytes: in the idle loop with the stack pointer of control, in one of the two
+windows of the dot, with the NMI on and the joypad's strobe off -/
+def endOK (G : Guard) (B : AS) : Bool :=
+  B.pc == G.idle && B.s == G.s0 && ((B.lo == 0 && B.hi == 0 && !B.vb && !B.nmi) || (decide (1 ≤ B.lo) && decide (B.hi ≤ 9) && B.vb && B.nmi)) &&
+    B.ppuCtrl.bit 0x80 == some true && !B.strobe
+
+/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with the watched bits known and the start of the next frame (`endOK`) -/
 def walkK (C : CfgK) : Nat → AS → Bool
   | 0, _ => false
   | n + 1, A => (preK C.S C.G A).all fun A₁ => (kstep C.S C.G C.E C.ops A₁).all fun r =>
@@ -132,7 +143,7 @@ def walkK (C : CfgK) : Nat → AS → Bool
     | none => false
     | some B =>
       if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverK C B) || walkK C n B
-      else B.k == A.k + 1 && watchOK C.W B
+      else B.k == A.k + 1 && watchOK C.W B && endOK C.G B
 
 /-- the abstract state when the frame starts: that of `PipeWrites`, with the watched bits known -/
 def startK (G : Guard) (W : List Watch) (late : Bool) : AS :=
@@ -483,7 +494,7 @@ theorem cover_liveK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map kno
 theorem live_stepK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine}
     (hl : LiveK C F A m) (hh : CleanK C.G C.S.store m) :
     (∃ A', LiveK C F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
-    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
+    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
   obtain ⟨hs, n, hw⟩ := hl
   cases n with
   | zero => simp [walkK] at hw
@@ -510,21 +521,21 @@ theorem live_stepK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map know
         rw [hk1] at k1
         rw [if_neg (by simp [k1])] at hw2
         simp only [Bool.and_eq_true, beq_iff_eq] at hw2
-        exact ⟨k2, B, hw2.2, k1, h1⟩
+        exact ⟨k2, B, hw2.1.2, hw2.2, k1, h1⟩
 
 /-- **One frame.** A walk from `S` that succeeds covers the frame of every machine of `S`, for every input, if each instruction meets `CleanK`. -/
 theorem frame_of_walkK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkK C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) :
-    (frame m i).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have key : ∀ j, (∃ A, LiveK C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
-      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
+      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
     intro j
     induction j with
     | zero => exact Or.inl ⟨S, ⟨hs0, Fu, hw⟩, rfl, rfl, Nat.le_refl _⟩
     | succ j ih =>
       have e : trace m i (j + 1) = nxt (m.frame + 1) (trace m i j) := rfl
-      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h3, h4⟩
+      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h2', h3, h4⟩
       · have hh := h1.1.halted
         have hc : ¬ (((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true) := by
           simp [h3, hh]
@@ -532,24 +543,24 @@ theorem frame_of_walkK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map 
           rw [e]
           simp only [nxt, if_neg hc]
         rw [e2]
-        rcases live_stepK ht hkl hops hT h1 (hk j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a3, a4⟩
+        rcases live_stepK ht hkl hops hT h1 (hk j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a2', a3, a4⟩
         · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
-        · exact Or.inr ⟨by rw [a1, h3], B, a2, by rw [a3, h2], a4⟩
+        · exact Or.inr ⟨by rw [a1, h3], B, a2, a2', by rw [a3, h2], a4⟩
       · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
           simp [h1]
         have e2 : trace m i (j + 1) = trace m i j := by
           rw [e]
           simp only [nxt, if_pos hc]
         rw [e2]
-        exact Or.inr ⟨h1, B, h2, h3, h4⟩
+        exact Or.inr ⟨h1, B, h2, h2', h3, h4⟩
   rw [frame_trace]
-  rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h3, h4⟩
+  rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h2', h3, h4⟩
   · exfalso
     have a1 := h1.1.hi
     have a2 := h1.1.lim
     have a3 : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
     omega
-  · exact ⟨h1, B, h2, h3, h4⟩
+  · exact ⟨h1, B, h2, h2', h3, h4⟩
 
 end
 
@@ -613,20 +624,60 @@ theorem keep_frame {S : Spot} {G : Guard} {W : List Watch} (hc : keepCheck S G E
     cases b with
     | false => exact hC.s0
     | true => exact hC.s1
-  obtain ⟨_, B, h1, _, h2⟩ := frame_of_walkK (C := cfgOfK S G E W) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
+  obtain ⟨_, B, h1, _, _, h2⟩ := frame_of_walkK (C := cfgOfK S G E W) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
   exact watched_of h1 h2
+
+theorem bit80_all : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0x80 != 0) = true → UInt8.ofNat n.val &&& 0x80 = 0x80 := by decide +kernel
+
+/-- a known bit 7 that is 1 -/
+theorem ctrl_of_bit {b : AB} {x : UInt8} (h : (b.bit 0x80 == some true) = true) (hm : b.mem x) : x &&& 0x80 = 0x80 := by
+  unfold AB.bit at h
+  split at h
+  · rename_i hk
+    simp only [beq_iff_eq, Option.some.injEq] at h hk
+    have e : (x &&& b.k) &&& 0x80 = (b.v &&& b.k) &&& 0x80 := by rw [show x &&& b.k = b.v &&& b.k from hm]
+    rw [UInt8.and_assoc, UInt8.and_assoc, hk] at e
+    rw [e]
+    have h1 := bit80_all ⟨b.v.toNat, b.v.toNat_lt⟩
+    simp only [UInt8.ofNat_toNat] at h1
+    exact h1 (by rw [h])
+  · simp at h
+
+/-- **The start of a frame from the state after the frame's end**: `endOK` and the known bytes on the machine give `FrameStart`. `E'` has the program of `E`. -/
+theorem start_of_sim {G : Guard} {E' : Env} {B : AS} {m : Machine} (hs : Sim E F B m) (he : endOK G B = true) (hp : E.prg = E'.prg) (hmk : E.mask = E'.mask)
+    (hk : ∀ p ∈ G.known, m.ram.get! p.1 = p.2) : FrameStart G E' m := by
+  simp only [endOK, Bool.and_eq_true, beq_iff_eq, Bool.or_eq_true, Bool.not_eq_true', decide_eq_true_eq] at he
+  obtain ⟨⟨⟨⟨hpc, hs0⟩, hdot⟩, hc7⟩, hst⟩ := he
+  refine ⟨hs.pc.trans hpc, hs.s.trans hs0, ?_, ctrl_of_bit (by rw [hc7]; rfl) hs.ppuCtrl, hs.s0, hs.strobe.trans hst, hs.halted, hs.trk, hs.prg.trans hp, hs.mask.trans hmk,
+    hs.size, hk⟩
+  have hlo := hs.lo
+  have hhi := hs.hi
+  rcases hdot with ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ | ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩
+  · exact Or.inl ⟨by omega, hs.vb.trans h3, hs.nmi.trans h4⟩
+  · exact Or.inr ⟨by omega, by omega, hs.vb.trans h3, hs.nmi.trans h4⟩
+
+/-- **One frame in control ends at the start of a frame in control**, if the frame's end has the known bytes of `G` (for `guardK`: the routine, the mode, the task),
+and it keeps the watched bits. -/
+theorem keep_frame_start {S : Spot} {G : Guard} {W : List Watch} (hc : keepCheck S G E W = true) (hE : E.pad = AB.top) {m : Machine} {i : UInt8}
+    (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) (hkn : ∀ p ∈ G.known, (frame m i).ram.get! p.1 = p.2) :
+    FrameStart G E (frame m i) ∧ Watched W (frame m i) := by
+  have hC := keepOK_of_check hc
+  obtain ⟨b, hs⟩ := sim_startK hE h0 hw
+  have hw0 : walkK (cfgOfK S G E W) fuelK (startK G W b) = true := by
+    cases b with
+    | false => exact hC.s0
+    | true => exact hC.s1
+  obtain ⟨_, B, h1, h2, _, h3⟩ := frame_of_walkK (C := cfgOfK S G E W) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
+  exact ⟨start_of_sim h3 h2 rfl rfl hkn, watched_of h1 h3⟩
 
 end
 
 /-! ## On the ROM -/
 
-/-- the guard: that of `PipeWrites`, with the jumpspring's control known to be 0 when the frame starts, and the watched bytes and that byte among the bytes a store with a target not known does
-not touch -/
+/-- the guard: that of `PipeWrites`, with the watched bytes among the bytes a store with a target not known does not touch -/
 def guardK (sy : Syms) (m0 : Machine) : Guard :=
   let G := guardOf sy m0
-  { G with
-    known := G.known ++ [((sy.JumpspringAnimCtrl &&& 0x7FF).toNat, 0)]
-    prot := (sy.StarFlagTaskControl &&& 0x7FF).toNat :: (sy.SprObject_X_MoveForce &&& 0x7FF).toNat :: (sy.JumpspringAnimCtrl &&& 0x7FF).toNat :: G.prot }
+  { G with prot := (sy.StarFlagTaskControl &&& 0x7FF).toNat :: (sy.SprObject_X_MoveForce &&& 0x7FF).toNat :: G.prot }
 
 /-- the watched bits: the castle flag down, the fraction's low 4 bits 0 -/
 def watchOf (sy : Syms) : List Watch :=
@@ -701,41 +752,94 @@ end
 
 /-! ## The frames of a run -/
 
+/-- the start of a frame in control, as the walk needs it: `FrameStart` of the guard `guardK` -/
+abbrev StartK (sy : Syms) (m0 m : Machine) : Prop := FrameStart (guardK sy m0) (PipeEntryRule.envOf m0) m
+
+/-- **The machine at control, as the walk needs it**: the start of a frame in control, with the castle flag down -/
+structure AtCtl (sy : Syms) (m0 m : Machine) : Prop where
+  start : StartK sy m0 m
+  castle : CastleWalk.castle sy m = false
+
+theorem toUInt8_of_toUInt16 {x : UInt8} {v : UInt16} (h : x.toUInt16 = v) : x = v.toUInt8 := by
+  subst h
+  apply UInt8.toNat_inj.1
+  simp
+
+/-- the known bytes of `guardK` on a machine with control: the routine, the mode, the task -/
+theorem known_of_ctl {sy : Syms} {m0 m : Machine} (h1 : controllable sy m = true) :
+    ∀ p ∈ (guardK sy m0).known, m.ram.get! p.1 = p.2 := by
+  have e : (guardK sy m0).known = [((sy.GameEngineSubroutine &&& 0x7FF).toNat, sy.Eng_PlayerCtrl.toUInt8), ((sy.OperMode &&& 0x7FF).toNat, sy.GameModeValue.toUInt8),
+      ((sy.OperMode_Task &&& 0x7FF).toNat, sy.Task_GameCore.toUInt8)] := rfl
+  rw [e]
+  simp only [controllable, Bool.and_eq_true, beq_iff_eq] at h1
+  obtain ⟨⟨a1, a2⟩, a3⟩ := h1
+  intro p hp
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl | rfl
+  · exact toUInt8_of_toUInt16 a3
+  · exact toUInt8_of_toUInt16 a1
+  · exact toUInt8_of_toUInt16 a2
+
 /-- **The frames of a run, as the walk needs them.** `seq j` is the machine at the end of the counted frame `j`, and `seq 0` the machine at control. `fm j` is the machine when the counted frame
-`j` begins (`seq (j − 1)`, or later by `lag` frames), and `pad j` its input. Every field is a hypothesis. -/
+`j` begins (`seq (j − 1)`, or later by `lag` frames), and `pad j` its input. Every field is a hypothesis. That each frame starts in the idle loop in control (`StartK`) is not a field: it follows
+from the machine at control and `ctl` (`Frames.start`). -/
 structure Frames (sy : Syms) (m0 : Machine) (g : Nat) (seq : Nat → Machine) where
   fm : Nat → Machine
   pad : Nat → UInt8
   /-- the frame ends at `seq j` -/
   ends : ∀ j, 1 ≤ j → j ≤ g → seq j = frame (fm j) (pad j)
-  /-- it starts in the idle loop, in control, with the jumpspring's control 0 -/
-  start : ∀ j, 1 ≤ j → j ≤ g → FrameStart (guardK sy m0) (PipeEntryRule.envOf m0) (fm j)
+  /-- the frames before `g` end in control -/
+  ctl : ∀ j, 1 ≤ j → j < g → controllable sy (seq j) = true
   /-- each of its instructions meets `CleanK` -/
   clean : ∀ j, 1 ≤ j → j ≤ g → ∀ n, CleanK (guardK sy m0) (spotOf sy m0).store (trace (fm j) (pad j) n)
   /-- the `lag` frames before it keep the watched bits -/
   lag : ∀ j, 1 ≤ j → j ≤ g → Watched (watchOf sy) (seq (j - 1)) → Watched (watchOf sy) (fm j)
+  /-- the `lag` frames before it keep the start of a frame in control -/
+  lagStart : ∀ j, 1 ≤ j → j ≤ g → StartK sy m0 (seq (j - 1)) → StartK sy m0 (fm j)
 
 section
 variable {sy : Syms} {m0 : Machine} {g : Nat} {seq : Nat → Machine}
 
-/-- **Every frame keeps the watched bits**, from the machine at control on. `hc` is the walk's check on the ROM. -/
-theorem Frames.watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h0 : Watched (watchOf sy) (seq 0)) : ∀ j, j ≤ g → Watched (watchOf sy) (seq j) := by
+/-- **The ends of the frames before `g`** are starts of frames in control with the watched bits, from the machine at control on. `hc` is the walk's check on the ROM. -/
+theorem Frames.run (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+    ∀ j, j < g → StartK sy m0 (seq j) ∧ Watched (watchOf sy) (seq j) := by
   intro j
   induction j with
-  | zero => exact fun _ => h0
+  | zero => exact fun _ => ⟨hs0, h0⟩
   | succ i ih =>
     intro hj
-    have hl := K.lag (i + 1) (by omega) hj (by rw [Nat.add_sub_cancel]; exact ih (by omega))
+    obtain ⟨a1, a2⟩ := ih (by omega)
+    have s1 := K.lagStart (i + 1) (by omega) (by omega) (by rw [Nat.add_sub_cancel]; exact a1)
+    have w1 := K.lag (i + 1) (by omega) (by omega) (by rw [Nat.add_sub_cancel]; exact a2)
+    have hkn := known_of_ctl (m0 := m0) (K.ctl (i + 1) (by omega) hj)
+    rw [K.ends (i + 1) (by omega) (by omega)] at hkn ⊢
+    exact keep_frame_start hc rfl s1 w1 (K.clean (i + 1) (by omega) (by omega)) hkn
+
+/-- **Each frame up to `g` starts in the idle loop in control** (`StartK`): the field `start` of before, now a theorem -/
+theorem Frames.start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+    ∀ j, 1 ≤ j → j ≤ g → StartK sy m0 (K.fm j) :=
+  fun j h1 h2 => K.lagStart j h1 h2 (K.run hc hs0 h0 (j - 1) (by omega)).1
+
+/-- **Every frame keeps the watched bits**, from the machine at control on. `hc` is the walk's check on the ROM. -/
+theorem Frames.watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+    ∀ j, j ≤ g → Watched (watchOf sy) (seq j) := by
+  intro j hj
+  cases j with
+  | zero => exact h0
+  | succ i =>
+    have hl := K.lag (i + 1) (by omega) hj (by rw [Nat.add_sub_cancel]; exact (K.run hc hs0 h0 i (by omega)).2)
     rw [K.ends (i + 1) (by omega) hj]
-    exact keep_frame hc rfl (K.start (i + 1) (by omega) hj) hl (K.clean (i + 1) (by omega) hj)
+    exact keep_frame hc rfl (K.start hc hs0 h0 (i + 1) (by omega) hj) hl (K.clean (i + 1) (by omega) hj)
 
 /-- no castle flag up to frame `g` -/
-theorem Frames.noCastle (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h0 : Watched (watchOf sy) (seq 0)) : ∀ j, j ≤ g → CastleWalk.castle sy (seq j) = false :=
-  fun j hj => castle_of_watched (K.watched hc h0 j hj)
+theorem Frames.noCastle (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+    ∀ j, j ≤ g → CastleWalk.castle sy (seq j) = false :=
+  fun j hj => castle_of_watched (K.watched hc hs0 h0 j hj)
 
 /-- the fraction is a multiple of 1/16 px up to frame `g` -/
-theorem Frames.frac (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h0 : Watched (watchOf sy) (seq 0)) : ∀ j, j ≤ g → posP sy (seq j) % 16 = 0 :=
-  fun j hj => frac_of_watched (K.watched hc h0 j hj)
+theorem Frames.frac (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+    ∀ j, j ≤ g → posP sy (seq j) % 16 = 0 :=
+  fun j hj => frac_of_watched (K.watched hc hs0 h0 j hj)
 
 end
 

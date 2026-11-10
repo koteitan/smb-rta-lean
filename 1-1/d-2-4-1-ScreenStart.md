@@ -2,7 +2,7 @@
 
 # The condition `Room` at the first control in the room
 
-**Claim.** [The screen's page in the room, and the long timer](d-2-4-ScreenPage.md) assumed a condition `Room` on the state at the first control in the room. `Room` is the bits of 79 bytes and how the frame ended (the idle loop, the dot, the flags). This is now proved on the real machines. It comes from the rows of the time of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md). The conditions are those of that change, that the time is not up at the exit (`chg.time₁`), and that `b₁` is the first control after the entry (`chg.ctlFirst₁`). The field `chg.roomRest` (5 bytes at control) is gone.
+**Claim.** [The screen's page in the room, and the long timer](d-2-4-ScreenPage.md) assumed a condition `Room` on the state at the first control in the room. `Room` is the bits of 82 bytes and how the frame ended (the idle loop, the dot, the flags). This is now proved on the real machines. It comes from the rows of the time of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md). The conditions are those of that change, that the time is not up at the exit (`chg.time₁`), and that `b₁` is the first control after the entry (`chg.ctlFirst₁`). The field `chg.roomRest` (5 bytes at control) is gone.
 
 ## Statements
 
@@ -56,6 +56,6 @@ In each of the 41 runs without `Room`, only `AreaMusicQueue` differs, and none m
 ## Assumptions (not proved in Lean)
 
 * **`chg.time₁`, `chg.ctlFirst₁`.** The time is not up at the exit, and `b₁` is the first control. See [b-3-2](b-3-2-PipeChangeEnd.md).
-* **The conditions of the change** (`chg.entry₁`, `places₁`, `quiet₁`, `noStart₁`). `chg.entry₁` now also asks `WorldNumber`, `PrimaryHardMode` and the bits of `AreaMusicBuffer_Alt` at the entry. A fire Mario (`PlayerStatus` 2) does not meet `chg.entry₁`.
+* **The conditions of the change** (the condition at the entry `Run.entry₁`: `chg.entryRest₁`, `upStart₁`, `upClean₁` with `title`; `places₁`, `quiet₁`, `noStart₁`). The condition at the entry now also asks `WorldNumber`, `PrimaryHardMode` and the bits of `AreaMusicBuffer_Alt` at the entry. A fire Mario (`PlayerStatus` 2) does not meet `chg.entry₁`.
 
 **Files.** `Theorems/ScreenStart.lean`, `Theorems/PipeChangeEnd.lean` (`timeRows`, `PipeRun.inRowsT`), `Theorems/Route.lean` (`RoomChecks`, `Changes.roomAt`), private `Proof/ScreenStart.lean`.

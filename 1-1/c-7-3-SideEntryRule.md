@@ -37,6 +37,8 @@ entry_right_of_left  :  ruleCheck,  Enters(m, i),  (∀ n,  WriteStep(n) → Pas
                         →  ∃ n j,  WriteStep(n) ∧ j < n ∧ AtEntry(tr(j)) ∧ x₀ ≤ px(tr(j))
 mouth_of_pass        :  ruleCheck,  Enters(m, i),  (∀ n,  WriteStep(n) → Pass(n)),  pos(P)  →  P₀ ≤ P
 enters_of_ends       :  EndsEntry(m, i)  →  Enters(m, i)
+PassR(n)             :=  Pass(n) with RowOK alone at the reads (no TilesOK)
+pass_of              :  PassR(n),  (∀ j < n,  AtRead(tr(j)) → TilesOK(tr(j)))  →  Pass(n)
 RoomRun.mouth_of     :  Checks,  RoomRun  →  P₀ ≤ P(E)
 side_rule_check (private) :  ruleCheck(sy, m₀) = true (native_decide)
 ```
@@ -48,7 +50,7 @@ Lean: `Theorems/SideEntryRule.lean`, `RoomRun` in `Theorems/RoomJoin.lean`, priv
 The fields of `RoomJoin` changed as follows.
 
 * Removed: `entry`, `entry_mem`, `entered`, `entry_P` (in `RoomFields`). `Checks.side` became `Checks.sideRule`.
-* Added: `enters` (`Enters(fm(E − 1), pad(E))`, the machine and the input when frame `E` begins), `pass` (`∀ n, WriteStep(n) → Pass(n)`), `pos` (`pos(P(E))`). All are fields of `RoomRun`, and facts about frame `E` alone. `RoomRun.mouth_of` makes `RoomCore.mouth` (`P₀ ≤ P(E)`) from them.
+* Added: `enters` (`Enters(fm(E − 1), pad(E))`, the machine and the input when frame `E` begins), `pass` (`∀ n, WriteStep(n) → Pass(n)`), `pos` (`pos(P(E))`). All are fields of `RoomRun`, and facts about frame `E` alone. `RoomRun.mouth_of` makes `RoomCore.mouth` (`P₀ ≤ P(E)`) from them. Now `pass` gives `PassR(n)`, and the tiles are a field of their own, `tiles` (`∀ n j, WriteStep(n) → j < n → AtRead(tr(j)) → TilesOK(tr(j))`); `pass_of` puts them together.
 
 The old `entry_ground` (the entry state is on the ground) is gone. The proof did not use it.
 
@@ -96,7 +98,7 @@ A program (`side-rule-check`).
 * **The write in `Pass`.** Only `w` makes `rt` equal `e_s`. Earlier in that frame the side check started, and from there it did not go to an exit. Read from the code, and checked on the real frames above. The rest of the frame (NMI, sound, screen, enemies) is not followed.
 * **`Start`.** The stack pointer, the adders' offset, the dot, the flags. As for the pole.
 * **`RowOK`.** Read from the code, as for the pole.
-* **`TilesOK`.** The two tiles are only in the pipe's column of the block buffers. This is narrower than the hand-written block buffer. The code that writes the room's columns to the buffer is not followed.
+* **`TilesOK`.** The two tiles are only in the pipe's column of the block buffers. [The block map in the room](c-7-12-RoomMap.md) proves it at every read of every frame of the room, on the machines of the change into the room and out of it (`Route.Changes`), from what the room's frames already assume there (`SiteOK`). It stays a field of `RoomRun` (`tiles`) until frame `E` of `RoomRun` is joined to those machines.
 * **`pos`.** `P(E)` is the position at the read of the page. This is part of making a `Frame` from a real frame.
 * **The right end, the height, the ground.** Only the left end comes out here. `RoomJoin` uses only the left end.
 

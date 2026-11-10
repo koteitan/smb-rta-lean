@@ -21,7 +21,7 @@ FrameStart(m)   :=  pc(m) = EndlessLoop  ∧  the stack pointer has its value th
                     ∧  bit 7 of PPUCTRL is 1  ∧  no strobe  ∧  the sprite-0 flag fits the dot  ∧  not halted
                     ∧  rt = the player's routine  ∧  OperMode = game  ∧  OperMode_Task = game core
 
-HypG(m)         :=  (AtEntry(m) → px(m) < L_px)  ∧  (AtRead(m) → TilesOK(m))
+HypG(m)         :=  (AtEntry(m) → px(m) < L_px)  ∧  (AtRead(m) → TilesOK(m))      (with the split at the right foot; the split at the end of the move: item 1-1-a-5-9)
 TilesAll(m)     :=  ∀ place d of the block buffers,  mem(d) = T_R  →  d = d_R  ∧  pg ≤ page(m) + 1
 ```
 
@@ -37,8 +37,8 @@ rule_on_frames      :  ruleCheckG,  ∀ t,  Enters(fm t, inp t) → FrameStart(f
                        (P₂(t) is the position at the right foot: P₂(t) = 256·px(tr(j)) + f,  0 ≤ f,  j ≤ n)
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 tiles_of_steps      :  TilesAll(s(0)),  (∀ k < N,  TileStep(s(k), s(k + 1)))         →  ∀ k ≤ N,  TilesOK(s(k))
-pipe_frame_check (private)   :  ruleCheckG(sy, m₀) = true (native_decide)
-pipe_no_entry_real (private) :  start, clean, tiles, pos,  openP, openB,  the frames read from the machines ([item 1-1-a-5-5](a-5-5-PipeFrames.md)),  Enters(fm E, inp E)  →  367 < E
+pipe_frame_check (private)   :  ruleCheckS(sy, m₀) = true (native_decide; the walk with the split at the end of the move, item 1-1-a-5-9)
+pipe_no_entry_real (private) :  start, clean, tiles, edge, moved,  openP, openB,  the frames read from the machines ([item 1-1-a-5-5](a-5-5-PipeFrames.md)),  Enters(fm E, inp E)  →  367 < E
 ```
 
 The theorems with no ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
@@ -95,7 +95,7 @@ This is a program (`pipe-rule-check`). The conditions were checked on every inst
 * **`FrameStart` (item 1-1-a-5-2-1).** A frame that enters starts in the idle loop, in control.
 * **`Clean` (item 1-1-a-5-2-2).** The four conditions on each instruction up to the write. The ranges of indices and pointers that were needed are now this one condition. No proof comes from indices being small. `time` is about the frame's last 64 dots.
 * **`TilesOK` (item 1-1-a-5-3).** `tiles_of_steps` reduces it to a condition `TileStep` on one instruction at a time. `Route` does not use that. `T_R` comes into the block buffers from the level parser. The parser's bytes are not followed.
-* **`pos` (item 1-1-a-5-9).** `P₂` is the position at the entry for the right foot. It is part of making `Frame` from real frames (item 0-0-0-3-1).
+* **`pos` (item 1-1-a-5-9)** is no longer assumed. The walk now splits the position at the end of the move: [The position at the end of the move](a-5-9-MoveEnd.md). In its place: `moved` (`P₂` is the position at the end of the move) and `edge`.
 * **The right end of the window.** Only the left end is given here. `Route` uses only the left end.
 
 **Files.** `Theorems/PipeWrites.lean`, private `Proof/PipeWrites.lean`. It uses the definitions of `Theorems/PipeEntryRule.lean`. The symbols `JumpEngine`, `EndlessLoop` were added.

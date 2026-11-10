@@ -21,7 +21,7 @@ FrameStart(m)   :=  pc(m) = EndlessLoop  ∧  スタックポインタはそこ�
                     ∧  PPUCTRL のビット 7 が 1  ∧  ストローブなし  ∧  sprite-0 のフラグは dot のとおり  ∧  止まっていない
                     ∧  rt = 操作のルーチン  ∧  OperMode = ゲーム  ∧  OperMode_Task = ゲームコア
 
-HypG(m)         :=  (AtEntry(m) → px(m) < L_px)  ∧  (AtRead(m) → TilesOK(m))
+HypG(m)         :=  (AtEntry(m) → px(m) < L_px)  ∧  (AtRead(m) → TilesOK(m))      （右足で分けるとき。移動の終わりで分けるときは項目 1-1-a-5-9）
 TilesAll(m)     :=  ∀ ブロックバッファの場所 d,  mem(d) = T_R  →  d = d_R  ∧  pg ≤ page(m) + 1
 ```
 
@@ -37,8 +37,8 @@ rule_on_frames      :  ruleCheckG,  ∀ t,  Enters(fm t, inp t) → FrameStart(f
                        (P₂(t) は右足のときの位置: P₂(t) = 256·px(tr(j)) + f,  0 ≤ f,  j ≤ n)
                        →  ∀ t,  Enters(fm t, inp t)  →  L ≤ P₂(t)
 tiles_of_steps      :  TilesAll(s(0)),  (∀ k < N,  TileStep(s(k), s(k + 1)))         →  ∀ k ≤ N,  TilesOK(s(k))
-pipe_frame_check（非公開）   :  ruleCheckG(sy, m₀) = true（native_decide）
-pipe_no_entry_real（非公開） :  start, clean, tiles, pos,  openP, openB,  機械から読むフレーム（[次の項目](a-5-5-PipeFrames-ja.md)）,  Enters(fm E, inp E)  →  367 < E
+pipe_frame_check（非公開）   :  ruleCheckS(sy, m₀) = true（native_decide。移動の終わりで分ける抽象機械、項目 1-1-a-5-9）
+pipe_no_entry_real（非公開） :  start, clean, tiles, edge, moved,  openP, openB,  機械から読むフレーム（[次の項目](a-5-5-PipeFrames-ja.md)）,  Enters(fm E, inp E)  →  367 < E
 ```
 
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
@@ -95,7 +95,7 @@ Lean: `Theorems/PipeWrites.lean`、非公開の `Proof/PipeWrites.lean`。
 * **`FrameStart`（項目 1-1-a-5-2-1）.** 入るフレームは、アイドルループで、操作できる状態で始まる。
 * **`Clean`（項目 1-1-a-5-2-2）.** 書き込みまでの各命令について上の 4 つ。添字とポインタの範囲が要る場所は、これで 1 つの条件にまとまりました。添字が小さいことからの証明はしていません。`time` はフレームの最後の 64 dot についてです。
 * **`TilesOK`（項目 1-1-a-5-3）.** `tiles_of_steps` は、これを 1 命令ずつの条件 `TileStep` にします。`Route` は使っていません。`T_R` がブロックバッファに入るのは面の読み込みからです。面の読み込みのバイトは追っていません。
-* **`pos`（項目 1-1-a-5-9）.** `P₂` は右足の入口の位置です。本物のフレームから `Frame` を作る話（項目 0-0-0-3-1）の一部です。
+* **`pos`（項目 1-1-a-5-9）** は、もう仮定しません。抽象機械は位置を移動の終わりで分けるようになりました: [移動の終わりの位置](a-5-9-MoveEnd-ja.md)。かわりは `moved`（`P₂` は移動の終わりの位置）と `edge` です。
 * **範囲の右端.** ここでは左端だけを出します。`Route` が使うのは左端だけです。
 
 **ファイル.** `Theorems/PipeWrites.lean`、非公開の `Proof/PipeWrites.lean`。`Theorems/PipeEntryRule.lean` の定義を使います。記号 `JumpEngine`、`EndlessLoop` を足しました。

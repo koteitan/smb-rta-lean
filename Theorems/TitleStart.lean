@@ -28,12 +28,12 @@ open SideChangeEnd (xwalk xsearch noStartPad noStart mOf knowsAd ExitCond exitSt
 
 /-! ## The names -/
 
-/-- the names this file reads -/
+/-- the names this file reads, and those that `HurryMusic` and `HurryFrame` read through `Ctx.nm` -/
 def nameList : List String :=
   ["GameTimerDisplay", "IntervalTimerControl", "EventMusicQueue", "EventMusicBuffer", "NoteLengthTblAdder", "TimeRunningOutMusic", "FrameCounter", "GamePauseStatus",
    "GamePauseTimer", "ScreenRoutineTask", "ScreenTimer", "DisableScreenFlag", "AreaParserTaskNum", "VRAM_Buffer1_Offset", "PseudoRandomBitReg", "NumberOfPlayers",
    "TopScoreDisplay", "ScoreAndCoinDisplay", "Timers", "JoypadBitMask", "HorizontalScroll", "VerticalScroll", "SprShuffleAmtOffset", "SprDataOffset",
-   "Mirror_PPU_CTRL_REG1"]
+   "Mirror_PPU_CTRL_REG1", "PlayerStatus", "DeathMusicLoaded", "DigitModifier", "DisplayDigits"]
 
 /-- a value of the disassembly written in binary (`%`) -/
 def binValue (lines : List String) (n : String) : Option Nat :=

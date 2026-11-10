@@ -81,20 +81,20 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 keep            :  FrameKeep.Frames: 触るまでの本物の機械のフレーム          （フィールド）
 fracCheck       :  posP(B.m) mod 16 = 0                                       （pole_frac、native_decide）
 keepCheck       :  操作中の 1 フレーム全体の歩き                              （keep_check、native_decide）
-Run.fracP       :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
-Run.frac        :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  P₂(g) mod 16 = 0
-Run.frac_mem    :  Start(seq 0),  fracCheck,  keepCheck,  Run  →  frac(P₂(g)) ∈ fracs
+AtCtl(seq 0)    :  seq 0 は操作中のフレームの始まりで、城の旗は立っていない   （引数。Route.Run.atCtl₀）
+Run.fracP       :  Start(seq 0),  fracCheck,  keepCheck,  AtCtl(seq 0),  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
+Run.frac        :  同じもの  →  P₂(g) mod 16 = 0
+Run.frac_mem    :  同じもの  →  frac(P₂(g)) ∈ fracs
 atCastle        :  castle(seq c) = true                                       （フィールド）
-noCastle        :  ∀ j ≤ g,  castle(seq j) = false                            （フィールド）
-Run.afterTouch  :  Run  →  g < c
-Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,  Run  →  ∀ j ≤ g,  castle(seq j) = false
+Run.noCastle_of :  同じもの  →  ∀ j ≤ g,  castle(seq j) = false
+Run.afterTouch  :  同じもの  →  g < c
 ```
 
-`Run.fracP` は機械から `P(j) = posP(seq(j − 1))` を読みます。操作できるときに城の旗は立っていません（`j = 0` の `noCastle`）。`posP(seq 0) = posP(B.m)` は 16 の倍数です（`Start.P`、`fracCheck`）。触るまでの各フレームは両方を保ちます。`keep` のフレームでの、操作中の 1 フレーム全体の歩きです（[操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md)）。`Run.frac` は `P₂ = P + 16·v₂` を足します。ですから `CastleWalk.Statement.anyFraction` が確かめる端数は、走りの端数になりました。`flagAny` と `flagTight` は、確かめた触り方を端数 `frac(P₂(g))` で名指しします。`castle_of_direct` は `frac(P₂(g)) ∈ fracs` を `Run.frac_mem` から受け取ります。`flagAny`、`flagTight`、`other` の旗は `castle(seq ·)` です。別の関数ではありません。
+`Run.fracP` は機械から `P(j) = posP(seq(j − 1))` を読みます。操作できるときに城の旗は立っていません（`AtCtl(seq 0)`）。`posP(seq 0) = posP(B.m)` は 16 の倍数です（`Start.P`、`fracCheck`）。`AtCtl(seq 0)` は横の土管から出る切り替えの段から出ます（[地上で操作できるときの機械](f-6-2-ControlStart-ja.md)）。触るまでの各フレームは両方を保ちます。`keep` のフレームでの、操作中の 1 フレーム全体の歩きです（[操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md)）。`Run.frac` は `P₂ = P + 16·v₂` を足します。ですから `CastleWalk.Statement.anyFraction` が確かめる端数は、走りの端数になりました。`flagAny` と `flagTight` は、確かめた触り方を端数 `frac(P₂(g))` で名指しします。`castle_of_direct` は `frac(P₂(g)) ∈ fracs` を `Run.frac_mem` から受け取ります。`flagAny`、`flagTight`、`other` の旗は `castle(seq ·)` です。別の関数ではありません。
 
 位置の端数はプレイヤーの `SprObject_X_MoveForce` のバイトです。`MoveObjectHorizontally` はこれに速さの下 4 ビットの 16 倍を足します。1 フレーム全体がその下 4 ビットを保つことは、いまは歩きで証明しています。各命令の条件（`FrameKeep.CleanK`）のもとでです。前はコードから読んだフィールド `fracStep` でした。
 
-`noCastle` が成り立つわけ。`StarFlagTaskControl` が 0 から変わるのは面の終わりの `PlayerEndLevel` だけです。星の旗の物は、それが 0 のあいだ何もしません。同じ歩きが、操作中の 1 フレーム全体は旗を立てないことを証明します。ですから `keep` とチェックがあれば、`castle(seq 0) = false` だけで足ります（`Run.noCastle_of`）。`noCastle` はフィールドのままです。`Route` はチェックをとらない `Run.afterTouch` を使うからです。
+触るまで城の旗は立たない。`StarFlagTaskControl` が 0 から変わるのは面の終わりの `PlayerEndLevel` だけです。星の旗の物は、それが 0 のあいだ何もしません。同じ歩きが、操作中の 1 フレーム全体は旗を立てないことを証明します。ですから `keep` とチェックがあれば、操作できるときの機械だけで足ります（`Run.noCastle_of`）。前はフィールド `noCastle` でした。`Route` はもう `Run.afterTouch` を使いません。`level_ge_of_parts` は `g < c` をつなぎの上限（`touch_castle`）から読みます。`Run.segsOk`、`Run.hT`、`Run.hc` はそれを引数にとります。
 
 フィールドは次のように変わりました。
 
@@ -102,6 +102,7 @@ Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,
 * 増えたもの: `fracStep`、`noCastle`。`atCastle` は機械を読みます: `castle(seq c) = true`。`flagAny`、`flagTight` は `P₂(g)` の端数を使います。
 * `direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `hc` のあとの `(hfq : fracCheck sy (above m0 n) = true)`。
 * そのあと、なくなったもの: `fracStep`。増えたもの: `keep : FrameKeep.Frames sy m0 g seq`。`direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `hfq` のあとの `(hkc : FrameKeep.keepCheckOf sy m0 = true)`。`Run.fracP`、`Run.frac`、`Run.frac_mem` は `hq` のあとに `(hk : FrameKeep.keepCheckOf sy m0 = true)` をとります。
+* そのあと、なくなったもの: `noCastle`、`keep` のフィールド `start`。`keep` に増えたもの: `ctl`、`lagStart`。`direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `A` のあとの `(hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))`。`Run.fracP`、`Run.frac`、`Run.frac_mem`、`Run.noCastle_of` は `hk` のあとに `(hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))` をとります。`Run.afterTouch` は `st`、`hq`、`hk`、`hc0` をとります。
 
 本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
 
@@ -127,8 +128,8 @@ Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,
 | `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
 | `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
 | `fm`、`inp`、`touches`、`pass`、`pos` | フレーム `g` は本物の機械で触る。書き込みは横の判定の 1 回の通過の終わり。`P₂(g)` はページを読むときの位置。`P₀ ≤ P₂(g)` はこれらからの定理 `Run.inRange` | [旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md) |
-| `keep` | 触るまでの本物の機械のフレーム: それぞれ `seq j` で終わり、操作中に始まり（`FrameStart`）、各命令は `CleanK` を満たし、その前の `lag` のフレームは城の旗と端数の下 4 ビットを保つ。`16 ∣ P₂(g)` は定理 `Run.frac` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
-| `atCastle`、`noCastle` | 機械の城の旗: `c` で立ち、触るまではどの機械にもない。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
+| `keep` | 触るまでの本物の機械のフレーム: それぞれ `seq j` で終わり、触る前のフレームは操作中に終わり（`ctl`）、各命令は `CleanK` を満たし、その前の `lag` のフレームは操作中のフレームの始まり、城の旗、端数の下 4 ビットを保つ。各フレームが操作中に始まることは定理 `Frames.start`、`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
+| `atCastle` | フレーム `c` の終わりの機械の城の旗。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
 | `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |
 | `order`、`left`、`air` | 左から来て、フレーム `q` から土台の上面より下を落ちる。落下は着地の幅を飛び越せない。足が土台の上にあるフレームでは、ケースの動く向き、高さ、落下の速さはそのフレームのもの | コード。旗の上を越えて戻る走りは含まない |
@@ -140,7 +141,7 @@ Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,
 | `fall` | 遅いジャンプ: 落下は `w ≤ q` で `fallStarts` の 1 つか、土台から降りて始まる。フレームは `fallNext` のとおり | 下のマップの事実 |
 | `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ、`P₂(g)` の端数で確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
 
-操作できるときの状態 `Start` は定理の引数で、`Route.Run.start` が切り替えの最後の段から与えます。
+操作できるときの状態 `Start` と、操作できるときの機械 `AtCtl` は定理の引数です。`Route.Run.start` と `Route.Run.atCtl₀` が切り替えの最後の段から与えます。
 
 `fall` の中のマップの事実です。非公開の証明では `rows = 8` です。
 
@@ -168,6 +169,6 @@ Run.noCastle_of :  Start(seq 0),  fracCheck,  keepCheck,  castle(seq 0) = false,
 ```
 .lake/build/bin/smbrta pole-join-check FM2                  # ムービーのフレームで Run の全部のフィールド（2 秒）
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # フレーム 1036 からの入力を入れ替えて同じことを
-.lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで 16 ∣ P' − P、fracCheck、noCastle（約 4 分）
+.lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで 16 ∣ P' − P、fracCheck、城の旗（約 4 分）
 .lake/build/bin/smbrta keep-frames-check FM2 100            # 本物の走りで keep の条件
 ```

@@ -24,7 +24,7 @@ no_entry_of_reads :  16 ≤ v_top,  1 ≤ N,  (∀ t,  Enter t → L ≤ fr(t).P
 
 Pipe.next, Pipe.speed (Route)        :  the old fields next and speed, as theorems
 Pipe.reads (Route)                   :  Reads, from the frames read from their own machines and the frames not counted (own, lags, lag_check)
-pipe_no_entry_real (private)         :  start, clean, tiles, pos, openP, openB,  Enters(fm E, inp E),  Reads,  still   →   367 < E
+pipe_no_entry_real (private)         :  start, clean, tiles, edge, moved, openP, openB,  Enters(fm E, inp E),  Reads,  still   →   367 < E
 ```
 
 `Reads` is no longer a field. [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) proves it from `Pipe.own` (each counted frame ends at its own machine) and
@@ -74,7 +74,7 @@ the speed, the subspeed and the position.
 * **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
   frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md): `lags.start`, `lags.clean`, `lags.game`.
 * **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
-* **Not in this item.** `openP`, `openB` (item 1-1-a-5-4) and `pos` (item 1-1-a-5-9) stay hypotheses.
+* **Not in this item.** `openP`, `openB` (item 1-1-a-5-4) and `edge`, `moved` (item 1-1-a-5-9) stay hypotheses.
 
 **Files.** `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.
 

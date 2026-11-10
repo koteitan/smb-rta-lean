@@ -1,0 +1,74 @@
+[← Back](README.md) | [English](0-6-4-2-1-HurryFrame.md) | [Japanese](0-6-4-2-1-HurryFrame-ja.md)
+
+# The frame that starts the hurry-up music
+
+**Claim.** Take one whole frame that starts in control or in the player's entrance, with the hurry-up music off. If each of its instructions meets one condition on the machine, the frame ends with the music off, or with the timer at 100 or less.
+
+**This theorem has hypotheses.** They are conditions on this one frame: how it starts (`Start`) and a condition on each instruction (`CleanM`). They are checked on real frames. They are not proved for every run.
+
+`HurryMusic.Run` had the field `music`: a frame that starts the music begins with the timer at 100 or less. It is now a theorem (`HurryMusic.Run.music`), from this walk. The timer is now read when the frame ends, not when it begins.
+
+## What the game does
+
+* The game queues the hurry-up music in its timer routine (`RunGameTimer`). The routine reads the timer's three digits. If they are 1, 0, 0, it puts the music into the event music queue. Then it lowers the digits by one, to 0, 9, 9.
+* The sound routine runs earlier in the frame. It copies the queue into its buffer, and it sets the tempo's adder only when it loads the hurry-up music.
+* So within one frame the music can appear only in the queue, and only from the timer routine. On a death the game queues the death music, which is another bit.
+
+## The theorem
+
+`m` is the machine when the frame begins and `i` its input. `frame(m, i)` is the machine when the frame ends, and `tr(j)` the machine after `j` instructions. `v` is the number of the hurry-up music; it has one bit.
+
+```
+off(m)    :  EventMusicQueue(m) & v = 0  ∧  EventMusicBuffer(m) & v = 0  ∧  NoteLengthTblAdder(m) = 0
+timer(m)  =  100 · d₀ + 10 · d₁ + d₂            (the three digits, as CastleToLevel.timerOf)
+Start(m)  :  FrameStart of PipeWrites (the idle loop, the stack, the dot, the mode and its task), with the routine of control
+             or of the entrance, and the bytes of DigitModifier 0
+CleanM(m) :  PipeWrites.Clean, with the music bytes, the digits and the bytes of DigitModifier among the protected bytes;
+             but at the digits routine's stores through an index, and at the two stores into DigitModifier through an index,
+             the digits and the bytes of DigitModifier are not protected
+
+frame_music :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j))   ⟹   off(frame(m, i))  ∨  timer(frame(m, i)) ≤ 100
+```
+
+The frame may start with the routine of the entrance: on the first frame after a pipe, the entrance routine ends and the routine of control runs in the same frame, before the timer routine.
+
+The six bytes of `DigitModifier` are what the digits routine adds to the digits. The game sets them just before it calls the routine, and the routine clears them. So they are 0 when a frame starts.
+
+## The walk
+
+The walk is the abstract machine of `TaintRun`, over one whole frame, as in `PipeWrites` and `FrameKeep`. A byte has known bits. The walk starts with the music bits off and the six bytes 0. The digits are not known.
+
+* **The digits.** At the timer routine's load of the first digit into `Y`, the walk splits the digit into its 256 values. At its load of the second digit, the second and the third are split into 0 or their lowest bit 1. So on the path that queues the music the digits are known, 1, 0, 0, and the routine lowers them to 0, 9, 9.
+* **The death music.** The game queues one more than a register: `X` holds the player's status, or `Y` the flag of the death music. At those two loads the byte is split into 0 or its lowest bit 1, so the queued value is known.
+* **The digits routine.** It writes the digits and the six bytes through an index. On real frames it does so on the frame that starts the music. So at these stores the walk forgets the digits and the six bytes when the index is not known. `CleanM` asks there only that the store does not hit the other protected bytes.
+* At the end of every path the music bits are off, or the digits are known and their value is at most 100.
+
+The check (`music_check`, by `native_decide`): the search finds a table of 75,437 states in 1,321,935 steps. The check walks every state of the table and the 4 start states (control or entrance, just before or just after the frame's first event). It takes 3 to 9 seconds natively, depending on the load of the machine. `Proof/HurryFrame.lean` builds in 4.2 seconds.
+
+## On real frames
+
+`hurry-check FM2`, exit code 0. The runs are those of [Runs with the hurry-up music](0-6-4-HurryMusic.md): the timer written near 100 on 12 frames of the movie, then the movie's inputs, or random inputs with pauses.
+
+```
+frames that start the music                   108  (the movie's inputs 56, random inputs 52)
+  routine at their start                      control 94, entrance 14
+  Start                                       108 of 108
+  music bits off at the start                 108 of 108
+  instructions with CleanM                    521,286 of 521,286
+  timer at the end                            99 on all 108
+  ending in the idle loop                     108 of 108
+the movie's frames in control or entrance     833 frames, Start 833, off 833, CleanM on 4,034,601 of 4,034,601 instructions
+```
+
+## What is not proved
+
+* `Start` and `CleanM` on the frame that starts the music. They are conditions on one frame and its instructions, of the same kind as those of `PipeWrites` and `FrameKeep`, checked above.
+* That the stores of the digits routine are the only stores through an index that hit the digits or the six bytes: this is part of `CleanM`, checked above.
+
+**Files.** `Theorems/HurryFrame.lean` (`CleanM`, `Start`, `CleanAt`, `frame_music`), the private `Proof/HurryFrame.lean` (`music_check`). The symbol `Eng_PlayerEntrance` (`tools/smb-symbols.txt`).
+
+**Reproduce.**
+```
+.lake/build/bin/smbrta music-check            # the search and the check, as a program
+.lake/build/bin/smbrta hurry-check FM2        # the conditions on real frames
+```

@@ -5,7 +5,7 @@ import Theorems.TaintRun
 
 Two machines at the same place in the code run the same way if they agree on what the code reads. `walkT` follows a piece of code for two machines at once, knowing for each register and byte
 only a `Tag`: nothing, the two are the same, both are zero or both are not, or known bits of each. Its cost is small because no value is enumerated. Time is not looked at: an instruction here does not read the clock.
-Fed one machine twice, it says which bytes a piece of code leaves alone and what it reaches (`piece_spec`). Fed a real machine and the machine of `runSub`, it says that a routine does the same in both (`leaf_spec`).
+Fed one machine twice, it says which bytes a piece of code leaves alone and what it reaches (`piece_spec`). Fed a real machine and the machine of `runSub`, it says that a routine does the same in both (`leaf_spec`). Fed two machines of `runSub`, it relates the two results (`runSub2`).
 Each instruction is proved once (`tstep_spec`). There is no game data in this file. Page: `0-0/0-3-2-FrameModel.md`.
 -/
 
@@ -2813,18 +2813,39 @@ end walk
 
 At some places the two machines take different paths: the code reads a byte that is not the same in both, but what it writes there is of no interest. A `Detour` says that from the
 cut `c` each machine, alone, reaches the cut `c'` and leaves the bytes of `keep` (checked once, by the walk of one machine, `Detour.ok`). `walkD` follows two machines as `walkT` does,
-and at the start of a detour it lets each machine run its own way: the two may then be at different counts of instructions. -/
+and at the start of a detour it lets each machine run its own way: the two may then be at different counts of instructions. A detour may give the second machine its own start
+`c₂`, when the two differ in a byte that decides the way. -/
 
-/-- from the cut `c`, each machine alone reaches the cut `c'`, and the bytes of `keep` stay -/
+/-- from the cut `c`, each machine alone reaches the cut `c'`, and the bytes of `keep` stay; the second machine starts from `c₂` if it is given -/
 structure Detour where
   c : Cut
   c' : Cut
   keep : List Nat
   fuel : Nat
+  c₂ : Option Cut := none
   deriving Inhabited
 
-/-- the walk of one machine for a detour -/
-def Detour.ok (E : Rom) (d : Detour) : Bool := pieceOK E d.c d.c' d.keep d.fuel
+/-- the walk of one machine for a detour, for each start -/
+def Detour.ok (E : Rom) (d : Detour) : Bool :=
+  pieceOK E d.c d.c' d.keep d.fuel && (match d.c₂ with | some c => pieceOK E c d.c' d.keep d.fuel | none => true)
+
+/-- the start of each machine -/
+def Detour.cR (d : Detour) : Cut := d.c₂.getD d.c
+
+/-- what the walk must know at the start of a detour where the two machines start from different cuts: each machine's own values -/
+def goal2 (c₁ c₂ : Cut) (Q : TS) : Bool :=
+  Q.pc == c₁.pc && c₂.pc == c₁.pc && Q.s == some c₁.s && c₂.s == c₁.s && c₁.B.isEmpty && c₂.B.isEmpty &&
+  c₁.K.all (fun p => decide (p.1 < 2048) && (Q.ram p.1).exact.map (·.1) == some p.2) &&
+  c₂.K.all (fun p => decide (p.1 < 2048) && (Q.ram p.1).exact.map (·.2) == some p.2) &&
+  (match c₁.ra with | some v => Q.a.exact.map (·.1) == some v | none => true) &&
+  (match c₂.ra with | some v => Q.a.exact.map (·.2) == some v | none => true) &&
+  c₁.x.isNone && c₂.x.isNone && c₁.cf.isNone && c₂.cf.isNone
+
+/-- what the walk must know at the start of a detour -/
+def goalD (d : Detour) (Q : TS) : Bool :=
+  match d.c₂ with
+  | none => goalC d.c [] Q
+  | some c => goal2 d.c c Q
 
 /-- a register from a cut -/
 def regT : Option UInt8 → Tag
@@ -2850,7 +2871,7 @@ def walkD (E : Rom) (ds : List Detour) (stop goal : TS → Bool) (f : Nat) (Q : 
     if stop Q then goal Q
     else
       match ds.find? (fun d => d.c.pc == Q.pc) with
-      | some d => decide (d.fuel ≤ f) && goalC d.c [] Q && walkD E ds stop goal (f - d.fuel) (detourQ Q d)
+      | some d => decide (d.fuel ≤ f) && goalD d Q && walkD E ds stop goal (f - d.fuel) (detourQ Q d)
       | none =>
         match tstep E Q with
         | some l => l.all (fun Q' => walkD E ds stop goal f Q')
@@ -2867,7 +2888,7 @@ def walkDWhy (E : Rom) (ds : List Detour) (stop goal : TS → Bool) (f : Nat) (Q
       match ds.find? (fun d => d.c.pc == Q.pc) with
       | some d =>
         if !decide (d.fuel ≤ f) then some (Q.pc, "fuel at a detour")
-        else if !goalC d.c [] Q then some (Q.pc, "detour start")
+        else if !goalD d Q then some (Q.pc, "detour start")
         else walkDWhy E ds stop goal (f - d.fuel) (detourQ Q d)
       | none =>
         match tstep E Q with
@@ -2956,13 +2977,90 @@ theorem flagT_R {o : Option Bool} {x y : Bool} (h1 : ∀ v, o = some v → x = v
   | none => trivial
   | some v => exact ⟨h1 v rfl, h2 v rfl⟩
 
+/-- what the walk's state says of two machines at the start of a detour with two starts -/
+theorem at_of_goal2' {c₁ c₂ : Cut} {Q : TS} {m n : Machine} (hg : goal2 c₁ c₂ Q = true) (h : Lk E m₀ n₀ Q m n) : At E c₁ m ∧ At E c₂ n := by
+  simp only [goal2, Bool.and_eq_true, beq_iff_eq, List.all_eq_true, decide_eq_true_eq, Option.isNone_iff_eq_none, List.isEmpty_iff] at hg
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩ := hg
+  have hs := h.s _ h3
+  have ex : ∀ {t : Tag} {x y u : UInt8}, t.R x y → t.exact.map (·.1) = some u → x = u := by
+    intro t x y u hr he
+    cases e : t.exact with
+    | none => rw [e] at he; cases he
+    | some q =>
+      rw [e] at he
+      obtain ⟨a, b⟩ := q
+      have e2 : a = u := Option.some.inj he
+      rw [(Tag.exact_spec e hr).1, e2]
+  have ey : ∀ {t : Tag} {x y u : UInt8}, t.R x y → t.exact.map (·.2) = some u → y = u := by
+    intro t x y u hr he
+    cases e : t.exact with
+    | none => rw [e] at he; cases he
+    | some q =>
+      rw [e] at he
+      obtain ⟨a, b⟩ := q
+      have e2 : b = u := Option.some.inj he
+      rw [(Tag.exact_spec e hr).2, e2]
+  refine ⟨⟨h.gl, by rw [h.pcl, h1], hs.1, ?_, ?_, ?_, ?_, ?_⟩, ⟨h.gr, by rw [h.pcr, h1, h2], by rw [hs.2, h4], ?_, ?_, ?_, ?_, ?_⟩⟩
+  · intro p hp
+    exact ex (h.ram _ (h7 p hp).1) (h7 p hp).2
+  · intro p hp
+    rw [h5] at hp
+    cases hp
+  · intro v hv
+    rw [hv] at h9
+    exact ex h.regs.a (by simpa using h9)
+  · intro v hv
+    rw [h11] at hv
+    cases hv
+  · intro b hb
+    rw [h13] at hb
+    cases hb
+  · intro p hp
+    exact ey (h.ram _ (h8 p hp).1) (h8 p hp).2
+  · intro p hp
+    rw [h6] at hp
+    cases hp
+  · intro v hv
+    rw [hv] at h10
+    exact ey h.regs.a (by simpa using h10)
+  · intro v hv
+    rw [h12] at hv
+    cases hv
+  · intro b hb
+    rw [h14] at hb
+    cases hb
+
+/-- the start of each machine at a detour -/
+theorem at_of_goalD {d : Detour} {Q : TS} {m n : Machine} (hg : goalD d Q = true) (h : Lk E m₀ n₀ Q m n) : At E d.c m ∧ At E d.cR n := by
+  unfold goalD at hg
+  unfold Detour.cR
+  cases e : d.c₂ with
+  | none =>
+    rw [e] at hg
+    simpa using at_of_goal2 hg h
+  | some c =>
+    rw [e] at hg
+    simpa using at_of_goal2' hg h
+
+theorem Detour.ok_both {d : Detour} (hd : d.ok E = true) : pieceOK E d.c d.c' d.keep d.fuel = true ∧ pieceOK E d.cR d.c' d.keep d.fuel = true := by
+  unfold Detour.ok at hd
+  unfold Detour.cR
+  simp only [Bool.and_eq_true] at hd
+  refine ⟨hd.1, ?_⟩
+  cases e : d.c₂ with
+  | none => simpa using hd.1
+  | some c =>
+    rw [e] at hd
+    simpa using hd.2
+
 /-- **A detour**: the two machines run apart from the cut to the next, and the walk goes on with the kept bytes as before -/
-theorem lk_detour {d : Detour} {Q : TS} {m n : Machine} (hd : d.ok E = true) (hg : goalC d.c [] Q = true) (h : Lk E m₀ n₀ Q m n) :
+theorem lk_detour {d : Detour} {Q : TS} {m n : Machine} (hd : d.ok E = true) (hg : goalD d Q = true) (h : Lk E m₀ n₀ Q m n) :
     ∃ k1 k2, k1 ≤ d.fuel ∧ k2 ≤ d.fuel ∧ Lk E m₀ n₀ (detourQ Q d) (stepN k1 m) (stepN k2 n) ∧
       (∀ j, j < k1 → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m)) ∧ (∀ j, j < k2 → 0x8000 ≤ (stepN j n).pc ∧ Good E (stepN j n)) := by
-  obtain ⟨am, an⟩ := at_of_goal2 hg h
-  obtain ⟨k1, f1, A1, W1, I1⟩ := piece_specI hd am
-  obtain ⟨k2, f2, A2, W2, I2⟩ := piece_specI hd an
+  obtain ⟨am, an⟩ := at_of_goalD hg h
+  obtain ⟨hd1, hd2⟩ := Detour.ok_both hd
+  obtain ⟨k1, f1, A1, W1, I1⟩ := piece_specI hd1 am
+  obtain ⟨k2, f2, A2, W2, I2⟩ := piece_specI hd2 an
   refine ⟨k1, k2, f1, f2, ⟨A1.good, A2.good, A1.pc, A2.pc, ⟨?_, ?_, trivial, ?_, trivial, trivial⟩, ?_, ?_, ?_, ?_, ?_⟩, I1, I2⟩
   · exact regT_R A1.ra A2.ra
   · exact regT_R A1.x A2.x
@@ -3160,5 +3258,159 @@ theorem leafD_spec {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {entry
     exact h4.fixl i hi hw
 
 end apart
+
+/-! ## Two machines of `runSub`
+
+`runSub` of two machines that differ in a few bytes: a walk with detours from the routine's entry relates the two results. The walk starts with the stack pointer and A known,
+the listed bytes tagged, and the other bytes tagged `dflt` (`.eq` when the two machines are the same but for the listed bytes). -/
+
+/-- the start of a routine on two machines of `runSub` -/
+def leafQD (entry : UInt16) (sp : UInt8) (a dflt : Tag) (L : List (Nat × Tag)) : TS :=
+  { pc := entry, a, x := Tag.kn 0 0, y := Tag.kn 0 0, c := .any, z := .any, n := .any, s := some sp, ram := fun i => (lookN i L).getD dflt, w := fun _ => false }
+
+section two
+
+variable {E : Rom} {m₀ n₀ : Machine}
+
+/-- the machine of `runSub` is good -/
+theorem callM_good {H : Machine} (gH : GoodH E H) (entry : UInt16) (ain : UInt8) : Good E (callM H entry ain) := by
+  refine ⟨gH.prg, gH.mask, rfl, gH.halted, gH.trk, ?_, (by decide : (0 : UInt8) &&& 0x80 = 0)⟩
+  show ((H.ram.set! _ _).set! _ _).size = 2048
+  rw [size_set2]
+  exact gH.size
+
+/-- the two bytes of the return address of `runSub` are 0 -/
+theorem callM_stk {H : Machine} (gH : GoodH E H) (entry : UInt16) (ain : UInt8) :
+    (callM H entry ain).ram.get! (stkI (H.s - 1)) = 0 ∧ (callM H entry ain).ram.get! (stkI H.s) = 0 := by
+  refine ⟨?_, ?_⟩
+  · show ((H.ram.set! _ _).set! _ _).get! _ = 0
+    rw [PipeTransitionAll.ba_get_set_self _ _ _ (by
+      rw [PipeTransitionAll.ba_size_set, gH.size]
+      exact mask_stk _)]
+  · show ((H.ram.set! _ _).set! _ _).get! _ = 0
+    by_cases e : stkI H.s = stkI (H.s - 1)
+    · rw [e, PipeTransitionAll.ba_get_set_self _ _ _ (by
+        rw [PipeTransitionAll.ba_size_set, gH.size]
+        exact mask_stk _)]
+    · rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e2 => e e2.symm), PipeTransitionAll.ba_get_set_self _ _ _ (by rw [gH.size]; exact mask_stk _)]
+
+/-- **`runSub` ends at the routine's return**: from the machine of `runSub`, the instructions before step `k` are in the code, and at step `k` the machine is at a return
+with the stack pointer of the call and the return address untouched. -/
+theorem run_of_rts {H : Machine} {entry : UInt16} {ain : UInt8} {k : Nat} (hk : k < 1999)
+    (gX : Good E (stepN k (callM H entry ain))) (hp : 0x8000 ≤ (stepN k (callM H entry ain)).pc)
+    (hop : lookupOp (E.b (stepN k (callM H entry ain)).pc) insList = some .rts) (hidle : idleAt E (stepN k (callM H entry ain)).pc = false)
+    (hXs : (stepN k (callM H entry ain)).s = H.s - 2)
+    (hb1 : (stepN k (callM H entry ain)).ram.get! (stkI (H.s - 1)) = 0) (hb2 : (stepN k (callM H entry ain)).ram.get! (stkI H.s) = 0)
+    (hon : ∀ j, j < k → 0x8000 ≤ (stepN j (callM H entry ain)).pc ∧ Good E (stepN j (callM H entry ain))) :
+    (runSub H entry ain 0 0).ram = (stepN k (callM H entry ain)).ram ∧ GoodH E (runSub H entry ain 0 0) ∧ (runSub H entry ain 0 0).s = H.s := by
+  obtain ⟨y1, y2, y3, y4⟩ := step_rts gX hp hop hidle
+  obtain ⟨sp1, sp2⟩ := stack_two H.s
+  have hYpc : (stepN (k + 1) (callM H entry ain)).pc = 1 := by
+    rw [stepN_succ, y1, hXs, sp2, sp1, hb1, hb2]
+    decide
+  have hne : ∀ u : UInt16, 0x8000 ≤ u → u ≠ 1 := by
+    intro u hu e
+    subst e
+    exact absurd hu (by decide)
+  have hrun : runSub H entry ain 0 0 = stepN (k + 1) (callM H entry ain) := by
+    rw [runSub_eq]
+    refine crun k 2000 _ (by omega) ?_ hYpc
+    intro j hj
+    by_cases hjk : j = k
+    · subst hjk
+      exact ⟨hne _ hp, gX.halted⟩
+    · obtain ⟨h10, h11⟩ := hon j (by omega)
+      exact ⟨hne _ h10, h11.halted⟩
+  have g3 : Good E (runSub H entry ain 0 0) := by
+    rw [hrun, stepN_succ]
+    exact y4
+  refine ⟨?_, ⟨g3.prg, g3.mask, g3.halted, g3.trk, g3.size⟩, ?_⟩
+  · rw [hrun, stepN_succ]
+    exact y3
+  · rw [hrun, stepN_succ, y2, hXs, sp2]
+
+/-- **Two machines of `runSub`**, by the walk with detours: at the routine's return the tags of the walk's end relate the two results, and a byte that no path wrote
+is as before in both. -/
+theorem runSub2 {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {entry : UInt16} {sp ain : UInt8} {a dflt : Tag} {L : List (Nat × Tag)} {stop goal : TS → Bool} {fuel : Nat}
+    {H₁ H₂ : Machine} (hc : walkD E ds stop goal fuel (leafQD entry sp a dflt L) = true) (hfuel : fuel < 1999)
+    (hstop : ∀ Q, stop Q = true → 0x8000 ≤ Q.pc ∧ lookupOp (E.b Q.pc) insList = some .rts ∧ idleAt E Q.pc = false ∧ Q.s = some sp)
+    (hgoal : ∀ Q, goal Q = true → Q.w (stkI H₁.s) = false ∧ Q.w (stkI (H₁.s - 1)) = false)
+    (g1 : GoodH E H₁) (g2 : GoodH E H₂) (hsp : H₁.s - 2 = sp) (hs : H₂.s = H₁.s) (ha : a.R ain ain) (hd0 : dflt.R 0 0)
+    (hL : ∀ p ∈ L, p.1 < 2048 ∧ p.1 ≠ stkI H₁.s ∧ p.1 ≠ stkI (H₁.s - 1) ∧ p.2.R (H₁.ram.get! p.1) (H₂.ram.get! p.1))
+    (hd : ∀ i, i < 2048 → i ≠ stkI H₁.s → i ≠ stkI (H₁.s - 1) → lookN i L = none → dflt.R (H₁.ram.get! i) (H₂.ram.get! i)) :
+    ∃ Q, stop Q = true ∧ goal Q = true ∧
+      (∀ i, i < 2048 → (Q.ram i).R ((runSub H₁ entry ain 0 0).ram.get! i) ((runSub H₂ entry ain 0 0).ram.get! i)) ∧
+      (∀ i, i < 2048 → Q.w i = false → i ≠ stkI H₁.s → i ≠ stkI (H₁.s - 1) →
+        (runSub H₁ entry ain 0 0).ram.get! i = H₁.ram.get! i ∧ (runSub H₂ entry ain 0 0).ram.get! i = H₂.ram.get! i) := by
+  have c1 := callM_good g1 entry ain
+  have c2 := callM_good g2 entry ain
+  obtain ⟨b11, b12⟩ := callM_stk g1 entry ain
+  obtain ⟨b21, b22⟩ := callM_stk g2 entry ain
+  rw [hs] at b21 b22
+  have hL' : ∀ i t, lookN i L = some t → i < 2048 ∧ i ≠ stkI H₁.s ∧ i ≠ stkI (H₁.s - 1) ∧ t.R (H₁.ram.get! i) (H₂.ram.get! i) :=
+    fun i t h => hL _ (lookN_mem h)
+  have hN : ∀ i, (i = stkI H₁.s ∨ i = stkI (H₁.s - 1)) → lookN i L = none := by
+    intro i hi
+    cases h : lookN i L with
+    | none => rfl
+    | some t =>
+      obtain ⟨_, e1, e2, _⟩ := hL' i t h
+      rcases hi with hi | hi
+      · exact absurd hi e1
+      · exact absurd hi e2
+  have st : Lk E (callM H₁ entry ain) (callM H₂ entry ain) (leafQD entry sp a dflt L) (callM H₁ entry ain) (callM H₂ entry ain) := by
+    refine ⟨c1, c2, rfl, rfl, ⟨ha, Tag.R_kn 0 0, Tag.R_kn 0 0, trivial, trivial, trivial⟩, ?_, ?_, ?_, ?_, ?_⟩
+    · intro v hv
+      have e : sp = v := Option.some.inj hv
+      rw [← e]
+      refine ⟨hsp, ?_⟩
+      show H₂.s - 2 = sp
+      rw [hs, hsp]
+    · intro hv
+      cases hv
+    · intro i hi
+      show ((lookN i L).getD dflt).R _ _
+      by_cases e1 : i = stkI H₁.s
+      · rw [hN i (Or.inl e1)]
+        show dflt.R ((callM H₁ entry ain).ram.get! i) ((callM H₂ entry ain).ram.get! i)
+        rw [e1, b12, b22]
+        exact hd0
+      by_cases e2 : i = stkI (H₁.s - 1)
+      · rw [hN i (Or.inr e2)]
+        show dflt.R ((callM H₁ entry ain).ram.get! i) ((callM H₂ entry ain).ram.get! i)
+        rw [e2, b11, b21]
+        exact hd0
+      have f1 : (callM H₁ entry ain).ram.get! i = H₁.ram.get! i := get_set2 e1 e2
+      have f2 : (callM H₂ entry ain).ram.get! i = H₂.ram.get! i := by
+        show ((H₂.ram.set! _ _).set! _ _).get! i = _
+        rw [hs]
+        exact get_set2 e1 e2
+      rw [f1, f2]
+      cases h : lookN i L with
+      | none => exact hd i hi e1 e2 h
+      | some t => exact (hL' i t h).2.2.2
+    · intro _ _ _
+      rfl
+    · intro _ _ _
+      rfl
+  obtain ⟨k1, k2, Q, h1, h2, hs', hg, h4, J1, J2⟩ := walkD_spec hds fuel _ _ _ hc st
+  obtain ⟨p1, p2, p3, p4⟩ := hstop Q hs'
+  obtain ⟨w1, w2⟩ := hgoal Q hg
+  have w1' : Q.w (stkI H₂.s) = false := by rw [hs]; exact w1
+  have w2' : Q.w (stkI (H₂.s - 1)) = false := by rw [hs]; exact w2
+  obtain ⟨r1, _, _⟩ := run_of_rts (by omega) h4.gl (by rw [h4.pcl]; exact p1) (by rw [h4.pcl]; exact p2) (by rw [h4.pcl]; exact p3)
+    (by rw [(h4.s _ p4).1, hsp]) (by rw [h4.fixl _ (mask_stk _) w2, b11]) (by rw [h4.fixl _ (mask_stk _) w1, b12]) J1
+  obtain ⟨r2, _, _⟩ := run_of_rts (by omega) h4.gr (by rw [h4.pcr]; exact p1) (by rw [h4.pcr]; exact p2) (by rw [h4.pcr]; exact p3)
+    (by rw [(h4.s _ p4).2, hs, hsp]) (by rw [h4.fixr _ (mask_stk _) w2', hs, b21]) (by rw [h4.fixr _ (mask_stk _) w1', hs, b22]) J2
+  refine ⟨Q, hs', hg, fun i hi => ?_, fun i hi hw n1 n2 => ?_⟩
+  · rw [r1, r2]
+    exact h4.ram i hi
+  · rw [r1, r2, h4.fixl i hi hw, h4.fixr i hi hw]
+    refine ⟨get_set2 n1 n2, ?_⟩
+    show ((H₂.ram.set! _ _).set! _ _).get! i = _
+    rw [hs]
+    exact get_set2 n1 n2
+
+end two
 
 end Smbrta.FrameModel

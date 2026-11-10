@@ -112,7 +112,7 @@ Lean: `Theorems/PipeEntryRule.lean`、非公開の `Proof/PipeEntryRule.lean`（
 * **`RowOK`.** コードの `AND`、`SBC`、`TAY` と、足の判定の始めの `CMP` から読みました。このページでは仮定です。[1 フレーム全部](a-5-2-PipeWrites-ja.md) では仮定しません。
 * **`TilesOK`（項目 1-1-a-5-3）.** 手で書いたブロックバッファと同じ、という前提より狭くなりました。右のタイルについてだけです。ページの条件は、2 つ前のページ（偶奇が同じ）にいるあいだは土管の列がまだバッファにないことです。
 * **`pos`.** `P₂` は右足の読みに入るときの位置です。本物のフレームから `Frame` を作る話（項目 0-0-0-3-1）の一部です。
-* **範囲の右端と、`rule` の残り.** ここでは左端だけを出します。`Route` が使うのは左端だけで、`Route.Pipe` は `rule` のかわりに `start`、`clean`、`tiles`、`pos` を持ちます。右端、下ボタン、着地は [縦の土管に入る](a-4-PipeEntry-ja.md) の `rule` のままで、手で書いたバッファの上の話です。
+* **範囲の右端と、`rule` の残り.** ここでは左端だけを出します。`Route` が使うのは左端だけで、`Route.Pipe` は `rule` のかわりに `start`、`clean`、`tiles`、`edge`、`moved` を持ちます。右端、下ボタン、着地は [縦の土管に入る](a-4-PipeEntry-ja.md) の `rule` のままで、手で書いたバッファの上の話です。
 
 **ファイル.** `Theorems/PipeEntryRule.lean`、非公開の `Proof/PipeEntryRule.lean`。
 

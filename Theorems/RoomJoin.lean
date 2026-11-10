@@ -344,8 +344,8 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N
   /-- the state and the position are those of the machine -/
   read_hs : ∀ n, C ≤ n → n ≤ t0 → fr.hs n = FrameModel.readHS sy (fm n)
   read_P : ∀ n, C ≤ n → n ≤ t0 → fr.P n = posP sy (fm n)
-  /-- at first control, the vertical state is that of the machine -/
-  vs_C : fr.vs C = SurfaceFrames.vsOf sy (fm C)
+  /-- the vertical state is that of the machine -/
+  read_vs : ∀ n, C ≤ n → n ≤ t0 → fr.vs n = SurfaceFrames.vsOf sy (fm n)
   /-- the stored speed of frame `n` is what frame `n + 1` reads when it comes to the player's routine -/
   read_ab : ∀ n, C ≤ n → n < t0 → fr.ab n = (peek (PipeEntryRule.trace (fm n) (pad (n + 1)) (arr n)) sy.Player_XSpeedAbsolute).toNat
   /-- a frame that follows the model has the input read from the machine -/
@@ -359,9 +359,12 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N
     ¬FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) → fr.ab n < sy.AirFastSpeed.toNat
   /-- frame `E` enters the side pipe: an instruction of it, from `fm (E - 1)` with the input `pad E`, writes the side pipe's routine -/
   enters : SideEntryRule.Enters sy (fm (E - 1)) (pad E)
-  /-- each such write ends one pass of the side check, with reads `ReadOK` -/
+  /-- each such write ends one pass of the side check, with reads `RowOK` -/
   pass : ∀ n, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n →
-    PoleEntryRule.Pass (SideEntryRule.spots sy m) (PipeEntryRule.envOf m) (PipeEntryRule.trace (fm (E - 1)) (pad E)) n
+    SideEntryRule.PassR (SideEntryRule.spots sy m) (PipeEntryRule.envOf m) (PipeEntryRule.trace (fm (E - 1)) (pad E)) n
+  /-- at each read of the block buffer routine before the write, the side pipe's tiles are only in the pipe's column. `RoomMap.map_of_rows` proves it on the frames of the room. -/
+  tiles : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j < n → PoleEntryRule.AtRead (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) →
+    PoleEntryRule.TilesOK (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j)
   /-- `P(E)` is the position when the block buffer routine reads the page for the side check, before the write -/
   pos : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j < n →
     PoleEntryRule.AtEntry (SideEntryRule.spots sy m) (PipeEntryRule.trace (fm (E - 1)) (pad E) j) →
@@ -2779,7 +2782,7 @@ theorem move_top_of (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) : ∀ n, 
 
 theorem start_v (st : StartAt sy N (r.fm r.C)) :
     (r.fr.vs r.C).st = 2 ∧ VY (r.fr.vs r.C) ≤ N.startY ∧ VW (r.fr.vs r.C) ≤ N.startW ∧ (r.fr.vs r.C).vfd.toNat = N.fallF := by
-  rw [r.vs_C]
+  rw [r.read_vs r.C (Nat.le_refl _) r.t0_ge]
   exact st.v
 
 /-- a frame that follows the model reads the stored speed `|v|`: `AtCtrl.abs`, and nothing wrote the speed before the player's routine -/
@@ -2802,7 +2805,7 @@ theorem ab_of_run : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.h
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `SideEntryRule.mouth_of_pass`: one pass of the side check on the real frame -/
 theorem mouth_of (H : Checks sy m N) : SidePipe.mouthP sy 0 ≤ r.fr.P r.E :=
-  SideEntryRule.mouth_of_pass H.sideRule r.enters r.pass r.pos
+  SideEntryRule.mouth_of_pass H.sideRule r.enters (fun n hw => SideEntryRule.pass_of (r.pass n hw) (r.tiles n · hw)) r.pos
 
 /-- the frames as numbers -/
 def toCore (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) : RoomCore sy m N :=

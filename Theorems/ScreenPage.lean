@@ -1225,18 +1225,19 @@ def roomNames : List (String × Nat × Nat × UInt8) :=
    ("ScreenRight_X_Pos", 0, 1, 255), ("AreaParserTaskNum", 0, 1, 255), ("ScrollLock", 0, 1, 255), ("EnemyDataOffset", 0, 1, 255), ("EnemyObjectPageLoc", 0, 1, 255),
    ("ScrollThirtyTwo", 0, 1, 255), ("CloudTypeOverride", 0, 1, 255), ("AreaType", 0, 1, 255), ("CurrentPlayer", 0, 1, 255), ("PlayerStatus", 0, 1, 254),
    ("WorldNumber", 0, 1, 255), ("OperMode", 0, 1, 255), ("OperMode_Task", 0, 1, 255), ("StarInvincibleTimer", 0, 1, 255), ("AreaMusicBuffer_Alt", 0, 1, 251),
-   ("ScreenRoutineTask", 0, 1, 255), ("DisableScreenFlag", 0, 1, 255), ("Fireball_State", 0, 2, 255), ("JoypadOverride", 0, 1, 255), ("GameTimerExpiredFlag", 0, 1, 255)]
+   ("ScreenRoutineTask", 0, 1, 255), ("DisableScreenFlag", 0, 1, 255), ("Fireball_State", 0, 2, 255), ("JoypadOverride", 0, 1, 255), ("GameTimerExpiredFlag", 0, 1, 255),
+   ("AreaPointer", 0, 1, 255), ("EntrancePage", 0, 1, 255), ("PrimaryHardMode", 0, 1, 255)]
 
 /-- the list of bits, as RAM indices -/
 def knownOf (nm : Names) : List (Nat × UInt8) :=
   roomNames.flatMap fun p => (List.range p.2.2.1).map fun j => (((nm.ad p.1).toNat + p.2.1 + j) &&& 0x7FF, p.2.2.2)
 
 /-- the bytes of the condition at the entry of the side pipe that the walk does not give: a name, an offset, a number of bytes. The routine is the entry itself; the player's state and
-height; the screen's buffer; the sound; the next area, which the room's frames do not know. -/
+height; the screen's buffer; the sound; the level's number, which the rows of the change into the room do not know. -/
 def restNames : List (String × Nat × Nat) :=
   [("GameEngineSubroutine", 0, 1), ("Player_State", 0, 1), ("Player_Y_HighPos", 0, 1), ("Player_Y_Position", 0, 1), ("VRAM_Buffer1_Offset", 0, 1), ("VRAM_Buffer1", 0, 3), ("VRAM_Buffer1", 7, 1),
    ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("MusicData", 0, 2), ("MusicOffset_Square1", 0, 1), ("NoiseSoundBuffer", 0, 1), ("EventMusicQueue", 0, 1), ("NoteLengthTblAdder", 0, 1),
-   ("AreaPointer", 0, 1), ("EntrancePage", 0, 1), ("AreaNumber", 0, 1), ("PrimaryHardMode", 0, 1)]
+   ("AreaNumber", 0, 1)]
 
 /-- these bytes as RAM indices -/
 def restIdx (nm : Names) : List Nat :=

@@ -2,7 +2,7 @@
 
 # 部屋で最初に操作できる状態の条件 `Room`
 
-**主張.** [部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md) は、部屋で最初に操作できる状態についての条件 `Room` を仮定していました。`Room` は 79 バイトのビットと、フレームの終わり方（アイドルループ、ドット、フラグ）です。これは本物の機械で証明しました。[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md) の時間の段から出ます。条件はその切り替えの条件、出口で時間が切れていないこと（`chg.time₁`）、`b₁` が入ったあと最初の操作であること（`chg.ctlFirst₁`）です。フィールド `chg.roomRest`（操作のときの 5 バイト）はなくなりました。
+**主張.** [部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md) は、部屋で最初に操作できる状態についての条件 `Room` を仮定していました。`Room` は 82 バイトのビットと、フレームの終わり方（アイドルループ、ドット、フラグ）です。これは本物の機械で証明しました。[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md) の時間の段から出ます。条件はその切り替えの条件、出口で時間が切れていないこと（`chg.time₁`）、`b₁` が入ったあと最初の操作であること（`chg.ctlFirst₁`）です。フィールド `chg.roomRest`（操作のときの 5 バイト）はなくなりました。
 
 ## 文
 
@@ -56,6 +56,6 @@ Route.Changes.roomAt :  RoomChecks ∧ Changes  →  Room(seq b₁)
 ## 前提（Lean では証明していない）
 
 * **`chg.time₁`、`chg.ctlFirst₁`.** 出口で時間が切れていない。`b₁` は最初の操作。[b-3-2](b-3-2-PipeChangeEnd-ja.md) を見てください。
-* **切り替えの条件**（`chg.entry₁`、`places₁`、`quiet₁`、`noStart₁`）。`chg.entry₁` は、入るときに `WorldNumber`、`PrimaryHardMode`、`AreaMusicBuffer_Alt` のビットも求めるようになりました。ファイアマリオ（`PlayerStatus` が 2）は `chg.entry₁` を満たしません。
+* **切り替えの条件**（入るときの条件 `Run.entry₁`: `chg.entryRest₁`、`upStart₁`、`upClean₁` と `title`。`places₁`、`quiet₁`、`noStart₁`）。入るときの条件は、 `WorldNumber`、`PrimaryHardMode`、`AreaMusicBuffer_Alt` のビットも求めるようになりました。ファイアマリオ（`PlayerStatus` が 2）は `chg.entry₁` を満たしません。
 
 **ファイル.** `Theorems/ScreenStart.lean`、`Theorems/PipeChangeEnd.lean`（`timeRows`、`PipeRun.inRowsT`）、`Theorems/Route.lean`（`RoomChecks`、`Changes.roomAt`）、非公開の `Proof/ScreenStart.lean`。

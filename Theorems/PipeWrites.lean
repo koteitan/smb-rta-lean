@@ -16,7 +16,11 @@ The machine is the one of `TaintRun`. It does not fail on four things that it ca
 * the time: the instruction runs before the frame's last dots.
 
 The frame must start in the idle loop, in control (`FrameStart`). The block buffer's tile stays as `TilesOK` on the frame that enters (`tiles_of_steps` reduces it to single instructions). The row of a read is no hypothesis here: the walk knows it.
-There is no game data in this file. Page: `1-1/a-5-2-PipeWrites.md`.
+
+The walk splits the position into the values left of the window. `guardOf` splits it at the entry for the right foot (`entry_right_of_left`). `guardS` splits it where the move ends (`PlayerSubs`), and
+follows it from there through the scroll handler, the bounding box and the head's check to the foot check (`entry_right_of_leftS`, `rule_on_framesS`). So the position the rule needs is the frame model's `P₂`.
+Two places are cut (`HypG`): the scroll handler's store of the position, which keeps him on the screen at its edges (`edgeStore`), and the routine of the head's collision with a block (`headAt`),
+whose stores through an index make the walk forget the position. There is no game data in this file. Page: `1-1/a-5-2-PipeWrites.md`.
 -/
 
 namespace Smbrta.PipeWrites
@@ -55,6 +59,10 @@ structure Guard where
   /-- the return address of the collision routine, on the stack -/
   zLo : UInt8
   zHi : UInt8
+  /-- where the walk splits the position: if not 0, at this place (the end of the move); if 0, at the entry for the right foot -/
+  subs : UInt16 := 0
+  /-- places that the frame does not come to before the write -/
+  cuts : List UInt16 := []
   deriving Inhabited
 
 /-! ## The conditions on one state -/
@@ -93,8 +101,10 @@ structure Clean (G : Guard) (m : Machine) : Prop where
   /-- the time -/
   time : m.pc ≠ G.idle → m.fdot ≤ G.late
 
-/-- what the pass asks: left of the window at the entry for the right foot, `TilesOK` at its read -/
-def HypG (P : Spots) (m : Machine) : Prop := (AtEntry P m → px P m < P.left) ∧ (AtRead P m → TilesOK P m)
+/-- what the pass asks: left of the window where the walk splits the position (at the entry for the right foot, or at `G.subs`), `TilesOK` at the read of the right foot,
+and no place of `G.cuts` -/
+def HypG (G : Guard) (m : Machine) : Prop :=
+  (G.subs = 0 → AtEntry G.P m → px G.P m < G.P.left) ∧ (AtRead G.P m → TilesOK G.P m) ∧ (G.subs ≠ 0 → m.pc = G.subs → px G.P m < G.P.left) ∧ m.pc ∉ G.cuts
 
 /-- **The frame starts** in the idle loop, just before or just after the frame's first event, with the player's routine. -/
 structure FrameStart (G : Guard) (E : Env) (m : Machine) : Prop where
@@ -216,14 +226,19 @@ def readI (P : Spots) (A : AS) : Nat := ((ptrAt P A + A.y.v.toUInt16) &&& 0x7FF)
 def safeI (P : Spots) (i : Nat) (pa : AB) : Bool :=
   decide (pa.maxv.toNat ≤ P.pg) && decide (P.bufLo ≤ i) && decide (i < P.bufLo + P.bufBytes) && (i != P.dR || decide (pa.maxv.toNat + 1 < P.pg))
 
+/-- the position, one piece for each value left of the window -/
+def splitPos (P : Spots) (A : AS) : List AS :=
+  (List.range P.left).map fun n => (A.setK P.xI (AB.known (n % 256).toUInt8)).setK P.pI (AB.known (n / 256).toUInt8)
+
 /-- the pieces for the pass -/
 def zoneP (G : Guard) (A : AS) : List AS :=
   let P := G.P
-  if A.pc == P.foot then footP G A
+  if G.cuts.contains A.pc then []
+  else if A.pc == P.foot then footP G A
   else if A.pc == G.loadY then
     if (A.getK P.saveI).isK && P.idx2.contains (A.getK P.saveI).v then highP G A else [A]
-  else if A.pc == P.entry && A.y.isK && P.idx2.contains A.y.v then
-    (List.range P.left).map fun n => (A.setK P.xI (AB.known (n % 256).toUInt8)).setK P.pI (AB.known (n / 256).toUInt8)
+  else if G.subs != 0 && A.pc == G.subs then splitPos P A
+  else if G.subs == 0 && A.pc == P.entry && A.y.isK && P.idx2.contains A.y.v then splitPos P A
   else if A.pc == P.read then
     if (A.getK P.saveI).isK && P.idx2.contains (A.getK P.saveI).v && (A.getK P.ptrI).isK && (A.getK (P.ptrI + 1)).isK && A.y.isK && safeI P (readI P A) (A.getK P.pI) then
       bitList.map fun b => A.setK (readI P A) (neBit P.tile b)
@@ -257,18 +272,26 @@ def normRt (G : Guard) (A : AS) : AS :=
     else A
   | none => A
 
+/-- the return from the collision routine -/
+def colEnd (G : Guard) : UInt16 := (G.zLo.toUInt16 ||| (G.zHi.toUInt16 <<< 8)) + 1
+
 /-- what the search forgets: no part of the proof -/
 def normG (G : Guard) (A0 : AS) : AS :=
   let P := G.P
   let A := normRt G { A0 with padShift := AB.top }
+  -- with the split at `G.subs`, the position is kept from there to the read of the right foot, and forgotten at the return from the collision routine
+  let keepP := if G.subs != 0 then P.xI :: P.pI :: G.prot else G.prot
   if !inZone G A then
     if G.je ≤ A.pc && A.pc ≤ G.je + 18 then A else
-    let B := AS.forgetW G.prot A
+    let B := AS.forgetW keepP A
+    let B := if A.pc == colEnd G then forget [P.xI, P.pI] B else B
     let kn := (List.range (0x100 + A.s.toNat + 1 - G.stackLo)).foldl (fun k j => k.set! (G.stackLo + j) 0) B.kn
     { B with kn }
-  else if P.exits.contains A.pc || A.pc == P.foot then { AS.forgetW G.prot A with a := AB.top, x := AB.top, y := AB.top, p := AB.top }
+  else if P.exits.contains A.pc then { AS.forgetW G.prot A with a := AB.top, x := AB.top, y := AB.top, p := AB.top }
+  else if A.pc == P.foot then { AS.forgetW keepP A with a := AB.top, x := AB.top, y := AB.top, p := AB.top }
   else if A.pc == P.afterSum then
-    if (A.getK P.xI).isK then
+    let sv := A.getK P.saveI
+    if (A.getK P.xI).isK && (G.subs == 0 || (sv.isK && P.idx2.contains sv.v)) then
       { (forget [P.xI] A).setK P.sumI ⟨(A.getK P.sumI).v, (A.getK P.sumI).k &&& 0xF0⟩ with a := AB.top }
     else A
   else if A.pc == P.entry then { A with p := AB.top }
@@ -302,6 +325,7 @@ def keyG (G : Guard) (A : AS) : Nat :=
     else if G.je ≤ A.pc && A.pc ≤ G.je + 18 then
       let n := n * 65536 + num A.a
       n * 65536 + num A.y
+    else if G.subs != 0 && A.pc != colEnd G then (n * 65536 + num (A.getK P.xI)) * 65536 + num (A.getK P.pI)
     else n
   let n := n * 16777216 + A.s.toNat * 65536 + A.pc.toNat
   n * 18446744073709551616 + (n % 4294967291) * 4294967296 + stackHash A
@@ -523,6 +547,31 @@ def guardOf (sy : Syms) (m0 : Machine) : Guard :=
       | none => 0 }
 
 def ruleCheckG (sy : Syms) (m0 : Machine) : Bool := frameCheck (guardOf sy m0) (envOf m0)
+
+/-- the scroll handler: the routine that the end of the move calls first -/
+def scrollAt (sy : Syms) (m0 : Machine) : UInt16 := (romByte m0 (sy.PlayerSubs + 1)).toUInt16 ||| ((romByte m0 (sy.PlayerSubs + 2)).toUInt16 <<< 8)
+
+/-- the scroll handler's store of the horizontal position: it keeps him on the screen at its edges -/
+def edgeStore (sy : Syms) (m0 : Machine) : UInt16 := findStore m0 (scrollAt sy m0) (sy.Player_X_Position &&& 0xFF).toUInt8 200
+
+/-- the first `JMP t` from `a` on, within `n` bytes -/
+def findJmp (m : Machine) (a t : UInt16) : Nat → UInt16
+  | 0 => a
+  | n + 1 => if romByte m a == 0x4C && romByte m (a + 1) == t.toUInt8 && romByte m (a + 2) == (t >>> 8).toUInt8 then a else findJmp m (a + 1) t n
+
+/-- the routine of the head's collision with a block: the collision routine calls it just before its jump to the foot check -/
+def headAt (sy : Syms) (m0 : Machine) : UInt16 :=
+  let j := findJmp m0 sy.PlayerBGCollision sy.DoFootCheck 200
+  (romByte m0 (j - 2)).toUInt16 ||| ((romByte m0 (j - 1)).toUInt16 <<< 8)
+
+/-- a guard with the place of the split and the places cut -/
+def withSubs (G : Guard) (s : UInt16) (c : List UInt16) : Guard := { G with subs := s, cuts := c }
+
+/-- the guard with the position split at the end of the move, and the scroll handler's store cut -/
+def guardS (sy : Syms) (m0 : Machine) : Guard := withSubs (guardOf sy m0) sy.PlayerSubs [edgeStore sy m0, headAt sy m0]
+
+/-- **The check on the ROM, with the position at the end of the move.** -/
+def ruleCheckS (sy : Syms) (m0 : Machine) : Bool := sy.PlayerSubs != 0 && frameCheck (guardS sy m0) (envOf m0)
 
 /-! ## Forgetting follows the machine -/
 
@@ -1140,11 +1189,29 @@ theorem cov_high {G : Guard} (hy : G.yI < 2048) : Cov E F (highP G) := by
   have c4 : Cov E F (splitBit G.yI 16) := cov_bit hy (by decide)
   exact cov_then c1 (cov_then c2 (cov_then c3 c4))
 
-theorem cov_zone {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI < 2048 ∧ G.P.pI < 2048 ∧ G.P.saveI < 2048) (hh : HypG G.P m) (hs : Sim E F A m) :
+/-- the split of the position covers a machine left of the window -/
+theorem cov_split {P : Spots} {A : AS} {m : Machine} (hlt : px P m < P.left) (hs : Sim E F A m) :
+    ∃ B ∈ splitPos P A, Sim E F B m := by
+  obtain ⟨d1, d2⟩ := pos_digits (n := px P m) (p := m.ram.get! P.pI) (x := m.ram.get! P.xI) rfl
+  refine ⟨_, List.mem_map.2 ⟨px P m, List.mem_range.2 hlt, rfl⟩, ?_⟩
+  refine sim_setK' (sim_setK' hs ?_) ?_
+  · rw [d1]
+    exact mem_known_self _
+  · rw [d2]
+    exact mem_known_self _
+
+theorem cov_zone {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI < 2048 ∧ G.P.pI < 2048 ∧ G.P.saveI < 2048) (hh : HypG G m) (hs : Sim E F A m) :
     ∃ B ∈ zoneP G A, Sim E F B m := by
-  obtain ⟨hy, hx, hp, hsv⟩ := hb
+  obtain ⟨hy, _, hp, hsv⟩ := hb
+  obtain ⟨hE, hT, hS, hC⟩ := hh
   unfold zoneP
   simp only
+  by_cases h0 : G.cuts.contains A.pc = true
+  · exfalso
+    apply hC
+    rw [hs.pc]
+    exact List.mem_of_elem_eq_true h0
+  rw [if_neg h0]
   by_cases h1 : (A.pc == G.P.foot) = true
   · rw [if_pos h1]
     obtain ⟨B, hB, h3, _⟩ := cov_foot hy A m hs
@@ -1159,22 +1226,20 @@ theorem cov_zone {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI
     · rw [if_neg h3]
       exact ⟨A, List.mem_singleton.2 rfl, hs⟩
   rw [if_neg h2]
-  by_cases h3 : (A.pc == G.P.entry && A.y.isK && G.P.idx2.contains A.y.v) = true
+  by_cases h2s : (G.subs != 0 && A.pc == G.subs) = true
+  · rw [if_pos h2s]
+    simp only [Bool.and_eq_true, bne_iff_ne, beq_iff_eq] at h2s
+    exact cov_split (hS h2s.1 (by rw [hs.pc]; exact h2s.2)) hs
+  rw [if_neg h2s]
+  by_cases h3 : (G.subs == 0 && A.pc == G.P.entry && A.y.isK && G.P.idx2.contains A.y.v) = true
   · rw [if_pos h3]
     simp only [Bool.and_eq_true, beq_iff_eq] at h3
-    obtain ⟨⟨h4, h5⟩, h6⟩ := h3
+    obtain ⟨⟨⟨h3a, h4⟩, h5⟩, h6⟩ := h3
     have hyy : m.y = A.y.v := known_eq h5 hs.y
     have ha : AtEntry G.P m := ⟨by rw [hs.pc, h4], by
       rw [hyy]
       exact List.mem_of_elem_eq_true h6⟩
-    have hlt := hh.1 ha
-    obtain ⟨d1, d2⟩ := pos_digits (n := px G.P m) (p := m.ram.get! G.P.pI) (x := m.ram.get! G.P.xI) rfl
-    refine ⟨_, List.mem_map.2 ⟨px G.P m, List.mem_range.2 hlt, rfl⟩, ?_⟩
-    refine sim_setK' (sim_setK' hs ?_) ?_
-    · rw [d1]
-      exact mem_known_self _
-    · rw [d2]
-      exact mem_known_self _
+    exact cov_split (hE h3a ha) hs
   rw [if_neg h3]
   by_cases h4 : (A.pc == G.P.read) = true
   · rw [if_pos h4]
@@ -1185,7 +1250,7 @@ theorem cov_zone {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI
       have hpc : m.pc = G.P.read := by rw [hs.pc]; exact beq_iff_eq.1 h4
       have hsv2 : m.ram.get! G.P.saveI = (A.getK G.P.saveI).v := known_eq h6 (hs.ram _ hsv)
       have hat : AtRead G.P m := ⟨hpc, by rw [hsv2]; exact List.mem_of_elem_eq_true h7⟩
-      have htiles := hh.2 hat
+      have htiles := hT hat
       have hpage : (m.ram.get! G.P.pI).toNat ≤ (A.getK G.P.pI).maxv.toNat := TaintRun.le_maxv (hs.ram _ hp)
       simp only [safeI, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, bne_iff_ne] at h9
       obtain ⟨⟨⟨h10, h11⟩, h12⟩, h13⟩ := h9
@@ -1204,7 +1269,7 @@ theorem cov_zone {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI
     exact ⟨A, List.mem_singleton.2 rfl, hs⟩
 
 /-- every machine that meets the conditions is in a piece -/
-theorem cov_pre {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI < 2048 ∧ G.P.pI < 2048 ∧ G.P.saveI < 2048) (hc : Clean G m) (hh : HypG G.P m) (hs : Sim E F A m) :
+theorem cov_pre {G : Guard} {A : AS} {m : Machine} (hb : G.yI < 2048 ∧ G.P.xI < 2048 ∧ G.P.pI < 2048 ∧ G.P.saveI < 2048) (hc : Clean G m) (hh : HypG G m) (hs : Sim E F A m) :
     ∃ B ∈ preG G A, Sim E F B m := by
   obtain ⟨B, hB, h1⟩ := cov_jump hc (sim_cap hc hs)
   obtain ⟨D, hD, h2⟩ := cov_zone hb hh h1
@@ -1292,7 +1357,7 @@ theorem ne_of_okRt {G : Guard} {B : AS} {x : UInt8} (h : okRt G B = true) (hm : 
   exact h hm
 
 theorem live_stepG (ht : C.t.all (walkG C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
-    (hb : C.G.yI < 2048 ∧ C.G.P.xI < 2048 ∧ C.G.P.pI < 2048 ∧ C.G.P.saveI < 2048) (hr : C.G.rtI < 2048) {A : AS} {m : Machine} (hl : LiveG C F A m) (hc : Clean C.G m) (hh : HypG C.G.P m) :
+    (hb : C.G.yI < 2048 ∧ C.G.P.xI < 2048 ∧ C.G.P.pI < 2048 ∧ C.G.P.saveI < 2048) (hr : C.G.rtI < 2048) {A : AS} {m : Machine} (hl : LiveG C F A m) (hc : Clean C.G m) (hh : HypG C.G m) :
     (go step m).2.ram.get! C.G.rtI ≠ C.G.ev ∧ (F.1 < (go step m).2.frame ∨ ∃ A', LiveG C F A' (go step m).2) := by
   obtain ⟨hs, hk, n, hw⟩ := hl
   cases n with
@@ -1390,7 +1455,7 @@ theorem frameOK_of_check {G : Guard} {E : Env} (h : frameCheck G E = true) : Fra
 /-- **The frame.** From a `FrameStart`, while each instruction is `Clean` and meets `HypG`, the routine byte does not become the pipe's. -/
 theorem no_write_frame {G : Guard} {E : Env} (hc : frameCheck G E = true) (hE : E.pad = AB.top) {s : Nat → Machine} {n : Nat}
     (hs : ∀ j, j ≤ n → s (j + 1) = (go step (s j)).2) (hf : ∀ j, j ≤ n → (s j).frame ≤ (s 0).frame) (h0 : FrameStart G E (s 0))
-    (hh : ∀ j, j ≤ n → Clean G (s j) ∧ HypG G.P (s j)) : (s (n + 1)).ram.get! G.rtI ≠ G.ev := by
+    (hh : ∀ j, j ≤ n → Clean G (s j) ∧ HypG G (s j)) : (s (n + 1)).ram.get! G.rtI ≠ G.ev := by
   have hC := frameOK_of_check hc
   obtain ⟨b, hsim⟩ := sim_startG hE h0
   have hb : (cfgOf G E).G.yI < 2048 ∧ (cfgOf G E).G.P.xI < 2048 ∧ (cfgOf G E).G.P.pI < 2048 ∧ (cfgOf G E).G.P.saveI < 2048 :=
@@ -1452,10 +1517,10 @@ theorem entry_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : ruleC
   · exfalso
     have hn := no_write_frame (s := trace m i) (n := n) hc rfl (fun j hj => step_before hw j hj)
       (fun j hj => frame_before hw j hj) (h0.pad _)
-      (fun j hj => ⟨(hp n hw j hj).1, fun ha => by
+      (fun j hj => ⟨(hp n hw j hj).1, fun _ ha => by
         by_cases hl : (guardOf sy m0).P.left ≤ px (guardOf sy m0).P (trace m i j)
         · exact absurd ⟨j, hj, ha, hl⟩ hx
-        · omega, (hp n hw j hj).2⟩)
+        · omega, (hp n hw j hj).2, fun h => absurd rfl h, List.not_mem_nil⟩)
     exact hn hw.2
 
 /-- **The rule on frames.** `fm t` is the machine when frame `t` begins and `inp t` its input. This is what `PipeEntry.no_entry_by` needs: an entering frame is at or right of the window's left end. -/
@@ -1474,6 +1539,69 @@ theorem rule_on_frames {top amax : Int} {sy : Syms} {m0 : Machine} (hc : ruleChe
   have h6 : (guardOf sy m0).P.left = 256 * PipeEntry.pipePage sy m0 + PipeEntry.xLo sy := rfl
   rw [h6] at h4
   unfold PipeEntry.windowP
+  omega
+
+/-! ## The position at the end of the move
+
+With `guardS` the walk splits the position where the move ends (`PlayerSubs`), not at the entry for the right foot. So the frame model's `P₂`, the position there, is what the rule needs:
+nothing between the move and the foot check moves him, except the scroll handler's store at the screen's edges (`edgeStore`), which the frame does not come to. -/
+
+theorem clean_withSubs {G : Guard} {s : UInt16} {c : List UInt16} {m : Machine} (h : Clean G m) : Clean (withSubs G s c) m := ⟨h.store, h.read, h.jump, h.time⟩
+
+theorem start_withSubs {G : Guard} {s : UInt16} {c : List UInt16} {E : Env} {m : Machine} (h : FrameStart G E m) : FrameStart (withSubs G s c) E m :=
+  ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, h.known⟩
+
+theorem clean_guardS {sy : Syms} {m0 m : Machine} (h : Clean (guardOf sy m0) m) : Clean (guardS sy m0) m := clean_withSubs h
+
+theorem start_guardS {sy : Syms} {m0 : Machine} {E : Env} {m : Machine} (h : FrameStart (guardOf sy m0) E m) : FrameStart (guardS sy m0) E m := start_withSubs h
+
+/-- **The entry on a real frame, at the end of the move.** If the frame enters, it starts in control, its instructions up to the write are `Clean`, each read of the right foot up to the write meets `TilesOK`,
+and it does not come to the scroll handler's store of the position, then at the end of the move, before the write, the position is at or right of the window's left end. -/
+theorem entry_right_of_leftS {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : ruleCheckS sy m0 = true) (he : Enters sy m i)
+    (h0 : FrameStart (guardOf sy m0) (envOf m0) m)
+    (hp : ∀ n, WriteStep sy m i n → ∀ j, j ≤ n → Clean (guardOf sy m0) (trace m i j) ∧ (AtRead (guardOf sy m0).P (trace m i j) → TilesOK (guardOf sy m0).P (trace m i j)) ∧
+      (trace m i j).pc ≠ edgeStore sy m0 ∧ (trace m i j).pc ≠ headAt sy m0) :
+    ∃ n j, WriteStep sy m i n ∧ j ≤ n ∧ (trace m i j).pc = sy.PlayerSubs ∧ (guardOf sy m0).P.left ≤ px (guardOf sy m0).P (trace m i j) := by
+  simp only [ruleCheckS, Bool.and_eq_true, bne_iff_ne] at hc
+  obtain ⟨hne, hc⟩ := hc
+  obtain ⟨n, _, hw⟩ := writeStep_of_enters he
+  by_cases hx : ∃ j, j ≤ n ∧ (trace m i j).pc = sy.PlayerSubs ∧ (guardOf sy m0).P.left ≤ px (guardOf sy m0).P (trace m i j)
+  · obtain ⟨j, a, b, c⟩ := hx
+    exact ⟨n, j, hw, a, b, c⟩
+  · exfalso
+    have hn := no_write_frame (G := guardS sy m0) (s := trace m i) (n := n) hc rfl (fun j hj => step_before hw j hj)
+      (fun j hj => frame_before hw j hj) (start_guardS (h0.pad _))
+      (fun j hj => ⟨clean_guardS (hp n hw j hj).1, ⟨fun h0 _ => absurd h0 hne, (hp n hw j hj).2.1, fun _ hs => by
+        by_cases hl : (guardOf sy m0).P.left ≤ px (guardOf sy m0).P (trace m i j)
+        · exact absurd ⟨j, hj, hs, hl⟩ hx
+        · exact Nat.lt_of_not_le hl, by
+        show (trace m i j).pc ∉ [edgeStore sy m0, headAt sy m0]
+        simp only [List.mem_cons, List.not_mem_nil, or_false, not_or]
+        exact (hp n hw j hj).2.2⟩⟩)
+    exact hn hw.2
+
+/-- **The rule on frames, with the position at the end of the move.** `moved`: `P₂` is the position at the end of the move (`PlayerSubs`) before the write, as in the frame model.
+`edge`: before the write the frame does not come to the scroll handler's store of the position. -/
+theorem rule_on_framesS {top amax : Int} {sy : Syms} {m0 : Machine} (hc : ruleCheckS sy m0 = true) (fr : Nat → TopSpeed.Frame top amax)
+    (fm : Nat → Machine) (inp : Nat → UInt8)
+    (h0 : ∀ t, Enters sy (fm t) (inp t) → FrameStart (guardOf sy m0) (envOf m0) (fm t))
+    (hcl : ∀ t, Enters sy (fm t) (inp t) → ∀ n, WriteStep sy (fm t) (inp t) n → ∀ j, j ≤ n → Clean (guardOf sy m0) (trace (fm t) (inp t) j))
+    (ht : ∀ t, Enters sy (fm t) (inp t) → ∀ n, WriteStep sy (fm t) (inp t) n → ∀ j, j ≤ n → AtRead (guardOf sy m0).P (trace (fm t) (inp t) j) → TilesOK (guardOf sy m0).P (trace (fm t) (inp t) j))
+    (hedge : ∀ t, Enters sy (fm t) (inp t) → ∀ n, WriteStep sy (fm t) (inp t) n → ∀ j, j ≤ n → (trace (fm t) (inp t) j).pc ≠ edgeStore sy m0 ∧ (trace (fm t) (inp t) j).pc ≠ headAt sy m0)
+    (hmoved : ∀ t, Enters sy (fm t) (inp t) → ∀ n j, WriteStep sy (fm t) (inp t) n → j ≤ n → (trace (fm t) (inp t) j).pc = sy.PlayerSubs →
+      (fr t).P₂ = posP sy (trace (fm t) (inp t) j)) :
+    ∀ t, Enters sy (fm t) (inp t) → PipeEntry.windowP sy (PipeEntry.pipePage sy m0) ≤ (fr t).P₂ := by
+  intro t he
+  obtain ⟨n, j, h1, h2, h3, h4⟩ := entry_right_of_leftS hc he (h0 t he) (fun n hw j hj => ⟨hcl t he n hw j hj, ht t he n hw j hj, hedge t he n hw j hj⟩)
+  have h5 := hmoved t he n j h1 h2 h3
+  rw [h5]
+  have h6 : (guardOf sy m0).P.left = 256 * PipeEntry.pipePage sy m0 + PipeEntry.xLo sy := rfl
+  have h7 : (guardOf sy m0).P.xI = (sy.Player_X_Position &&& 0x7FF).toNat := rfl
+  have h8 : (guardOf sy m0).P.pI = (sy.Player_PageLoc &&& 0x7FF).toNat := rfl
+  rw [h6] at h4
+  unfold px at h4
+  rw [h7, h8] at h4
+  unfold PipeEntry.windowP posP peek
   omega
 
 /-! ## The tile, by single instructions
@@ -1569,10 +1697,20 @@ structure Report where
   tileBad : Nat := 0
   pageBad : Nat := 0
   pxs : List Nat := []
+  /-- with `G.subs`: frames in control that come to a place of `G.cuts`; entries that come to one before the write; entries with no arrival or more than one at `G.subs`
+  before the write; entries whose position there is left of the window; entries where it is not the start's moved by the speed there (`P₂ = P + 16·v₂`); entries where it differs from the
+  position at the entry for the right foot -/
+  cutFrames : Nat := 0
+  eCut : Nat := 0
+  eSubsN : Nat := 0
+  eSubsLeft : Nat := 0
+  eMove : Nat := 0
+  eSubsDiff : Nat := 0
   deriving Inhabited
 
 def Report.show (r : Report) : String :=
-  s!"frames {r.frames}, in control {r.ctl} (not FrameStart: {r.startBad}); instructions {r.instrs}: stores {r.stores} (bad {r.storeBad}), pointer reads {r.reads} (bad {r.readBad}), jumps {r.jumps} (bad {r.jumpBad}), late {r.timeBad}, largest dot {r.maxDot}, bad pcs {r.badPcs.take 6}; right foot reads {r.footReads} (not TilesOK: {r.tilesBad}); entries {r.entries} (not FrameStart: {r.eStart}, not Clean: {r.eClean}, not TilesOK: {r.eTiles}, not the write: {r.writeBad}, no foot: {r.noFoot}, left of the window: {r.leftBad}, right of it: {r.rightOut}, positions differ: {r.posDiff}, moved after: {r.moved}, largest dot of a write: {r.writeDot}), positions {r.pxs.eraseDups}; stores of the tile {r.tileWrites} (bad {r.tileBad}), page back with the tile {r.pageBad}"
+  s!"frames {r.frames}, in control {r.ctl} (not FrameStart: {r.startBad}); instructions {r.instrs}: stores {r.stores} (bad {r.storeBad}), pointer reads {r.reads} (bad {r.readBad}), jumps {r.jumps} (bad {r.jumpBad}), late {r.timeBad}, largest dot {r.maxDot}, bad pcs {r.badPcs.take 6}; right foot reads {r.footReads} (not TilesOK: {r.tilesBad}); entries {r.entries} (not FrameStart: {r.eStart}, not Clean: {r.eClean}, not TilesOK: {r.eTiles}, not the write: {r.writeBad}, no foot: {r.noFoot}, left of the window: {r.leftBad}, right of it: {r.rightOut}, positions differ: {r.posDiff}, moved after: {r.moved}, largest dot of a write: {r.writeDot}), positions {r.pxs.eraseDups}; stores of the tile {r.tileWrites} (bad {r.tileBad}), page back with the tile {r.pageBad}" ++
+  s!"; the end of the move: frames in control at a cut place {r.cutFrames}, entries at a cut place before the write {r.eCut}, not one arrival {r.eSubsN}, left of the window there {r.eSubsLeft}, not the start moved by the speed {r.eMove}, not the position at the right foot {r.eSubsDiff}"
 
 /-- one real frame with the bits `pad` of the controller -/
 def scanFrame (sy : Syms) (G : Guard) (E : Env) (m : Machine) (pad : UInt8) (r0 : Report) : Report × Machine := Id.run do
@@ -1588,8 +1726,15 @@ def scanFrame (sy : Syms) (G : Guard) (E : Env) (m : Machine) (pad : UInt8) (r0 
   let mut lastPx : Option Nat := none
   let mut diff := false
   let mut entered : Option Nat := none
+  let mut subsN := 0
+  let mut subsAt : Option Machine := none
+  let mut cutSeen := false
   let mut n := 0
   while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) do
+    if G.cuts.contains c.pc then cutSeen := true
+    if G.subs != 0 && c.pc == G.subs && entered.isNone then
+      subsN := subsN + 1
+      subsAt := subsAt <|> some c
     let (a, b, j, d) := cleanB G c
     let op := opAt c
     if ctl then
@@ -1638,6 +1783,15 @@ def scanFrame (sy : Syms) (G : Guard) (E : Env) (m : Machine) (pad : UInt8) (r0 
         noFoot := r.noFoot + (if lastPx.isSome then 0 else 1)
         posDiff := r.posDiff + (if diff then 1 else 0)
         writeDot := Nat.max r.writeDot dot }
+      if G.subs != 0 then
+        let one : Nat := if cutSeen then 1 else 0
+        r := { r with eCut := r.eCut + one, eSubsN := r.eSubsN + (if subsN == 1 then 0 else 1) }
+        match subsAt with
+        | some u =>
+          let moveOk := posP sy u == posP sy m + 16 * sbyte (peek u sy.Player_X_Speed)
+          r := { r with eSubsLeft := r.eSubsLeft + (if px P u < P.left then 1 else 0), eMove := r.eMove + (if moveOk then 0 else 1),
+                        eSubsDiff := r.eSubsDiff + (if lastPx == some (px P u) then 0 else 1) }
+        | none => pure ()
       match lastPx with
       | some q =>
         r := { r with leftBad := r.leftBad + (if q < P.left then 1 else 0), pxs := q :: r.pxs,
@@ -1648,6 +1802,7 @@ def scanFrame (sy : Syms) (G : Guard) (E : Env) (m : Machine) (pad : UInt8) (r0 
   match entered with
   | some q => if px P c != q then r := { r with moved := r.moved + 1 }
   | none => pure ()
+  if ctl && cutSeen then r := { r with cutFrames := r.cutFrames + 1 }
   return (r, c)
 
 end Smbrta.PipeWrites

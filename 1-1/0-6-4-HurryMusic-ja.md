@@ -12,10 +12,10 @@
 
 `seq n` はフレーム `n` が始まるときの機械です。`s(n)` はフレーム `n` が始まるときの `clock` のカウンタです（`CastleToLevel.Frames`。`Route.Run.clock` と同じものです）。`timer(m)` は機械 `m` のタイマーの 3 桁の値です。
 
-`hurryOn(m)` は、機械 `m` で急ぎの音楽がキューにあるか、鳴っているか、そのあとの曲を速くしていることです。
+`hurryOn(m)` は、機械 `m` で急ぎの音楽がキューにあるか、鳴っているか、そのあとの曲を速くしていることです。キューとバッファは音楽のビットで読みます（`TimeRunningOutMusic` の番号 `v` のビットは 1 つです）。
 
 ```
-hurryOn(m)  =  EventMusicQueue(m) = TimeRunningOutMusic  ∨  EventMusicBuffer(m) = TimeRunningOutMusic  ∨  NoteLengthTblAdder(m) ≠ 0
+hurryOn(m)  =  EventMusicQueue(m) & v ≠ 0  ∨  EventMusicBuffer(m) & v ≠ 0  ∨  NoteLengthTblAdder(m) ≠ 0
 ```
 
 `HurryMusic.Run` のフィールドです。
@@ -26,10 +26,14 @@ next           seq(n + 1) = frame(seq n, inp n)
 title          タイトルで Start を押してからフレーム 0 まで（TitleStart.Begin）
 read₀          s(0).t = timer(seq 0)
 k, hk, on      k ≤ E + 1,  hurryOn(seq k) = true
-music          n < k,  hurryOn(seq n) = false,  hurryOn(frame(seq n, inp n)) = true  ⟹  timer(seq n) ≤ u        （1 フレーム）
-below          n < k  ⟹  s(n).t ≤ timer(seq n)
+音楽を始めるフレーム n について:  n < k,  hurryOn(seq n) = false,  hurryOn(seq (n + 1)) = true  ⟹
+  start        Start(seq n)                          （1 つの状態: 操作中か登場中。HurryFrame を参照）
+  clean        ∀ j,  CleanM(tr_n(j))                  （そのフレームの各命令）
+  below        s(n + 1).t ≤ timer(seq (n + 1))       （1 フレーム）
 L, after       E < L
 ```
+
+`Start` と `CleanM` は [急ぎの音楽を始めるフレーム](0-6-4-2-1-HurryFrame-ja.md) のものです。`tr_n(j)` はフレーム `n` の `j` 命令あとの機械です。
 
 定理です。
 
@@ -37,6 +41,7 @@ L, after       E < L
 Frames.late         :  s(0).t = t0,  n ≤ E + 1,  s(n).t ≤ u  ⟹  q · (t0 − u) ≤ E + 3q
 Run.zero            :  timer(seq 0) = t0                （title と確かめ title_check から）
 Run.quiet₀          :  hurryOn(seq 0) = false           （title と確かめ title_check から）
+Run.music           :  音楽を始めるフレーム n で  timer(seq (n + 1)) ≤ u      （start と clean と確かめ music_check から）
 Run.late            :  1 ≤ q  ⟹  q · (t0 − u) ≤ E + 3q
 Run.level_ge        :  1 ≤ q,  1748 + 3q ≤ q · (t0 − u)  ⟹  1748 ≤ L
 hurry_1_1（非公開）  :  q = 24,  t0 = 401,  u = 100  ⟹  1748 ≤ L
@@ -46,11 +51,13 @@ hurry_1_1（非公開）  :  q = 24,  t0 = 401,  u = 100  ⟹  1748 ≤ L
 
 証明です。
 
-* `hurryOn` はフレーム 0 で偽、フレーム `k` で真です。なので偽から真になるフレーム `n < k` があります（`first_on`）。`music` から `timer(seq n) ≤ u`、`below` から `s(n).t ≤ u` です。
+* `hurryOn` はフレーム 0 で偽、フレーム `k` で真です。なので偽から真になるフレーム `n < k` があります（`first_on`）。`Run.music` から `timer(seq (n + 1)) ≤ u`、`below` から `s(n + 1).t ≤ u` です。`n + 1 ≤ k ≤ E + 1` です。
 * `Frames.late`: どのフレームもタイマーの数字を上げません（`t_anti`）。なので `T = s(E + 1).t ≤ u` です。`hT` から `t0 − u ≤ ⌈p₁/q⌉ + ⌈p₂/q⌉ + ⌈p₃/q⌉` です。`p₁`、`p₂`、`p₃` は 3 つのエリアのプレイのフレーム数です。`q · ⌈p/q⌉ ≤ p + q − 1` で、`p₁ + p₂ + p₃ ≤ E` です。
 * `Run.level_ge`: `L > E ≥ q · (t0 − u) − 3q ≥ 1748` です。
 
 `hT` はどのサブカウンタから始めても成り立ちます（`playN_drop`）。プレイ `p` フレームで、タイマーの数字は `⌈p/q⌉` より多くは減りません。なので音楽の 1 フレームとタイマーの規則だけで足ります。
+
+`Run.music`: `HurryFrame.frame_music` の歩きから、そのフレームは音楽なしで終わるか、タイマー `u` 以下で終わります。音楽ありで終わるので、タイマーは `u` 以下です。`u = 100` のとき、本物のフレームではそこで 99 です。
 
 ## 本物のフレームでの確認
 
@@ -68,16 +75,31 @@ hurry_1_1（非公開）  :  q = 24,  t0 = 401,  u = 100  ⟹  1748 ≤ L
 
 音楽が始まらなかった 60 回は、タイマーが動かない切り替えか、触ったあとか、600 フレームでは 100 まで下がらない値です。
 
+同じ確認で、音楽を始める 108 のフレームを 1 命令ずつ動かします。
+
+```
+Start                                      108 のうち 108（操作のルーチン 94、登場のルーチン 14）
+始まりで音楽のビットなし                   108 のうち 108
+CleanM を満たす命令                        521,286 のうち 521,286
+終わりのタイマー                           108 全部で 99
+何もしないループで終わる                   108 のうち 108
+動画の操作中か登場中のフレーム             833。全部で Start、音楽なし、CleanM（4,034,601 命令）
+```
+
+108 のフレームはどれも何もしないループで終わります。ルーチンがフレームの中で終わります。なので次のフレームが始まるときの `clock` のカウンタは機械のもので、そこで `below` は等号で成り立ちます。
+
 ## 証明していないこと
 
-* `music` は 1 フレームの仮定です。コードでは、急ぎの音楽をキューに入れるのは `RunGameTimer` だけで、タイマーが 100 のときです。`EventMusicBuffer` はキューから写します。`NoteLengthTblAdder` を 0 でない値にするのは、キューの急ぎの音楽を読み込むときだけです。これはコードから読んだもので、上の 108 フレームで確かめました。
-* `below` と `read₀` はカウンタと機械のつながりです。はみ出すフレームのない走りでは、`clock` のカウンタは機械から読んだ値なので、等号で成り立ちます。はみ出すフレームでは、境目の数字はルーチンが残す数字より小さくありません。ルーチンは数字を下げるだけだからです。これはコードから読んだもので、確かめていません。
+* `music` はもうフィールドではありません。`start` と `clean` から、1 フレーム全体の歩きで証明します（[急ぎの音楽を始めるフレーム](0-6-4-2-1-HurryFrame-ja.md)）。`start` と `clean` はその 1 フレームとその命令の条件です。上の 108 フレームで確かめましたが、証明はしていません。
+* `below` は 1 フレームでだけ要るようになりました。音楽を始めるフレームの次のフレームです。前は `k` までの全部のフレームで要りました。カウンタと機械のつながりです。はみ出すフレームのない走りでは、`clock` のカウンタは機械から読んだ値なので、等号で成り立ちます。はみ出すフレームでは、境目の数字はルーチンが残す数字より小さくありません。ルーチンは数字を下げるだけだからです。これはコードから読んだものです。上の本物の 108 フレームでは等号で成り立ちます。
+* `read₀` は、`Route.Run` と同じく、フレーム 0 が始まるときのカウンタと機械のつながりです。
 * `title` は [タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md) の仮定です。押したあとの機械の 1 つの条件と、操作できるまでのゲームコアのフレームで Start を押さないことです。`zero` と `quiet₀` はもうフィールドではありません。ここから証明します（`Run.zero`、`Run.quiet₀`）。
 * `clock` の `step` と `plan` は `Route.Run` と同じ仮定です（[1-1 全体](0-1-Route-ja.md)）。パワーアップのある走りと死ぬ走りは `plan` に従わないので、ここにも入りません。
 
-**ファイル.** `Theorems/HurryMusic.lean`、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、`Theorems/TitleStart.lean`、非公開の `Proof/HurryMusic.lean` と `Proof/TitleStart.lean`。
+**ファイル.** `Theorems/HurryMusic.lean`、`Theorems/HurryFrame.lean`、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、`Theorems/TitleStart.lean`、非公開の `Proof/HurryMusic.lean`、`Proof/HurryFrame.lean`、`Proof/TitleStart.lean`。
 
 **再現.**
 ```
 .lake/build/bin/smbrta hurry-check FM2
+.lake/build/bin/smbrta music-check
 ```

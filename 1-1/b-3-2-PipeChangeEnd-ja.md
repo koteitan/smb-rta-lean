@@ -2,7 +2,7 @@
 
 # `fall` なしの部屋への切り替え
 
-**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入り、`entry₁` は新しい入るときの条件になります。`keep₁` もなくなりました。[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)を見てください。さらに出口で時間が切れておらず（`TimeOK`）、`b` が入ったあと最初の操作なら、操作の前に `left` は 0 になりません（`PipeRun.first`）。操作のときの機械は時間の段の中にあります（`PipeRun.inRowsT`）。これでルートから `first₁` がなくなります。`Changes` には代わりに `time₁` と `ctlFirst₁` が入ります（項目 1-1-b-3-9）。
+**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入ります。入るときの条件 `Entry` は、いまはその一部をタイトルで Start を押したことと操作できるときからのフレームから出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。`keep₁` もなくなりました。[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)を見てください。さらに出口で時間が切れておらず（`TimeOK`）、`b` が入ったあと最初の操作なら、操作の前に `left` は 0 になりません（`PipeRun.first`）。操作のときの機械は時間の段の中にあります（`PipeRun.inRowsT`）。これでルートから `first₁` がなくなります。`Changes` には代わりに `time₁` と `ctlFirst₁` が入ります（項目 1-1-b-3-9）。
 
 `m₀`、`run`、`ctl`、`0^k`、`E` は[地下への切り替えの長さを決めるもの](b-2-1-PipeTransitionAll-ja.md)と同じです。`left` は[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)と同じです。土管のルーチンが動くあいだは `timer + 43` で、そのあとは 43 行の表から読みます。`frame(m, i)` は `m` から入力 `i` で進む 1 フレームです。`trace(m, i, j)` はそのフレームを `j` ステップ進めた機械です。`T = run(E, 0^48)` は出口の基準です。`m[b]` は `m` のバイト `b` です。`+k` のついた名前は、その名前の `k` バイトあとのバイトです。`Paused(m)` は、`GamePauseStatus` の最下位ビットが立っていることです。`m[GamePauseStatus] & 1 = 1` です。`TimeOK(m)` は時間が切れていないことです。`m[PauseModeFlag] = 0 ∧ (m[GameTimerDisplay], m[GameTimerDisplay+1], m[GameTimerDisplay+2]) ≠ (0, 0, 0)` です。
 
@@ -166,7 +166,7 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 
 ## 仮定（Lean では証明していない）
 
-* 本物の走りの入る状態で `Entry`（`chg.entry₁`）。項目 1-1-b-3-4。`WorldNumber`、`PrimaryHardMode`、`AreaMusicBuffer_Alt` のビットは新しく入りました。前のフィールド `chg.roomRest` の代わりです（[d-2-4-1](d-2-4-1-ScreenStart-ja.md)）。これらを足す前に測ったこと: `K` の 113 バイトとマスクつきの 12 バイトのうち 109 は、基準の道でも TAS でも、`m₀` から入るまでのどのフレームでも同じ値です。5 つは `m₀` ですでに違います。`Up_Down_Buttons`、`GameEngineSubroutine`、`EnemyObjectPageLoc`、`EnemyObjectPageSel`、`ScreenTimer` です。TAS では 11 が途中で変わり、入るときには戻っています。`Player_State`、`Enemy_State`（2 つのスロット）、`Block_State`、`Block_RepFlag`、`Misc_State+8`、`Misc_Y_Position+8`、`FloateyNum_Control`（2 つ）、`Square1SoundQueue`、`Square2SoundQueue` です。パート a のフレームの歩みが 109 バイトを保つとしても、この 16 は残ります。
+* 本物の走りの入る状態で `Entry`。項目 1-1-b-3-4。もうフィールドではありません。`Run.entry₁` が、タイトルで Start を押したこと、操作できるときから入るまでのフレーム（`upStart₁`、`upClean₁`）、`Rest`（`entryRest₁`: 土管のタイマーと 128 バイトのうち 61）から出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
 * 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。項目 1-1-b-3-5:
   * `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許し、上限もないので、走りに何も求めません。状態はそこでこのオフセットで分かれ、確認にはそれが要ります。
   * `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater`、`ColorRotation` にはドットの上限 50,000 がありました。これらはなくなりました。5 つの上限（`UpdScrollVar` とこの 4 つ）のうちどの 4 つを外しても確認は成り立ち、5 つすべてを外すと成り立ちません。だから上限は 1 つ、パーサーの場所に残します。14 個の入る状態と 3 種類の入力では、土管の 1,974 フレームは、どれもドット 37,603 以下でパーサーの場所に着きます。

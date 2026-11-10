@@ -1620,6 +1620,32 @@ structure TimeOK (nx : Names) (m : Machine) : Prop where
   flag : m.ram.get! (adI nx "PauseModeFlag") = 0
   timer : ∃ i ∈ digitsOf nx, m.ram.get! i ≠ 0
 
+/-- the value that the game timer's three digits show -/
+def timerVal (nx : Names) (m : Machine) : Nat := (digitsOf nx).foldl (fun a i => 10 * a + (m.ram.get! i).toNat) 0
+
+theorem fold_digit (m : Machine) : ∀ (l : List Nat) (a : Nat), l.foldl (fun a i => 10 * a + (m.ram.get! i).toNat) a ≠ 0 → a ≠ 0 ∨ ∃ i ∈ l, m.ram.get! i ≠ 0
+  | [], a, h => Or.inl h
+  | x :: l, a, h => by
+    rcases fold_digit m l (10 * a + (m.ram.get! x).toNat) h with h1 | ⟨i, hi, h2⟩
+    · by_cases hx : (m.ram.get! x).toNat = 0
+      · left
+        omega
+      · right
+        refine ⟨x, List.mem_cons_self, fun h0 => hx ?_⟩
+        rw [h0]
+        rfl
+    · exact Or.inr ⟨i, List.mem_cons_of_mem _ hi, h2⟩
+
+/-- a timer that does not show 0 has a digit that is not 0 -/
+theorem digit_of_timerVal {nx : Names} {m : Machine} (h : timerVal nx m ≠ 0) : ∃ i ∈ digitsOf nx, m.ram.get! i ≠ 0 := by
+  rcases fold_digit m (digitsOf nx) 0 h with h1 | h1
+  · exact absurd rfl h1
+  · exact h1
+
+/-- **The time at the exit from its two parts**: the sound's pause flag, and a timer that does not show 0 -/
+theorem timeOK_of {nx : Names} {m : Machine} (hf : m.ram.get! (adI nx "PauseModeFlag") = 0) (ht : timerVal nx m ≠ 0) : TimeOK nx m :=
+  ⟨hf, digit_of_timerVal ht⟩
+
 /-- the environment of these rows: `dg` says that the timer is not 000 -/
 def timeEnv (nm nx : Names) (e : Machine) : Env := { rowsEnv nm nx e with D := digitsOf nx }
 

@@ -37,6 +37,8 @@ entry_right_of_left  :  ruleCheck,  Enters(m, i),  (∀ n,  WriteStep(n) → Pas
                         →  ∃ n j,  WriteStep(n) ∧ j < n ∧ AtEntry(tr(j)) ∧ x₀ ≤ px(tr(j))
 mouth_of_pass        :  ruleCheck,  Enters(m, i),  (∀ n,  WriteStep(n) → Pass(n)),  pos(P)  →  P₀ ≤ P
 enters_of_ends       :  EndsEntry(m, i)  →  Enters(m, i)
+PassR(n)             :=  読みで RowOK だけを求める Pass(n)（TilesOK なし）
+pass_of              :  PassR(n),  (∀ j < n,  AtRead(tr(j)) → TilesOK(tr(j)))  →  Pass(n)
 RoomRun.mouth_of     :  Checks,  RoomRun  →  P₀ ≤ P(E)
 side_rule_check（非公開） :  ruleCheck(sy, m₀) = true（native_decide）
 ```
@@ -48,7 +50,7 @@ Lean: `Theorems/SideEntryRule.lean`、`Theorems/RoomJoin.lean` の `RoomRun`、�
 `RoomJoin` のフィールドは次のように変わりました。
 
 * なくなったもの: `entry`、`entry_mem`、`entered`、`entry_P`（`RoomFields`）。`Checks.side` は `Checks.sideRule` になりました。
-* 増えたもの: `enters`（`Enters(fm(E − 1), pad(E))`、フレーム `E` の始めの機械と入力）、`pass`（`∀ n, WriteStep(n) → Pass(n)`）、`pos`（`pos(P(E))`）。どれも `RoomRun` のフィールドで、フレーム `E` だけについての事実です。`RoomCore.mouth`（`P₀ ≤ P(E)`）は、これらから `RoomRun.mouth_of` が作ります。
+* 増えたもの: `enters`（`Enters(fm(E − 1), pad(E))`、フレーム `E` の始めの機械と入力）、`pass`（`∀ n, WriteStep(n) → Pass(n)`）、`pos`（`pos(P(E))`）。どれも `RoomRun` のフィールドで、フレーム `E` だけについての事実です。`RoomCore.mouth`（`P₀ ≤ P(E)`）は、これらから `RoomRun.mouth_of` が作ります。今は `pass` は `PassR(n)` を与え、タイルは別のフィールド `tiles`（`∀ n j, WriteStep(n) → j < n → AtRead(tr(j)) → TilesOK(tr(j))`）です。`pass_of` が 2 つを合わせます。
 
 前の `entry_ground`（入る状態は地面にある）はなくなりました。証明では使っていませんでした。
 
@@ -96,7 +98,7 @@ Lean: `Theorems/SideEntryRule.lean`、`Theorems/RoomJoin.lean` の `RoomRun`、�
 * **`Pass` の書き込みの部分.** `rt` を `e_s` にする命令は `w` だけ。そのフレームの中で、それより前に横の判定を始めている。そこから出口に行っていない。コードから読みました。上の表の本物のフレームで確かめました。フレームの残り（NMI、音、画面、敵）は追っていません。
 * **`Start`.** スタックポインタ、足し算の番号、ドット、フラグです。旗と同じです。
 * **`RowOK`.** コードから読みました。旗と同じです。
-* **`TilesOK`.** 2 つのタイルは、ブロックバッファの中で土管の列にしかない。手で書いたブロックバッファと同じ、という前提より狭いです。部屋の列をバッファに書くコードは追っていません。
+* **`TilesOK`.** 2 つのタイルは、ブロックバッファの中で土管の列にしかない。[部屋のブロックの地図](c-7-12-RoomMap-ja.md) が、部屋への切り替えと部屋からの切り替えの機械（`Route.Changes`）の上で、部屋のどのフレームのどの読みでも証明します。使う仮定は、部屋のフレームがそこですでに仮定しているもの（`SiteOK`）です。`RoomRun` のフレーム `E` をその機械につなぐまでは、`RoomRun` のフィールド（`tiles`）のままです。
 * **`pos`.** `P(E)` はページを読むときの位置です。本物のフレームから `Frame` を作る話の一部です。
 * **右端、高さ、地面.** ここでは左端だけを出します。`RoomJoin` が使うのは左端だけです。
 

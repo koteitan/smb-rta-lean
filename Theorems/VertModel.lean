@@ -246,7 +246,7 @@ theorem vcase_mem {st ab : UInt8} {prevA : Bool} (h1 : st ∈ [(0 : UInt8), 1, 2
 /-- **The vertical movement of a real frame.** From the player's routine to the scroll handler, the vertical bytes read from the machine follow `vstep` on the machine
 `vmach`: with A of this frame and the stored speed. Two conditions on the state at the player's routine: in a jump the jump's halt value is 1, and A on the frame before is
 the A that the machine holds. -/
-theorem vert_model {S : UInt8} {R : Machine} (hOK : vertOK sy m0 S = true) (h : AtCtrl sy (Rom.of m0) S R)
+theorem vert_model {S : UInt8} {R : Machine} (hOK : vertOK sy m0 S = true) (h : FrameModel.AtCtrl0 sy (Rom.of m0) S R)
     (hd : peek R sy.Player_State = 1 → peek R sy.DiffToHaltJump = 1)
     (hp : peek R sy.PreviousA_B_Buttons &&& 0x80 = peek R sy.A_B_Buttons &&& 0x80) :
     ∃ k, k ≤ FrameModel.moveLen ∧ Good (Rom.of m0) (stepN k R) ∧ (stepN k R).pc = sy.PlayerSubs ∧ (stepN k R).s = S ∧

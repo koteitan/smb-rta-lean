@@ -42,6 +42,7 @@ GameModeValue
 VictoryModeValue
 Task_GameCore=index:GameMode:GameCoreRoutine
 Eng_PlayerCtrl=index:GameRoutines:PlayerCtrlRoutine
+Eng_PlayerEntrance=index:GameRoutines:PlayerEntrance
 FrameTimersLast=byte:DecTimers+1
 # the running top speed (first entry of the right-speed table)
 RunTopSpeed=byte:MaxRightXSpdData+0
@@ -202,3 +203,5 @@ LRAir
 PJumpSnd
 MovePlayerVertically
 NoJSChk
+# the friction routine: where its two ways to slow a move right join
+RghtFrict

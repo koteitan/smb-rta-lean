@@ -112,7 +112,7 @@ This is a program (`pipe-rule-check`).
 * **`RowOK`.** Read from the code's `AND`, `SBC`, `TAY` and the `CMP` at the foot check's start. It is assumed on this page. [The whole frame](a-5-2-PipeWrites.md) does not assume it.
 * **`TilesOK` (item 1-1-a-5-3).** This is narrower than "the same as the hand-written block buffer": it is about the right tile only. The page condition says that the pipe's column is not yet in the buffer when he is on the page two before it, which has the same parity.
 * **`pos`.** `P₂` is the position on entering the routine for the right foot. It is part of making `Frame` from real frames (item 0-0-0-3-1).
-* **The right end of the window and the rest of `rule`.** Only the left end is given here, and `Route` uses only the left end: `Route.Pipe` has `start`, `clean`, `tiles` and `pos` in place of `rule`. The right end, Down and the landing stay with `rule` of [Entering the vertical pipe](a-4-PipeEntry.md), on the hand-written buffer.
+* **The right end of the window and the rest of `rule`.** Only the left end is given here, and `Route` uses only the left end: `Route.Pipe` has `start`, `clean`, `tiles`, `edge` and `moved` in place of `rule`. The right end, Down and the landing stay with `rule` of [Entering the vertical pipe](a-4-PipeEntry.md), on the hand-written buffer.
 
 **Files.** `Theorems/PipeEntryRule.lean`, private `Proof/PipeEntryRule.lean`.
 

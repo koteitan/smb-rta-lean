@@ -11,7 +11,8 @@ at or right of the left end of the mouth when the block buffer routine read the 
 This is `PoleEntryRule` with other places: the side check is the same, the write is the one in the side pipe's part of it, the two tiles are those the routine enters by, the page is 0. The pieces of
 a byte read are other ones, because the two tiles differ in more than one bit. The whole frame is not followed. What is assumed stays on the single frame: the instruction that writes the routine byte
 is the collision routine's own, it comes at the end of one pass from the start of the side check (`PoleEntryRule.Pass`), and the block buffers hold the two tiles only in the pipe's column
-(`PoleEntryRule.TilesOK`). What is proved is the pass (`no_write`). There is no game data in this file. Page: `1-1/c-7-3-SideEntryRule.md`.
+(`PoleEntryRule.TilesOK`). What is proved is the pass (`no_write`). `PassR` is `Pass` without the tiles: `RoomMap.map_of_rows` proves the tiles on the frames of the room.
+There is no game data in this file. Page: `1-1/c-7-3-SideEntryRule.md`.
 -/
 
 namespace Smbrta.SideEntryRule
@@ -445,6 +446,17 @@ theorem mouth_of_pass {sy : Syms} {m0 m : Machine} {i : UInt8} {P₂ : Int} (hc 
   rw [h5] at h3
   unfold SidePipe.mouthP
   omega
+
+/-- `Pass` without the tiles: the reads of the pass meet `RowOK`. The tiles (`TilesOK`) are given apart: `RoomMap.map_of_rows` proves them on the frames in the room. -/
+def PassR (P : Spots) (E : Env) (tr : Nat → Machine) (n : Nat) : Prop :=
+  (tr n).pc = P.write ∧ ∃ n₀, n₀ ≤ n ∧ Start P E (tr n₀) ∧ (∀ j, n₀ ≤ j → j ≤ n → (tr j).pc ∉ P.exits) ∧
+    (∀ j, n₀ ≤ j → j < n → AtRead P (tr j) → RowOK P (tr j))
+
+/-- `PassR` and the tiles at the reads before the write give `Pass` -/
+theorem pass_of {P : Spots} {E : Env} {tr : Nat → Machine} {n : Nat} (h : PassR P E tr n) (ht : ∀ j, j < n → AtRead P (tr j) → TilesOK P (tr j)) :
+    Pass P E tr n := by
+  obtain ⟨h1, n₀, h2, h3, h4, h5⟩ := h
+  exact ⟨h1, n₀, h2, h3, h4, fun j a b c => ⟨h5 j a b c, ht j b c⟩⟩
 
 /-! ## On real frames: a program, no part of the proof -/
 

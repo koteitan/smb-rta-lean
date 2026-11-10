@@ -2,7 +2,7 @@
 
 # A real frame and the horizontal and vertical models
 
-**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). The parts before the player's routine and after the scroll handler are assumptions on one frame.
+**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). With the pressed side masked, the frame follows `hstep` or leaves the speed 0 (`move_masked`). The parts before the player's routine and after the scroll handler are assumptions on one frame.
 
 `tr(n)` is the machine `n` instructions into `frame(M, i)`. `HS(m)` is the horizontal state read from machine `m` (speed, subspeed, facing, moving direction, whether `RunningSpeed` is 0). `P(m)` is the position. `In(m)` is the input read from the machine at the player's routine. `v'` is the speed of `HS(frame(M, i))`.
 
@@ -18,7 +18,7 @@ frame_read  :  modelOK,  frictionCheck,  ReadFrame(M, i, n₀)
 
 From `frame_read` and `TopSpeed`'s `Frame.bound`: with `|v| ≤ v_top`, `|v'| ≤ v_top` and `P' − P ≤ 16·v_top`. So `move_top` of `RoomJoin` is now a theorem.
 
-Lean: `Theorems/FrameWalk.lean` (the walk over two machines: `tstep_spec`, `walkT_spec`, `piece_spec`, `leaf_spec`; with detours: `lk_detour`, `walkD_spec`, `leafD_spec`), `Theorems/FrameModel.lean` (`move_model`, `clean_frame`, `frame_read`), `Theorems/VertModel.lean` (`vert_model`), private `frame_model` (`modelOK`, `native_decide`). `vertOK` is a part of `SurfaceFrames.numbersCheck`. No file has game values. The checks take about 2 s and 0.1 s natively.
+Lean: `Theorems/FrameWalk.lean` (the walk over two machines: `tstep_spec`, `walkT_spec`, `piece_spec`, `leaf_spec`; with detours: `lk_detour`, `walkD_spec`, `leafD_spec`), `Theorems/FrameModel.lean` (`move_model`, `move_masked`, `clean_frame`, `frame_read`), `Theorems/VertModel.lean` (`vert_model`), private `frame_model` (`modelOK`, `native_decide`). `vertOK` and `maskOK` are parts of `SurfaceFrames.numbersCheck`. No file has game values. The checks take about 2 s, 0.1 s and 0.1 s natively.
 
 ## The walk over two machines
 
@@ -41,14 +41,14 @@ leafD_spec :  walkD from a routine's entry, the stack pointer the same on both
               →  at the routine's return the tags relate the real machine and the result of runSub
 ```
 
-`leaf_spec` needs a routine that calls no other routine. `leafD_spec` allows calls, because the stack pointer is known.
+`leaf_spec` needs a routine that calls no other routine. `leafD_spec` allows calls, because the stack pointer is known. `runSub2` relates the results of `runSub` of two machines in the same way.
 
 ## The vertical model
 
 `vstepV(s, A, abs)` is `Jump.vstep` on the machine `vmach`: `m0` with the stack pointer `S` of the player's routine and `DiffToHaltJump = 1`. `A(R)` is bit 7 of `SavedJoypadBits` at `R`. `vs(m)` is the vertical state read from the machine.
 
 ```
-vert_model :  vertOK,  AtCtrl(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
+vert_model :  vertOK,  AtCtrl0(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
               →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), abs(R))
                              ∧  (st = 1 → DTHJ = 1)  at stepN(k, R)
 ```
@@ -62,6 +62,28 @@ vert_model :  vertOK,  AtCtrl(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 =
 Why the two conditions. `DiffToHaltJump` is 0 at control above ground and 1 after any jump; `m0`, at the start of the level, has 0. The routine compares with it in a jump, and the walk needs it the same on both machines. `vstep` writes A of the frame before from `s.prevA`, which reads `A_B_Buttons`; the real routine reads `PreviousA_B_Buttons`. The game copies the first into the second at the end of the game engine (`SaveAB`).
 
 Found while the check ran as a program first: with only some bits of the buttons known, the walk of one machine cannot branch on their other bits, so the buttons are 256 cases. `MovePlayerHorizontally` indexes by a register loaded from `JumpspringAnimCtrl`, so that byte is known to be 0 at the start of two detours. The ground's routine and the air's Left and Right call routines at the routine's own stack level, so they write the two stack bytes below it.
+
+## A frame with the pressed side masked
+
+`ImposeFriction` first masks Left/Right with the collision bits. `hstep` runs it with the bits of `m0`, where nothing is blocked. When Left is blocked (`noLeft`) and he presses Left, the real routine can take another way.
+
+```
+move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr ≠ lr,  0 < v(R) < 128
+               →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs
+                              ∧  ( HS(stepN(k, R)) = hstep(HS(R), In(R))  ∨  v(stepN(k, R)) = 0 )
+                              ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)
+```
+
+`lr` is the Left/Right that `hstep` reads from `In(R)`. `AtCtrl0` is `AtCtrl` without the condition on the mask. The proof:
+
+* `N` is the model's machine at `ImposeFriction` with the real bits. The real friction and `runSub(N)` take the same way (`fric_stage`, a walk of two machines; 1920 of the 4608 cases are masked).
+* `runSub(N)` next to `runSub(C)`, `C` the model's machine (`runSub2`, a walk of two machines of `runSub`):
+  * Left and Right: both take the same way.
+  * Left alone at a speed `v` from 1 to 127: a detour with two starts. From `ImposeFriction` each machine alone comes to `RghtFrict` and writes nothing on the way. One walk for each `v`.
+  * Left alone at the speed 0: `runSub(N)` leaves the speed 0, and the model's speed becomes negative. This is the frame that stops (`MaskStop`).
+* The speed at `ImposeFriction` is `v(R)` or 0: `X_Physics` does not write it, and `GetPlayerAnimSpeed` writes only 0 to it (`gpasOK`).
+
+`maskOK` is these checks, about 0.1 s natively. It is a part of `SurfaceFrames.numbersCheck`. A detour may now give the second machine its own start (`Detour.c₂`): at `ImposeFriction` the two machines differ in the collision bits, and the bits decide the way.
 
 ## The pieces
 
@@ -149,4 +171,5 @@ The writers of the horizontal bytes after the scroll handler, seen on the 3442 f
 ```
 .lake/build/bin/smbrta frame-model-check FM2 300
 .lake/build/bin/smbrta vert-model-check          # vertOK and each case, about 0.1 s
+.lake/build/bin/smbrta mask-model-check          # maskOK and its parts, about 0.1 s
 ```

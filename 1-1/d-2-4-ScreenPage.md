@@ -2,7 +2,7 @@
 
 # The screen's page in the room, and the long timer of the side pipe
 
-**Claim.** This is a partial result. Suppose the state at the first control in the room meets one condition `Room`, each instruction of each frame from there to the entry meets a condition `SiteOK`, and each frame before the entry starts in the player's routine. Then on every frame up to the entry the screen is on the first page and the scroll lock is on, and at the end of the entry frame the timer has the long value, at least 160. If also 21 bytes at the end of the entry frame have the values of a reference (`EntryRest`), the state there meets the whole condition `Entry2` at the entry of the side pipe ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)). `Entry2` asks for 90 bytes (93 with a record in the screen's buffer), the program counter, the stack pointer and the frame's end in the idle loop. The proof follows one whole frame in the room with the abstract machine. It does not cut the frame into parts. `Room`, `SiteOK`, the condition on the routine and `EntryRest` are assumptions. They were checked on real frames.
+**Claim.** This is a partial result. Suppose the state at the first control in the room meets one condition `Room`, each instruction of each frame from there to the entry meets a condition `SiteOK`, and each frame before the entry starts in the player's routine. Then on every frame up to the entry the screen is on the first page and the scroll lock is on, and at the end of the entry frame the timer has the long value, at least 160. If also 18 bytes at the end of the entry frame have the values of a reference (`EntryRest`), the state there meets the whole condition `Entry2` at the entry of the side pipe ([The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md)). `Entry2` asks for 90 bytes (93 with a record in the screen's buffer), the program counter, the stack pointer and the frame's end in the idle loop. The proof follows one whole frame in the room with the abstract machine. It does not cut the frame into parts. `Room`, `SiteOK`, the condition on the routine and `EntryRest` are assumptions. They were checked on real frames.
 
 `m₀` is the machine at the start of 1-1. `r` is the reference machine, a real run on the frame before the entry (`P` of [The change out of the side pipe](d-1-SideTransition.md)). `frame(m, i)` is one real frame with input `i`. `tr(n)` is the machine `n` instructions into that frame. `page(m)` is `ScreenLeft_PageLoc`, `lock(m)` is `ScrollLock`, `rt(m)` is `GameEngineSubroutine`, `timer(m)` is `ChangeAreaTimer`, `x(m)` is `Player_X_Position`. `e_s` is the number of the side pipe's routine, `long` is the first value of `AreaChangeTimerData`. `L` is 6000 dots before the frame's end.
 
@@ -25,7 +25,7 @@ Leaves(m')  :=  page(m') = page(r) ∧ lock(m') = lock(r) ∧ rt(m') ≠ rt(r)
 EntryRest(m) :=  ∃ (v, X) ∈ V,  ∀ b ∈ X ∩ R,  m[b] = v[b]
 ```
 
-`K` is known bits of 79 bytes, listed below. `T` is the tiles in the block buffers of `r`, and 0. `V` are the two reference machines of `Entry2` with their lists `X` of bytes (`SideChangeEnd.refs2`). `RoomCond(v, Y)` is `Room` with `v` in place of `r` and all the bits of the bytes `Y`. `R` is the list of 21 bytes below (`restIdx`).
+`K` is known bits of 82 bytes, listed below. `T` is the tiles in the block buffers of `r`, and 0. `V` are the two reference machines of `Entry2` with their lists `X` of bytes (`SideChangeEnd.refs2`). `RoomCond(v, Y)` is `Room` with `v` in place of `r` and all the bits of the bytes `Y`. `R` is the list of 18 bytes below (`restIdx`).
 
 ```
 room_step    :  Room(m) ∧ (∀ j, SiteOK(tr(j)))  →  Room(frame(m, i)) ∨ Leaves(frame(m, i))
@@ -55,7 +55,7 @@ Lean: `Theorems/ScreenPage.lean` (`readStep`, `writeStep`, `s_readStep`, `s_writ
 
 **(4) The condition at the entry.** If the abstract state at the frame's end has `rt = e_s`, the check also asks that it lies under a start state of each reference `(v, X ∖ R)`. That is, it knows the program counter, the stack pointer, the dot and the flags, and every byte of `X ∖ R` with the value of `v`. Then `Entry2` needs only the bytes of `R` (`entry_rest`).
 
-The walk ends the entry frame in 2 abstract states (dot 0, and dots 1 to 9). In both, the walk knows 73 of the 90 bytes of `Entry2` as the reference does, and 73 of 93 with the record (measured by `screen-check`). The 17 (20) that it does not know, and `GameEngineSubroutine`, are `R`. With the 73 bytes of `K` of the last round, 23 were not known.
+The walk ends the entry frame in 2 abstract states (dot 0, and dots 1 to 9). In both, the walk knows 76 of the 90 bytes of `Entry2` as the reference does, and 76 of 93 with the record (measured by `screen-check`). The 14 (17) that it does not know, and `GameEngineSubroutine`, are `R`. With the 79 bytes of `K` of the last round, 17 (20) were not known; with the 73 bytes of the round before, 23.
 
 | Bytes of `R` | Why the walk does not know them |
 |---|---|
@@ -63,9 +63,11 @@ The walk ends the entry frame in 2 abstract states (dot 0, and dots 1 to 9). In 
 | `Player_State`, `Player_Y_HighPos`, `Player_Y_Position` | the player's state and height. `K` knows only the high bits of the state; the height changes in the room |
 | `VRAM_Buffer1_Offset`, `VRAM_Buffer1` (+0, +1, +2, +7) | the screen's buffer. The walk only splits the offset below 64 |
 | `AreaMusicBuffer`, `EventMusicBuffer`, `MusicData` (2), `MusicOffset_Square1`, `NoiseSoundBuffer`, `EventMusicQueue`, `NoteLengthTblAdder` | the sound. `K` does not follow the sound engine. The hurry-up music changes these bytes |
-| `AreaPointer`, `EntrancePage`, `AreaNumber`, `PrimaryHardMode` | the next area and the hard mode. The rows of the change into the room do not know them at control |
+| `AreaNumber` | the level's number. The rows of the change into the room do not know it at control: the condition at the vertical pipe's entry does not have it |
 
 With one of these bytes added to `K`, the walk fails: `Player_Y_HighPos` 1 failure, `VRAM_Buffer1_Offset` 3, `EventMusicBuffer` 1, `MusicOffset_Square1` 1, `NoiseSoundBuffer` 1, `VRAM_Buffer1` 2. For the last group and `MusicData`, `EventMusicQueue`, `Player_Y_Position`, `Player_State`, `AreaMusicBuffer`, the rows of the change into the room do not know the reference's value at control (of 4 states with control: 0, 2 or none). Six bytes passed both tests and are now in `K`: `ScreenRoutineTask`, `DisableScreenFlag`, `Fireball_State` (2), `JoypadOverride`, `GameTimerExpiredFlag`. The rows know them at control, and the check of [The condition `Room`](d-2-4-1-ScreenStart.md) still passes with them.
+
+This round three more bytes are in `K`: `AreaPointer`, `EntrancePage`, `PrimaryHardMode`, the next area and the hard mode. The rows of the time of the change into the room know them at control with the reference's values (both states with control). With them in `K` the walk has 0 failures and the same table, and the check of [The condition `Room`](d-2-4-1-ScreenStart.md) passes. So `EntryRest` no longer asks them. `AreaNumber` too passes the walk, but the rows do not know it. On real runs in the room (113 runs, 36 entries; measured with a temporary program, not kept), these four bytes and `Player_Y_HighPos` and the sound bytes of `R` never change; with the sound bytes in `K` the walk passes, but at the end of the entry frame it does not know them, because the search joins states where they differ.
 
 ## How it works
 
@@ -123,7 +125,7 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 | the game timer written near 100 at the first state, no input | 900 | 0 | 0 | 0 | | | 3 / 3 | 0 | 0 |
 | written right of the pipe, Right and B, pauses | 4,800 | 2,328 | 0 | 0 | | | 12 / 12 | 0 | 192 |
 
-`Room` here has the 79 bytes of `K`. `Entry2` is with the timer at least 160.
+`Room` here has the 82 bytes of `K`. `Entry2` is with the timer at least 160.
 
 * Every entry frame ends with the timer at `long`.
 * Every real entry meets `EntryRest`, and `Entry2` as `entry_rest` says.
@@ -134,8 +136,8 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 
 ## Assumptions (not proved in Lean)
 
-* **`EntryRest(seq(e))`.** The 21 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5.
-* **`Room(seq(c))`.** 79 bytes at the first control in the room. In the route it is proved from the rows of the time of the first change ([The condition `Room` at the first control in the room](d-2-4-1-ScreenStart.md)). The rest of this item is as written for this page, with 73 bytes. `K` keeps only bytes that do not differ between runs. It fails for a fire Mario (`PlayerStatus` 2); before this pipe in 1-1 there is one power-up. It should come from walking the rows of the change into the room, since the state after that change is nearly all known. If the last row of item 1-1-b-3-2 knows the values of `K`, one check with `AS.le` is enough. The bytes of `K` that the area's setup does not clear are `AreaType`, `CurrentPlayer`, `PlayerStatus`, `WorldNumber`, `OperMode`, `OperMode_Task`, `AreaMusicBuffer_Alt`. The exit condition of those rows has to know them. This page does not depend on those rows, and they were not run here.
+* **`EntryRest(seq(e))`.** The 18 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5.
+* **`Room(seq(c))`.** 82 bytes at the first control in the room. In the route it is proved from the rows of the time of the first change ([The condition `Room` at the first control in the room](d-2-4-1-ScreenStart.md)). The rest of this item is as written for this page, with 73 bytes. `K` keeps only bytes that do not differ between runs. It fails for a fire Mario (`PlayerStatus` 2); before this pipe in 1-1 there is one power-up. It should come from walking the rows of the change into the room, since the state after that change is nearly all known. If the last row of item 1-1-b-3-2 knows the values of `K`, one check with `AS.le` is enough. The bytes of `K` that the area's setup does not clear are `AreaType`, `CurrentPlayer`, `PlayerStatus`, `WorldNumber`, `OperMode`, `OperMode_Task`, `AreaMusicBuffer_Alt`. The exit condition of those rows has to know them. This page does not depend on those rows, and they were not run here.
 * **The time in `SiteOK`.** The frames in the room do not overrun.
 * **The address of a read.** `LDA (zp),Y` does not read a register.
 * **Tiles.** A block buffer read gives a value of `T`. This comes from the address being in the block buffers, and the block buffers of the room being as at the start or with coins erased. Not proved.
@@ -151,7 +153,7 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 
 ```
 a₂         := first(n ≥ b₁, n ≤ b₁ + dR : rt(seq n) ≠ rt(r))     (Changes.a₂; b₁ + dR if none)
-entry₂     : EntryRest(seq a₂)                       (21 bytes)
+entry₂     : EntryRest(seq a₂)                       (18 bytes)
 Room(seq b₁)                                           (Changes.roomAt: the rows of the time of the first change, chg.time₁, chg.ctlFirst₁)
 roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
 roomOrder  : b₁ ≤ a₂                                   (theorem, from the definition of a₂)
@@ -160,9 +162,9 @@ roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)        (theorem, from th
 
 **The list `K`** (names):
 
-`GameEngineSubroutine`, `Enemy_Flag` (6), `Enemy_ID+5`, `Player_State` (bits 0xfc), `Block_State` (2), `Misc_State` (9), `EnemyData`, `EnemyDataHigh`, `AreaMusicBuffer` (bits 0xfb), `AreaMusicQueue`, `FloateyNum_Timer` (6), `VineFlagOffset`, `Block_RepFlag` (2), `Cannon_PageLoc` (6), `Cannon_X_Position` (6), `Cannon_Y_Position` (4), `EnemyFrenzyBuffer`, `SecondaryHardMode`, `EnemyFrenzyQueue`, `SprDataOffset`, `SwimmingFlag`, `JumpspringAnimCtrl`, `FireballThrowingTimer`, `ScreenLeft_PageLoc`, `ScreenRight_PageLoc`, `ScreenRight_X_Pos`, `AreaParserTaskNum`, `ScrollLock`, `EnemyDataOffset`, `EnemyObjectPageLoc`, `ScrollThirtyTwo`, `CloudTypeOverride`, `AreaType`, `CurrentPlayer`, `PlayerStatus` (bits 0xfe), `WorldNumber`, `OperMode`, `OperMode_Task`, `StarInvincibleTimer`, `AreaMusicBuffer_Alt` (bits 0xfb), `ScreenRoutineTask`, `DisableScreenFlag`, `Fireball_State` (2), `JoypadOverride`, `GameTimerExpiredFlag`
+`GameEngineSubroutine`, `Enemy_Flag` (6), `Enemy_ID+5`, `Player_State` (bits 0xfc), `Block_State` (2), `Misc_State` (9), `EnemyData`, `EnemyDataHigh`, `AreaMusicBuffer` (bits 0xfb), `AreaMusicQueue`, `FloateyNum_Timer` (6), `VineFlagOffset`, `Block_RepFlag` (2), `Cannon_PageLoc` (6), `Cannon_X_Position` (6), `Cannon_Y_Position` (4), `EnemyFrenzyBuffer`, `SecondaryHardMode`, `EnemyFrenzyQueue`, `SprDataOffset`, `SwimmingFlag`, `JumpspringAnimCtrl`, `FireballThrowingTimer`, `ScreenLeft_PageLoc`, `ScreenRight_PageLoc`, `ScreenRight_X_Pos`, `AreaParserTaskNum`, `ScrollLock`, `EnemyDataOffset`, `EnemyObjectPageLoc`, `ScrollThirtyTwo`, `CloudTypeOverride`, `AreaType`, `CurrentPlayer`, `PlayerStatus` (bits 0xfe), `WorldNumber`, `OperMode`, `OperMode_Task`, `StarInvincibleTimer`, `AreaMusicBuffer_Alt` (bits 0xfb), `ScreenRoutineTask`, `DisableScreenFlag`, `Fireball_State` (2), `JoypadOverride`, `GameTimerExpiredFlag`, `AreaPointer`, `EntrancePage`, `PrimaryHardMode`
 
-**The list `R`** (names): `GameEngineSubroutine`, `Player_State`, `Player_Y_HighPos`, `Player_Y_Position`, `VRAM_Buffer1_Offset`, `VRAM_Buffer1` (+0, +1, +2, +7), `AreaMusicBuffer`, `EventMusicBuffer`, `MusicData` (2), `MusicOffset_Square1`, `NoiseSoundBuffer`, `EventMusicQueue`, `NoteLengthTblAdder`, `AreaPointer`, `EntrancePage`, `AreaNumber`, `PrimaryHardMode`
+**The list `R`** (names): `GameEngineSubroutine`, `Player_State`, `Player_Y_HighPos`, `Player_Y_Position`, `VRAM_Buffer1_Offset`, `VRAM_Buffer1` (+0, +1, +2, +7), `AreaMusicBuffer`, `EventMusicBuffer`, `MusicData` (2), `MusicOffset_Square1`, `NoiseSoundBuffer`, `EventMusicQueue`, `NoteLengthTblAdder`, `AreaNumber`
 
 **Files.** `Theorems/ScreenPage.lean`, private `Proof/ScreenPage.lean`.
 

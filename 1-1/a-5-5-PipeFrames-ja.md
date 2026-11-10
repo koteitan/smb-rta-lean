@@ -23,7 +23,7 @@ no_entry_of_reads :  16 ≤ v_top,  1 ≤ N,  (∀ t,  Enter t → L ≤ fr(t).P
 
 Pipe.next, Pipe.speed（Route）       :  前のフィールド next と speed を定理として
 Pipe.reads（Route）                   :  Reads を、自分の機械から読むフレームと数えないフレームから（own、lags、lag_check）
-pipe_no_entry_real（非公開）          :  start, clean, tiles, pos, openP, openB,  Enters(fm E, inp E),  Reads,  still   →   367 < E
+pipe_no_entry_real（非公開）          :  start, clean, tiles, edge, moved, openP, openB,  Enters(fm E, inp E),  Reads,  still   →   367 < E
 ```
 
 `Reads` はもうフィールドではありません。[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) が、`Pipe.own`（数えるフレームはそのフレーム自身の機械で終わる）と
@@ -71,7 +71,7 @@ Lean: `Theorems/PipeFrames.lean`、`Theorems/Route.lean` の `Pipe`、非公開�
 * **数えないフレームは 3 つの値を変えない.** まとめての仮定ではなくなりました。モードのルーチンを呼ばないフレーム（ポーズ）では証明しました。
   残る仮定は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) の `lags.start`、`lags.clean`、`lags.game` です。
 * **`still`: 操作できるときの速さは 0.** いまはタイトルで Start を押したところから証明しています（`Route.Run.still`、[タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md)）。
-* **この項目でないもの.** `openP`、`openB`（項目 1-1-a-5-4）と `pos`（項目 1-1-a-5-9）は、仮定のままです。
+* **この項目でないもの.** `openP`、`openB`（項目 1-1-a-5-4）と `edge`、`moved`（項目 1-1-a-5-9）は、仮定のままです。
 
 **ファイル.** `Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/PipeWrites.lean`。
 

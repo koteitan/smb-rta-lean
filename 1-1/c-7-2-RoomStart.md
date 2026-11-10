@@ -2,7 +2,7 @@
 
 # The state at the first control in the room
 
-**Claim.** [Joining the bonus room](c-5-RoomJoin.md) assumed the horizontal state, the position, the vertical state and the stored speed at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`). This is now proved on the real machines. It comes from the rows of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md). The conditions are those of that change, and that `left₁` is not 0 before control. That is a theorem now (`Changes.first₁`), from the time at the exit (`chg.time₁`) and the first control (`chg.ctlFirst₁`), as in [b-3-2](b-3-2-PipeChangeEnd.md). That the room's machine is the change's machine (`roomCtl`), and that the vertical state at first control is read from the machine (`vs_C`), are link fields. The stored speed is now read from the machine on every frame (`read_ab`), and the proof does not use the stored speed at `C` ([Joining the bonus room](c-5-RoomJoin.md)).
+**Claim.** [Joining the bonus room](c-5-RoomJoin.md) assumed the horizontal state, the position, the vertical state and the stored speed at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`). This is now proved on the real machines. It comes from the rows of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md). The conditions are those of that change, and that `left₁` is not 0 before control. That is a theorem now (`Changes.first₁`), from the time at the exit (`chg.time₁`) and the first control (`chg.ctlFirst₁`), as in [b-3-2](b-3-2-PipeChangeEnd.md). That the room's machine is the change's machine (`roomCtl`) is a link field. The vertical state and the stored speed are now read from the machine on every frame (`read_vs`, `read_ab`), as the horizontal state and the position are; the proof does not use the stored speed at `C` ([Joining the bonus room](c-5-RoomJoin.md)).
 
 ## Statements
 
@@ -30,7 +30,7 @@ Route.Run.roomStart :  pipe_end ∧ room_start ∧ Run  →  StartAt(room.fm roo
 
 `PipeRun.inRows` shows by induction on the frames that every machine from the entry to control is a state of the pipe's frames (`During`) or in the rows (`InRows`). A frame of the pipe uses `step`, a frame in the rows uses `rows`. `rows` gives "`left` is 0 already" or "the next machine is in the rows too". `Changes.first₁` rules out the first. The last machine has control, so `left = 0` (`atControl`). A state of the pipe's frames has `left = timer + 43 > 0`, so the last machine is in the rows.
 
-`RoomRun.toCore` and `RoomRun.entry_ge` take `StartAt(fm C)` as an argument. With `read_hs`, `read_P`, `vs_C` it gives `start`, `startP0`, `startP1`, `v_start`.
+`RoomRun.toCore` and `RoomRun.entry_ge` take `StartAt(fm C)` as an argument. With `read_hs`, `read_P`, `read_vs` at `C` it gives `start`, `startP0`, `startP1`, `v_start`.
 
 ## The check
 
@@ -51,7 +51,7 @@ The program is `room-start-check FM2 [N]`. The entries are the reference entry, 
 
 * **`chg.time₁`, `chg.ctlFirst₁`.** At the exit the sound's pause flag is 0 and the game timer is not 000, and `b₁` is the first control after the entry. They give `left₁` not 0 before control (`Changes.first₁`). A run whose timer is 000 at the exit fails `time₁`: with the timer written to 000 at the entry, `left₁` is 0 at frame 91, and there the routine is the death's, with no control.
 * **`roomCtl`.** `room.fm room.C = chg.seq chg.b₁`: the room's first machine is the change's last machine. It comes from how the sequences are made.
-* **`vs_C`.** `fr.vs C = vs(fm C)`: read from the machine, as `read_hs` and `read_P` are. Only on the frame `C`.
-* The conditions of the change (`chg.entry₁`, `places₁`, `quiet₁`, `noStart₁`). They are the assumptions of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md).
+* **`read_vs`.** `fr.vs n = vs(fm n)` for `C ≤ n ≤ t₀`: read from the machine, as `read_hs` and `read_P` are. It is a reading, not a fact about the run. It replaces `vs_C`, which was the same on the frame `C` only.
+* The conditions of the change (the condition at the entry `Run.entry₁`: `chg.entryRest₁`, `upStart₁`, `upClean₁` with `title`; `places₁`, `quiet₁`, `noStart₁`). They are the assumptions of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md).
 
-**Files.** `Theorems/RoomStart.lean`, `Theorems/RoomJoin.lean` (`StartAt`, `vs_C`), `Theorems/Route.lean` (`Changes.first₁`, `time₁`, `ctlFirst₁`, `roomCtl`, `Run.roomStart`), private `Proof/RoomStart.lean`.
+**Files.** `Theorems/RoomStart.lean`, `Theorems/RoomJoin.lean` (`StartAt`, `read_vs`), `Theorems/Route.lean` (`Changes.first₁`, `time₁`, `ctlFirst₁`, `roomCtl`, `Run.roomStart`), private `Proof/RoomStart.lean`.

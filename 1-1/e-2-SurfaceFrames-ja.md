@@ -2,7 +2,7 @@
 
 # 地上: 操作できてからのフレームを 1 つずつ
 
-**主張.** [操作から城まで](f-5-PoleJoin-ja.md) は走り全体についての文 `model`、`hit`、`stop`、`box`、`off`、`next`、`startP`、`startV` を仮定していました。これらは定理になりました。残る仮定は 1 フレームについての文です。1〜8 フレーム目の縦の一歩（`vstep`）も本物の機械で定理になりました。そこで残るのは、フレームのほかの部分が縦のバイトを変えないことです。`startP`、`startV` は本物の機械で証明しました。[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の最後の段から出ます。条件はその切り替えの条件と、`left` が操作の前に 0 にならないことだけです。
+**主張.** [操作から城まで](f-5-PoleJoin-ja.md) は走り全体についての文 `model`、`hit`、`stop`、`box`、`off`、`next`、`startP`、`startV` を仮定していました。これらは定理になりました。残る仮定は 1 フレームについての文です。1〜8 フレーム目の縦の一歩（`vstep`）も本物の機械で定理になりました。そこで残るのは、フレームのほかの部分が縦のバイトを変えないことです。押している側がふさがれたフレームも定理になり、フィールド `masked` はなくなりました。`startP`、`startV` は本物の機械で証明しました。[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の最後の段から出ます。条件はその切り替えの条件と、`left` が操作の前に 0 にならないことだけです。
 
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
@@ -43,18 +43,24 @@ After(a, Q, b)     : b の f, fd, md は Q のもの ∧ (RunningSpeed(b) = 0 �
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
 
-Moves(a, M, x, n₀) : AtCtrl(R)                                   プレイヤーのルーチンでの状態。FrameModel が要るもの
+Moves(a, M, x, n₀) : AtCtrl0(R)                                  プレイヤーのルーチンでの状態。FrameModel が要るもの（ふさぎは除く）
                      ∧ R の横の 8 バイトは a のもの                  a から R まで書かれない
+                     ∧ bits(R) = bits(a)                             当たり判定のビットも書かれない
                      ∧ R から 728 命令のうちにフレームが終わらない
                      ∧ 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
                      ∧ スクロールの処理に来るどの Q でも After(a, Q, b)
 
-at_subs       : modelOK ∧ Moves  →  スクロールの処理に来る Q があって hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
-one_of_moves  : modelOK ∧ Moves  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
+at_subs       : modelOK ∧ Moves ∧ ¬Masked  →  スクロールの処理に来る Q があって hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_moves  : modelOK ∧ Moves ∧ ¬Masked  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
+at_subsM      : modelOK ∧ maskOK ∧ Moves ∧ Clean(a) ∧ Masked  →  スクロールの処理に来る Q があって (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
+                                                                ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_movesM : modelOK ∧ maskOK ∧ Moves ∧ Clean(a) ∧ Masked  →  OneFrame(inAt(M, x, n₀), a, b)
 one_of_frames : OnFrames ∧ Clean(seq (j − 1))  →  OneFrame(inp j, seq (j − 1), seq j)
 ```
 
-`modelOK` は `FrameModel` の ROM の確認です。これは `numbersCheck` の一部になったので、非公開の証明が `native_decide` で計算します（約 3 秒増えます）。`move_model` は押している側がふさがれていないことを要ります。ふさがれているフレーム（`Masked`）は仮定で `OneFrame` のままです。そこでは摩擦の処理がふさぎを読み、`hstep` は読みません。
+`modelOK` は `FrameModel` の ROM の確認です。これは `numbersCheck` の一部になったので、非公開の証明が `native_decide` で計算します（約 3 秒増えます）。`move_model` は押している側がふさがれていないことを要ります。`bits(R) = bits(a)` があれば、これは `¬Masked` です。
+
+**ふさがれたフレーム.** 押している側がふさがれたフレーム（`Masked`）では、摩擦の処理がふさぎを読み、`hstep` は読みません。[`FrameModel.move_masked`](../0-0/0-3-2-FrameModel-ja.md) は、それでもフレームが `hstep` のとおりになるか、速さを 0 にすることを証明します。押している側がふさがれた Clean な状態は、左をふさぐビットを持ち、右へ動いています（`masked_clean`）。スクロールの処理で速さが 0 なら、`After` から `MaskStop` が出ます。`maskOK` は `move_masked` の ROM の確認で（約 0.1 秒）、`numbersCheck` の一部です。
 
 仮定のフィールドです（`OnFrames`）。全部 `Run` の `frames` に入ります。`fm`、`pad`、`arr` はその中のデータです。
 
@@ -62,8 +68,7 @@ one_of_frames : OnFrames ∧ Clean(seq (j − 1))  →  OneFrame(inp j, seq (j �
 reads  : 1 ≤ j ≤ g   →  fr j の始まりの v, f, P は seq (j − 1) のもの
          1 ≤ j < g   →  fr j の終わりの v', f', P' は seq j のもの
 ends   : 1 ≤ j ≤ T, j < g  →  seq j = frame(fm j, pad j)
-moves   : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1)), ¬Masked(inp j, seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)
-masked  : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1)), Masked(inp j, seq (j − 1))   →  OneFrame(inp j, seq (j − 1), seq j)
+moves   : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)
 vBefore : 1 ≤ j < J, j < g  →  R での y, mf, vy, dummy, vf, vfd, origin, st, DTHJ と A は seq (j − 1) のもの、
                                かつ PrevA & 80 = A_B & 80
 vAfter  : 1 ≤ j < J, j < g、Q はスクロールの処理  →  seq j でのこれらのバイトと A は Q のもの
@@ -85,7 +90,8 @@ vert_of    : vertOK ∧ moves ∧ vBefore ∧ vAfter ∧ HaltOK(seq (j − 1))  
 
 | 前のフィールド | 今 |
 |---|---|
-| `step`: Clean なフレームは全部 `OneFrame` | `moves`（移動の外の部分）、`masked`（押している側がふさがれたフレームだけ）、`ends` |
+| `step`: Clean なフレームは全部 `OneFrame` | `moves`（移動の外の部分）、`ends` |
+| `masked`: 押している側がふさがれたフレームは `OneFrame` | 定理 `one_of_movesM`（`moves` と `FrameModel.move_masked` から）。新しく `Moves.bits`。`Moves.at_ctrl` は `AtCtrl0` で、ふさぎの条件はない |
 | `reads`: `v₂(fr j) = v₂` | なくなった。`box` が本物の機械 `Q` と `seq j` の文なので、フレームの `v₂` は要らない |
 | `fr j` についての `box` | 本物の機械についての `box`、スクロールの処理から |
 | `Moves.input`: ルーチンは `readIn(a, b)` を読む | なくなった。モデルの入力はルーチンが読むものそのもの |
@@ -159,7 +165,8 @@ Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq
 
 * 1〜8 フレーム目（3,194 フレーム）では `vs(seq j) = vNext(seq (j − 1), seq j)`、`vBefore`、`vAfter`、両端の `HaltOK`、`box`、当たり判定に入るときの `(y, vy, st)` が `vstepV` の結果であることも確かめました。違いは 0 です。
 * 全部のフレームで、プレイヤーのルーチンが読む入力は両端から読む `readIn(a, b)` と同じです（前のフィールド `input`）。違いは 0 です。
-* 押している側がふさがれたフレームは 329 です（操作から 3、階段のまわり 326）。全部 `OneFrame` で、`MaskStop` が要るものは 0 です。全部 `hstep` のとおりです。
+* 1〜8 フレーム目の 3,194 フレームのうち 2,375 で、スクロールの処理からフレームの終わりまでのあいだに縦のバイトが別の値になり、終わりには戻っています。地面の上では当たり判定のルーチンが `Player_State` を 2 にして、また着地させます。なので `vAfter` は、これらのバイトへの書き込みを許さない歩きからは出ません。
+* 押している側がふさがれたフレームは 329 です（操作から 3、階段のまわり 326）。全部 `OneFrame` で、全部 `Moves` を満たします。移動の処理に来たとき、182 はモデルの速さで、147 はモデルの速さが 0 でないのに速さ 0 です（`move_masked` の 2 番目の場合。種類の列では `Hit` に数えます）。この 147 は `Pre ∧ Coll` でなく、`MaskStop` が要ります。前にこのページは要るものは 0 と書いていましたが、それは誤りでした。`bits(R) = bits(a)` が成り立たないフレームはありません。
 * `lag` のフレーム 8,070 では、ここで読むバイトは変わりません。なので `seq j` のあとに `lag` のフレームがあっても読む値は同じです。はみ出すフレームはこれらの走りにありません。
 * 切り替え: TAS の入る状態と `E` から、Start なしのランダムな入力で 201 回。全部 282 フレーム以上で操作でき、操作の前に `left` が 0 になることはなく、操作のときの状態は全部 `Start` を満たします。
 * 測り方: 操作できない機械で終わるフレーム（死ぬ、旗に触る）はフィールドの外なので数えません。そこで `Follow` と `Hit` は成り立ちません。そういう走りは `Run` ではありません。
@@ -179,19 +186,18 @@ Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq
 
 ## 前提（Lean では証明していない）
 
-* `moves`: 移動の外の部分。プレイヤーのルーチンでの `AtCtrl`、そこまで横のバイトを書かないこと、移動のあいだにフレームが終わらないこと、位置が端から遠いこと、`After`。移動そのものは証明です（[`FrameModel`](../0-0/0-3-2-FrameModel-ja.md)）。
-* `masked`: 押している側がふさがれたフレームが `OneFrame` であること。
+* `moves`: 移動の外の部分。プレイヤーのルーチンでの `AtCtrl0`、そこまで横のバイトと当たり判定のビットを書かないこと、移動のあいだにフレームが終わらないこと、位置が端から遠いこと、`After`。移動そのものは、押している側がふさがれていても証明です（[`FrameModel`](../0-0/0-3-2-FrameModel-ja.md)）。
 * `ends`: `seq j` は `fm j` のフレームを `pad j` で動かした終わりであること。
 * `vBefore`、`vAfter`: 1〜8 フレーム目で、移動のルーチンの外が縦のバイトを変えないこと。ルーチンが `vstep` のとおりなのは証明です（`vert_of`）。
 * `box`: 1〜8 フレーム目で、当たり判定が操作のときの機械と同じ結果になること。
 * `reads`: `fr` を機械から読むこと。`Frame` であること自体は [最高速の上限](../0-0/0-1-TopSpeed-ja.md) の前提のままです。
 * `chg.time₂`、`chg.ctlFirst₂`、`atCtl`。
-* 左をふさいだフレームの `MaskStop`。`SurfaceRun.maskSame` は Lean では端数 0、128、255 だけで、この証明には使っていません。全部の端数はプログラムで確かめました（28 秒、違いなし）。
 
-**ファイル.** `Theorems/SurfaceFrames.lean`、`Theorems/VertModel.lean`、非公開の `Proof/SurfaceFrames.lean`（`side_start`）、`Proof/PoleJoin.lean`（`pole_numbers`）。
+**ファイル.** `Theorems/SurfaceFrames.lean`、`Theorems/VertModel.lean`、`Theorems/FrameModel.lean`（`move_masked`）、非公開の `Proof/SurfaceFrames.lean`（`side_start`）、`Proof/PoleJoin.lean`（`pole_numbers`）。
 
 **再現.**
 ```
 .lake/build/bin/smbrta surface-frames-check FM2 200    # 上の表、CPU で約 7 分
 .lake/build/bin/smbrta vert-model-check                # vertOK とその各場合、約 0.1 秒
+.lake/build/bin/smbrta mask-model-check                # maskOK とその部分、約 0.1 秒
 ```

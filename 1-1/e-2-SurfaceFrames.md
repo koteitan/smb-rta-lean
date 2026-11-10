@@ -2,7 +2,7 @@
 
 # Above ground: the frames from control, one by one
 
-**Claim.** [From control to the castle](f-5-PoleJoin.md) assumed the statements about a whole run `model`, `hit`, `stop`, `box`, `off`, `next`, `startP`, `startV`. They are theorems now. The assumptions that stay are about one frame. On frames 1 to 8 the vertical step (`vstep`) is a theorem on real machines too; what stays there is that the rest of the frame keeps the vertical bytes. `startP`, `startV` are proved on real machines. They come from the last row of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). The conditions are those of that change, and that `left` is not 0 before control.
+**Claim.** [From control to the castle](f-5-PoleJoin.md) assumed the statements about a whole run `model`, `hit`, `stop`, `box`, `off`, `next`, `startP`, `startV`. They are theorems now. The assumptions that stay are about one frame. On frames 1 to 8 the vertical step (`vstep`) is a theorem on real machines too; what stays there is that the rest of the frame keeps the vertical bytes. A frame where the side he presses is masked is a theorem too: the field `masked` is gone. `startP`, `startV` are proved on real machines. They come from the last row of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). The conditions are those of that change, and that `left` is not 0 before control.
 
 The unit is 1/256 px. `seq j` is the machine at the end of the counted frame `j`. `seq 0` is the machine at control. `B.m` is the machine at control that the private proof holds.
 
@@ -43,18 +43,24 @@ After(a, Q, b)     : f, fd, md of b are those of Q ∧ (RunningSpeed(b) = 0 ⟺ 
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
 
-Moves(a, M, x, n₀) : AtCtrl(R)                                   the state at the player's routine, as FrameModel needs it
+Moves(a, M, x, n₀) : AtCtrl0(R)                                  the state at the player's routine, as FrameModel needs it, but the mask
                      ∧ the 8 horizontal bytes of R are those of a    nothing writes them from a to R
+                     ∧ bits(R) = bits(a)                             nor the collision bits
                      ∧ the frame does not end within 728 instructions after R
                      ∧ 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
                      ∧ After(a, Q, b) at every Q at the scroll handler
 
-at_subs       : modelOK ∧ Moves  →  ∃ Q at the scroll handler, hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
-one_of_moves  : modelOK ∧ Moves  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
+at_subs       : modelOK ∧ Moves ∧ ¬Masked  →  ∃ Q at the scroll handler, hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_moves  : modelOK ∧ Moves ∧ ¬Masked  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
+at_subsM      : modelOK ∧ maskOK ∧ Moves ∧ Clean(a) ∧ Masked  →  ∃ Q at the scroll handler, (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
+                                                                ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+one_of_movesM : modelOK ∧ maskOK ∧ Moves ∧ Clean(a) ∧ Masked  →  OneFrame(inAt(M, x, n₀), a, b)
 one_of_frames : OnFrames ∧ Clean(seq (j − 1))  →  OneFrame(inp j, seq (j − 1), seq j)
 ```
 
-`modelOK` is the check on the ROM of `FrameModel`. It is a part of `numbersCheck` now, so the private proof computes it by `native_decide` (about 3 s more). `move_model` needs that the side he presses is not masked. A frame where it is masked (`Masked`) stays a `OneFrame` by assumption: there the routine of the friction reads the mask, and `hstep` does not.
+`modelOK` is the check on the ROM of `FrameModel`. It is a part of `numbersCheck` now, so the private proof computes it by `native_decide` (about 3 s more). `move_model` needs that the side he presses is not masked; with `bits(R) = bits(a)` this is `¬Masked`.
+
+**The masked frames.** On a frame where the side he presses is masked (`Masked`), the routine of the friction reads the mask and `hstep` does not. [`FrameModel.move_masked`](../0-0/0-3-2-FrameModel.md) proves that the frame still follows `hstep`, or it leaves the speed 0. A clean state with the side masked has the bits of a block of Left and moves right (`masked_clean`). With the speed 0 at the scroll handler, `After` gives `MaskStop`. `maskOK` is the check on the ROM of `move_masked` (about 0.1 s); it is a part of `numbersCheck`.
 
 The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`. `fm`, `pad`, `arr` are data in it.
 
@@ -62,8 +68,7 @@ The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`
 reads  : 1 ≤ j ≤ g   →  v, f, P at the start of fr j are those of seq (j − 1)
          1 ≤ j < g   →  v', f', P' at the end of fr j are those of seq j
 ends   : 1 ≤ j ≤ T, j < g  →  seq j = frame(fm j, pad j)
-moves   : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1)), ¬Masked(inp j, seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)
-masked  : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1)), Masked(inp j, seq (j − 1))   →  OneFrame(inp j, seq (j − 1), seq j)
+moves   : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)
 vBefore : 1 ≤ j < J, j < g  →  at R: y, mf, vy, dummy, vf, vfd, origin, st, DTHJ and A are those of seq (j − 1),
                                and PrevA & 80 = A_B & 80
 vAfter  : 1 ≤ j < J, j < g, Q at the scroll handler  →  at seq j these bytes and A are those of Q
@@ -85,7 +90,8 @@ vert_of    : vertOK ∧ moves ∧ vBefore ∧ vAfter ∧ HaltOK(seq (j − 1))  
 
 | Field before | Now |
 |---|---|
-| `step`: every clean frame is a `OneFrame` | `moves` (the frame outside the movement), `masked` (only the frames with the pressed side masked), `ends` |
+| `step`: every clean frame is a `OneFrame` | `moves` (the frame outside the movement), `ends` |
+| `masked`: a frame with the pressed side masked is a `OneFrame` | theorem `one_of_movesM` (from `moves` and `FrameModel.move_masked`). New: `Moves.bits`; `Moves.at_ctrl` is `AtCtrl0`, with no condition on the mask |
 | `reads`: `v₂(fr j) = v₂` | gone. `box` is on the real machines `Q` and `seq j`, so the frame's `v₂` is not needed |
 | `box` on `fr j` | `box` on the real machines, from the scroll handler |
 | `Moves.input`: the routine reads `readIn(a, b)` | gone. The model's input is the one the routine reads |
@@ -159,7 +165,8 @@ The program `surface-frames-check FM2 N`, `N = 200`, exit code 0, about 7 minute
 
 * On frames 1 to 8 (3,194 frames) also `vs(seq j) = vNext(seq (j − 1), seq j)`, `vBefore`, `vAfter`, `HaltOK` at both ends, `box`, and that `(y, vy, st)` on entering the collision routine is `vstepV`'s result. No difference.
 * On every frame the input that the player's routine reads is `readIn(a, b)` of the two ends (the old field `input`): no difference.
-* The pressed side is masked on 329 frames (3 from control, 326 around the stairs). All are `OneFrame`, and on none is `MaskStop` needed: each follows `hstep`.
+* On 2,375 of the 3,194 frames 1 to 8 a byte of the vertical state takes another value between the scroll handler and the frame's end, and is back at the end. On the ground the collision routine sets `Player_State` to 2 and lands him again. So `vAfter` cannot come from a walk that forbids writes to these bytes.
+* The pressed side is masked on 329 frames (3 from control, 326 around the stairs). All are `OneFrame` and all meet `Moves`. At the mover 182 have the model's speed and 147 the speed 0 where the model's is not 0 (`move_masked`'s second case; the kinds column counts them as `Hit`). These 147 are not `Pre ∧ Coll` and need `MaskStop`; this page said before that none needs it, which was false. `bits(R) = bits(a)` fails on no frame.
 * On the 8,070 `lag` frames, no byte read here changes. So with `lag` frames after `seq j` the values read are the same. No frame overruns on these runs.
 * The change: 201 runs from the TAS's entry state and `E` with random inputs with no Start. All get control after 282 frames or more, `left` is never 0 before control, and the state at control always meets `Start`.
 * How it counts: a frame that ends in a machine without control (death, the touch) is outside the fields and is not counted. `Follow` and `Hit` do not hold there. Such a run is not a `Run`.
@@ -179,19 +186,18 @@ So frame 1 alone closes. It is one frame of 233, and the states grow on the next
 
 ## Assumptions (not proved in Lean)
 
-* `moves`: the frame outside the movement: `AtCtrl` at the player's routine, nothing writes the horizontal bytes before it, the frame does not end during the movement, the position is far from the ends, and `After`. The movement is proved ([`FrameModel`](../0-0/0-3-2-FrameModel.md)).
-* `masked`: a frame where the pressed side is masked is a `OneFrame`.
+* `moves`: the frame outside the movement: `AtCtrl0` at the player's routine, nothing writes the horizontal bytes and the collision bits before it, the frame does not end during the movement, the position is far from the ends, and `After`. The movement is proved ([`FrameModel`](../0-0/0-3-2-FrameModel.md)), also with the pressed side masked.
 * `ends`: `seq j` is the end of the frame of `fm j` with `pad j`.
 * `vBefore`, `vAfter`: on frames 1 to 8, the frame outside the movement routine keeps the vertical bytes. That the routine follows `vstep` is proved (`vert_of`).
 * `box`: on frames 1 to 8 the collision routine gives the same result as on the machine at control.
 * `reads`: `fr` is read from the machines. That it is a `Frame` stays an assumption of [Top speed](../0-0/0-1-TopSpeed.md).
 * `chg.time₂`, `chg.ctlFirst₂`, `atCtl`.
-* `MaskStop` on a frame with Left blocked. `SurfaceRun.maskSame` covers fractions 0, 128, 255 in Lean, and this proof does not use it. All fractions were run as a program (28 s, no difference).
 
-**Files.** `Theorems/SurfaceFrames.lean`, `Theorems/VertModel.lean`, private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`).
+**Files.** `Theorems/SurfaceFrames.lean`, `Theorems/VertModel.lean`, `Theorems/FrameModel.lean` (`move_masked`), private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`).
 
 **Reproduce.**
 ```
 .lake/build/bin/smbrta surface-frames-check FM2 200    # the table above, about 7 minutes of CPU
 .lake/build/bin/smbrta vert-model-check                # vertOK and each of its cases, about 0.1 s
+.lake/build/bin/smbrta mask-model-check                # maskOK and its parts, about 0.1 s
 ```

@@ -2,7 +2,7 @@
 
 # 本物のフレームと横と縦のモデル
 
-**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
+**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。押している側がふさがれていると、フレームは `hstep` のとおりか、速さを 0 にします（`move_masked`）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
 
 `tr(n)` は `frame(M, i)` の `n` 命令あとの機械です。`HS(m)` は機械 `m` から読んだ横の状態（速さ、subspeed、向き、動く向き、`RunningSpeed` が 0 かどうか）です。`P(m)` は位置です。`In(m)` はプレイヤーのルーチンに来た機械から読んだ入力です。`v'` は `HS(frame(M, i))` の速さです。
 
@@ -18,7 +18,7 @@ frame_read  :  modelOK,  frictionCheck,  ReadFrame(M, i, n₀)
 
 `frame_read` と `TopSpeed` の `Frame.bound` から、`|v| ≤ v_top` のとき `|v'| ≤ v_top`、`P' − P ≤ 16·v_top` です。`RoomJoin` の `move_top` はこれで定理になりました。
 
-Lean: `Theorems/FrameWalk.lean`（2 台の機械の歩き。`tstep_spec`、`walkT_spec`、`piece_spec`、`leaf_spec`。回り道つき: `lk_detour`、`walkD_spec`、`leafD_spec`）、`Theorems/FrameModel.lean`（`move_model`、`clean_frame`、`frame_read`）、`Theorems/VertModel.lean`（`vert_model`）、非公開の `frame_model`（`modelOK`、`native_decide`）。`vertOK` は `SurfaceFrames.numbersCheck` の一部です。どのファイルにもゲームの値はありません。チェックはネイティブで約 2 秒と 0.1 秒です。
+Lean: `Theorems/FrameWalk.lean`（2 台の機械の歩き。`tstep_spec`、`walkT_spec`、`piece_spec`、`leaf_spec`。回り道つき: `lk_detour`、`walkD_spec`、`leafD_spec`）、`Theorems/FrameModel.lean`（`move_model`、`move_masked`、`clean_frame`、`frame_read`）、`Theorems/VertModel.lean`（`vert_model`）、非公開の `frame_model`（`modelOK`、`native_decide`）。`vertOK` と `maskOK` は `SurfaceFrames.numbersCheck` の一部です。どのファイルにもゲームの値はありません。チェックはネイティブで約 2 秒、0.1 秒、0.1 秒です。
 
 ## 2 台の機械の歩き
 
@@ -41,14 +41,14 @@ leafD_spec :  ルーチンの入口からの walkD、スタックポインタは
               →  ルーチンが戻るところで、タグが本物の機械と runSub の結果をつなぐ
 ```
 
-`leaf_spec` はほかのルーチンを呼ばないルーチンにしか使えません。`leafD_spec` は呼んでもよいです。スタックポインタが分かっているからです。
+`leaf_spec` はほかのルーチンを呼ばないルーチンにしか使えません。`leafD_spec` は呼んでもよいです。スタックポインタが分かっているからです。`runSub2` は同じやり方で 2 台の機械の `runSub` の結果をつなぎます。
 
 ## 縦のモデル
 
 `vstepV(s, A, abs)` は機械 `vmach` の上の `Jump.vstep` です。`vmach` は `m0` で、スタックポインタをプレイヤーのルーチンの `S` にし、`DiffToHaltJump = 1` にしたものです。`A(R)` は `R` での `SavedJoypadBits` の 7 ビット目です。`vs(m)` は機械から読んだ縦の状態です。
 
 ```
-vert_model :  vertOK,  AtCtrl(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
+vert_model :  vertOK,  AtCtrl0(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
               →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), abs(R))
                              ∧  stepN(k, R) で (st = 1 → DTHJ = 1)
 ```
@@ -62,6 +62,28 @@ vert_model :  vertOK,  AtCtrl(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 =
 2 つの条件がある理由です。`DiffToHaltJump` は地上で操作できるときは 0 で、ジャンプのあとは 1 です。レベルの最初の `m0` では 0 です。ルーチンはジャンプ中にこれと比べるので、歩きでは 2 台で同じでないといけません。`vstep` は前のフレームの A を `s.prevA` から書きます。`s.prevA` は `A_B_Buttons` を読みます。本物のルーチンは `PreviousA_B_Buttons` を読みます。ゲームはゲームエンジンの最後で前者を後者に写します（`SaveAB`）。
 
 チェックをまずプログラムとして動かして分かったことです。ボタンの一部のビットだけが分かっていると、1 台の機械の歩きはほかのビットで分かれられません。なのでボタンは 256 通りにしました。`MovePlayerHorizontally` は `JumpspringAnimCtrl` から読んだレジスタで番地を決めるので、2 つの回り道の始まりでそのバイトが 0 と分かっていることにしました。地面の処理と空中の左右は、ルーチン自身のスタックの高さからほかのルーチンを呼ぶので、そのすぐ下の 2 バイトを書きます。
+
+## 押している側がふさがれたフレーム
+
+`ImposeFriction` はまず左右のボタンを当たり判定のビットでふさぎます。`hstep` はそれを `m0` のビットで動かし、そこでは何もふさがれていません。左がふさがれていて（`noLeft`）左を押すと、本物のルーチンは別の道を通ることがあります。
+
+```
+move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr ≠ lr,  0 < v(R) < 128
+               →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs
+                              ∧  ( HS(stepN(k, R)) = hstep(HS(R), In(R))  ∨  v(stepN(k, R)) = 0 )
+                              ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)
+```
+
+`lr` は `hstep` が `In(R)` から読む左右です。`AtCtrl0` は `AtCtrl` からふさぎの条件を除いたものです。証明は次のとおりです。
+
+* `N` は、`ImposeFriction` でのモデルの機械に本物のビットを入れたものです。本物の摩擦と `runSub(N)` は同じ道を通ります（`fric_stage`、2 台の機械の歩き。4608 の場合のうち 1920 がふさがれた場合）。
+* `runSub(N)` と、モデルの機械 `C` の `runSub(C)` を並べます（`runSub2`、`runSub` の 2 台の機械の歩き）。
+  * 左と右: 2 台は同じ道を通ります。
+  * 左だけで速さ `v` が 1 から 127: 始まりが 2 つの回り道です。`ImposeFriction` から、それぞれの機械が 1 台で `RghtFrict` に着き、途中で何も書きません。`v` ごとに 1 つの歩きです。
+  * 左だけで速さ 0: `runSub(N)` は速さを 0 のままにし、モデルの速さは負になります。これが止まるフレーム（`MaskStop`）です。
+* `ImposeFriction` での速さは `v(R)` か 0 です。`X_Physics` は速さを書かず、`GetPlayerAnimSpeed` は 0 だけを書きます（`gpasOK`）。
+
+`maskOK` はこれらのチェックで、ネイティブで約 0.1 秒です。`SurfaceFrames.numbersCheck` の一部です。回り道は、2 台目の機械に別の始まりを持たせられるようになりました（`Detour.c₂`）。`ImposeFriction` では 2 台の当たり判定のビットが違い、ビットが道を決めるからです。
 
 ## 分け方
 
@@ -149,4 +171,5 @@ TAS の操作できる 3442 フレームでは、`Clean` は 3404 で、モデ�
 ```
 .lake/build/bin/smbrta frame-model-check FM2 300
 .lake/build/bin/smbrta vert-model-check          # vertOK と各場合、約 0.1 秒
+.lake/build/bin/smbrta mask-model-check          # maskOK とその部分、約 0.1 秒
 ```
