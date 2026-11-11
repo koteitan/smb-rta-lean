@@ -146,7 +146,7 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 * **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5.
 * **`Room(seq(c))`.** 82 bytes at the first control in the room. In the route it is proved from the rows of the time of the first change ([The condition `Room` at the first control in the room](d-2-4-1-ScreenStart.md)). The rest of this item is as written for this page, with 73 bytes. `K` keeps only bytes that do not differ between runs. It fails for a fire Mario (`PlayerStatus` 2); before this pipe in 1-1 there is one power-up. It should come from walking the rows of the change into the room, since the state after that change is nearly all known. If the last row of item 1-1-b-3-2 knows the values of `K`, one check with `AS.le` is enough. The bytes of `K` that the area's setup does not clear are `AreaType`, `CurrentPlayer`, `PlayerStatus`, `WorldNumber`, `OperMode`, `OperMode_Task`, `AreaMusicBuffer_Alt`. The exit condition of those rows has to know them. This page does not depend on those rows, and they were not run here.
 * **The time in `SiteOK`.** The frames in the room do not overrun.
-* **The address of a read.** `LDA (zp),Y` does not read a register.
+* **The address of a read.** `LDA (zp),Y` does not read a register. Measured (temporary program, not kept): with the rule of [the last frames of the change](d-2-3-SideChangeEnd.md) (the high byte of the pointer known to be at most `0x1E` or at least `0x80`) in place of this condition, the room's walk fails at the screen update's first read, `LDA ($00),Y`: the NMI loads the pointer from a table at the index `VRAM_Buffer_AddrCtrl`, which `Room` does not know (taking a coin changes it). So the walk would need that byte's bits in `Room` and a split of its read. Also [the block map in the room](c-7-12-RoomMap.md) uses this part of `SiteOK` for every `LDA (zp),Y`, also through a known pointer, so this part cannot be taken out of `chg.roomSites` without changing what that page's theorems are given. Item 1-1-d-2-4-2.
 * **Tiles.** A block buffer read gives a value of `T`. This comes from the address being in the block buffers, and the block buffers of the room being as at the start or with coins erased. Not proved.
 * **The head.** A read for the head gives 0 or a coin. This comes from the head not reaching a brick in the room. On real frames the jump is too low (measured: the least `y` of a big Mario is 45, and his head is below the top row).
 * **The address that erases a coin, the buffer's index.** Both hold on real frames. The index was at most 55.
@@ -161,7 +161,7 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 ```
 a₂         := first(n ≥ b₁, n ≤ b₁ + dR : rt(seq n) ≠ rt(r))     (Changes.a₂; b₁ + dR if none)
 entry₂     : EntryRest(seq a₂)                       (16 bytes)
-Room(seq b₁)                                           (Changes.roomAt: the rows of the time of the first change, chg.time₁, chg.ctlFirst₁)
+Room(seq b₁)                                           (Changes.roomAt: the rows of the time of the first change, chg.time₁, Changes.ctlFirst₁)
 roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
 roomOrder  : b₁ ≤ a₂                                   (theorem, from the definition of a₂)
 roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)        (theorem, from the definition of a₂)

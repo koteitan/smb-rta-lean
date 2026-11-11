@@ -24,7 +24,7 @@ start_of_rows    :  startCheck ∧ InRows(m) ∧ ctl(m)  →  StartAt(m)
 left_during      :  During(m)  →  left(m) ≠ 0
 PipeRun.inRows   :  EndStatement ∧ PipeRun ∧ (∀ n ∈ [a, b), left(seq n) ≠ 0)  →  InRows(seq b)
 PipeRun.start    :  EndStatement ∧ startCheck ∧ PipeRun ∧ (∀ n ∈ [a, b), left(seq n) ≠ 0)  →  StartAt(seq b)
-Route.Changes.first₁ :  pipe_end ∧ Changes  →  ∀ n ∈ [a₁, b₁), left₁(seq n) ≠ 0       （time₁、ctlFirst₁ から）
+Route.Changes.first₁ :  pipe_end ∧ Changes  →  ∀ n ∈ [a₁, b₁), left₁(seq n) ≠ 0       （time₁ と定理 ctlFirst₁ から）
 Route.Run.roomStart :  pipe_end ∧ room_start ∧ Run  →  StartAt(room.fm room.C)
 ```
 
@@ -49,7 +49,7 @@ Route.Run.roomStart :  pipe_end ∧ room_start ∧ Run  →  StartAt(room.fm roo
 
 ## 前提（Lean では証明していない）
 
-* **`chg.time₁`、`chg.ctlFirst₁`.** 出口で音のポーズのフラグが 0 で、ゲームのタイマーが 000 でない。`b₁` は入ったあと最初の操作。この 2 つから、操作の前に `left₁` が 0 にならないことが出ます（`Changes.first₁`）。出口でタイマーが 000 の走りは `time₁` を満たしません。入るときにタイマーを 000 に書くと、フレーム 91 で `left₁` が 0 になり、そこでのルーチンは死ぬルーチンで、操作できません。
+* **`chg.time₁`（と定理 `Changes.ctlFirst₁`）.** 出口で音のポーズのフラグが 0 で、ゲームのタイマーが 000 でない。`b₁` は定義から入ったあと最初の操作。この 2 つから、操作の前に `left₁` が 0 にならないことが出ます（`Changes.first₁`）。出口でタイマーが 000 の走りは `time₁` を満たしません。入るときにタイマーを 000 に書くと、フレーム 91 で `left₁` が 0 になり、そこでのルーチンは死ぬルーチンで、操作できません。
 * **`roomCtl`.** `room.fm room.C = chg.seq chg.b₁`。部屋の最初の機械は切り替えの最後の機械です。列の作り方から来ます。
 * **`read_vs`.** `C ≤ n ≤ t₀` で `fr.vs n = vs(fm n)`。`read_hs`、`read_P` と同じ、機械から読むことです。走りについての事実ではなく、読み方です。`C` のフレームだけの同じもの（`vs_C`）に代わりました。
 * 切り替えの条件（入るときの条件 `Run.entry₁`: `chg.entryRest₁`、`upClean₁` と `title`。`places₁`、`quiet₁`、`noStart₁`）。[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md) の前提です。

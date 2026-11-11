@@ -48,6 +48,7 @@ import Theorems.RoomMap
 import Theorems.ControlStart
 import Theorems.CtrlKeep
 import Theorems.SideFrame
+import Theorems.PoleFrame
 
 open Smbrta
 
@@ -1195,6 +1196,12 @@ theorem pole_rule_real (m : Machine) (i : UInt8) (he : Touches sy m i) (P₂ : I
     SurfaceRun.poleP sy ctx ≤ P₂ :=
   inRange_of_pass pole_rule_check he hp hpos
 ")
+  -- the touch of the pole on real frames: one whole frame (PoleFrame)
+  IO.FS.writeFile s!"{dir}/PoleFrame.lean" (head ["PoleFrame"] ++ s!"
+open Smbrta.PoleFrame in
+/-- the walk of the whole frame of the touch, from the idle loop in control -/
+theorem pole_frame_check : poleFrameCheck sy ctx = true := by native_decide
+")
   -- one whole frame in control keeps the castle flag down and the fraction's low 4 bits
   IO.FS.writeFile s!"{dir}/FrameKeep.lean" (head ["FrameKeep"] ++ s!"
 open Smbrta.FrameKeep in
@@ -1202,7 +1209,7 @@ open Smbrta.FrameKeep in
 theorem keep_check : keepCheckOf sy ctx = true := by native_decide
 ")
   let poleRows : Nat := 8
-  IO.FS.writeFile s!"{dir}/PoleJoin.lean" ("import Proof.SurfaceRun\nimport Proof.PoleGrab\nimport Proof.PoleEntryRule\nimport Proof.Jump\nimport Proof.CastleWalk\nimport Proof.TopSpeedFriction\nimport Proof.FrameKeep\n" ++ head ["PoleJoin"] ++ s!"
+  IO.FS.writeFile s!"{dir}/PoleJoin.lean" ("import Proof.SurfaceRun\nimport Proof.PoleGrab\nimport Proof.PoleEntryRule\nimport Proof.PoleFrame\nimport Proof.Jump\nimport Proof.CastleWalk\nimport Proof.TopSpeedFriction\nimport Proof.FrameKeep\n" ++ head ["PoleJoin"] ++ s!"
 open Smbrta.PoleJoin in
 /-- the numbers of the join, with the fraction {joinF}/256 px -/
 theorem pole_join_numbers : joinCheck sy ctx ({surfX}) {surfN} {surfE} {surfT} 9 126 160 {joinF} = true := by native_decide
@@ -1227,20 +1234,20 @@ open Smbrta.PoleJoin SurfaceRun CastleWalk in
 /-- above ground: the castle entry is not before {surfT + 7 + 126} frames after control -/
 theorem pole_join (R : Run sy ctx (beside ctx) (beforeGrab sy ctx) ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩ {surfT} 9 126 {joinF}) (st : SurfaceFrames.Start sy ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩ (R.seq 0))
     (h0 : FrameKeep.AtCtl sy ctx (R.seq 0)) : {surfT + 7 + 126} ≤ R.c :=
-  castle_ge surface_facts surface_run castle_walk jump_grab pole_rules.1 pole_rules.2.1 pole_join_numbers top_frictionCheck pole_keep pole_falls pole_rule_check pole_frac keep_check R ⟨pole_numbers, st⟩ h0
+  castle_ge surface_facts surface_run castle_walk jump_grab pole_rules.1 pole_rules.2.1 pole_join_numbers top_frictionCheck pole_keep pole_falls pole_frame_check pole_frac keep_check R ⟨pole_numbers, st⟩ h0
 
 open Smbrta.PoleJoin SurfaceRun CastleWalk in
 /-- no touch up to frame {surfT} after control -/
 theorem pole_touch (R : Run sy ctx (beside ctx) (beforeGrab sy ctx) ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩ {surfT} 9 126 {joinF}) (st : SurfaceFrames.Start sy ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩ (R.seq 0))
     (h0 : FrameKeep.AtCtl sy ctx (R.seq 0)) : {surfT + 1} ≤ R.g :=
-  touch_ge surface_facts surface_run pole_join_numbers pole_rule_check pole_frac keep_check R ⟨pole_numbers, st⟩ h0
+  touch_ge surface_facts surface_run pole_join_numbers pole_frame_check pole_frac keep_check R ⟨pole_numbers, st⟩ h0
 
 open Smbrta.PoleJoin SurfaceRun CastleWalk in
 /-- above ground: the touch and the castle together -/
 theorem pole_touch_castle (R : Run sy ctx (beside ctx) (beforeGrab sy ctx) ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩ {surfT} 9 126 {joinF}) (st : SurfaceFrames.Start sy ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩ (R.seq 0))
     (h0 : FrameKeep.AtCtl sy ctx (R.seq 0)) :
     ({surfT} + 1 ≤ R.g ∧ R.g + 126 + 6 ≤ R.c) ∨ ({surfT} + 7 ≤ R.g ∧ R.g ≤ {surfT} + 8 ∧ R.g + 126 ≤ R.c) ∨ ({surfT} + 9 ≤ R.g ∧ R.g + 126 ≤ R.c + 1) :=
-  touch_castle surface_facts surface_run castle_walk jump_grab pole_rules.1 pole_rules.2.1 pole_join_numbers top_frictionCheck pole_keep pole_falls pole_rule_check pole_frac keep_check R ⟨pole_numbers, st⟩ h0
+  touch_castle surface_facts surface_run castle_walk jump_grab pole_rules.1 pole_rules.2.1 pole_join_numbers top_frictionCheck pole_keep pole_falls pole_frame_check pole_frac keep_check R ⟨pole_numbers, st⟩ h0
 ")
   -- above ground: the state at control, from the rows of the change
   IO.FS.writeFile s!"{dir}/SurfaceFrames.lean" ("import Proof.SurfaceRun\nimport Proof.SideChangeEnd\n" ++ head ["SurfaceFrames"] ++ s!"
@@ -1280,7 +1287,7 @@ theorem route_1_1 (R : Run sy ctx {pipeN} {pipeD} roomNums (beside ctx) (beforeG
     1748 + R.j ≤ R.L := by
   have hs₁ := R.pipeStart₁ title_check title_ctl_check
   have h₁ : 368 ≤ R.pipe.E :=
-    pipe_no_entry_real R.pipe.amax R.pipe.fr R.pipe.fm R.pipe.inp R.pipe.E R.pipe.enter (R.pipe.startE walk_check hs₁) R.pipe.clean R.pipe.tiles R.pipe.edge R.pipe.moved
+    pipe_no_entry_real R.pipe.amax R.pipe.fr R.pipe.fm R.pipe.inp R.pipe.E R.pipe.enter (R.pipe.startE lag_check walk_check hs₁) R.pipe.clean R.pipe.tiles R.pipe.edge R.pipe.moved
       R.pipe.openP R.pipe.openB (R.pipe.reads lag_check walk_check hs₁) (R.still title_check)
   have h₃ := room_join R.room (Run.roomStart pipe_end room_start title_check entry_checks R)
     (Run.inRoom pipe_end map_facts map_start map_startF title_check entry_checks R)
@@ -1309,7 +1316,7 @@ and 100, the value on which the music starts -/
 theorem hurry_1_1 \{E : Nat} \{S : CastleToLevel.Segs} (H : Run sy ctx titleCtx {cq} {ct0} 100 E S) : 1748 ≤ H.L :=
   H.level_ge title_check music_check hurry_near_check (by decide) (by decide)
 ")
-  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, FrameModel.lean, PipeEntry.lean, PipeTransition.lean, Route.lean, FastTakeoff.lean, SidePipe.lean, FastHop.lean, CastleWalk.lean, PipeTransitionAll.lean, SideTransition.lean, SurfaceRun.lean, CastleToLevel.lean, RoomJoin.lean, PoleJoin.lean, SideTransitionAll.lean, TaintRun.lean, PipeChangeBound.lean, SideChangeBound.lean, SideChangeEnd.lean, PipeEntryRule.lean, SurfaceFrames.lean, PoleEntryRule.lean, PipeWrites.lean, PipeChangeEnd.lean, FlagRule.lean, ScreenPage.lean, RoomStart.lean, ScreenStart.lean, HurryMusic.lean, TitleStart.lean, SideEntryRule.lean, FrameKeep.lean, HurryFrame.lean, EntryKeep.lean, RoomMap.lean, ControlStart.lean, StartRun.lean, SideFrame.lean"
+  IO.println s!"wrote {dir}/FastAccel*.lean, TasFastAccel*.lean, TopSpeed*.lean, Reach.lean, ReachOpen*.lean, Opening.lean, AirCap.lean, PoleGrab.lean, Jump.lean, FrameModel.lean, PipeEntry.lean, PipeTransition.lean, Route.lean, FastTakeoff.lean, SidePipe.lean, FastHop.lean, CastleWalk.lean, PipeTransitionAll.lean, SideTransition.lean, SurfaceRun.lean, CastleToLevel.lean, RoomJoin.lean, PoleJoin.lean, SideTransitionAll.lean, TaintRun.lean, PipeChangeBound.lean, SideChangeBound.lean, SideChangeEnd.lean, PipeEntryRule.lean, SurfaceFrames.lean, PoleEntryRule.lean, PipeWrites.lean, PipeChangeEnd.lean, FlagRule.lean, ScreenPage.lean, RoomStart.lean, ScreenStart.lean, HurryMusic.lean, TitleStart.lean, SideEntryRule.lean, FrameKeep.lean, HurryFrame.lean, EntryKeep.lean, RoomMap.lean, ControlStart.lean, StartRun.lean, SideFrame.lean, PoleFrame.lean"
   return 0
 
 /-! ## Ground physics -/
@@ -4041,8 +4048,8 @@ def lagSearch (sy : Syms) (romPath : String) : IO Bool := do
   let m0 := smb11Start sy cart
   let mut ok := true
   IO.println s!"the call of the mode's routine at {LagFrames.modeCall sy}, opcode {romByte m0 (LagFrames.modeCall sy)}"
-  for b in LagFrames.vfpI sy do
-    let G := LagFrames.lagGuard sy m0
+  for b in LagFrames.lagI sy do
+    let G := PipeWrites.guardOf sy m0
     let E := LagFrames.lagEnv m0 b
     let t0 ← IO.monoMsNow
     let X ← IO.lazyPure fun _ => LagFrames.searchL G E (LagFrames.modeCall sy)
@@ -4055,7 +4062,7 @@ def lagSearch (sy : Syms) (romPath : String) : IO Bool := do
     ok := ok && c
   return ok
 
-/-- one frame not counted on a real machine: it starts in the idle loop (`FrameStart` with no byte known), each instruction before the call of the mode's routine is `Clean`,
+/-- one frame not counted on a real machine: it starts in the idle loop in control (`FrameStart` of `guardOf`), each instruction before the call of the mode's routine is `Clean`,
 it calls the mode's routine; and its end -/
 def lagFrameRun (sy : Syms) (G : PipeWrites.Guard) (E : TaintRun.Env) (m : Machine) (i : UInt8) : Bool × Bool × Bool × Machine × String := Id.run do
   let t := m.frame + 1
@@ -4088,13 +4095,17 @@ structure LagRep where
   noCallBad : Nat := 0
   paused : Nat := 0
   timerCtl : Nat := 0
+  callTc0 : Nat := 0
+  callCtl : Nat := 0
+  noCallOut : Nat := 0
   entries : Nat := 0
   outs : Nat := 0
   bad : List String := []
 
 def LagRep.show (r : LagRep) : String :=
   s!"runs {r.runs}, counted frames {r.counted}, entries {r.entries}, runs ended out of control {r.outs}; frames not counted {r.lags} (ending paused {r.paused}, starting with the timer control set {r.timerCtl}): " ++
-  s!"not FrameStart {r.notStart}, not Clean {r.notClean}, calling the mode's routine {r.calls} (that change the three values {r.callBad}), not calling it and changing them {r.noCallBad}; first bad {r.bad.reverse.take 8}; bad that change the values {(r.bad.reverse.filter (fun x => (x.splitOn "keep false").length > 1)).take 30}"
+  s!"not FrameStart {r.notStart}, not Clean {r.notClean}, calling the mode's routine {r.calls} (that change the three values {r.callBad}, with the timer control 0 at the start {r.callTc0}, ending in control {r.callCtl}), " ++
+  s!"not calling it and changing them {r.noCallBad}, not calling it and ending out of control {r.noCallOut}; first bad {r.bad.reverse.take 8}; bad that change the values {(r.bad.reverse.filter (fun x => (x.splitOn "keep false").length > 1)).take 30}"
 
 /-- the frames from a machine at control, with the inputs `inp`, until the entry, a counted frame out of control, or `rlim` frames -/
 def lagRealRun (sy : Syms) (nm : PipeTransitionAll.Names) (pauseA : UInt16) (G : PipeWrites.Guard) (E : TaintRun.Env) (c1 : Machine) (inp : Nat → UInt8) (rlim : Nat) (tag : String)
@@ -4116,8 +4127,11 @@ def lagRealRun (sy : Syms) (nm : PipeTransitionAll.Names) (pauseA : UInt16) (G :
       let b5 : Nat := if !call && !keep then 1 else 0
       let b6 : Nat := if (peek z pauseA) &&& 1 == 1 then 1 else 0
       let b7 : Nat := if peek x sy.TimerControl != 0 then 1 else 0
+      let b8 : Nat := if call && peek x sy.TimerControl == 0 then 1 else 0
+      let b9 : Nat := if call && controllable sy z then 1 else 0
+      let b10 : Nat := if !call && !controllable sy z then 1 else 0
       r := { r with lags := r.lags + 1, notStart := r.notStart + b1, notClean := r.notClean + b2, calls := r.calls + b3, callBad := r.callBad + b4 }
-      r := { r with noCallBad := r.noCallBad + b5, paused := r.paused + b6, timerCtl := r.timerCtl + b7 }
+      r := { r with noCallBad := r.noCallBad + b5, paused := r.paused + b6, timerCtl := r.timerCtl + b7, callTc0 := r.callTc0 + b8, callCtl := r.callCtl + b9, noCallOut := r.noCallOut + b10 }
       if !st || !cl || (!keep) then
         let vf := fun (a : Machine) => (SurfaceFrames.vOf sy a, SurfaceFrames.fOf sy a, posP sy a)
         r := { r with bad := s!"{tag} frame {k}: start {st} (pc {x.pc} dot {x.fdot}) clean {cl} {why} call {call} keep {keep} {vf x}→{vf z} routine {PipeEntryRule.rt sy x} timer control {peek x sy.TimerControl} paused at end {(peek z pauseA) &&& 1}" :: r.bad }
@@ -4140,7 +4154,7 @@ def lagCheckCmd (sy : Syms) (romPath fm2 : String) (nRuns : Nat := 240) : IO UIn
   let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
   let nm := PipeTransitionAll.namesFrom text
   let pauseA : UInt16 := ((PipeTransitionAll.asmValue (text.splitOn "\n") "GamePauseStatus").getD 0).toUInt16
-  let G := LagFrames.lagGuard sy m0
+  let G := PipeWrites.guardOf sy m0
   let E := PipeEntryRule.envOf m0
   -- the movie, from control to the entry
   let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2))
@@ -4223,7 +4237,7 @@ def lagCheckCmd (sy : Syms) (romPath fm2 : String) (nRuns : Nat := 240) : IO UIn
   IO.println s!"big with the super status: {ri.show}"
   IO.println s!"followed past a counted frame out of control (not part of the check): {rd.show}"
   let bad := rT.notStart + rT.notClean + rT.callBad + rT.noCallBad + rr.notStart + rr.notClean + rr.callBad + rr.noCallBad + ri.notStart + ri.notClean + ri.callBad + ri.noCallBad +
-    rp.notStart + rp.notClean + rp.callBad + rp.noCallBad
+    rp.notStart + rp.notClean + rp.callBad + rp.noCallBad + rT.noCallOut + rr.noCallOut + ri.noCallOut + rp.noCallOut
   IO.println s!"bad {bad}"
   return if ok && bad == 0 then 0 else 1
 
@@ -4520,6 +4534,72 @@ def poleRuleCheck (sy : Syms) (romPath fm2 : String) : IO UInt32 := do
   IO.println s!"bad: {bad}"
   return if ok && bad == 0 then 0 else 1
 
+/-- the walk of `FrameKeep.keepCheckOf` (the frames of a run): the mode and the task in the table's key, and at each frame's end the mode of control when the routine and the
+task are those of control (`FrameKeep.endCtl`), as a program -/
+def keepCtlSearch (sy : Syms) (romPath : String) : IO Bool := do
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let S := FrameKeep.spotOf sy m0
+  let G := FrameKeep.guardK sy m0
+  let E := PipeEntryRule.envOf m0
+  let W := FrameKeep.watchOf sy
+  let key := FrameKeep.keyKC sy S G W
+  let t0 ← IO.monoMsNow
+  let X ← IO.lazyPure fun _ => FrameKeep.searchOfKW S G E W key
+  let t1 ← IO.monoMsNow
+  IO.println s!"the search: {X.steps} steps, {X.forks} forks, {X.fails} failures, table {X.multi.size}, states {X.done.size}; {t1 - t0} ms"
+  flush
+  -- the frame's ends: the states after the frame's last step, from every table state and the starts
+  let C := FrameKeep.cfgOfKW S G E W key (FrameKeep.endCtl sy)
+  let ok ← IO.lazyPure fun _ => FrameKeep.keepCheckOf sy m0
+  let t2 ← IO.monoMsNow
+  IO.println s!"keepCheckOf {ok}, {t2 - t1} ms; the table {C.t.size}"
+  let old ← IO.lazyPure fun _ => FrameKeep.keepCheckOld sy m0
+  IO.println s!"the walk without endCtl (keepCheck) {old}, {(← IO.monoMsNow) - t2} ms"
+  flush
+  return ok
+
+/-- the touch of the pole by one whole frame (`PoleFrame`): the search and the check of the walk, as a program -/
+def poleFrameSearch (sy : Syms) (romPath : String) : IO Bool := do
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let T := PoleFrame.poleOf sy m0
+  let G := T.G
+  let E := PipeEntryRule.envOf m0
+  IO.println s!"the end of the move {sy.PlayerSubs}, cuts {G.cuts}, the mask of the sum {T.andAt} (opcode {romByte m0 T.andAt} {romByte m0 (T.andAt + 1)}), the read {T.Q.read}, the write {T.Q.write}, the pole's page {T.Q.pg}, left end {T.Q.left} (low {PoleFrame.lowOf T.Q}), the routine {G.ev}, the move routine {T.K.entry}..{T.K.store}, ptr ok {PoleFrame.ptrOK sy m0}, pieces at the end of the move {(PoleFrame.splitL T.Q (PipeWrites.startG G false)).length}"
+  flush
+  let t0 ← IO.monoMsNow
+  let X ← IO.lazyPure fun _ => PoleFrame.searchOf T E
+  let t1 ← IO.monoMsNow
+  let fp := (X.failPcs.toList.mergeSort (fun a b => a.2 ≥ b.2)).take 12
+  IO.println s!"one frame: {X.steps} steps, {X.forks} forks, {X.fails} failures {fp}, table {X.multi.size}, states {X.done.size}; search {t1 - t0} ms"
+  match X.firstFail with
+  | some A =>
+    let st := (List.range 6).map fun j => let b := A.getK (0x100 + A.s.toNat + 1 + j); (b.v, b.k)
+    IO.println s!"first failure: pc {A.pc} s {A.s} a {(A.a.v, A.a.k)} x {(A.x.v, A.x.k)} y {(A.y.v, A.y.k)} dots {A.lo}..{A.hi} vb {A.vb} nmi {A.nmi} k {A.k} xpos {((A.getK T.Q.xI).v, (A.getK T.Q.xI).k)} page {((A.getK T.Q.pI).v, (A.getK T.Q.pI).k)} save {((A.getK T.Q.saveI).v, (A.getK T.Q.saveI).k)} ptr {((A.getK T.Q.ptrI).v, (A.getK T.Q.ptrI).k)} {((A.getK (T.Q.ptrI + 1)).v, (A.getK (T.Q.ptrI + 1)).k)} temp {((A.getK T.Q.tempI).v, (A.getK T.Q.tempI).k)} stack {st} rt {((A.getK G.rtI).v, (A.getK G.rtI).k)}"
+    let rs := (PoleFrame.preT T A).flatMap (FrameKeep.kstep T.K G E (TaintRun.aRows E).toArray)
+    IO.println s!"  its successors: {rs.map (fun r => match r with | none => "none" | some B => s!"pc {B.pc} ok {PipeWrites.okRt G B} dots {B.lo}..{B.hi}")}"
+  | none => pure ()
+  let mut inZ := 0
+  let mut nRead := 0
+  let mut nOn := 0
+  let mut onPos : List (Nat × Nat × Nat × Nat) := []
+  for (_, (A, _)) in X.done.toList do
+    if PipeWrites.inZone G A then inZ := inZ + 1
+    if A.pc == T.Q.read + 2 && SideFrame.sideNow T.Q A then
+      nRead := nRead + 1
+      if !PoleFrame.offTile T.Q A then
+        nOn := nOn + 1
+        let x := A.getK T.Q.xI
+        let p := A.getK T.Q.pI
+        onPos := (x.v.toNat, x.k.toNat, p.v.toNat, p.k.toNat) :: onPos
+  IO.println s!"in the collision routine {inZ}; after a side read {nRead}, of them maybe the pole's tile {nOn}: (pixel, its known bits, page, its known bits) {onPos.eraseDups}"
+  flush
+  let t2 ← IO.monoMsNow
+  let ok ← if X.fails == 0 then IO.lazyPure fun _ => PoleFrame.poleFrameCheck sy m0 else pure false
+  IO.println s!"the check {ok}, {(← IO.monoMsNow) - t2} ms"
+  return ok
+
 /-- an entry into the side pipe on real frames: the check of one pass, the hypotheses on the movie's room, and own inputs in the room -/
 def sideRuleCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 := do
   let cart ← loadCart romPath
@@ -4684,7 +4764,8 @@ def sideFrameReal (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :=
   let cart ← loadCart romPath
   let m0 := smb11Start sy cart
   let P := SideEntryRule.spots sy m0
-  let scan := fun (c : Machine) (i : UInt8) (r : SideFrame.Report) => SideFrame.scanFrame sy m0 c i r
+  let G := SideFrame.roomG sy m0
+  let scan := fun (c : Machine) (i : UInt8) (r : SideFrame.Report) => SideFrame.scanFrame sy m0 G c i r
   let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2))
   let mut t := powerOn cart 0
   let mut seen := false
@@ -5474,6 +5555,19 @@ def poleJoinCheck (sy : Syms) (romPath fm2Path : String) (c0 : Nat) (at_ : Nat :
   let fTouch := frs[g]!.P2 - 256 * (rTouch.pxs.headD 0 : Int)
   IO.println s!"touches, pass, pos on frame g: {rTouch.show}; P₂(g) = 256·px + f with f = {fTouch}: {decide (0 ≤ fTouch)}"
   IO.println s!"Touches (an instruction writes the pole's routine): {decide (0 < rTouch.touches)}; the frame ends with the routine {(PipeEntryRule.rt sy (PipeTransition.frame touchM touchPad)).toNat} (the pole's {PoleEntryRule.vf sy}, the end of the level {sy.EngEndLevel})"
+  -- the whole frame of the touch (`PoleFrame`): `tiles`, `edge`, `moved` of `Run`
+  let (rT2, _) := PoleFrame.scanFrame sy ctx touchM touchPad {}
+  let subsP : Option Int := Id.run do
+    let mut c : Machine := { touchM with pad := touchPad }
+    let t := touchM.frame + 1
+    let mut n := 0
+    let mut res : Option Int := none
+    while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) && res.isNone do
+      if c.pc == sy.PlayerSubs then res := some (posP sy c)
+      c := (PipeTransitionAll.go step c).2
+      n := n + 1
+    return res
+  IO.println s!"the whole frame of the touch (PoleFrame): {rT2.show}; moved: P₂(g) is posP at the end of the move: {subsP == some frs[g]!.P2}"
   let B : PoleJoin.Box := ⟨SurfaceRun.above ctx 982, 4, 40, 8⟩
   let hJ := hFirst.getD 0
   IO.println s!"box: frames 1 to 8 in the box: {(List.range 8).map fun i => joinBox sy B frs[i + 1]!}; off: {hFirst.isNone || (List.range hJ).any fun i => !joinQuiet frs[i + 1]!}"
@@ -5613,6 +5707,127 @@ def fracInputs (seed : UInt64) (n : Nat) : Array UInt8 := Id.run do
     else hold := hold - 1
     out := out.push cur
   return out
+
+/-- the touch of the pole by one whole frame (`PoleFrame`) on real frames: `StartK`, `CleanK`, `TileRead`, the cut places and the end of the move (`moved`), on the runs of
+`pole-rule-check` and on random inputs from the movie's frames 1002 to 1091 -/
+def poleFrameReal (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 := do
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let P := PoleFrame.spotsF sy m0
+  let scan := fun (c : Machine) (i : UInt8) (r : PoleFrame.Report) => PoleFrame.scanFrame sy m0 c (smbToPad i) r
+  -- the movie, from the first control to after the touch
+  let (mS, inputs, k0) ← movieAt sy romPath fm2 0
+  let mut t := mS
+  let mut ra : PoleFrame.Report := {}
+  let mut hist : Array Machine := #[mS]
+  for j in [1:1240] do
+    let (r, c) := PoleFrame.scanFrame sy m0 t inputs[k0 + j]! ra
+    ra := r
+    t := c
+    hist := hist.push t
+  IO.println s!"the movie, frames 1 to 1239 after the first control: {ra.show}"
+  flush
+  let late := (hexDecode "02808080").toList ++ List.replicate 16 0
+  let (rl, _) := late.foldl (fun (x : PoleFrame.Report × Machine) i => scan x.2 i x.1) (({} : PoleFrame.Report), hist[1089]!)
+  IO.println s!"frame 1089, then 02808080: {rl.show}"
+  flush
+  let ins : List UInt8 := (List.range 16).map fun (n : Nat) =>
+    let i := n.toUInt8
+    ((i &&& 4) <<< 4) ||| ((i &&& 8) <<< 4) ||| (i &&& 3)
+  let searchFrom := fun (c0 : Machine) (delta d : Nat) (r0 : PoleFrame.Report) => Id.run do
+    let p := (posP sy c0).toNat + delta
+    let c1 := poke (poke (poke c0 sy.SprObject_X_MoveForce (p % 256).toUInt8) sy.Player_X_Position (p / 256 % 256).toUInt8) sy.Player_PageLoc (p / 65536).toUInt8
+    let mut layer : Array Machine := #[c1]
+    let mut r := r0
+    for _ in [0:d] do
+      let mut nxt : Std.HashMap (Array UInt8) Machine := {}
+      for c in layer do
+        for i in ins do
+          let (r1, c') := scan c i r
+          r := r1
+          if (peek c' sy.GameEngineSubroutine).toUInt16 == sy.Eng_PlayerCtrl && nxt.size < 150 then nxt := nxt.insert (ramKey sy c') c'
+      layer := nxt.valuesArray
+    return r
+  let mut rs : PoleFrame.Report := {}
+  for a in [1082, 1089] do
+    rs := searchFrom hist[a]! 0 6 rs
+  IO.println s!"every input from frames of the movie: {rs.show}"
+  flush
+  let mut rd : PoleFrame.Report := {}
+  for delta in [64, 256, 512, 1024, 1536] do
+    rd := searchFrom hist[1082]! delta 5 rd
+  IO.println s!"every input, the position moved forward (touch-search-at): {rd.show}"
+  flush
+  let mut z : UInt64 := 88172
+  let mut rr : PoleFrame.Report := {}
+  let mut rb : PoleFrame.Report := {}
+  for q in List.range 160 do
+    let mut c := hist[960 + (q * 7) % 130]!
+    let big := q % 4 == 3
+    if big then c := poke c sy.PlayerSize 0
+    let mut f := 0
+    while f < 160 && (peek c sy.GameEngineSubroutine).toUInt16 == sy.Eng_PlayerCtrl do
+      z := z ^^^ (z <<< 13)
+      z := z ^^^ (z >>> 7)
+      z := z ^^^ (z <<< 17)
+      let w := ((z >>> 11) &&& 15).toNat
+      let i : UInt8 := match w with
+        | 0 | 1 | 2 | 3 | 4 => 0x41
+        | 5 | 6 | 7 | 8 => 0xC1
+        | 9 | 10 => 0x81
+        | 11 => 0x01
+        | 12 => 0x02
+        | 13 => 0x82
+        | 14 => 0x00
+        | _ => ((z >>> 20) &&& 0xCF).toUInt8
+      let (r, d) := scan c i (if big then rb else rr)
+      if big then rb := r else rr := r
+      c := d
+      f := f + 1
+  IO.println s!"random inputs towards the pole, small: {rr.show}"
+  IO.println s!"random inputs towards the pole, big (overwritten): {rb.show}"
+  flush
+  let mut rj : PoleFrame.Report := {}
+  for a in (List.range 22).map (fun q => 985 + 5 * q) do
+    for n in [2, 6, 10, 14, 18, 22, 30] do
+      let mut c := hist[a]!
+      let mut f := 0
+      while f < 70 && (peek c sy.GameEngineSubroutine).toUInt16 == sy.Eng_PlayerCtrl do
+        let (r, d) := scan c (if f < n then 0xC1 else 0x41) rj
+        rj := r
+        c := d
+        f := f + 1
+  IO.println s!"jumps from frames of the movie: {rj.show}"
+  flush
+  let mut rh : PoleFrame.Report := {}
+  let c0 := hist[1085]!
+  for y in (List.range 26).map (fun n => 0x10 + 8 * n) do
+    for dx in List.range 44 do
+      for fall in [0, 1] do
+        let px := P.left - 12 + dx
+        let c1 := poke (poke (poke c0 sy.Player_PageLoc (px / 256).toUInt8) sy.Player_X_Position (px % 256).toUInt8) sy.Player_Y_Position y.toUInt8
+        let c2 := poke (poke c1 sy.Player_Y_Speed (if fall == 0 then 0xFC else 0x02)) sy.Player_State 1
+        for i in ([0x01, 0x02, 0x00] : List UInt8) do
+          let (r, _) := scan c2 i rh
+          rh := r
+  IO.println s!"one frame from each height and position near the column (overwritten): {rh.show}"
+  flush
+  -- random inputs from the movie's frames 1002 to 1091, as `pole-frac-check`
+  let mut rf : PoleFrame.Report := {}
+  for sd in [1:runs + 1] do
+    let at_ := 1002 + (sd * 7919) % 90
+    let w := fracInputs (sd.toUInt64 + 7777) 160
+    let mut c := hist[at_]!
+    for i in w do
+      if (peek c sy.GameEngineSubroutine).toUInt16 != sy.Eng_PlayerCtrl then break
+      let (r, d) := scan c i rf
+      rf := r
+      c := d
+  IO.println s!"random inputs from the movie's frames 1002 to 1091 ({runs} runs): {rf.show}"
+  flush
+  let bad := ra.bad + rl.bad + rs.bad + rd.bad + rr.bad + rb.bad + rj.bad + rh.bad + rf.bad
+  IO.println s!"bad: {bad}"
+  return if bad == 0 then 0 else 1
 
 /-- `16 ∣ P' − P` (a theorem from `PoleJoin.Run.keep`), `PoleJoin.fracCheck` and no castle flag up to the touch (a theorem: `PoleJoin.Run.noCastle_of`) on real frames: the fraction at control, on each frame from control above ground up to the touch the position moves by a
 multiple of 1/16 px, and no machine up to the touch has the castle flag. The movie, random inputs from control and from the movie's frames, and runs into the screen's left edge. -/
@@ -6128,11 +6343,15 @@ structure FramesCount where
   maskStopNeed : Nat := 0
   /-- frames before `J` where a vertical byte takes another value after the scroll handler (and is back at the frame's end) -/
   vMid : Nat := 0
+  /-- `OnFrames.lagNo`: `lag` frames that come to the player's routine; `OnFrames.unpaused`: counted frames in control that end paused -/
+  lagArr : Nat := 0
+  endPaused : Nat := 0
 
-def FramesCount.bad (c : FramesCount) : Nat := c.lagMoved + c.one + c.mid + c.move + c.gain + c.impV + c.impF + c.impP + c.boxBad + c.ends + c.movesBad + c.boxM
+def FramesCount.bad (c : FramesCount) : Nat := c.lagMoved + c.one + c.mid + c.move + c.gain + c.impV + c.impF + c.impP + c.boxBad + c.ends + c.movesBad + c.boxM +
+  c.lagArr + c.endPaused
 
 def FramesCount.str (c : FramesCount) : String :=
-  s!"frames {c.frames} (not in control {c.noCtl}, lag {c.lag}, moved on a lag frame {c.lagMoved}, not clean {c.unclean}); FAILS: OneFrame {c.one}, mid {c.mid}, `Frame` move {c.move} gain {c.gain} impedeV {c.impV} impedeF {c.impF} impedeP {c.impP}; kinds: quiet {c.quiet}, block of Left {c.blockL}, hit {c.hit}, mask stop {c.maskStop}; P' held at the edge {c.clamp}; a hit moving right with no push: largest v₂ {c.edgeV}; frames before J {c.boxN}, FAILS {c.boxBad}; OnFrames: Moves {c.moves}, masked {c.masked}, FAILS: end {c.ends}, Moves {c.movesBad} {c.why}, box from the scroll handler {c.boxM}; input at the routine not that of the two ends {c.inDiff}; masked at the mover: the model's speed {c.maskSame}, the speed 0 {c.maskZero}, not Pre ∧ Coll (so MaskStop) {c.maskStopNeed}; frames before J where a vertical byte changes after the scroll handler {c.vMid}"
+  s!"frames {c.frames} (not in control {c.noCtl}, lag {c.lag}, moved on a lag frame {c.lagMoved}, not clean {c.unclean}); FAILS: OneFrame {c.one}, mid {c.mid}, `Frame` move {c.move} gain {c.gain} impedeV {c.impV} impedeF {c.impF} impedeP {c.impP}; kinds: quiet {c.quiet}, block of Left {c.blockL}, hit {c.hit}, mask stop {c.maskStop}; P' held at the edge {c.clamp}; a hit moving right with no push: largest v₂ {c.edgeV}; frames before J {c.boxN}, FAILS {c.boxBad}; OnFrames: Moves {c.moves}, masked {c.masked}, FAILS: end {c.ends}, Moves {c.movesBad} {c.why}, box from the scroll handler {c.boxM}; input at the routine not that of the two ends {c.inDiff}; masked at the mover: the model's speed {c.maskSame}, the speed 0 {c.maskZero}, not Pre ∧ Coll (so MaskStop) {c.maskStopNeed}; frames before J where a vertical byte changes after the scroll handler {c.vMid}; FAILS: lag frames at the player's routine {c.lagArr}, counted frames that end paused {c.endPaused}"
 
 /-- One frame from `cur` to `b`, as `SurfaceFrames` states it, where `a` is the machine when the routine of the frame before it ended: `cur` is `a`, or later by `lag` frames. `j` is the frame's number from control, or 0 -/
 def framesOne (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) (B : PoleJoin.Box) (a cur b : Machine) (pad : UInt8) (j : Nat) (c0 : FramesCount) : FramesCount := Id.run do
@@ -6140,10 +6359,12 @@ def framesOne (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) (B : Pol
   if !controllable sy cur || !controllable sy b then return { c with noCtl := c.noCtl + 1 }
   if CastleToLevel.kindOf sy nm cur b == .lag then
     c := { c with lag := c.lag + 1 }
+    if (framesAt cur pad sy.PlayerCtrlRoutine).isSome then c := { c with lagArr := c.lagArr + 1 }
     if Potential.startHS sy cur != Potential.startHS sy b || posP sy cur != posP sy b || SurfaceFrames.vsOf sy cur != SurfaceFrames.vsOf sy b ||
         peek cur sy.Player_XSpeedAbsolute != peek b sy.Player_XSpeedAbsolute || peek cur sy.Player_CollisionBits != peek b sy.Player_CollisionBits || peek cur sy.Player_State != peek b sy.Player_State ||
         peek cur sy.RunningTimer != peek b sy.RunningTimer then c := { c with lagMoved := c.lagMoved + 1 }
     return c
+  if !CtrlKeep.unpausedB sy m0 b then c := { c with endPaused := c.endPaused + 1 }
   let some e := framesAt cur pad sy.MoveObjectHorizontally | return { c with move := c.move + 1 }
   let v := sbyte (peek a sy.Player_X_Speed)
   let f : Int := (peek a sy.Player_X_MoveForce).toNat
@@ -6799,22 +7020,35 @@ structure TitleRun where
   /-- the timer and the phase when frame 0 begins -/
   t : Nat
   ph : Nat
+  /-- the frames from the press to frame 0 that end paused -/
+  paused : Nat
+  /-- frame 0 is in the game core and has Start (allowed) -/
+  start0 : Bool
 
-/-- from the machine `m` on the title: the title's inputs `ti` until the frame `kk`, the press `pi` on frame `kk`, then the inputs `gi` with no Start on the frames of the
-game core. `none` if there is no control in 600 frames. -/
+/-- from the machine `m` on the title: the title's inputs `ti` until the frame `kk`, the press `pi` on frame `kk`, then the inputs `gi`, Start included. On the frame that
+ends with control (frame 0), Start in the game core is taken out if the frame still ends with control without it; if not, Start stays (`start0`).
+`none` if there is no control in 3000 frames. -/
 def titleRun (sy : Syms) (c : TitleStart.Ctx) (t0 : Nat) (m : Machine) (kk : Nat) (ti : Nat → UInt8) (pi : UInt8) (gi : Nat → UInt8) : Option TitleRun := Id.run do
   let mut x := m
   for k in [0:kk] do x := runFrame x (ti k &&& 0xF7)
   x := runFrame x pi
   let press := SideChangeEnd.exitOK c.E c.x c.K c.gps x
   let mut b := x
-  for n in [0:600] do
-    let i := if TitleStart.inCore sy b then gi n &&& 0xF7 else gi n
-    let y := runFrame b i
+  let mut paused := 0
+  for n in [0:3000] do
+    let mut i := gi n
+    let mut y := runFrame b i
+    let core := TitleStart.inCore sy b
+    if controllable sy y && core && i &&& 0x08 != 0 then
+      let y' := runFrame b (i &&& 0xF7)
+      if controllable sy y' then
+        i := i &&& 0xF7
+        y := y'
     if controllable sy y then
       let zero := (TitleStart.zeroBytes c.nm t0).all fun p => b.ram.get! p.1 == p.2
       let still := y.ram.get! (TitleStart.vI sy) == 0
-      return some { press, pre := n, zero, still, t := CastleToLevel.timerOf c.nm b, ph := CastleToLevel.phaseOf c.nm b }
+      return some { press, pre := n, zero, still, t := CastleToLevel.timerOf c.nm b, ph := CastleToLevel.phaseOf c.nm b, paused, start0 := core && i &&& 0x08 != 0 }
+    if y.ram.get! c.gps &&& 1 == 1 then paused := paused + 1
     b := y
   return none
 
@@ -6829,8 +7063,8 @@ def titleRand (seed : UInt64) (k : Nat) : UInt8 := Id.run do
   return (s >>> 17).toUInt8
 
 /-- The fields of `TitleStart.Begin` and its conclusions on real runs: Start on the title after any frames, any buttons on the title, A with Start, a reset during a game,
-and any buttons up to control but Start on the frames of the game core. A run whose press meets the condition and whose frame 0 lacks the bytes of `zeroBytes` would make
-the check wrong. -/
+the title after a game over, and any buttons up to control, Start included: pauses on the frames of the game core. A run whose press meets the condition and whose frame 0
+lacks the bytes of `zeroBytes`, or whose control comes with a speed not 0, would make the check wrong. -/
 def titleCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
   let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
   let cnm := CastleToLevel.namesFrom text
@@ -6865,6 +7099,35 @@ def titleCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
     let kk := 36 + (titleRand (i.toUInt64 + 7) 0).toNat
     let mask : UInt8 := if i % 4 == 0 then 0xFB else 0xFF
     cases := cases.push (s!"random {i}", pon, kk, fun k => titleRand i.toUInt64 k &&& mask, 0x08, fun k => titleRand (i.toUInt64 + 1000) k)
+  -- pauses on the frames of the game core: Start on the first or the second frame of the game core, and again after `d` frames
+  for kk in [39, 45, 52, 61, 70, 88, 101, 133] do
+    let mut b := pon
+    for _ in [0:kk] do b := runFrame b 0
+    b := runFrame b 0x08
+    let mut c0 := 0
+    for n in [0:400] do
+      if TitleStart.inCore sy b then
+        c0 := n
+        break
+      b := runFrame b 0
+    for (a, d) in [(c0, 43), (c0, 44), (c0, 60), (c0, 200), (c0 + 1, 43), (c0 + 1, 44), (c0 + 1, 60), (c0 + 1, 61)] do
+      cases := cases.push (s!"pause at {a} for {d}, press at {kk}", pon, kk, fun _ => 0, 0x08, fun n => if n == a || n == a + d then 0x08 else 0)
+  -- a game over with no input, or with Start every 97 or 131 frames on the first 3000 frames of the game (pauses; after them Start ends a pause), then the title
+  for every in [0, 97, 131] do
+    let mut g := pon
+    for _ in [0:39] do g := runFrame g 0
+    g := runFrame g 0x08
+    let mut left := false
+    for n in [0:60000] do
+      if peek g sy.OperMode == 0 then
+        left := true
+        break
+      let st := (every != 0 && n < 3000 && n % every == every - 1) || (3000 ≤ n && g.ram.get! c.gps &&& 1 == 1 && n % 50 == 0)
+      g := runFrame g (if st then 0x08 else 0)
+    if left then
+      for kk in [30, 77] do
+        cases := cases.push (s!"title after a game over (Start every {every}), press at {kk}", g, kk, fun _ => 0, 0x08, fun j => titleRand (kk.toUInt64 + 99) j)
+    else IO.println s!"no game over in 60000 frames (Start every {every}): mode {peek g sy.OperMode}, task {peek g sy.OperMode_Task}"
   -- a reset during the movie, then the title
   let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2Path)) fceuxSkip
   let mut mv := pon
@@ -6873,6 +7136,9 @@ def titleCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
       let r := (Smbrta.reset.run { mv with ppuCtrl := 0, nmiPending := false }).2
       cases := cases.push (s!"reset after movie frame {k}", r, 60 + k % 7, fun _ => 0, 0x08, fun j => titleRand k.toUInt64 j)
     mv := runFrame mv inputs[k]
+  let mut withPause := 0
+  let mut start0 := 0
+  let mut maxPaused := 0
   for (name, m, kk, ti, pi, gi) in cases do
     runs := runs + 1
     match titleRun sy c t0 m kk ti pi gi with
@@ -6881,6 +7147,9 @@ def titleCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
       if !pres.contains r.pre then pres := pres.push r.pre
       if r.press then
         pressOK := pressOK + 1
+        if r.paused > 0 then withPause := withPause + 1
+        if r.start0 then start0 := start0 + 1
+        maxPaused := max maxPaused r.paused
         if !(r.zero && r.still) then
           wrong := wrong + 1
           IO.println s!"AGAINST THE CHECK: {name}: timer {r.t}, phase {r.ph}, speed 0 {r.still}"
@@ -6905,10 +7174,11 @@ def titleCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
       break
     x := y
   IO.println s!"the movie: the press meets the condition {moviePress}; frame 0 and control as the check says {movieZero}"
-  IO.println s!"{runs} runs: no control in 600 frames {noCtl}; the press meets the condition {pressOK}; of them against the check {wrong}"
-  IO.println s!"  the frames from the press to frame 0: {pres.toList.mergeSort}"
+  IO.println s!"{runs} runs: no control in 3000 frames {noCtl}; the press meets the condition {pressOK}; of them against the check {wrong}"
+  IO.println s!"  of them with paused frames before frame 0 {withPause} (at most {maxPaused} paused frames); with Start on frame 0 in the game core {start0}"
+  IO.println s!"  the frames from the press to frame 0: {(pres.toList.mergeSort).take 30} ... ({pres.size} values, the largest {pres.foldl max 0})"
   IO.println s!"  outside the condition {outside.size}, of them with frame 0 or control not as the check says {bad}: {outside.toList.take 12}"
-  return (if ok && wrong == 0 && moviePress && movieZero then 0 else 1)
+  return (if ok && wrong == 0 && moviePress && movieZero && withPause > 0 then 0 else 1)
 
 
 /-! ## The condition at the vertical pipe's entry, from the title (`EntryKeep`) -/
@@ -7083,7 +7353,7 @@ def entryWalkCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   let E := PipeEntryRule.envOf m0
   let fin := EntryKeep.finOf sy m0 d e
   let t0 ← IO.monoMsNow
-  let X ← IO.lazyPure fun _ => EntryKeep.searchE EntryKeep.spot G E fin W
+  let X ← IO.lazyPure fun _ => EntryKeep.searchE EntryKeep.spot G E (EntryKeep.timerI d e) fin W
   let fp := (X.failPcs.toList.mergeSort fun a b => a.2 ≥ b.2).take 12
   IO.println s!"one frame: {X.steps} steps, {X.fails} failures at {fp}, table {X.multi.size}; search {(← IO.monoMsNow) - t0} ms"
   match X.firstFail with
@@ -7095,7 +7365,8 @@ def entryWalkCheck (sy : Syms) (romPath : String) : IO UInt32 := do
       | some B =>
         if B.k != A.k then
           let rt := B.getK G.rtI
-          IO.println s!"  an end: routine {rt.v}/{rt.k}, kept {FrameKeep.watchOK W B}, endOK {FrameKeep.endOK G B}, pc {B.pc} s {B.s} lo {B.lo} hi {B.hi} vb {B.vb} nmi {B.nmi}"
+          let tm := B.getK (EntryKeep.timerI d e)
+          IO.println s!"  an end: routine {rt.v}/{rt.k}, kept {FrameKeep.watchOK W B}, endOK {FrameKeep.endOK G B}, pipe's timer {tm.v}/{tm.k}, pc {B.pc} s {B.s} lo {B.lo} hi {B.hi} vb {B.vb} nmi {B.nmi}"
           for p in G.known do
             IO.println s!"    known byte {p.1}: {(B.getK p.1).v}/{(B.getK p.1).k}, at control {p.2}"
       | none => IO.println "  a step that fails"
@@ -7175,6 +7446,206 @@ def entryCleanUse (sy : Syms) (romPath : String) : IO UInt32 := do
   IO.println s!"places that need Clean: {(l.filter fun p => p.2 &&& 31 != 0).length}; a store with the target not known {cnt 1}, a store to a known target not Plain {cnt 2}, LDA (zp),Y not known {cnt 4}, the jump not known {cnt 8}, late {cnt 16}; decided by the walk somewhere: a store {cnt 32}, LDA (zp),Y {cnt 64}, the jump {cnt 128}; stores never known {(l.filter fun p => p.2 &&& 1 != 0 && p.2 &&& 32 == 0).length}, always known {(l.filter fun p => p.2 &&& 1 == 0 && p.2 &&& 32 != 0).length}"
   for p in l do
     IO.println s!"{p.1} {p.2}"
+  return 0
+
+/-- experiment for `EntryKeep`: for each byte of `restNames`, the values on real frames (at control, and frames from control to the entry that differ from the
+reference entry), what the condition at the press and the near states of `TitleStart` know of it, and the search of one frame from control and the check of frame 0 with the byte
+kept too (`endOnly`: asked only at the pipe's end) -/
+def entryWiden (sy : Syms) (romPath fm2Path : String) (only : List Nat) (searchOn : Bool) (endOnly : Bool := false) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let e := PipeTransition.entry m0
+  let nx := PipeChangeEnd.namesOf text
+  let T ← IO.lazyPure fun _ => PipeChangeEnd.tablesOf sy nx m0
+  let d := PipeChangeEnd.assemble sy nx m0 (PipeChangeEnd.songTable nx m0 5327) T.2.1 T.1 T.2.2.1 T.2.2.2 0 0
+  let W := EntryKeep.kept sy d e
+  let G := EntryKeep.guardOf sy m0 d e
+  let E := PipeEntryRule.envOf m0
+  let c := TitleStart.ctxOf sy (TitleStart.namesFrom text) cart 39
+  let rest := (EntryKeep.entryW d e).filter fun w => (EntryKeep.restIdx d.nx).contains w.1
+  let nearR := (TitleStart.setsOf sy c).near.R
+  -- real frames: the movie and the reference from control to the entry, and random runs from control
+  let pon := powerOn cart 0
+  let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2Path)) fceuxSkip
+  let mut x := pon
+  let mut k0 := 0
+  for h : k in [0:inputs.size] do
+    x := runFrame x inputs[k]
+    if controllable sy x then
+      k0 := k
+      break
+  let mut tas : Array Machine := #[x]
+  let mut a := x
+  for j in [1:400] do
+    a := runFrame a inputs[k0 + j]!
+    tas := tas.push a
+    if (peek a sy.GameEngineSubroutine).toUInt16 == sy.EngVerticalPipe then break
+  let mut rf : Array Machine := #[m0]
+  a := m0
+  for i in PipeTransition.witness do
+    a := runFrame a (smbToPad i)
+    rf := rf.push a
+    if (peek a sy.GameEngineSubroutine).toUInt16 == sy.EngVerticalPipe then break
+  let mut rnd : Array Machine := #[]
+  for sd in [1:61] do
+    a := m0
+    for i in fracInputs sd.toUInt64 500 do
+      if (peek a sy.GameEngineSubroutine).toUInt16 != sy.Eng_PlayerCtrl then break
+      rnd := rnd.push a
+      a := runFrame a (smbToPad i)
+  IO.println s!"movie {tas.size} frames (entry {(peek tas.back! sy.GameEngineSubroutine).toUInt16 == sy.EngVerticalPipe}), reference {rf.size}, random {rnd.size}; kept {W.length}, rest {rest.length}"
+  let bad := fun (ms : Array Machine) (w : FrameKeep.Watch) => (ms.filter fun m => (m.ram.get! w.1 &&& w.2.1) != (w.2.2 &&& w.2.1)).size
+  let mut k := 0
+  for p in EntryKeep.restNames do
+    let idx := SideChangeBound.bytesOf nx [p]
+    for w in rest.filter fun w => idx.contains w.1 do
+      let add := [w]
+      let keptReal := bad (tas.pop) w == 0 && bad rf.pop w == 0 && bad rnd w == 0
+      if only.isEmpty || only.contains k then
+        IO.println s!"[{k}] {p.1}+{p.2.1} i={w.1} mask {w.2.1} ref {w.2.2}: control {tas[0]!.ram.get! w.1}, movie differs {bad (tas.pop) w}/{tas.size - 1} (entry {tas.back!.ram.get! w.1}), reference differs {bad rf.pop w}, random differs {bad rnd w}/{rnd.size}; at the press: known {c.K.contains w.1}, free {(TitleStart.freeOf c.nm).contains w.1}; near states that know it {(nearR.filter fun S => (S.getK w.1).k &&& w.2.1 == w.2.1).length}/{nearR.length}"
+        if searchOn && (only.contains k || keptReal || endOnly) then
+          let W' := if endOnly then W else W ++ add
+          let W3 := EntryKeep.atEntry d e ++ add
+          let G' := { G with prot := add.map (·.1) ++ G.prot }
+          let fin := EntryKeep.finE G'.rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) W' W3 (FrameKeep.endOK G') (fun B => EntryKeep.idleOK e B && EntryKeep.timerOK (EntryKeep.timerI d e) B)
+          let t0 ← IO.monoMsNow
+          let X ← IO.lazyPure fun _ => EntryKeep.searchE EntryKeep.spot G' E (EntryKeep.timerI d e) fin W'
+          let fp := (X.failPcs.toList.mergeSort fun a b => a.2 ≥ b.2).take 8
+          let near ← IO.lazyPure fun _ => if endOnly then true else EntryKeep.nearCheck sy m0 c W'
+          IO.println s!"   search {X.steps} steps, {X.fails} failures at {fp}, table {X.multi.size}, {(← IO.monoMsNow) - t0} ms; frame 0 {near}"
+        flush
+    k := k + 1
+  return 0
+
+/-- experiment for `EntryKeep`: `EntryKeep.runE` that also records the places where a step changes what the state knows of byte `i` -/
+partial def runEW (S : FrameKeep.Spot) (G : PipeWrites.Guard) (E : TaintRun.Env) (tI : Nat) (fin : TaintRun.AS → Bool) (ops : Array (TaintRun.AM Unit)) (i : Nat) (X0 : PipeWrites.SG)
+    (wr0 : Std.HashMap Nat Nat) (A0 : TaintRun.AS) : PipeWrites.SG × Std.HashMap Nat Nat := Id.run do
+  let mut X := X0
+  let mut wr := wr0
+  let mut cur := A0
+  let mut run := 0
+  while true do
+    let rs := (FrameKeep.preK S G cur).flatMap (FrameKeep.kstep S G E ops)
+    X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
+    let bad := rs.any fun r => match r with
+      | none => true
+      | some B => B.k != cur.k && !fin B
+    if bad then
+      X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur, failPcs := X.failPcs.insert cur.pc.toNat (X.failPcs.getD cur.pc.toNat 0 + 1) }
+    let c0 := cur.getK i
+    for r in rs do
+      match r with
+      | some B =>
+        let b0 := B.getK i
+        if b0.k != c0.k || (b0.v &&& b0.k) != (c0.v &&& c0.k) then wr := wr.insert cur.pc.toNat (wr.getD cur.pc.toNat 0 + 1)
+      | none => pure ()
+    let good := (rs.filterMap id).filter fun b => b.k == cur.k
+    match good with
+    | [b] =>
+      if (X.leaders[b.pc.toNat]?).isNone && run < 64 && b.pc != G.je && b.pc != S.entry &&
+          (b.pc.toNat == cur.pc.toNat + 1 || b.pc.toNat == cur.pc.toNat + 2 || b.pc.toNat == cur.pc.toNat + 3) then
+        cur := b
+        run := run + 1
+        continue
+      else pure ()
+    | _ => pure ()
+    for b in good do
+      X := { X with leaders := X.leaders.insert b.pc.toNat () }
+      X := EntryKeep.routeE E S G tI X b
+    break
+  return (X, wr)
+
+/-- experiment for `EntryKeep`: with one byte of `restNames` kept too, the places of a frame from control that change it, and the places where the frame's end fails -/
+def entryWriters (sy : Syms) (romPath : String) (names : List String) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let e := PipeTransition.entry m0
+  let nx := PipeChangeEnd.namesOf text
+  let T ← IO.lazyPure fun _ => PipeChangeEnd.tablesOf sy nx m0
+  let d := PipeChangeEnd.assemble sy nx m0 (PipeChangeEnd.songTable nx m0 5327) T.2.1 T.1 T.2.2.1 T.2.2.2 0 0
+  let W := EntryKeep.kept sy d e
+  let G := EntryKeep.guardOf sy m0 d e
+  let rest := (EntryKeep.entryW d e).filter fun w => (EntryKeep.restIdx d.nx).contains w.1
+  let E := PipeEntryRule.envOf m0
+  let ops := (TaintRun.aRows E).toArray
+  let S := EntryKeep.spot
+  for p in EntryKeep.restNames do
+    if names.isEmpty || names.contains p.1 then
+      for w in rest.filter fun w => (SideChangeBound.bytesOf nx [p]).contains w.1 do
+        let W' := W ++ [w]
+        let W3 := EntryKeep.atEntry d e ++ [w]
+        let G' := { G with prot := w.1 :: G.prot }
+        let fin := EntryKeep.finE G'.rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) W' W3 (FrameKeep.endOK G') (fun B => EntryKeep.idleOK e B && EntryKeep.timerOK (EntryKeep.timerI d e) B)
+        let mut X : PipeWrites.SG := [FrameKeep.startK G' W' false, FrameKeep.startK G' W' true].foldl (EntryKeep.routeE E S G' (EntryKeep.timerI d e)) {}
+        let mut wr : Std.HashMap Nat Nat := {}
+        while true do
+          match X.pending.minEntry? with
+          | none => break
+          | some (key, A) =>
+            X := { X with pending := X.pending.erase key }
+            let r := runEW S G' E (EntryKeep.timerI d e) fin ops w.1 X wr A
+            X := r.1
+            wr := r.2
+        let fp := (X.failPcs.toList.mergeSort fun a b => a.1 ≤ b.1)
+        let wl := (wr.toList.mergeSort fun a b => a.1 ≤ b.1)
+        IO.println s!"{p.1}+{p.2.1} i={w.1}: {X.steps} steps, {X.fails} failures at {fp}; changed at {wl}"
+        flush
+  return 0
+
+/-- experiment for `EntryKeep`: on real frames from control while the player's routine runs at the frame's start, the stores through an index or a pointer to each RAM byte -/
+def realStores (sy : Syms) (start : Machine) (w : Array UInt8) (pads : Bool) (acc0 : Std.HashMap Nat Nat) : Std.HashMap Nat Nat := Id.run do
+  let mut acc := acc0
+  let mut a := start
+  for i in w do
+    if (peek a sy.GameEngineSubroutine).toUInt16 != sy.Eng_PlayerCtrl then break
+    let t := a.frame + 1
+    let mut c : Machine := { a with pad := if pads then i else smbToPad i }
+    let mut n := 0
+    while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) do
+      match PipeWrites.wTarget (PipeWrites.opAt c) c with
+      | some tg => if tg < 0x2000 then acc := acc.insert (tg &&& 0x7FF).toNat (acc.getD (tg &&& 0x7FF).toNat 0 + 1)
+      | none => pure ()
+      c := (PipeTransitionAll.go step c).2
+      n := n + 1
+    a := c
+  return acc
+
+def entryStores (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let e := PipeTransition.entry m0
+  let nx := PipeChangeEnd.namesOf text
+  let T ← IO.lazyPure fun _ => PipeChangeEnd.tablesOf sy nx m0
+  let d := PipeChangeEnd.assemble sy nx m0 (PipeChangeEnd.songTable nx m0 5327) T.2.1 T.1 T.2.2.1 T.2.2.2 0 0
+  let rest := (EntryKeep.entryW d e).filter fun w => (EntryKeep.restIdx d.nx).contains w.1
+  let pon := powerOn cart 0
+  let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2Path)) fceuxSkip
+  let mut x := pon
+  let mut k0 := 0
+  for h : k in [0:inputs.size] do
+    x := runFrame x inputs[k]
+    if controllable sy x then
+      k0 := k
+      break
+  let sm := realStores sy x ((List.range 400).map fun j => inputs[k0 + 1 + j]!).toArray true {}
+  let sr := realStores sy m0 PipeTransition.witness.toArray false {}
+  let mut r : Std.HashMap Nat Nat := {}
+  for sd in [1:301] do
+    r := realStores sy m0 (fracInputs sd.toUInt64 500 |>.map fun b => if sd % 3 == 0 && (b.toNat + sd) % 41 == 0 then b ||| 0x10 else b) false r
+  let mut tas : Array Machine := #[x]
+  let mut a := x
+  for j in [1:368] do
+    a := runFrame a inputs[k0 + j]!
+    tas := tas.push a
+  let mut l : Std.HashMap Nat Nat := {}
+  for sd in [1:301] do
+    l := realStores sy tas[(sd * 7919) % 360]! (fracInputs (sd.toUInt64 + 7777) 300 |>.map fun b => if sd % 3 == 0 && (b.toNat + sd) % 37 == 0 then b ||| 0x10 else b) false l
+  for p in EntryKeep.restNames do
+    for w in rest.filter fun w => (SideChangeBound.bytesOf nx [p]).contains w.1 do
+      IO.println s!"{p.1}+{p.2.1} i={w.1}: stores through an index or a pointer: movie {sm.getD w.1 0}, reference {sr.getD w.1 0}, random from control {r.getD w.1 0}, random from the movie {l.getD w.1 0}"
   return 0
 
 /-- as `endPoke`, but print the best input sequence and replay it frame by frame -/
@@ -7329,25 +7800,28 @@ def flagRuleCheck (sy : Syms) (romPath fm2 : String) (args : List String) : IO U
 def ctrlKeepProg (sy : Syms) (romPath : String) : IO UInt32 := do
   let m0 := smb11Start sy (← loadCart romPath)
   IO.println s!"the player's routine at {sy.PlayerCtrlRoutine}, the stack there {FrameModel.ctrlStack sy m0}, the move routine's store {(FrameKeep.spotOf sy m0).store}"
+  IO.println s!"the pause byte {CtrlKeep.pauseA sy m0}; the bytes before the mode's call {(List.range 9).map fun k => romByte m0 (LagFrames.modeCall sy - 6 + k.toUInt16)}"
   let G := FrameKeep.guardK sy m0
-  let t0 ← IO.monoMsNow
-  let X ← IO.lazyPure fun _ => CtrlKeep.searchR G (CtrlKeep.envR m0 (sy.Player_X_Speed &&& 0x7FF).toNat) sy.PlayerCtrlRoutine
-  let t1 ← IO.monoMsNow
-  IO.println s!"the search: {X.steps} steps, {X.forks} forks, {X.fails} failures, table {X.multi.size}, at the cut {X.cuts}, frame ends {X.ends}; {t1 - t0} ms"
-  let q ← IO.lazyPure fun _ => CtrlKeep.cutTable sy m0
   let mut ok := true
-  for b in CtrlKeep.keepI sy do
-    let C := CtrlKeep.cfgOf sy m0 q b
-    let c ← IO.lazyPure fun _ => CtrlKeep.ctrlCheck1 C
-    if !c then
-      let w := [false, true].map fun late => CtrlKeep.whyR C PipeWrites.fuelG (LagFrames.startL C.G late)
-      let wt := (C.t.toList.filterMap fun A => CtrlKeep.whyR C PipeWrites.fuelG A).take 3
-      IO.println s!"byte {b}: the check fails: {w} {wt}"
-    ok := ok && c
+  for pw in [false, true] do
+    let t0 ← IO.monoMsNow
+    let X ← IO.lazyPure fun _ => CtrlKeep.searchR G (CtrlKeep.envR m0 (sy.Player_X_Speed &&& 0x7FF).toNat) sy.PlayerCtrlRoutine (CtrlKeep.pauseI sy m0) pw
+    let t1 ← IO.monoMsNow
+    IO.println s!"the search (pause bit asked {pw}): {X.steps} steps, {X.forks} forks, {X.fails} failures, table {X.multi.size}, at the cut {X.cuts}, frame ends {X.ends}; {t1 - t0} ms"
+    let q ← IO.lazyPure fun _ => CtrlKeep.cutTable sy m0 pw
+    let bs := if pw then [(sy.Player_X_Speed &&& 0x7FF).toNat] else CtrlKeep.keepI sy
+    for b in bs do
+      let C := CtrlKeep.cfgOf sy m0 q b pw
+      let c ← IO.lazyPure fun _ => CtrlKeep.ctrlCheck1 C
+      if !c then
+        let w := [(false, false), (false, true), (true, false), (true, true)].map fun (late, p) => CtrlKeep.whyR C PipeWrites.fuelG (CtrlKeep.startP C.G C.pz late p)
+        let wt := (C.t.toList.filterMap fun A => CtrlKeep.whyR C PipeWrites.fuelG A).take 3
+        IO.println s!"byte {b} (pause bit asked {pw}): the check fails: {w} {wt}"
+      ok := ok && c
   let t2 ← IO.monoMsNow
   let c ← IO.lazyPure fun _ => CtrlKeep.ctrlCheck sy m0
   let t3 ← IO.monoMsNow
-  IO.println s!"each byte: {ok}; the check of the {(CtrlKeep.keepI sy).length} bytes {c}, {t3 - t2} ms"
+  IO.println s!"each walk: {ok}; the check of the {(CtrlKeep.keepI sy).length} bytes and the pause bit {c}, {t3 - t2} ms"
   (← IO.getStdout).flush
   return if ok && c then 0 else 1
 
@@ -7407,6 +7881,9 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   entry-keep-check FM2               the vertical pipe's entry from the title: the kept bytes at control, FrameStart and Clean on each frame, Rest and Entry at the entry
   entry-walk-check                   the walks of EntryKeep as a program: one frame from control (each end with the player's routine starts a frame), frame 0
   entry-clean-use                    the places where the walk of EntryKeep leaves an instruction to Clean, by the part of Clean
+  entry-widen FM2 [real | end | K]   EntryKeep, each byte of restNames alone: its values on real frames, the search with it kept too and frame 0 (end: asked only at the pipe's end)
+  entry-writers [NAME ...]           EntryKeep: with one byte of restNames kept too, the places where the walk of a frame changes it
+  entry-stores FM2                   EntryKeep: the stores through an index or a pointer to each byte of restNames on real frames from control
   castle-level-check                 from the castle entry to the level change: the checks, then small timers, fireworks, a pause, every input on the real state, as a program
   flag-rule-check FM2 [real]         the star flag's check of one frame after the castle entry, then its condition on real frames, as a program
   room-join-check                    joining the bonus room: the longest jumps, the floor check, the margins
@@ -7434,8 +7911,11 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   pipe-subs-check FM2                 the same check, and its conditions (edge, the position at the end of the move) on the movie and on random inputs
   pipe-frames-check FM2 [RUNS]        part a's frames read from the machines: the speed at control, each frame a TopSpeed.Frame, lag frames, on the movie and on own inputs
   lag-check FM2 [RUNS]                part a's frames not counted: the check of one frame for each byte of the speed and the position, and its hypotheses on real frames
-  ctrl-keep-check                    above ground: the walk of a frame in control up to the player's routine (CtrlKeep), one walk for each of the 25 kept bytes
+  ctrl-keep-check                    above ground: the walk of a frame in control up to the player's routine (CtrlKeep), one walk for each of the 25 kept bytes and one for the pause bit
   pole-rule-check FM2                 a touch of the pole on real frames: the check of one pass, the hypotheses on the movie, the late touch and own inputs
+  pole-frame-search                   the touch of the pole by one whole frame (PoleFrame): the search and the check of the walk
+  keep-ctl-search                     the walk of the frames of a run (FrameKeep.keepCheckOf): the mode and the task kept, the mode of control at each frame's end
+  pole-frame-check FM2 [N]            the same on real frames: StartK, CleanK, TileRead, the cut places, the end of the move (moved), the runs of pole-rule-check and N random runs
   side-rule-check FM2 [N]             an entry into the side pipe on real frames: the check of one pass, the hypotheses in the movie's room and N runs of own inputs
   side-frame-search                   the side pipe's entry by one whole frame (SideFrame): the search and the check of the walk
   side-frame-check FM2 [N]            the same on real frames: FrameStart, Clean, TilesOK, the cut places, the end of the move (moved), the movie's room and N runs of own inputs
@@ -7558,6 +8038,12 @@ def main (args : List String) : IO UInt32 := do
   | ["entry-keep-check", fm2] => entryKeepCheck sy rom fm2
   | ["entry-walk-check"] => entryWalkCheck sy rom
   | ["entry-clean-use"] => entryCleanUse sy rom
+  | ["entry-widen", fm2] => entryWiden sy rom fm2 [] true
+  | ["entry-widen", fm2, "end"] => entryWiden sy rom fm2 [] true true
+  | ["entry-stores", fm2] => entryStores sy rom fm2
+  | "entry-writers" :: names => entryWriters sy rom names
+  | ["entry-widen", fm2, "real"] => entryWiden sy rom fm2 [] false
+  | ["entry-widen", fm2, k] => entryWiden sy rom fm2 [k.toNat!] true
   | ["route-check", fm2, a, hex] => routeCheck sy rom fm2 a.toNat! (hexDecode hex).toList
   | ["changes-check", fm2] => changesCheck sy rom fm2
   | ["changes-check", fm2, "pause", f, d] =>
@@ -7614,6 +8100,10 @@ def main (args : List String) : IO UInt32 := do
   | ["frame-model-check", fm2] => frameModelCheck sy rom fm2 300
   | ["frame-model-check", fm2, runs] => frameModelCheck sy rom fm2 runs.toNat!
   | ["pole-rule-check", fm2] => poleRuleCheck sy rom fm2
+  | ["pole-frame-search"] => do return if (← poleFrameSearch sy rom) then 0 else 1
+  | ["keep-ctl-search"] => do return if (← keepCtlSearch sy rom) then 0 else 1
+  | ["pole-frame-check", fm2] => poleFrameReal sy rom fm2 1200
+  | ["pole-frame-check", fm2, n] => poleFrameReal sy rom fm2 n.toNat!
   | ["side-frame-search"] => do return if (← sideFrameSearch sy rom) then 0 else 1
   | ["side-frame-check", fm2] => sideFrameReal sy rom fm2 200
   | ["side-frame-check", fm2, n] => sideFrameReal sy rom fm2 n.toNat!

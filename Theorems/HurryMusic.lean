@@ -118,38 +118,31 @@ theorem first_turn {seq : Nat → Machine} {P : Machine → Bool} (h0 : P (seq 0
         obtain ⟨n, h1, h2, h3⟩ := ih m (by omega) hP
         exact ⟨n, by omega, h2, h3⟩
 
-/-- **The check of frame 0**: from each state of `TitleStart`'s near group, the frame ends with control and the speed 0, at the start of a frame in control (`FrameKeep.endOK`),
-with the bytes that the digits routine adds 0 and the music bits off. `TitleStart`'s machine has the program of `m0`. -/
+/-- **The check of frame 0**: from each near or held state of `TitleStart`, with any input, the frame ends with control and the speed 0, at the start of a frame in control
+(`FrameKeep.endOK`), with the bytes that the digits routine adds 0 and the music bits off; or it ends without control in a state of `TitleStart`'s set
+(`TitleStart.frame0Check`). `TitleStart`'s machine has the program of `m0`. -/
 def nearCheck (sy : Syms) (m0 : Machine) (c : TitleStart.Ctx) : Bool :=
   let P := HurryFrame.placesOf sy c.nm m0
   decide (c.E.prg.data = (PipeEntryRule.envOf m0).prg.data) && c.E.mask == (PipeEntryRule.envOf m0).mask &&
-    TitleStart.grpOK sy c (TitleStart.setsOf sy c).near
+    TitleStart.frame0Check sy c
       (fun B => TitleStart.finNear sy B && FrameKeep.watchOK (HurryFrame.modsW P ++ HurryFrame.watchOf P) B && FrameKeep.endOK (HurryFrame.guardOf sy c.nm m0) B)
 
-/-- **Frame 1 begins in control as the walk needs it**, with the music bits off: frame 0 begins in a near state of `TitleStart` (from the press of Start, `Begin`), and the walk
-of its frame ends so. `hB` and `hN` are checks on the ROM. -/
+/-- **Frame 1 begins in control as the walk needs it**, with the music bits off: the end of frame 0, with any input (`TitleStart.Begin.frame0`). Start is allowed on every frame.
+`hB` and `hN` are checks on the ROM. -/
 theorem Begin.start₁ {sy : Syms} {m0 : Machine} {c : TitleStart.Ctx} {t0 : Nat} {seq : Nat → Machine} {inp : Nat → UInt8} (hB : TitleStart.check sy c t0 = true)
     (hN : nearCheck sy m0 c = true) (B : TitleStart.Begin sy c seq inp) (hn : seq 1 = PipeTransition.frame (seq 0) (inp 0)) :
     HurryFrame.Start sy c.nm m0 (seq 1) ∧ FrameKeep.Watched (HurryFrame.watchOf (HurryFrame.placesOf sy c.nm m0)) (seq 1) := by
-  have P : TitleStart.Parts sy c t0 (TitleStart.setsOf sy c) := TitleStart.parts_of_check hB
-  obtain ⟨⟨S, hS, hs⟩, _⟩ := B.near P hn
-  have hi : TitleStart.inCore sy (seq 0) = true → SideChangeEnd.noStart (inp 0) = true := by
-    intro h
-    have := B.noPause B.pre (Nat.le_refl _)
-    rw [B.atZero.1, B.atZero.2] at this
-    exact this h
   unfold nearCheck at hN
   rw [Bool.and_eq_true, Bool.and_eq_true] at hN
   obtain ⟨⟨hp, hm⟩, hN'⟩ := hN
-  obtain ⟨B', h1, h2⟩ := TitleStart.grp_frame hN' hS hs (TitleStart.grp_pad hN' hS hs hi)
+  obtain ⟨B', h1, h2⟩ := B.frame0 hB hN' hn
   simp only [Bool.and_eq_true] at h1
   have hw := FrameKeep.watched_of h1.1.2 h2
-  have hmo : FrameKeep.Watched (HurryFrame.modsW (HurryFrame.placesOf sy c.nm m0)) (PipeTransition.frame (seq 0) (inp 0)) :=
+  have hmo : FrameKeep.Watched (HurryFrame.modsW (HurryFrame.placesOf sy c.nm m0)) (seq 1) :=
     fun w hw' => hw w (List.mem_append_left _ hw')
-  have hwm : FrameKeep.Watched (HurryFrame.watchOf (HurryFrame.placesOf sy c.nm m0)) (PipeTransition.frame (seq 0) (inp 0)) :=
+  have hwm : FrameKeep.Watched (HurryFrame.watchOf (HurryFrame.placesOf sy c.nm m0)) (seq 1) :=
     fun w hw' => hw w (List.mem_append_right _ hw')
   have hc := B.ctl
-  rw [hn] at hc ⊢
   exact ⟨Or.inl (FrameKeep.start_of_sim h2 h1.2 (SideTransition.byteArray_eq (of_decide_eq_true hp)) (beq_iff_eq.1 hm) (HurryFrame.known_of hc hmo)), hwm⟩
 
 /-- A run in which the hurry-up music plays at frame `k`, up to the castle entry `E`. `clock` is as `Route.Run.clock`; `seq n` is the machine when frame `n` begins.

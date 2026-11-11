@@ -92,10 +92,10 @@ PipeRun.bound   :  a run with the fields below  →  cnt(a) + 91 ≤ cnt(b)
 Changes.bound₁  :  e₁ + 91 ≤ c₂
 PipeRun.first   :  a run with the fields below  ∧  time  ∧  ctlFirst  →  ∀ n, a ≤ n < b,  left(seq n) ≠ 0
 PipeRun.inRowsT :  the same  →  InRowsT(seq b)
-Changes.first₁  :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        (PipeRun.first with chg.time₁, chg.ctlFirst₁)
+Changes.first₁  :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        (PipeRun.first with chg.time₁ and Changes.ctlFirst₁)
 ```
 
-The fields of `PipeRun`, and of the first change in `Changes`:
+The fields of `PipeRun`, and of the first change in `Changes` (there `atCtl` is the theorem `Changes.ctl₁`):
 
 ```
 entry    :  Entry(seq a)
@@ -106,7 +106,7 @@ quiet    :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  Quiet(seq n) ∧ Song(seq
 noStart  :  ∀ n, a ≤ n < b,  NoStart(seq n, inp n)
 ```
 
-and, for `PipeRun.first` (in `Changes`: `time₁`, `ctlFirst₁`):
+and, for `PipeRun.first` (in `Changes`: the field `time₁` and the theorem `Changes.ctlFirst₁`):
 
 ```
 time     :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  TimeOK(seq n)
@@ -166,13 +166,13 @@ Entries: `E`, the TAS entry, the 13 real entries, and 422 entries of runs of my 
 
 ## Assumptions (not proved in Lean)
 
-* `Entry` on the state at the entry of a real run. Item 1-1-b-3-4. It is no longer a field: `Run.entry₁` proves it from the press of Start on the title, the frames from control to the entry (`upClean₁`; that each starts in control is proved, `Run.upStart₁`) and `Rest` (`entryRest₁`: the pipe's timer and 61 of the 128 bytes). See [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
+* `Entry` on the state at the entry of a real run. Item 1-1-b-3-4. It is no longer a field: `Run.entry₁` proves it from the press of Start on the title, the frames from control to the entry (`upClean₁`; that each starts in control is proved, `Run.upStart₁`) and `Rest` (`entryRest₁`: 56 of the 128 bytes; the pipe's timer is proved). See [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
 * `Places` on every step of the pipe's frames (`chg.places₁`). The rows come from the frames of a few runs. A run where an enemy is loaded, or where the parser has a column not in the rows, is outside. Item 1-1-b-3-5:
   * With all 256 values of `VRAM_Buffer1_Offset` and no bound, the place `ColorRotation` asks nothing of a run. The state splits there by the offset, and the check needs that.
   * `ProcELoop`, `FlagpoleRoutine`, `BlockObjMT_Updater` and `ColorRotation` had a bound of 50,000 on the dot. They are gone. The check holds with any 4 of the 5 bounds dropped (`UpdScrollVar` and these 4), and it fails with all 5 dropped. So one bound stays, at the parser's place. On 14 entries with the three kinds of inputs, the 1,974 frames of the pipe come to the parser's place at dot 37,603 at most.
 * `Quiet ∧ Song ∧ Shape` at the exit (`chg.quiet₁`). It fails after Start on the pipe's frames. `Shape` and `Song` do not follow from the walk of the exit frame: none of the 36 end states of that walk at the exit knows the form of the first screen buffer or the song's bytes. When the exit frame's NMI writes from the second buffer, the first buffer keeps what the frame before wrote, and the walk of one frame does not know it.
 * `NoStart` on the frames of the game core after the pipe (`chg.noStart₁`).
-* `TimeOK` at the exit (`chg.time₁`), and `b` is the first control after the entry (`chg.ctlFirst₁`). Item 1-1-b-3-9. `TimeOK` fails with a pause in the pipe (`changes-check FM2 pause 380 60` and `pause 416 60`), on the same exit where `Quiet` fails.
+* `TimeOK` at the exit (`chg.time₁`). Item 1-1-b-3-9. That `b` is the first control after the entry is no longer a field (the field `ctlFirst₁` is gone): `b₁` is the first frame with control from the entry on, within `dB` frames (`firstB₁ : b₁ = firstCtl(seq, a₁, dB)`), and `ctlBy₁ : ctl(seq (a₁ + dB))`. Then `Changes.order₁ : a₁ ≤ b₁`, `Changes.ctl₁ : ctl(seq b₁)` and `Changes.ctlFirst₁ : ∀ n, a₁ ≤ n < b₁ → ¬ctl(seq n)` are theorems, as for `b₂`. `TimeOK` fails with a pause in the pipe (`changes-check FM2 pause 380 60` and `pause 416 60`), on the same exit where `Quiet` fails.
 * `lagPaused` (`chg.paused₁`): a `lag` frame ends paused. See [b-3-3](b-3-3-LagPaused.md).
 
 **Files.** `Theorems/PipeChangeEnd.lean`, private `Proof/PipeChangeEnd.lean`.

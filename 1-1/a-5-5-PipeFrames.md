@@ -72,7 +72,7 @@ the speed, the subspeed and the position.
 * **Each frame is a `Frame`.** This is the type of `fr`. It was assumed before; it is item 0-0-0-3-1 (`FrameModel.frame_read` gives it under `ReadFrame`). It is checked on the real frames above.
   New is that it is used for frames 1 to `N` as well.
 * **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
-  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl`, `lags.clean`, `lags.store`, `lags.game`.
+  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, `lags.game`. `lags.store` is proved now.
 * **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
 * **Not in this item.** `openP`, `openB` (item 1-1-a-5-4) and `edge`, `moved` (item 1-1-a-5-9) stay hypotheses.
 

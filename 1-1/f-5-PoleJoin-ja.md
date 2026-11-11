@@ -42,7 +42,7 @@ B + 32 < P₀                                   Statement.gap
 P_f ≤ P₂(e),  e + d = T   →   P₂(e) + 16·v_top·d ≤ B      hB_of_line。Statement.after と hit_bound から、ぶつかる場合も含む
 ```
 
-Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_keep`、`pole_falls`、`pole_frac`、`pole_join`、`pole_touch`。`pole_join` は非公開の `surface_run`、`castle_walk`、`jump_grab`、`pole_rules`、`top_frictionCheck`、`pole_keep`、`pole_falls`、`pole_frac` を適用しているので、これらは仮定に現れません。
+Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_keep`、`pole_falls`、`pole_frac`、`pole_join`、`pole_touch`。`pole_join` は非公開の `surface_run`、`castle_walk`、`jump_grab`、`pole_rules`、`top_frictionCheck`、`pole_keep`、`pole_falls`、`pole_frame_check`、`pole_frac`、`keep_check` を適用しているので、これらは仮定に現れません。
 
 ## つないだことで道筋のページから変わること
 
@@ -104,6 +104,7 @@ Run.afterTouch  :  同じもの  →  g < c
 * そのあと、なくなったもの: `fracStep`。増えたもの: `keep : FrameKeep.Frames sy m0 g seq`。`direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `hfq` のあとの `(hkc : FrameKeep.keepCheckOf sy m0 = true)`。`Run.fracP`、`Run.frac`、`Run.frac_mem` は `hq` のあとに `(hk : FrameKeep.keepCheckOf sy m0 = true)` をとります。
 * そのあと、なくなったもの: `noCastle`、`keep` のフィールド `start`。`keep` に増えたもの: `ctl`、`lagStart`。`direct_castle`、`castle_ge`、`touch_castle` の新しい引数: `A` のあとの `(hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))`。`Run.fracP`、`Run.frac`、`Run.frac_mem`、`Run.noCastle_of` は `hk` のあとに `(hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))` をとります。`Run.afterTouch` は `st`、`hq`、`hk`、`hc0` をとります。
 * そのあと、`keep` からなくなったもの: `fm`、`pad`（`all` と `ix` から読む `Frames.fm`、`Frames.pad` になった）、`ends`（定理 `Frames.ends` になった）、`lag`、`lagStart`（定理 `Frames.all_start` になった）。`keep` に増えたもの: `all`、`inp`、`next`、`ix`、`ix0`、`order`、`at_ix`。`ctl` と `clean` は、数えるかどうかによらず、触るまでの全部のフレームについて言うようになった。`PoleJoin` の型は変わっていません。
+* そのあと、なくなったもの: `fm`、`inp`、`pass`、`pos`。`touches` は `keep` のフレーム `g` について言います（`Touches(keep.fm g, keep.pad g)`）。増えたもの: `tiles`、`edge`、`moved`（[旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md)）。`keep` の `ctl` は、ルーチンとタスクの 2 バイトだけを仮定します。モードがゲームのものであることは定理 `Frames.ctlAll` です。`touch_ge`、`direct_castle`、`castle_ge`、`touch_castle` の引数 `hc` は `(hc : PoleFrame.poleFrameCheck sy m0 = true)` になりました（前は `PoleEntryRule.ruleCheck`）。`Run.inRange` は `hc` のあと `R`、`st`、`hq`、`hk`、`hc0` をとります。
 
 本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
 
@@ -128,8 +129,8 @@ Run.afterTouch  :  同じもの  →  g < c
 | `fr`、`seq`、`frames.reads` | フレームは機械から読む。`g` では `P₂` までのフィールドだけが本物（触ると動かされる）。`next` は定理 | [地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md) |
 | `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
 | `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
-| `fm`、`inp`、`touches`、`pass`、`pos` | フレーム `g` は本物の機械で触る。書き込みは横の判定の 1 回の通過の終わり。`P₂(g)` はページを読むときの位置。`P₀ ≤ P₂(g)` はこれらからの定理 `Run.inRange` | [旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md) |
-| `keep` | 触るまでの本物の機械のフレーム（数えるかどうかによらない）。操作できるときから続く（`all`、`next`）。数えるフレーム `j` は `seq j` で終わる（`ix`）。触るフレームの前のフレームは操作中に終わる（`ctl`）。各命令は `CleanK` を満たす（`clean`）。各フレームが操作中に始まること、`lag` のフレームが城の旗と端数の下 4 ビットを保つことは定理 `Frames.all_start`、`Frames.start`。`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
+| `touches`、`tiles`、`edge`、`moved` | `keep` のフレーム `g` は本物の機械で触る。書き込みまで、旗のタイルを読んだ横の判定は旗の列を読んでいる（`TileRead`）。画面の端の書き込みにも頭の当たりにも来ない。`P₂(g)` は移動の終わりの位置。`P₀ ≤ P₂(g)` はこれらと `keep` からの定理 `Run.inRange`（1 フレーム全部の歩き） | [旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md) |
+| `keep` | 触るまでの本物の機械のフレーム（数えるかどうかによらない）。操作できるときから続く（`all`、`next`）。数えるフレーム `j` は `seq j` で終わる（`ix`）。触るフレームの前のフレームは操作のルーチンとタスクで終わる（`ctl`。操作中に終わることは定理 `Frames.ctlAll`）。各命令は `CleanK` を満たす（`clean`）。各フレームが操作中に始まること、`lag` のフレームが城の旗と端数の下 4 ビットを保つことは定理 `Frames.all_start`、`Frames.start`。`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
 | `atCastle` | フレーム `c` の終わりの機械の城の旗。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
 | `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |

@@ -102,7 +102,7 @@ b から音楽のフレームまでのフレーム         0 から 305、全部
 * `ctl` と `clean` は、`b` から音楽のフレームまでの各フレームが操作できる状態で終わること、その各命令が `CleanM` を満たすことです。1 フレームと 1 命令ごとの条件で、上の 108 回（7,559 フレーム）で確かめましたが、証明はしていません。音楽を始める最初のフレームと、その前の `b` からのフレームにだけ求めます。
 * `below` は 1 フレームでだけ要ります。音楽を始める最初のフレームの次のフレームです。以前は `k` までの全部のフレームで要りました。カウンタと機械のつながりです。はみ出すフレームのない走りでは、`clock` のカウンタは機械から読んだ値なので、等号で成り立ちます。はみ出すフレームでは、境目の数字はルーチンが残す数字より小さくありません。ルーチンは数字を下げるだけだからです。これはコードから読んだものです。上の本物の 108 フレームでは等号で成り立ちます。
 * `read₀` は、`Route.Run` と同じく、フレーム 0 が始まるときのカウンタと機械のつながりです。
-* `title` は [タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md) の仮定です。押したあとの機械の 1 つの条件と、操作できるまでのゲームコアのフレームで Start を押さないことです。`zero` と `quiet₀` はもうフィールドではありません。ここから証明します（`Run.zero`、`Run.quiet₀`）。
+* `title` は [タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md) の仮定です。押したあとの機械の 1 つの条件と、フレーム 0 でゲームコアなら Start を押さないことです。`zero` と `quiet₀` はもうフィールドではありません。ここから証明します（`Run.zero`、`Run.quiet₀`）。これらと `Begin.start₁` は、操作できるまでどの入力でもよく、フレーム 0 の Start もよいです。`hurry_near_check` は `TitleStart` の近い状態と止まった状態からフレーム 0 をどの入力でも歩き、操作できない終わりは `title.ctl` が除きます。
 * `clock` の `step` と `plan` は `Route.Run` と同じ仮定です（[1-1 全体](0-1-Route-ja.md)）。パワーアップのある走りと死ぬ走りは `plan` に従わないので、ここにも入りません。
 
 **ファイル.** `Theorems/HurryMusic.lean`（`First`、`first_turn`、`nearCheck`、`Begin.start₁`、`Run.startAt`）、`Theorems/HurryFrame.lean`（`frame_start`）、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、`Theorems/TitleStart.lean`、非公開の `Proof/HurryMusic.lean`（`hurry_near_check`、`hurry_1_1`）、`Proof/HurryFrame.lean`、`Proof/TitleStart.lean`。

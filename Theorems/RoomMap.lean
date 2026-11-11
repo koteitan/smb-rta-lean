@@ -17,8 +17,10 @@ every read of every frame from the first control to the entry, the side pipe's t
 
 The walk also checks at each state the conditions of `PipeWrites.Clean` that `SiteOK` does not give (`cleanS`): a store through an index or a pointer has a known target
 outside the guard's bytes, or it is the erase of a coin; the jump routine's index is known and in its table. So every instruction of these frames is `Clean` (`clean_of_rows`).
-And the room's condition at the start of each frame is a `PipeWrites.FrameStart` (`startCheckF`, `start_of_rowsF`). The walk of one whole frame of the side pipe
-(`SideFrame`) needs these three facts on the entering frame.
+And the room's condition at the start of each frame is a `PipeWrites.FrameStart` (`startCheckF`, `start_of_rowsF`). The guard is the room's (`SideFrame.roomG`): the
+screen's bytes that the scroll handler reads are known at each frame's start and protected from stores through an index or a pointer, and no state of the walk is at the
+routine of the head's collision with a block, the place that the guard cuts (`cuts_run`, `head_of_rows`): `SiteOK` lets a read for the head give only nothing or a coin.
+The walk of one whole frame of the side pipe (`SideFrame`) needs these four facts on the entering frame.
 
 What stays assumed is what `ScreenPage` assumes: `SiteOK` on each instruction of the frames, and that each frame before the entry starts in the player's routine. The condition at
 the first control comes from the rows of the time of the change (`start_of_rows`). No game data: the map comes from a reference machine. Page: `1-1/c-7-12-RoomMap.md`.
@@ -91,12 +93,12 @@ def cleanS (G : PipeWrites.Guard) (P : Places) (E : Env) (A : AS) : Bool := deci
 
 /-- at the frame's end: the tiles, `Clean`, and a start state of the condition, or the routine is known and is not the reference's -/
 def finT (Q : Spots) (G : PipeWrites.Guard) (E : Env) (P : Places) (r : Machine) (K : List (Nat × UInt8)) (B : AS) : Bool :=
-  tilesB Q B && cleanS G P E B && (endUnder r K B || (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI))
+  tilesB Q B && cleanS G P E B && !G.cuts.contains B.pc && (endUnder r K B || (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI))
 
-/-- the walk of `ScreenPage` with `stepT`, and the tiles and `Clean` at each state -/
+/-- the walk of `ScreenPage` with `stepT`, and the tiles, `Clean` and no place of the guard's cuts at each state -/
 def walkT (Q : Spots) (G : PipeWrites.Guard) (C : CfgS) : Nat → AS → Bool
   | 0, _ => false
-  | n + 1, A => tilesB Q A && cleanS G C.P C.E A && (preS C.P (clampS C.P A)).all fun A₁ => (stepT C.P C.E C.ops A₁).all fun r =>
+  | n + 1, A => tilesB Q A && cleanS G C.P C.E A && !G.cuts.contains A.pc && (preS C.P (clampS C.P A)).all fun A₁ => (stepT C.P C.E C.ops A₁).all fun r =>
     match r with
     | none => false
     | some B =>
@@ -390,14 +392,24 @@ theorem tiles_of_walkT {n : Nat} {A : AS} (h : walkT Q G C n A = true) : tilesB 
   | zero => simp [walkT] at h
   | succ n =>
     simp only [walkT, Bool.and_eq_true] at h
-    exact h.1.1
+    exact h.1.1.1
 
 theorem cleanS_of_walkT {n : Nat} {A : AS} (h : walkT Q G C n A = true) : cleanS G C.P C.E A = true := by
   cases n with
   | zero => simp [walkT] at h
   | succ n =>
     simp only [walkT, Bool.and_eq_true] at h
-    exact h.1.2
+    exact h.1.1.2
+
+theorem cut_of_walkT {n : Nat} {A : AS} (h : walkT Q G C n A = true) : A.pc ∉ G.cuts := by
+  cases n with
+  | zero => simp [walkT] at h
+  | succ n =>
+    simp only [walkT, Bool.and_eq_true] at h
+    intro hm
+    have h2 := h.1.2
+    simp at h2
+    exact h2 hm
 
 theorem cover_liveT (ht : C.t.all (walkT Q G C Fu) = true) {B : AS} {m : Machine} (hs : Sim C.E F B m) (h : coverS C B = true) :
     ∃ D, LiveT Q G C F D m ∧ D.k = B.k := by
@@ -461,12 +473,12 @@ theorem live_stepT (hO : PlacesOK C.E C.P) (ht : C.t.all (walkT Q G C Fu) = true
         exact ⟨k2, B, hw2.2, k1, h1⟩
 
 /-- **One frame.** A walk from `S` that succeeds covers the frame of every machine of `S`, for every input, if each instruction meets `SiteOK`; and at each read of the block buffer
-routine in the frame, the side pipe's tiles are only in the pipe's column. -/
+routine in the frame, the side pipe's tiles are only in the pipe's column; each instruction is `Clean` and at no place of the guard's cuts. -/
 theorem frame_of_walkT (hO : PlacesOK C.E C.P) (ht : C.t.all (walkT Q G C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
-    (hfin : ∀ B, C.fin B = true → tilesB Q B = true ∧ cleanS G C.P C.E B = true) (hG : CleanFacts G C.P) (hQ : Q.pg = 0) (hbuf : Q.bufLo + Q.bufBytes ≤ 2048)
+    (hfin : ∀ B, C.fin B = true → tilesB Q B = true ∧ cleanS G C.P C.E B = true ∧ B.pc ∉ G.cuts) (hG : CleanFacts G C.P) (hQ : Q.pg = 0) (hbuf : Q.bufLo + Q.bufBytes ≤ 2048)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkT Q G C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, SiteOK C.P (trace m i j)) :
     ((frame m i).frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i)) ∧
-    (∀ j, AtRead Q (trace m i j) → TilesOK Q (trace m i j)) ∧ ∀ j, PipeWrites.Clean G (trace m i j) := by
+    (∀ j, AtRead Q (trace m i j) → TilesOK Q (trace m i j)) ∧ (∀ j, PipeWrites.Clean G (trace m i j)) ∧ ∀ j, (trace m i j).pc ∉ G.cuts := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have key : ∀ j, (∃ A, LiveT Q G C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
       ((trace m i j).frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
@@ -494,7 +506,7 @@ theorem frame_of_walkT (hO : PlacesOK C.E C.P) (ht : C.t.all (walkT Q G C Fu) = 
           simp only [nxt, if_pos hc]
         rw [e2]
         exact Or.inr ⟨h1, B, h2, h3, h4⟩
-  refine ⟨?_, fun j hr => ?_, fun j => ?_⟩
+  refine ⟨?_, fun j hr => ?_, fun j => ?_, fun j => ?_⟩
   · rw [frame_trace]
     rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h3, h4⟩
     · exfalso
@@ -508,7 +520,12 @@ theorem frame_of_walkT (hO : PlacesOK C.E C.P) (ht : C.t.all (walkT Q G C Fu) = 
     · exact tiles_of_sim hQ hbuf h4 (hfin B h2).1 hr
   · rcases key j with ⟨A, ⟨h1, n, h2⟩, _⟩ | ⟨_, B, h2, _, h4⟩
     · exact clean_of_sim hO hG h1 (cleanS_of_walkT h2) (hk j)
-    · exact clean_of_sim hO hG h4 (hfin B h2).2 (hk j)
+    · exact clean_of_sim hO hG h4 (hfin B h2).2.1 (hk j)
+  · rcases key j with ⟨A, ⟨h1, n, h2⟩, _⟩ | ⟨_, B, h2, _, h4⟩
+    · rw [h1.pc]
+      exact cut_of_walkT h2
+    · rw [h4.pc]
+      exact (hfin B h2).2.2
 
 end
 
@@ -536,21 +553,24 @@ variable {Q : Spots} {G : PipeWrites.Guard} {E : Env} {P : Places} {r : Machine}
 only in the pipe's column. -/
 theorem room_stepT (h : RoomOKT Q G E P r K C Fu) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (RoomCond E r K (frame m i) ∨ (frame m i).ram.get! P.rtI ≠ r.ram.get! P.rtI) ∧ (∀ j, AtRead Q (trace m i j) → TilesOK Q (trace m i j)) ∧
-    ∀ j, PipeWrites.Clean G (trace m i j) := by
+    (∀ j, PipeWrites.Clean G (trace m i j)) ∧ ∀ j, (trace m i j).pc ∉ G.cuts := by
   obtain ⟨S, hS, hs⟩ := sim_of_room (F := (m.frame, 2)) h.mask h.pad hm rfl
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hw := h.starts S hS
   have hs' : Sim C.E (m.frame, 2) S m := by rw [h.env]; exact hs
-  have hfin : ∀ B, C.fin B = true → tilesB Q B = true ∧ cleanS G C.P C.E B = true := by
+  have hfin : ∀ B, C.fin B = true → tilesB Q B = true ∧ cleanS G C.P C.E B = true ∧ B.pc ∉ G.cuts := by
     intro B hB
     rw [h.fin] at hB
     simp only [finT, Bool.and_eq_true] at hB
     rw [h.env, h.pl]
-    exact ⟨hB.1.1, hB.1.2⟩
+    refine ⟨hB.1.1.1, hB.1.1.2, fun hm => ?_⟩
+    have h2 := hB.1.2
+    simp at h2
+    exact h2 hm
   have hG : CleanFacts G C.P := by rw [h.pl]; exact h.clean
-  obtain ⟨⟨_, B, h2, _, h4⟩, ht, hcl⟩ := frame_of_walkT (i := i) hO h.table h.ops (show 2 ≤ (2 : UInt8).toNat by decide) (by rw [h.env]; exact h.pad) hfin hG h.pg h.buf hw hs'
+  obtain ⟨⟨_, B, h2, _, h4⟩, ht, hcl, hcu⟩ := frame_of_walkT (i := i) hO h.table h.ops (show 2 ≤ (2 : UInt8).toNat by decide) (by rw [h.env]; exact h.pad) hfin hG h.pg h.buf hw hs'
     (by rw [h.pl]; exact hk)
-  refine ⟨?_, ht, hcl⟩
+  refine ⟨?_, ht, hcl, hcu⟩
   rw [h.env] at h4
   rw [h.fin] at h2
   simp only [finT, Bool.and_eq_true, Bool.or_eq_true, bne_iff_ne, ne_eq, decide_eq_true_eq] at h2
@@ -593,7 +613,15 @@ theorem clean_run (h : RoomOKT Q G E P r K C Fu) {seq : Nat → Machine} {inp : 
     (hs : ∀ n, c ≤ n → n < e → ∀ j, SiteOK P (trace (seq n) (inp n) j))
     (hr : ∀ n, c ≤ n → n < e → (seq n).ram.get! P.rtI = r.ram.get! P.rtI) :
     ∀ n, c ≤ n → n < e → ∀ j, PipeWrites.Clean G (trace (seq n) (inp n) j) :=
-  fun n h1 h2 => (room_stepT h ((map_run h next h0 hs hr).1 n h1 h2) (hs n h1 h2)).2.2
+  fun n h1 h2 => (room_stepT h ((map_run h next h0 hs hr).1 n h1 h2) (hs n h1 h2)).2.2.1
+
+/-- **No place of the guard's cuts on any instruction of any frame from the first control in the room to the entry**, under the hypotheses of `map_run` -/
+theorem cuts_run (h : RoomOKT Q G E P r K C Fu) {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {c e : Nat}
+    (h0 : RoomCond E r K (seq c))
+    (hs : ∀ n, c ≤ n → n < e → ∀ j, SiteOK P (trace (seq n) (inp n) j))
+    (hr : ∀ n, c ≤ n → n < e → (seq n).ram.get! P.rtI = r.ram.get! P.rtI) :
+    ∀ n, c ≤ n → n < e → ∀ j, (trace (seq n) (inp n) j).pc ∉ G.cuts :=
+  fun n h1 h2 => (room_stepT h ((map_run h next h0 hs hr).1 n h1 h2) (hs n h1 h2)).2.2.2
 
 end
 
@@ -678,16 +706,19 @@ theorem roomOKT_of_check {Q : Spots} {G : PipeWrites.Guard} {P : Places} {Z : Sc
 section
 open ScreenPage (placesR placesOf envR envOf refR aidsOf knownOf)
 
-/-- the known bits: those of `ScreenPage`, and the bits of the map -/
+/-- the screen's bytes of the side pipe's walk, all bits known -/
+def scrK (sy : Syms) (m0 : Machine) : List (Nat × UInt8) := (SideFrame.screenI sy m0).map fun i => (i, (255 : UInt8))
+
+/-- the known bits: those of `ScreenPage`, the bits of the map, and the screen's bytes -/
 def knownT (sy : Syms) (nm : Names) (m0 : Machine) : List (Nat × UInt8) :=
-  knownOf nm ++ bufK (placesR sy nm m0).bufLo (placesR sy nm m0).bufN (mapRef m0)
+  knownOf nm ++ bufK (placesR sy nm m0).bufLo (placesR sy nm m0).bufN (mapRef m0) ++ scrK sy m0
 
 /-- the side pipe's places, on the machine `m0` -/
 abbrev spotsT (sy : Syms) (m0 : Machine) : Spots := SideEntryRule.spots sy m0
 
 /-- the configuration of the walk -/
 abbrev cfgT (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
-  cfgOfT (spotsT sy m0) (PipeWrites.guardOf sy m0) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (knownT sy nm m0)
+  cfgOfT (spotsT sy m0) (SideFrame.roomG sy m0) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (knownT sy nm m0)
 
 /-- **The check on the ROM**: the walk, the side pipe's page and the block buffers, and the reference has no bit in the block buffers that the map has not. The machines are
 computed once. -/
@@ -696,12 +727,12 @@ def mapCheck (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
   let Q := spotsT sy m0
   let r := refR m0
   let mr := mapRef m0
-  walkCheckT Q (PipeWrites.guardOf sy m0) P (aidsOf sy nm m0) (envOf nm sy r) r (knownOf nm ++ bufK P.bufLo P.bufN mr) && Q.pg == 0 && decide (Q.bufLo + Q.bufBytes ≤ 2048) &&
+  walkCheckT Q (SideFrame.roomG sy m0) P (aidsOf sy nm m0) (envOf nm sy r) r (knownOf nm ++ bufK P.bufLo P.bufN mr ++ scrK sy m0) && Q.pg == 0 && decide (Q.bufLo + Q.bufBytes ≤ 2048) &&
     (List.range P.bufN).all fun j => r.ram.get! (P.bufLo + j) &&& ~~~ mr.ram.get! (P.bufLo + j) == 0
 
 /-- what the check gives -/
 structure MapFacts (sy : Syms) (nm : Names) (m0 : Machine) : Prop where
-  ok : RoomOKT (spotsT sy m0) (PipeWrites.guardOf sy m0) (envR sy nm m0) (placesR sy nm m0) (refR m0) (knownT sy nm m0) (cfgT sy nm m0) ScreenPage.fuelS
+  ok : RoomOKT (spotsT sy m0) (SideFrame.roomG sy m0) (envR sy nm m0) (placesR sy nm m0) (refR m0) (knownT sy nm m0) (cfgT sy nm m0) ScreenPage.fuelS
   sub : ∀ j, j < (placesR sy nm m0).bufN → (refR m0).ram.get! ((placesR sy nm m0).bufLo + j) &&& ~~~ (mapRef m0).ram.get! ((placesR sy nm m0).bufLo + j) = 0
 
 theorem mapFacts_of_check {sy : Syms} {nm : Names} {m0 : Machine} (h : mapCheck sy nm m0 = true) : MapFacts sy nm m0 := by
@@ -717,7 +748,7 @@ open PipeChangeEnd (Data timeEnv timeCtx timeRows InRowsT)
 def startCheckT (sy : Syms) (nm : Names) (d : Data) (e : Machine) (nmS : Names) (m0 : Machine) : Bool :=
   let r := refR m0
   let P := placesOf sy nmS m0 r
-  let K := knownOf nmS ++ bufK P.bufLo P.bufN (mapRef m0)
+  let K := knownOf nmS ++ bufK P.bufLo P.bufN (mapRef m0) ++ scrK sy m0
   let E := envOf nmS sy r
   maskOK r K && decide ((timeEnv d e).prg.data = E.prg.data) && (timeEnv d e).mask == E.mask && ScreenStart.rowsR sy r K (timeRows (timeCtx sy nm d e) d e)
 
@@ -747,7 +778,7 @@ theorem map_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS m0
   obtain ⟨h1, h2⟩ := map_run hF.ok next h0 sites stay
   refine ⟨fun n a1 a2 i hi => ?_, h2⟩
   have hmem : ((placesR sy nmS m0).bufLo + i, ~~~ (mapRef m0).ram.get! ((placesR sy nmS m0).bufLo + i)) ∈ knownT sy nmS m0 :=
-    List.mem_append_right _ (List.mem_map.2 ⟨i, List.mem_range.2 hi, rfl⟩)
+    List.mem_append_left _ (List.mem_append_right _ (List.mem_map.2 ⟨i, List.mem_range.2 hi, rfl⟩))
   have hb := (h1 n a1 a2).bytes _ hmem
   simp only at hb
   rw [hb]
@@ -760,10 +791,11 @@ end
 section
 open ScreenPage (placesR envR refR)
 
-/-- **The check on the ROM**: a machine in the room's condition starts a frame as `PipeWrites.FrameStart` asks. The reference machine is in the idle loop with the guard's stack
-pointer, the condition knows each byte of the guard whole and with the guard's value, the program is the same, and the first dots are before the end of vblank. -/
+/-- **The check on the ROM**: a machine in the room's condition starts a frame as `PipeWrites.FrameStart` asks with the room's guard (`SideFrame.roomG`: the screen's bytes too).
+The reference machine is in the idle loop with the guard's stack pointer, the condition knows each byte of the guard whole and with the guard's value, the program is the same, and
+the first dots are before the end of vblank. -/
 def startCheckF (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
-  let G := PipeWrites.guardOf sy m0
+  let G := SideFrame.roomG sy m0
   let r := refR m0
   let K := knownT sy nm m0
   r.pc == G.idle && r.s == G.s0 && decide (9 < dotVblClr) &&
@@ -774,7 +806,7 @@ variable {sy : Syms} {nm nmS : Names} {d : PipeChangeEnd.Data} {e m0 : Machine}
 
 /-- a machine in the room's condition starts a frame in control -/
 theorem frameStart_of_cond (hc : startCheckF sy nmS m0 = true) {m : Machine} (h : RoomCond (envR sy nmS m0) (refR m0) (knownT sy nmS m0) m) :
-    PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) m := by
+    PipeWrites.FrameStart (SideFrame.roomG sy m0) (PipeEntryRule.envOf m0) m := by
   simp only [startCheckF, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, List.all_eq_true] at hc
   obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := hc
   have hd := h.dot
@@ -801,7 +833,7 @@ theorem start_of_rowsF (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS
     (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat} (hin : PipeChangeEnd.InRowsT sy nm d e (seq b)) (hctl : controllable sy (seq b) = true)
     (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
     (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
-    ∀ n, b ≤ n → n < a → PipeWrites.FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq n) := by
+    ∀ n, b ≤ n → n < a → PipeWrites.FrameStart (SideFrame.roomG sy m0) (PipeEntryRule.envOf m0) (seq n) := by
   have h0 := start_of_rows hc hin hctl
   obtain ⟨h1, _⟩ := map_run hF.ok next h0 sites stay
   exact fun n a1 a2 => frameStart_of_cond hs (h1 n a1 a2)
@@ -812,8 +844,20 @@ theorem clean_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS 
     (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat} (hin : PipeChangeEnd.InRowsT sy nm d e (seq b)) (hctl : controllable sy (seq b) = true)
     (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
     (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
-    ∀ n, b ≤ n → n < a → ∀ j, PipeWrites.Clean (PipeWrites.guardOf sy m0) (trace (seq n) (inp n) j) :=
+    ∀ n, b ≤ n → n < a → ∀ j, PipeWrites.Clean (SideFrame.roomG sy m0) (trace (seq n) (inp n) j) :=
   clean_run hF.ok next (start_of_rows hc hin hctl) sites stay
+
+/-- **No frame of the room comes to the routine of the head's collision with a block**, on the real machines, under the conditions of `map_of_rows`: a read for the head gives
+nothing or a coin (`SiteOK`), so the walk never comes there -/
+theorem head_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS m0 = true) {seq : Nat → Machine} {inp : Nat → UInt8}
+    (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat} (hin : PipeChangeEnd.InRowsT sy nm d e (seq b)) (hctl : controllable sy (seq b) = true)
+    (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
+    (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
+    ∀ n, b ≤ n → n < a → ∀ j, (trace (seq n) (inp n) j).pc ≠ PipeWrites.headAt sy m0 := by
+  intro n h1 h2 j he
+  apply cuts_run hF.ok next (start_of_rows hc hin hctl) sites stay n h1 h2 j
+  rw [he]
+  exact List.mem_singleton.2 rfl
 
 end
 

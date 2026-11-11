@@ -24,7 +24,7 @@ start_of_rows    :  startCheck ∧ InRows(m) ∧ ctl(m)  →  StartAt(m)
 left_during      :  During(m)  →  left(m) ≠ 0
 PipeRun.inRows   :  EndStatement ∧ PipeRun ∧ (∀ n ∈ [a, b), left(seq n) ≠ 0)  →  InRows(seq b)
 PipeRun.start    :  EndStatement ∧ startCheck ∧ PipeRun ∧ (∀ n ∈ [a, b), left(seq n) ≠ 0)  →  StartAt(seq b)
-Route.Changes.first₁ :  pipe_end ∧ Changes  →  ∀ n ∈ [a₁, b₁), left₁(seq n) ≠ 0       (from time₁, ctlFirst₁)
+Route.Changes.first₁ :  pipe_end ∧ Changes  →  ∀ n ∈ [a₁, b₁), left₁(seq n) ≠ 0       (from time₁ and the theorem ctlFirst₁)
 Route.Run.roomStart :  pipe_end ∧ room_start ∧ Run  →  StartAt(room.fm room.C)
 ```
 
@@ -49,7 +49,7 @@ The program is `room-start-check FM2 [N]`. The entries are the reference entry, 
 
 ## Assumptions (not proved in Lean)
 
-* **`chg.time₁`, `chg.ctlFirst₁`.** At the exit the sound's pause flag is 0 and the game timer is not 000, and `b₁` is the first control after the entry. They give `left₁` not 0 before control (`Changes.first₁`). A run whose timer is 000 at the exit fails `time₁`: with the timer written to 000 at the entry, `left₁` is 0 at frame 91, and there the routine is the death's, with no control.
+* **`chg.time₁` (with the theorem `Changes.ctlFirst₁`).** At the exit the sound's pause flag is 0 and the game timer is not 000, and `b₁` is the first control after the entry by its definition. They give `left₁` not 0 before control (`Changes.first₁`). A run whose timer is 000 at the exit fails `time₁`: with the timer written to 000 at the entry, `left₁` is 0 at frame 91, and there the routine is the death's, with no control.
 * **`roomCtl`.** `room.fm room.C = chg.seq chg.b₁`: the room's first machine is the change's last machine. It comes from how the sequences are made.
 * **`read_vs`.** `fr.vs n = vs(fm n)` for `C ≤ n ≤ t₀`: read from the machine, as `read_hs` and `read_P` are. It is a reading, not a fact about the run. It replaces `vs_C`, which was the same on the frame `C` only.
 * The conditions of the change (the condition at the entry `Run.entry₁`: `chg.entryRest₁`, `upClean₁` with `title`; `places₁`, `quiet₁`, `noStart₁`). They are the assumptions of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md).

@@ -92,10 +92,10 @@ PipeRun.bound   :  下のフィールドを持つ走り  →  cnt(a) + 91 ≤ cn
 Changes.bound₁  :  e₁ + 91 ≤ c₂
 PipeRun.first   :  下のフィールドを持つ走り  ∧  time  ∧  ctlFirst  →  ∀ n, a ≤ n < b,  left(seq n) ≠ 0
 PipeRun.inRowsT :  同じ  →  InRowsT(seq b)
-Changes.first₁  :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        （chg.time₁、chg.ctlFirst₁ での PipeRun.first）
+Changes.first₁  :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        （chg.time₁ と Changes.ctlFirst₁ での PipeRun.first）
 ```
 
-`PipeRun` のフィールドです。`Changes` の 1 つ目の切り替えのフィールドも同じです。
+`PipeRun` のフィールドです。`Changes` の 1 つ目の切り替えのフィールドも同じです（ただし `atCtl` は定理 `Changes.ctl₁` です）。
 
 ```
 entry    :  Entry(seq a)
@@ -106,7 +106,7 @@ quiet    :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  Quiet(seq n) ∧ Song(seq
 noStart  :  ∀ n, a ≤ n < b,  NoStart(seq n, inp n)
 ```
 
-`PipeRun.first` にはさらに次が要ります（`Changes` では `time₁`、`ctlFirst₁`）。
+`PipeRun.first` にはさらに次が要ります（`Changes` ではフィールド `time₁` と定理 `Changes.ctlFirst₁`）。
 
 ```
 time     :  ∀ n, a ≤ n ≤ b,  ExitAt(seq n)  →  TimeOK(seq n)
@@ -166,13 +166,13 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 
 ## 仮定（Lean では証明していない）
 
-* 本物の走りの入る状態で `Entry`。項目 1-1-b-3-4。もうフィールドではありません。`Run.entry₁` が、タイトルで Start を押したこと、操作できるときから入るまでのフレーム（`upClean₁`。各フレームが操作中に始まることは証明、`Run.upStart₁`）、`Rest`（`entryRest₁`: 土管のタイマーと 128 バイトのうち 61）から出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
+* 本物の走りの入る状態で `Entry`。項目 1-1-b-3-4。もうフィールドではありません。`Run.entry₁` が、タイトルで Start を押したこと、操作できるときから入るまでのフレーム（`upClean₁`。各フレームが操作中に始まることは証明、`Run.upStart₁`）、`Rest`（`entryRest₁`: 128 バイトのうち 56。土管のタイマーは証明）から出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
 * 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。項目 1-1-b-3-5:
   * `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許し、上限もないので、走りに何も求めません。状態はそこでこのオフセットで分かれ、確認にはそれが要ります。
   * `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater`、`ColorRotation` にはドットの上限 50,000 がありました。これらはなくなりました。5 つの上限（`UpdScrollVar` とこの 4 つ）のうちどの 4 つを外しても確認は成り立ち、5 つすべてを外すと成り立ちません。だから上限は 1 つ、パーサーの場所に残します。14 個の入る状態と 3 種類の入力では、土管の 1,974 フレームは、どれもドット 37,603 以下でパーサーの場所に着きます。
 * 出口で `Quiet ∧ Song ∧ Shape`（`chg.quiet₁`）。土管のフレームで Start を押すと成り立たないことがあります。`Shape` と `Song` は出口のフレームの歩みからは出ません。その歩みの出口での終わりの状態 36 個のどれも、1 つめの画面のバッファの形も曲のバイトも知りません。出口のフレームの NMI が 2 つめのバッファから書くとき、1 つめのバッファには前のフレームが書いたものが残ります。1 フレームの歩みはそれを知りません。
 * 土管のあとのゲームコアのフレームで `NoStart`（`chg.noStart₁`）。
-* 出口で `TimeOK`（`chg.time₁`）、`b` は入ったあと最初の操作（`chg.ctlFirst₁`）。項目 1-1-b-3-9。土管の中でポーズすると `TimeOK` は成り立ちません（`changes-check FM2 pause 380 60` と `pause 416 60`）。そのときは同じ出口で `Quiet` も成り立ちません。
+* 出口で `TimeOK`（`chg.time₁`）。項目 1-1-b-3-9。`b` が入ったあと最初の操作であることは、もうフィールドではありません（フィールド `ctlFirst₁` はなくなりました）。`b₁` は、入るときから `dB` フレームの中で最初に操作できるフレームです（`firstB₁ : b₁ = firstCtl(seq, a₁, dB)`）。さらに `ctlBy₁ : ctl(seq (a₁ + dB))`。すると `Changes.order₁ : a₁ ≤ b₁`、`Changes.ctl₁ : ctl(seq b₁)`、`Changes.ctlFirst₁ : ∀ n, a₁ ≤ n < b₁ → ¬ctl(seq n)` は定理です。`b₂` と同じです。土管の中でポーズすると `TimeOK` は成り立ちません（`changes-check FM2 pause 380 60` と `pause 416 60`）。そのときは同じ出口で `Quiet` も成り立ちません。
 * `lagPaused`（`chg.paused₁`）: `lag` のフレームはポーズの状態で終わる。[b-3-3](b-3-3-LagPaused-ja.md) を見てください。
 
 **ファイル.** `Theorems/PipeChangeEnd.lean`、非公開の `Proof/PipeChangeEnd.lean`。

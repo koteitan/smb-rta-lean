@@ -123,6 +123,8 @@ structure CfgK where
   cut : ByteArray
   /-- the table's key of a state: no part of the proof -/
   key : AS → Nat
+  /-- what the frame's end must meet besides the watched bits and `endOK` -/
+  fin : AS → Bool
 
 def coverK (C : CfgK) (B : AS) : Bool :=
   (C.idx.getD (C.key B) []).any fun i =>
@@ -136,7 +138,7 @@ def endOK (G : Guard) (B : AS) : Bool :=
   B.pc == G.idle && B.s == G.s0 && ((B.lo == 0 && B.hi == 0 && !B.vb && !B.nmi) || (decide (1 ≤ B.lo) && decide (B.hi ≤ 9) && B.vb && B.nmi)) &&
     B.ppuCtrl.bit 0x80 == some true && !B.strobe
 
-/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with the watched bits known and the start of the next frame (`endOK`) -/
+/-- from `A`, step by step, until every path ends in a state of the table, or at the frame's end with the watched bits known, the start of the next frame (`endOK`), and `fin` -/
 def walkK (C : CfgK) : Nat → AS → Bool
   | 0, _ => false
   | n + 1, A => (preK C.S C.G A).all fun A₁ => (kstep C.S C.G C.E C.ops A₁).all fun r =>
@@ -144,7 +146,7 @@ def walkK (C : CfgK) : Nat → AS → Bool
     | none => false
     | some B =>
       if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverK C B) || walkK C n B
-      else B.k == A.k + 1 && watchOK C.W B && endOK C.G B
+      else B.k == A.k + 1 && watchOK C.W B && endOK C.G B && C.fin B
 
 /-- the abstract state when the frame starts: that of `PipeWrites`, with the watched bits known -/
 def startK (G : Guard) (W : List Watch) (late : Bool) : AS :=
@@ -175,9 +177,10 @@ def keyK (S : Spot) (G : Guard) (W : List Watch) (A : AS) : Nat :=
   let n := n * 16777216 + A.s.toNat * 65536 + A.pc.toNat
   n * 18446744073709551616 + (n % 4294967291) * 4294967296 + stackHash A
 
-def routeK (S : Spot) (G : Guard) (W : List Watch) (X : SG) (B0 : AS) : SG :=
+/-- the search's step into the table, with the table's key `key` -/
+def routeKW (S : Spot) (G : Guard) (key : AS → Nat) (X : SG) (B0 : AS) : SG :=
   let B := normK S G B0
-  let K := keyK S G W B
+  let K := key B
   match X.pending[K]? with
   | some Q =>
     match X.done[K]? with
@@ -199,7 +202,9 @@ def routeK (S : Spot) (G : Guard) (W : List Watch) (X : SG) (B0 : AS) : SG :=
       { X with pending := X.pending.insert K J, done := X.done.insert K (J, some l'), multi := X.multi.insert K (), arr := X.arr.insert K (c + 1) }
     | none => { X with pending := X.pending.insert K B, done := X.done.insert K (B, none) }
 
-partial def runK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array (AM Unit)) (X0 : SG) (A0 : AS) : SG := Id.run do
+def routeK (S : Spot) (G : Guard) (W : List Watch) (X : SG) (B0 : AS) : SG := routeKW S G (keyK S G W) X B0
+
+partial def runKW (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (ops : Array (AM Unit)) (X0 : SG) (A0 : AS) : SG := Id.run do
   let mut X := X0
   let mut cur := A0
   let mut run := 0
@@ -223,50 +228,64 @@ partial def runK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array 
     | _ => pure ()
     for b in good do
       X := { X with leaders := X.leaders.insert b.pc.toNat () }
-      X := routeK S G W X b
+      X := routeKW S G key X b
     break
   return X
 
-partial def searchK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array (AM Unit)) (X0 : SG) : SG := Id.run do
+partial def searchKW (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (ops : Array (AM Unit)) (X0 : SG) : SG := Id.run do
   let mut X := X0
   while true do
     match X.pending.minEntry? with
     | none => break
-    | some (key, A) =>
-      X := { X with pending := X.pending.erase key }
-      X := runK S G E W ops X A
+    | some (k, A) =>
+      X := { X with pending := X.pending.erase k }
+      X := runKW S G E W key ops X A
   return X
 
-def searchOfK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : SG :=
+partial def runK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array (AM Unit)) (X0 : SG) (A0 : AS) : SG := runKW S G E W (keyK S G W) ops X0 A0
+
+partial def searchK (S : Spot) (G : Guard) (E : Env) (W : List Watch) (ops : Array (AM Unit)) (X0 : SG) : SG := searchKW S G E W (keyK S G W) ops X0
+
+def searchOfKW (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) : SG :=
   let ops := (aRows E).toArray
-  searchK S G E W ops ([startK G W false, startK G W true].foldl (routeK S G W) {})
+  searchKW S G E W key ops ([startK G W false, startK G W true].foldl (routeKW S G key) {})
+
+def searchOfK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : SG := searchOfKW S G E W (keyK S G W)
 
 /-- the table, from the search: every state that was reached more than once -/
-def tableOfK (S : Spot) (G : Guard) (W : List Watch) (X : SG) : Array AS × Std.HashMap Nat (List Nat) × ByteArray := Id.run do
+def tableOfKW (key : AS → Nat) (X : SG) : Array AS × Std.HashMap Nat (List Nat) × ByteArray := Id.run do
   let mut t : Array AS := #[]
   let mut idx : Std.HashMap Nat (List Nat) := {}
   let mut cut := ByteArray.mk (Array.replicate 65536 0)
   for (k, _) in X.multi.toList do
     match X.done[k]? with
     | some (A, _) =>
-      idx := idx.insert (keyK S G W A) (t.size :: idx.getD (keyK S G W A) [])
+      idx := idx.insert (key A) (t.size :: idx.getD (key A) [])
       cut := cut.set! A.pc.toNat 1
       t := t.push A
     | none => pure ()
   return (t, idx, cut)
 
-def cfgOfK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : CfgK :=
-  let q := tableOfK S G W (searchOfK S G E W)
-  { E, ops := (aRows E).toArray, S, G, W, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key := keyK S G W }
+def tableOfK (S : Spot) (G : Guard) (W : List Watch) (X : SG) : Array AS × Std.HashMap Nat (List Nat) × ByteArray := tableOfKW (keyK S G W) X
+
+/-- the table with the key `key` and the frame's end condition `fin` -/
+def cfgOfKW (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (fin : AS → Bool) : CfgK :=
+  let q := tableOfKW key (searchOfKW S G E W key)
+  { E, ops := (aRows E).toArray, S, G, W, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key, fin }
+
+def cfgOfK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : CfgK := cfgOfKW S G E W (keyK S G W) fun _ => true
 
 /-- the fuel of a walk -/
 def fuelK : Nat := 20000
 
 /-- **The check.** -/
-def keepCheck (S : Spot) (G : Guard) (E : Env) (W : List Watch) : Bool :=
-  let C := cfgOfK S G E W
+def keepCheckW (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (fin : AS → Bool) : Bool :=
+  let C := cfgOfKW S G E W key fin
   decide (G.late < dotsPerFrame) && W.all (fun w => decide (w.1 < 2048)) &&
     C.t.all (walkK C fuelK) && walkK C fuelK (startK G W false) && walkK C fuelK (startK G W true)
+
+/-- **The check**, with the end condition `fin` true -/
+def keepCheck (S : Spot) (G : Guard) (E : Env) (W : List Watch) : Bool := keepCheckW S G E W (keyK S G W) fun _ => true
 
 /-! ## The steps follow the machine -/
 
@@ -495,7 +514,7 @@ theorem cover_liveK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map kno
 theorem live_stepK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine}
     (hl : LiveK C F A m) (hh : CleanK C.G C.S.store m) :
     (∃ A', LiveK C F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
-    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
+    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ C.fin B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2) := by
   obtain ⟨hs, n, hw⟩ := hl
   cases n with
   | zero => simp [walkK] at hw
@@ -522,21 +541,21 @@ theorem live_stepK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map know
         rw [hk1] at k1
         rw [if_neg (by simp [k1])] at hw2
         simp only [Bool.and_eq_true, beq_iff_eq] at hw2
-        exact ⟨k2, B, hw2.1.2, hw2.2, k1, h1⟩
+        exact ⟨k2, B, hw2.1.1.2, hw2.1.2, hw2.2, k1, h1⟩
 
 /-- **One frame.** A walk from `S` that succeeds covers the frame of every machine of `S`, for every input, if each instruction meets `CleanK`. -/
 theorem frame_of_walkK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkK C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) :
-    (frame m i).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have key : ∀ j, (∃ A, LiveK C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
-      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
+      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, watchOK C.W B = true ∧ endOK C.G B = true ∧ C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
     intro j
     induction j with
     | zero => exact Or.inl ⟨S, ⟨hs0, Fu, hw⟩, rfl, rfl, Nat.le_refl _⟩
     | succ j ih =>
       have e : trace m i (j + 1) = nxt (m.frame + 1) (trace m i j) := rfl
-      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h2', h3, h4⟩
+      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h2', h2'', h3, h4⟩
       · have hh := h1.1.halted
         have hc : ¬ (((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true) := by
           simp [h3, hh]
@@ -544,24 +563,24 @@ theorem frame_of_walkK (ht : C.t.all (walkK C Fu) = true) (hkl : C.kl = C.t.map 
           rw [e]
           simp only [nxt, if_neg hc]
         rw [e2]
-        rcases live_stepK ht hkl hops hT h1 (hk j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a2', a3, a4⟩
+        rcases live_stepK ht hkl hops hT h1 (hk j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a2', a2'', a3, a4⟩
         · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
-        · exact Or.inr ⟨by rw [a1, h3], B, a2, a2', by rw [a3, h2], a4⟩
+        · exact Or.inr ⟨by rw [a1, h3], B, a2, a2', a2'', by rw [a3, h2], a4⟩
       · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
           simp [h1]
         have e2 : trace m i (j + 1) = trace m i j := by
           rw [e]
           simp only [nxt, if_pos hc]
         rw [e2]
-        exact Or.inr ⟨h1, B, h2, h2', h3, h4⟩
+        exact Or.inr ⟨h1, B, h2, h2', h2'', h3, h4⟩
   rw [frame_trace]
-  rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h2', h3, h4⟩
+  rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h2', h2'', h3, h4⟩
   · exfalso
     have a1 := h1.1.hi
     have a2 := h1.1.lim
     have a3 : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
     omega
-  · exact ⟨h1, B, h2, h2', h3, h4⟩
+  · exact ⟨h1, B, h2, h2', h2'', h3, h4⟩
 
 end
 
@@ -603,30 +622,49 @@ theorem watched_of {W : List Watch} {B : AS} {m : Machine} (hk : watchOK W B = t
     _ = (B.getK w.1).v &&& w.2.1 := by rw [h2]
     _ = w.2.2 &&& w.2.1 := h3
 
-/-- what the check says -/
-structure KeepOK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : Prop where
+/-- what the check says, with the key `key` and the end condition `fin` -/
+structure KeepOKW (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (fin : AS → Bool) : Prop where
   late : G.late < dotsPerFrame
-  table : (cfgOfK S G E W).t.all (walkK (cfgOfK S G E W) fuelK) = true
-  s0 : walkK (cfgOfK S G E W) fuelK (startK G W false) = true
-  s1 : walkK (cfgOfK S G E W) fuelK (startK G W true) = true
+  table : (cfgOfKW S G E W key fin).t.all (walkK (cfgOfKW S G E W key fin) fuelK) = true
+  s0 : walkK (cfgOfKW S G E W key fin) fuelK (startK G W false) = true
+  s1 : walkK (cfgOfKW S G E W key fin) fuelK (startK G W true) = true
 
-theorem keepOK_of_check {S : Spot} {G : Guard} {E : Env} {W : List Watch} (h : keepCheck S G E W = true) : KeepOK S G E W := by
-  simp only [keepCheck, Bool.and_eq_true, decide_eq_true_eq] at h
+theorem keepOKW_of_check {S : Spot} {G : Guard} {E : Env} {W : List Watch} {key : AS → Nat} {fin : AS → Bool} (h : keepCheckW S G E W key fin = true) :
+    KeepOKW S G E W key fin := by
+  simp only [keepCheckW, Bool.and_eq_true, decide_eq_true_eq] at h
   obtain ⟨⟨⟨⟨h1, _⟩, h2⟩, h3⟩, h4⟩ := h
   exact ⟨h1, h2, h3, h4⟩
+
+/-- what the check says -/
+abbrev KeepOK (S : Spot) (G : Guard) (E : Env) (W : List Watch) : Prop := KeepOKW S G E W (keyK S G W) fun _ => true
+
+theorem keepOK_of_check {S : Spot} {G : Guard} {E : Env} {W : List Watch} (h : keepCheck S G E W = true) : KeepOK S G E W := keepOKW_of_check h
+
+/-- **The frame's end**, from the walk with the end condition `fin`: a state that covers the machine at the frame's end, with the watched bits known, the start of a frame
+(`endOK`), and `fin` -/
+theorem end_of_walkW {S : Spot} {G : Guard} {W : List Watch} {key : AS → Nat} {fin : AS → Bool} (hc : keepCheckW S G E W key fin = true) (hE : E.pad = AB.top)
+    {m : Machine} {i : UInt8} (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) :
+    ∃ B, watchOK W B = true ∧ endOK G B = true ∧ fin B = true ∧ Sim E (m.frame, 2) B (frame m i) := by
+  have hC := keepOKW_of_check hc
+  obtain ⟨b, hs⟩ := sim_startK hE h0 hw
+  have hw0 : walkK (cfgOfKW S G E W key fin) fuelK (startK G W b) = true := by
+    cases b with
+    | false => exact hC.s0
+    | true => exact hC.s1
+  obtain ⟨_, B, h1, h2, h3, _, h4⟩ := frame_of_walkK (C := cfgOfKW S G E W key fin) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
+  exact ⟨B, h1, h2, h3, h4⟩
+
+/-- **One frame in control keeps the watched bits**, for the check with any key and end condition -/
+theorem keep_frameW {S : Spot} {G : Guard} {W : List Watch} {key : AS → Nat} {fin : AS → Bool} (hc : keepCheckW S G E W key fin = true) (hE : E.pad = AB.top)
+    {m : Machine} {i : UInt8} (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) : Watched W (frame m i) := by
+  obtain ⟨B, h1, _, _, h2⟩ := end_of_walkW hc hE h0 hw hk
+  exact watched_of h1 h2
 
 /-- **One frame in control keeps the watched bits.** A frame that starts in the idle loop in control (`FrameStart`) with the watched bits at their values, and whose every instruction
 meets `CleanK`, ends with the watched bits at their values. -/
 theorem keep_frame {S : Spot} {G : Guard} {W : List Watch} (hc : keepCheck S G E W = true) (hE : E.pad = AB.top) {m : Machine} {i : UInt8}
-    (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) : Watched W (frame m i) := by
-  have hC := keepOK_of_check hc
-  obtain ⟨b, hs⟩ := sim_startK hE h0 hw
-  have hw0 : walkK (cfgOfK S G E W) fuelK (startK G W b) = true := by
-    cases b with
-    | false => exact hC.s0
-    | true => exact hC.s1
-  obtain ⟨_, B, h1, _, _, h2⟩ := frame_of_walkK (C := cfgOfK S G E W) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
-  exact watched_of h1 h2
+    (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) : Watched W (frame m i) :=
+  keep_frameW hc hE h0 hw hk
 
 theorem bit80_all : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0x80 != 0) = true → UInt8.ofNat n.val &&& 0x80 = 0x80 := by decide +kernel
 
@@ -657,19 +695,19 @@ theorem start_of_sim {G : Guard} {E' : Env} {B : AS} {m : Machine} (hs : Sim E F
   · exact Or.inl ⟨by omega, hs.vb.trans h3, hs.nmi.trans h4⟩
   · exact Or.inr ⟨by omega, by omega, hs.vb.trans h3, hs.nmi.trans h4⟩
 
+/-- **One frame in control ends at the start of a frame in control**, for the check with any key and end condition -/
+theorem keep_frame_startW {S : Spot} {G : Guard} {W : List Watch} {key : AS → Nat} {fin : AS → Bool} (hc : keepCheckW S G E W key fin = true) (hE : E.pad = AB.top)
+    {m : Machine} {i : UInt8} (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) (hkn : ∀ p ∈ G.known, (frame m i).ram.get! p.1 = p.2) :
+    FrameStart G E (frame m i) ∧ Watched W (frame m i) := by
+  obtain ⟨B, h1, h2, _, h3⟩ := end_of_walkW hc hE h0 hw hk
+  exact ⟨start_of_sim h3 h2 rfl rfl hkn, watched_of h1 h3⟩
+
 /-- **One frame in control ends at the start of a frame in control**, if the frame's end has the known bytes of `G` (for `guardK`: the routine, the mode, the task),
 and it keeps the watched bits. -/
 theorem keep_frame_start {S : Spot} {G : Guard} {W : List Watch} (hc : keepCheck S G E W = true) (hE : E.pad = AB.top) {m : Machine} {i : UInt8}
     (h0 : FrameStart G E m) (hw : Watched W m) (hk : ∀ j, CleanK G S.store (trace m i j)) (hkn : ∀ p ∈ G.known, (frame m i).ram.get! p.1 = p.2) :
-    FrameStart G E (frame m i) ∧ Watched W (frame m i) := by
-  have hC := keepOK_of_check hc
-  obtain ⟨b, hs⟩ := sim_startK hE h0 hw
-  have hw0 : walkK (cfgOfK S G E W) fuelK (startK G W b) = true := by
-    cases b with
-    | false => exact hC.s0
-    | true => exact hC.s1
-  obtain ⟨_, B, h1, h2, _, h3⟩ := frame_of_walkK (C := cfgOfK S G E W) (F := (m.frame, 2)) hC.table rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs hk
-  exact ⟨start_of_sim h3 h2 rfl rfl hkn, watched_of h1 h3⟩
+    FrameStart G E (frame m i) ∧ Watched W (frame m i) :=
+  keep_frame_startW hc hE h0 hw hk hkn
 
 end
 
@@ -689,8 +727,31 @@ def spotOf (sy : Syms) (m0 : Machine) : Spot :=
   let sum := findOp m0 sy.MoveObjectHorizontally 0x65 64
   { entry := sy.MoveObjectHorizontally, store := findOp m0 sy.MoveObjectHorizontally 0x9D 64, temps := [(romByte m0 (sum + 1)).toNat] }
 
-/-- the check on the ROM -/
-def keepCheckOf (sy : Syms) (m0 : Machine) : Bool := keepCheck (spotOf sy m0) (guardK sy m0) (PipeEntryRule.envOf m0) (watchOf sy)
+/-- the value `v` is not in the byte: a known bit differs -/
+def excl (b : AB) (v : UInt8) : Bool := v &&& b.k != b.v &&& b.k
+
+/-- **The frame's end, for the frames of a run**: if the routine is the player's and the task is the core's, then the mode is the game's -/
+def endCtl (sy : Syms) (B : AS) : Bool :=
+  excl (B.getK (sy.GameEngineSubroutine &&& 0x7FF).toNat) sy.Eng_PlayerCtrl.toUInt8 ||
+  excl (B.getK (sy.OperMode_Task &&& 0x7FF).toNat) sy.Task_GameCore.toUInt8 ||
+  ((B.getK (sy.OperMode &&& 0x7FF).toNat).isK && (B.getK (sy.OperMode &&& 0x7FF).toNat).v == sy.GameModeValue.toUInt8)
+
+/-- the table's key with the mode and the task: no part of the proof -/
+def keyKC (sy : Syms) (S : Spot) (G : Guard) (W : List Watch) (A : AS) : Nat :=
+  let num := fun (b : AB) => b.k.toNat * 256 + (b.v &&& b.k).toNat
+  (keyK S G W A * 65536 + num (A.getK (sy.OperMode &&& 0x7FF).toNat)) * 65536 + num (A.getK (sy.OperMode_Task &&& 0x7FF).toNat)
+
+/-- **The check on the ROM**: the walk with the mode and the task in the table's key, and at the frame's end `endCtl` too -/
+def keepCheckOf (sy : Syms) (m0 : Machine) : Bool :=
+  decide (sy.GameModeValue < 256) &&
+    keepCheckW (spotOf sy m0) (guardK sy m0) (PipeEntryRule.envOf m0) (watchOf sy) (keyKC sy (spotOf sy m0) (guardK sy m0) (watchOf sy)) (endCtl sy)
+
+/-- the walk of the frames of a run, without the end condition `endCtl`: no part of the proof -/
+def keepCheckOld (sy : Syms) (m0 : Machine) : Bool := keepCheck (spotOf sy m0) (guardK sy m0) (PipeEntryRule.envOf m0) (watchOf sy)
+
+/-- the routine is the player's and the task the core's: two of the three bytes of `controllable` -/
+def ctlRT (sy : Syms) (m : Machine) : Bool :=
+  (peek m sy.OperMode_Task).toUInt16 == sy.Task_GameCore && (peek m sy.GameEngineSubroutine).toUInt16 == sy.Eng_PlayerCtrl
 
 /-- `Watched` as a check, for a program -/
 def watchedB (W : List Watch) (m : Machine) : Bool := W.all fun w => m.ram.get! w.1 &&& w.2.1 == w.2.2 &&& w.2.1
@@ -781,10 +842,52 @@ theorem known_of_ctl {sy : Syms} {m0 m : Machine} (h1 : controllable sy m = true
   · exact toUInt8_of_toUInt16 a1
   · exact toUInt8_of_toUInt16 a2
 
+/-- the parts of the check -/
+theorem keepCheckOf_parts {sy : Syms} {m0 : Machine} (h : keepCheckOf sy m0 = true) : sy.GameModeValue < 256 ∧
+    keepCheckW (spotOf sy m0) (guardK sy m0) (PipeEntryRule.envOf m0) (watchOf sy) (keyKC sy (spotOf sy m0) (guardK sy m0) (watchOf sy)) (endCtl sy) = true := by
+  simp only [keepCheckOf, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h
+
+theorem excl_false {b : AB} {x : UInt8} (hm : b.mem x) : excl b x = false := by
+  simp only [excl, bne_eq_false_iff_eq]
+  exact hm
+
+/-- **`endCtl` on the machine**: a state of the frame's end that meets `endCtl` covers a machine; if the machine has the routine and the task of control, it has control -/
+theorem ctl_of_endCtl {sy : Syms} {E : Env} {F : Nat × UInt8} {B : AS} {m : Machine} (hg : sy.GameModeValue < 256) (hs : Sim E F B m) (he : endCtl sy B = true)
+    (hc : ctlRT sy m = true) : controllable sy m = true := by
+  simp only [ctlRT, Bool.and_eq_true, beq_iff_eq] at hc
+  obtain ⟨h1, h2⟩ := hc
+  have e1 : m.ram.get! (sy.OperMode_Task &&& 0x7FF).toNat = sy.Task_GameCore.toUInt8 := toUInt8_of_toUInt16 h1
+  have e2 : m.ram.get! (sy.GameEngineSubroutine &&& 0x7FF).toNat = sy.Eng_PlayerCtrl.toUInt8 := toUInt8_of_toUInt16 h2
+  have m1 := hs.ram _ (PipeTransitionAll.mask_lt sy.OperMode_Task)
+  have m2 := hs.ram _ (PipeTransitionAll.mask_lt sy.GameEngineSubroutine)
+  have m3 := hs.ram _ (PipeTransitionAll.mask_lt sy.OperMode)
+  rw [e1] at m1
+  rw [e2] at m2
+  simp only [endCtl, excl_false m1, excl_false m2, Bool.false_or, Bool.and_eq_true, beq_iff_eq] at he
+  obtain ⟨hk, hv⟩ := he
+  have e3 : m.ram.get! (sy.OperMode &&& 0x7FF).toNat = sy.GameModeValue.toUInt8 := by rw [PipeEntryRule.known_eq hk m3, hv]
+  have hg' : sy.GameModeValue.toNat < 256 := UInt16.lt_iff_toNat_lt.1 hg
+  have e4 : (peek m sy.OperMode).toUInt16 = sy.GameModeValue := by
+    unfold peek
+    rw [e3]
+    apply UInt16.toNat_inj.1
+    simp
+    omega
+  simp only [controllable, Bool.and_eq_true, beq_iff_eq]
+  exact ⟨⟨e4, h1⟩, h2⟩
+
+/-- **A frame in control that ends with the routine and the task of control ends in control.** The walk of `keepCheckOf` from the frame's start, with `endCtl` at the frame's end. -/
+theorem ctl_of_frame {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : keepCheckOf sy m0 = true) (h0 : StartK sy m0 m) (hw : Watched (watchOf sy) m)
+    (hk : ∀ j, CleanK (guardK sy m0) (spotOf sy m0).store (trace m i j)) (h1 : ctlRT sy (frame m i) = true) : controllable sy (frame m i) = true := by
+  obtain ⟨hg, hW⟩ := keepCheckOf_parts hc
+  obtain ⟨B, _, _, h2, h3⟩ := end_of_walkW hW rfl h0 hw hk
+  exact ctl_of_endCtl hg h3 h2 h1
+
 /-- **The frames of a run, as the walk needs them.** `all n` is the machine when frame `n` begins, counted or not (a `lag` frame), from the machine at control (`all 0`) on, and
 `inp n` its input. `seq j` is the machine at the end of the counted frame `j`: `all (ix j)`. The frames between two counted frames are the `lag` frames. Every field is a hypothesis.
 That each frame starts in the idle loop in control (`StartK`) is not a field: it follows from the machine at control, `ctl` and `clean` (`Frames.all_start`), and so do the
-watched bits of the `lag` frames. -/
+watched bits of the `lag` frames. Of the three bytes of control, `ctl` asks two: the mode at each frame's end is a theorem (`Frames.ctlAll`). -/
 structure Frames (sy : Syms) (m0 : Machine) (g : Nat) (seq : Nat → Machine) where
   all : Nat → Machine
   inp : Nat → UInt8
@@ -795,8 +898,8 @@ structure Frames (sy : Syms) (m0 : Machine) (g : Nat) (seq : Nat → Machine) wh
   ix0 : ix 0 = 0
   order : ∀ j, j < g → ix j < ix (j + 1)
   at_ix : ∀ j, j ≤ g → seq j = all (ix j)
-  /-- every frame before the touch's frame ends in control, counted or not -/
-  ctl : ∀ n, n + 1 < ix g → controllable sy (all (n + 1)) = true
+  /-- every frame before the touch's frame ends with the routine and the task of control, counted or not -/
+  ctl : ∀ n, n + 1 < ix g → ctlRT sy (all (n + 1)) = true
   /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` -/
   clean : ∀ n, n < ix g → ∀ k, CleanK (guardK sy m0) (spotOf sy m0).store (trace (all n) (inp n) k)
 
@@ -852,9 +955,10 @@ theorem Frames.all_start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq
   | succ i ih =>
     intro hi
     obtain ⟨a1, a2⟩ := ih (by omega)
-    have hkn := known_of_ctl (m0 := m0) (K.ctl i hi)
-    rw [K.next i] at hkn ⊢
-    exact keep_frame_start hc rfl a1 a2 (K.clean i (by omega)) hkn
+    have h1 := K.ctl i hi
+    rw [K.next i] at h1 ⊢
+    have hkn := known_of_ctl (m0 := m0) (ctl_of_frame hc a1 a2 (K.clean i (by omega)) h1)
+    exact keep_frame_startW (keepCheckOf_parts hc).2 rfl a1 a2 (K.clean i (by omega)) hkn
 
 /-- **Every frame up to the touch's frame ends with the watched bits**, counted or not -/
 theorem Frames.all_watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
@@ -867,7 +971,16 @@ theorem Frames.all_watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g s
   | succ i =>
     obtain ⟨a1, a2⟩ := K.all_start hc hs0 h0 i (by omega)
     rw [K.next i]
-    exact keep_frame hc rfl a1 a2 (K.clean i (by omega))
+    exact keep_frameW (keepCheckOf_parts hc).2 rfl a1 a2 (K.clean i (by omega))
+
+/-- **Every frame before the touch's frame ends in control**, counted or not: the old field `ctl`, now from the routine and the task (`ctl`) and the walk -/
+theorem Frames.ctlAll (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+    ∀ n, n + 1 < K.ix g → controllable sy (K.all (n + 1)) = true := by
+  intro n hn
+  obtain ⟨a1, a2⟩ := K.all_start hc hs0 h0 n (by omega)
+  have h1 := K.ctl n hn
+  rw [K.next n] at h1 ⊢
+  exact ctl_of_frame hc a1 a2 (K.clean n (by omega)) h1
 
 /-- **The ends of the frames before `g`** are starts of frames in control with the watched bits, from the machine at control on. `hc` is the walk's check on the ROM. -/
 theorem Frames.run (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :

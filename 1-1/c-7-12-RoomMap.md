@@ -13,7 +13,7 @@ Zero(m)       :=  ∀ d ∈ B,  m(d) & ~M(d) = 0
 Cond(m)       :=  ScreenPage's condition at a frame's start, with the bits of Zero added
 ```
 
-`Cond(m)` holds of a machine when the frame before ended in the idle loop, the bytes of `ScreenPage` have the bits of its reference machine, and `Zero(m)` holds.
+`Cond(m)` holds of a machine when the frame before ended in the idle loop, the bytes of `ScreenPage` have the bits of its reference machine, the 5 screen's bytes of [one whole frame](c-7-16-SideFrame.md) (the scroll lock, the edges' positions and pages) have its values, and `Zero(m)` holds. Of the 5, only the left edge's position is new: `ScreenPage` knows the other 4.
 
 ```
 s_eraseT      :  the erase of a coin writes A through a pointer the walk does not know;  A is known,
@@ -45,25 +45,29 @@ Run.roomTiles   :  the checks,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j 
 The same walk gives that each frame of the room starts in control, as the walk of [one whole frame](c-7-16-SideFrame.md) asks:
 
 ```
-startCheckF        :  the reference machine is in the idle loop with the guard's stack pointer, Cond knows the guard's three bytes whole and with its values,
-                      the program is the same, 9 < the dot where vblank ends
-frameStart_of_cond :  startCheckF,  Cond(m)  →  FrameStart(m)
+startCheckF        :  the reference machine is in the idle loop with the guard's stack pointer, Cond knows the guard's 8 bytes (3 of the game, 5 of the screen)
+                      whole and with its values, the program is the same, 9 < the dot where vblank ends
+frameStart_of_cond :  startCheckF,  Cond(m)  →  FrameStart(m)          (with the room's guard G_room of one whole frame)
 start_of_rowsF     :  the hypotheses of map_of_rows,  startCheckF  →  ∀ n ∈ [b, a),  FrameStart(seq(n))
 Run.roomStartE     :  the checks,  Run  →  FrameStart(fm(E − 1))          (StartE; the old field room.startE)
 map_startF (private) :  startCheckF = true  (native_decide)
 ```
 
-The walk also checks, at every state, the conditions of `Clean` ([One whole frame](a-5-2-PipeWrites.md)) that `SiteOK` does not give. A store through an index or a pointer has a known target outside the guard's bytes, or it is the erase of a coin, whose target `SiteOK` puts in the block buffers. At the jump routine the index is known and in its table. `SiteOK` gives the reads through a pointer and the time. So every instruction of every frame of the room is `Clean`, with no new assumption:
+The walk also checks, at every state, the conditions of `Clean` ([One whole frame](a-5-2-PipeWrites.md)) that `SiteOK` does not give, with the room's guard `G_room`: its protected bytes include the 5 screen's bytes. A store through an index or a pointer has a known target outside the guard's bytes, or it is the erase of a coin, whose target `SiteOK` puts in the block buffers. At the jump routine the index is known and in its table. `SiteOK` gives the reads through a pointer and the time. So every instruction of every frame of the room is `Clean`, with no new assumption. And at no state is it at the routine of the head's collision with a block (`h`, the one place that `G_room` cuts): `SiteOK` lets a read for the head give only nothing or a coin, so the walk never comes there.
 
 ```
 cleanS(A)          :=  pc(A) ≥ 0x8000  ∧  (pc(A) = erase  ∨  the store's target is known and Plain)  ∧  (pc(A) = JumpEngine → A known, A < the length of its table)
+walk, at each state :  tilesB(A)  ∧  cleanS(A)  ∧  pc(A) ∉ cuts(G_room) = {h}
 clean_of_sim       :  CleanFacts,  A covers m,  cleanS(A),  SiteOK(m)  →  Clean(m)
 clean_of_rows      :  the hypotheses of map_of_rows  →  ∀ n ∈ [b, a),  ∀ j,  Clean(tr_n(j))
+cuts_run           :  the hypotheses of map_run  →  ∀ n ∈ [c, e),  ∀ j,  pc(tr_n(j)) ∉ cuts
+head_of_rows       :  the hypotheses of map_of_rows  →  ∀ n ∈ [b, a),  ∀ j,  pc(tr_n(j)) ≠ h
 Run.roomCleanE     :  the checks,  Run  →  CleanE                       (the old field room.cleanE)
-Run.inRoom         :  the checks,  Run  →  TilesE ∧ StartE ∧ CleanE     (RoomRun.InRoom)
+Run.roomHeadE      :  the checks,  Run  →  HeadE:  ∀ j,  pc(tr(j)) ≠ h    (once part of the field room.edgeE)
+Run.inRoom         :  the checks,  Run  →  TilesE ∧ StartE ∧ CleanE ∧ HeadE     (RoomRun.InRoom)
 ```
 
-`CleanFacts` is part of `mapCheck`: the idle loop of the places is the guard's, their last dot is at most the guard's, and no byte of the block buffers is a byte of the guard. With these checks `mapCheck` still takes about 2.6 s in a program.
+`CleanFacts` is part of `mapCheck`: the idle loop of the places is the guard's, their last dot is at most the guard's, and no byte of the block buffers is a byte of the guard. With these checks `mapCheck` takes about 4 s in a program (2.6 s before the screen's bytes and the cut were added).
 
 ## How it works
 
@@ -75,7 +79,7 @@ Run.inRoom         :  the checks,  Run  →  TilesE ∧ StartE ∧ CleanE     (R
 * At each state at the read of the block buffer routine, the walk checks `tilesB`: every byte of `B` out of the pipe's column is known to be neither tile. A byte is known not to be `T₁` when `T₁` has a 1 at a bit that is known to be 0. For this map every byte out of the column has such bits for both tiles.
 * At the frame's end the walk asks `tilesB`, and a start state of `Cond`, or `rt` known and not `rt_r` (the frame left the player's routine).
 
-**Size.** The search takes 210,934 steps with 8,750 forks and no failure. The table has 9,378 states. `mapCheck` takes about 3.4 s in a program, and `startCheckT` about 3.5 s. The private proof builds in about 8 s.
+**Size.** The search takes 209,861 steps with 9,132 forks and no failure. The table has 9,301 states. `mapCheck` takes about 4 s in a program, and `startCheckT` about 2.6 s. The private proof builds in about 10 s.
 
 **Why only the bits that are 0.** The erase writes into some byte of `B` that the walk does not know. A 0 written anywhere keeps every bit that is known to be 0, but not a bit that is known to be 1. To keep each byte exactly, one would need that the erase writes into a byte of a coin.
 

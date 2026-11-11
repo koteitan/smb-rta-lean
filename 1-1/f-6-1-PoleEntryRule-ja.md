@@ -4,6 +4,8 @@
 
 **主張.** これは部分的な結果です。「触る」を本物の機械の上で定義します。あるフレームが触るなら、そのフレームの横の判定がページを読むとき、マリオの位置は旗の範囲の左端より左ではありません。ですから `PoleJoin.Run` の仮定 `inRange` はなくなり、定理 `Run.inRange` になります。証明は横の判定の 1 回の通過を抽象機械で追います。フレームの残りは追いません。残りは仮定 `Pass` と `pos` です。
 
+**走りではもう使いません.** `PoleJoin.Run` はこの通過をもう使いません。[旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md) が触るフレーム全部を追います。ですから `Pass` と `pos` は走りの仮定ではなくなり、`Run.inRange` はその歩きから出ます。このページは 1 回の通過の証明として残します。そのプログラムは前の仮定を本物のフレームで確かめます。
+
 `frame(m, i)` は入力 `i` の本物の 1 フレームです。`tr(n)` は、そのフレームの `n` 命令あとの機械です。`rt(m)` は `GameEngineSubroutine` です。`e_f` は旗のルーチンの番号です。`page(m)` は `Player_PageLoc`、`x(m)` は `Player_X_Position` です。`pg` は旗のページ、`col` は旗の列です。`w` は `RunFR` の中で `rt` を書く命令です。`T_b`、`T_s` は旗の玉と棒のタイルです。`d_C` はブロックバッファの中の旗の列の一番上の場所です。`R` はブロックバッファの行の数です。
 
 ```
@@ -32,7 +34,7 @@ no_write            :  walkCheck,  s(j + 1) = step(s(j)) (j < n),  Start(s(0)),
 touch_right_of_left :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pass(n))
                        →  ∃ n j,  WriteStep(n) ∧ j < n ∧ AtEntry(tr(j)) ∧ L_px ≤ px(tr(j))
 inRange_of_pass     :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pass(n)),  pos(P₂)  →  P₀ ≤ P₂
-Run.inRange         :  ruleCheck,  Run  →  P₀ ≤ P₂(g)
+Run.inRange         :  ruleCheck,  Run  →  P₀ ≤ P₂(g)          （前の回まで。今は 1 フレーム全部から、f-6-16）
 touches_of_ends     :  EndsTouch(m, i)  →  Touches(m, i)
 pole_rule_check（非公開） :  ruleCheck(sy, m₀) = true（native_decide）
 ```
@@ -41,12 +43,13 @@ pole_rule_check（非公開） :  ruleCheck(sy, m₀) = true（native_decide）
 
 `P₀ = 256·L_px` は `poleP` です。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/PoleEntryRule.lean`、`Theorems/PoleJoin.lean` の `Run`、非公開の `Proof/PoleEntryRule.lean`（`pole_rule_check`、`pole_rule_real`）。
+Lean: `Theorems/PoleEntryRule.lean`、非公開の `Proof/PoleEntryRule.lean`（`pole_rule_check`、`pole_rule_real`）。`Theorems/PoleJoin.lean` の `Run` は前の回までこれを使っていました。
 
 `Run` のフィールドは次のように変わりました。
 
 * なくなったもの: `inRange`。
 * 増えたもの: `fm`、`inp`（フレーム `g` の始めの機械と入力）、`touches`（`Touches(fm, inp)`）、`pass`（`∀ n, WriteStep(n) → Pass(n)`）、`pos`（`pos(P₂(g))`）。
+* そのあとなくなったもの: `fm`、`inp`、`pass`、`pos`。`touches` は `keep` のフレーム `g` の `Touches(fm g, pad g)` になりました。増えたもの: `tiles`、`edge`、`moved`（[旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md)）。
 
 ## しくみ
 

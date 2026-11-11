@@ -13,6 +13,8 @@ with the input `i` makes the routine byte the pole's (`Touches`). The frame need
 The whole frame is not followed, as in `PipeEntryRule`. What is assumed stays on the single frame: the instruction that writes the routine byte is the collision routine's own, it comes at the end of one pass from the start
 of the side check (`Pass`), and the block buffers hold the pole's tiles only in its column (`TilesOK`). What is proved is the pass (`no_write`): an abstract machine (the one of `SideChangeBound`) follows it, with
 every byte unknown except the stack and the offset of the adders. There is no game data in this file. Page: `1-1/f-6-1-PoleEntryRule.md`.
+
+`PoleJoin.Run` no longer uses this pass: `PoleFrame` follows the whole frame of the touch, so `Pass` and `pos` are no longer hypotheses of the run.
 -/
 
 namespace Smbrta.PoleEntryRule

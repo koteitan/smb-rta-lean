@@ -69,7 +69,7 @@ Lean: `Theorems/PipeFrames.lean`、`Theorems/Route.lean` の `Pipe`、非公開�
 * **各フレームは `Frame` である.** `fr` の型です。前からの前提で、項目 0-0-0-3-1 です（`FrameModel.frame_read` は `ReadFrame` のもとでこれを出します）。上の本物のフレームで確かめました。
   新しいのは、フレーム 1 から `N` までにもこれを使うことです。
 * **数えないフレームは 3 つの値を変えない.** まとめての仮定ではなくなりました。モードのルーチンを呼ばないフレーム（ポーズ）では証明しました。
-  残る仮定は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) と [操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md) の `lags.ctl`、`lags.clean`、`lags.store`、`lags.game` です。
+  残る仮定は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) と [操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md) の `lags.ctl`（いまは数えるフレームだけ）、`lags.clean`、`lags.game` です。`lags.store` はいまは証明しています。
 * **`still`: 操作できるときの速さは 0.** いまはタイトルで Start を押したところから証明しています（`Route.Run.still`、[タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md)）。
 * **この項目でないもの.** `openP`、`openB`（項目 1-1-a-5-4）と `edge`、`moved`（項目 1-1-a-5-9）は、仮定のままです。
 

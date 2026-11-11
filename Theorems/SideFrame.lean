@@ -1,6 +1,7 @@
 import Theorems.PipeWrites
 import Theorems.SideEntryRule
 import Theorems.PipeChangeEnd
+import Theorems.ScreenPage
 
 /-!
 # The side pipe's entry: one whole frame
@@ -13,7 +14,9 @@ The walk splits the position where the move ends (`PlayerSubs`), under the hypot
 and the feet's checks to the side check. In the block buffer routine of a side check it splits the high bits of the sum of the height and the adder, so the row of the read is known: no
 hypothesis on the row. At the read, the tiles' condition (`TilesOK`) divides the byte read into the pieces of `SideEntryRule`. No path comes to the side pipe's routine.
 
-The two places of `PipeWrites.guardS` are cut: the scroll handler's store of the position at the screen's edges, and the routine of the head's collision with a block.
+The guard is that of a frame in the room (`roomG`): the screen's bytes of the room are known at the frame's start and kept from stores with a target not known. Where the
+scroll handler asks whether he is off the screen, the walk splits the position into its values, so the store at the screen's edges is followed: it comes only at the left edge,
+and there it keeps the position. One place is cut: the routine of the head's collision with a block (`RoomMap` shows that no frame in the room comes to it).
 There is no game data in this file. Page: `1-1/c-7-16-SideFrame.md`.
 -/
 
@@ -35,6 +38,10 @@ structure Side where
   G : Guard
   Q : Spots
   andAt : UInt16
+  /-- the scroll handler's call of the routine of the offscreen bits, that routine, and the return from the scroll handler -/
+  offAt : UInt16
+  offR : UInt16
+  back : UInt16
   deriving Inhabited
 
 /-- the places of `SideEntryRule.spots` with the three values of the adders' offset: a big Mario, a big one in the water, a small or crouching one. A side check reads with
@@ -43,12 +50,36 @@ def spotsF (sy : Syms) (m0 : Machine) : Spots :=
   let ads := [romByte m0 sy.BlockBufferAdderData, romByte m0 (sy.BlockBufferAdderData + 1), romByte m0 (sy.BlockBufferAdderData + 2)]
   { SideEntryRule.spots sy m0 with ads, idx := ads.flatMap fun e => [e + 3, e + 4, e + 5, e + 6] }
 
+/-- the RAM index of the operand of the instruction at `a` -/
+def opnd (m0 : Machine) (a : UInt16) : Nat := (((romByte m0 (a + 1)).toUInt16 ||| ((romByte m0 (a + 2)).toUInt16 <<< 8)) &&& 0x7FF).toNat
+
+/-- the bytes of the screen that the scroll handler reads: the scroll lock (the second load of the scroll handler), the left and the right edges' positions and pages (the two
+loads by `Y` of the routine of the offscreen bits) -/
+def screenI (sy : Syms) (m0 : Machine) : List Nat :=
+  let eX := findOp m0 sy.GetXOffscreenBits 0xB9 16
+  let eP := findOp m0 (eX + 3) 0xB9 16
+  let l1 := findOp m0 (PipeWrites.scrollAt sy m0) 0xAD 16
+  let l2 := findOp m0 (l1 + 3) 0xAD 16
+  [opnd m0 l2, opnd m0 eX, opnd m0 eX + 1, opnd m0 eP, opnd m0 eP + 1]
+
+/-- these bytes with their values in the room: those of the reference machine of the room (`ScreenPage.refR`) -/
+def screenK (sy : Syms) (m0 : Machine) : List (Nat × UInt8) := (screenI sy m0).map fun i => (i, (ScreenPage.refR m0).ram.get! i)
+
+/-- a guard with more bytes known and protected, and its own places cut -/
+def extG (G : Guard) (k : List (Nat × UInt8)) (p : List Nat) (c : List UInt16) : Guard := { G with known := G.known ++ k, prot := G.prot ++ p, cuts := c }
+
+/-- **The guard of a frame in the room**: that of the vertical pipe, with the screen's bytes known at the start and kept from stores with a target not known, and the
+routine of the head's collision with a block as the one place cut -/
+def roomG (sy : Syms) (m0 : Machine) : Guard := extG (PipeWrites.guardOf sy m0) (screenK sy m0) (screenI sy m0) [PipeWrites.headAt sy m0]
+
 /-- the places, from the symbols and the ROM -/
 def sideOf (sy : Syms) (m0 : Machine) : Side :=
-  let G := PipeWrites.guardS sy m0
-  { G := { G with ev := SideEntryRule.vs sy }
+  { G := { roomG sy m0 with subs := sy.PlayerSubs, ev := SideEntryRule.vs sy }
     Q := spotsF sy m0
-    andAt := findOp m0 G.loadY 0x29 16 }
+    andAt := findOp m0 (PipeWrites.guardOf sy m0).loadY 0x29 16
+    offAt := ScreenPage.findJsr m0 (PipeWrites.scrollAt sy m0) sy.GetXOffscreenBits 200
+    offR := sy.GetXOffscreenBits
+    back := sy.PlayerSubs + 3 }
 
 /-! ## The pieces -/
 
@@ -91,6 +122,7 @@ def highA (A : AS) : List AS :=
 def zoneF (S : Side) (A : AS) : List AS :=
   if S.G.cuts.contains A.pc then []
   else if A.pc == S.G.subs then splitQ S.Q A
+  else if A.pc == S.offAt && (A.getK S.Q.xI).k != 0 then fillB S.Q.xI A
   else if A.pc == S.Q.adc && sideNow S.Q A then fillB S.Q.xI A
   else if A.pc == S.andAt && sideNow S.Q A then highA A
   else if A.pc == S.Q.read && sideNow S.Q A && (A.getK S.Q.ptrI).isK && (A.getK (S.Q.ptrI + 1)).isK && A.y.isK && safeF S.Q (readF S.Q A) then
@@ -125,6 +157,7 @@ def normF (S : Side) (A0 : AS) : AS :=
     if G.je ≤ A.pc && A.pc ≤ G.je + 18 then A else
     let B := PipeWrites.AS.forgetW keepP A
     let B := if A.pc == colEnd G then forget [Q.xI, Q.pI] B else B
+    let B := if A.pc == S.back then B.setK Q.xI (pieceOf Q (B.getK Q.xI)) else B
     let kn := (List.range (0x100 + A.s.toNat + 1 - G.stackLo)).foldl (fun k j => k.set! (G.stackLo + j) 0) B.kn
     { B with kn }
   else if Q.exits.contains A.pc then { PipeWrites.AS.forgetW G.prot A with a := AB.top, x := AB.top, y := AB.top, p := AB.top }
@@ -149,7 +182,12 @@ def keyF (S : Side) (A : AS) : Nat :=
     else if G.je ≤ A.pc && A.pc ≤ G.je + 18 then
       let n := n * 65536 + num A.a
       n * 65536 + num A.y
-    else if A.pc != colEnd G then (n * 65536 + num (A.getK S.Q.xI)) * 65536 + num (A.getK S.Q.pI)
+    else if A.pc != colEnd G then
+      let n := (n * 65536 + num (A.getK S.Q.xI)) * 65536 + num (A.getK S.Q.pI)
+      -- with the position whole in the scroll handler's question whether he is off the screen, the registers and the carry too: its loop must not join its two passes
+      if (A.getK S.Q.xI).k == 255 && ((S.offR ≤ A.pc && A.pc < S.offR + 0x90) || (S.offAt ≤ A.pc && A.pc < S.offAt + 0x40)) then
+        (((n * 65536 + num A.x) * 65536 + num A.y) * 65536 + num A.a) * 65536 + num (A.p.and (AB.known 1))
+      else n
     else n
   let n := n * 16777216 + A.s.toNat * 65536 + A.pc.toNat
   n * 18446744073709551616 + (n % 4294967291) * 4294967296 + TaintRun.stackHash A
@@ -164,8 +202,15 @@ structure CfgF where
   idx : Std.HashMap Nat Nat
   cut : ByteArray
 
+/-- the state whose key the table is looked up by: as the search normalized it (no part of the proof: any entry found must still be above the state) -/
+def keyOf (S : Side) (B : AS) : AS :=
+  if inZone S.G B then normF S B
+  else
+    let A := normRt S.G B
+    if B.pc == S.back then A.setK S.Q.xI (pieceOf S.Q (A.getK S.Q.xI)) else A
+
 def coverF (C : CfgF) (B : AS) : Bool :=
-  match C.idx[keyF C.S (if inZone C.S.G B then normF C.S B else normRt C.S.G B)]? with
+  match C.idx[keyF C.S (keyOf C.S B)]? with
   | some i =>
     match C.t[i]?, C.kl[i]? with
     | some D, some l => leK B D l
@@ -183,7 +228,7 @@ def walkF (C : CfgF) : Nat → AS → Bool
 /-! ## Finding the table: a search, no part of the proof -/
 
 def isCutF (S : Side) (pc : UInt16) : Bool :=
-  pc == S.Q.read || pc == S.Q.read + 2 || pc == S.andAt || pc == S.Q.side || pc == S.Q.adc || S.Q.exits.contains pc
+  pc == S.Q.read || pc == S.Q.read + 2 || pc == S.andAt || pc == S.Q.side || pc == S.Q.adc || S.Q.exits.contains pc || pc == S.back
 
 def routeF (S : Side) (X : PipeWrites.SG) (B0 : AS) : PipeWrites.SG :=
   let G := S.G
@@ -346,6 +391,11 @@ theorem cov_zoneF {S : Side} {A : AS} {m : Machine} (hb : PreF S) (hh : HypF S m
   · rw [if_pos h1]
     exact cov_splitQ hb.left hb.pos (hS (by rw [hs.pc]; exact beq_iff_eq.1 h1)) hs
   rw [if_neg h1]
+  by_cases h1o : (A.pc == S.offAt && (A.getK S.Q.xI).k != 0) = true
+  · rw [if_pos h1o]
+    obtain ⟨B, hB, h3, _⟩ := cov_fill hb.xI A m hs
+    exact ⟨B, hB, h3⟩
+  rw [if_neg h1o]
   by_cases h1a : (A.pc == S.Q.adc && sideNow S.Q A) = true
   · rw [if_pos h1a]
     obtain ⟨B, hB, h3, _⟩ := cov_fill hb.xI A m hs
@@ -513,20 +563,46 @@ theorem clean_ev {G : Guard} {e : UInt8} {m : Machine} (h : Clean G m) : Clean {
 theorem start_ev {G : Guard} {e : UInt8} {E : Env} {m : Machine} (h : FrameStart G E m) : FrameStart { G with ev := e } E m :=
   ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, h.known⟩
 
-/-- the conditions of the vertical pipe's guard are those of the side pipe's -/
-theorem clean_side {sy : Syms} {m0 m : Machine} (h : Clean (PipeWrites.guardOf sy m0) m) : Clean (sideOf sy m0).G m := clean_ev (PipeWrites.clean_guardS h)
+/-- the conditions of a guard do not depend on the place of the split and its routine -/
+theorem clean_subsEv {G : Guard} {s : UInt16} {e : UInt8} {m : Machine} (h : Clean G m) : Clean { G with subs := s, ev := e } m := ⟨h.store, h.read, h.jump, h.time⟩
 
-theorem start_side {sy : Syms} {m0 : Machine} {E : Env} {m : Machine} (h : FrameStart (PipeWrites.guardOf sy m0) E m) : FrameStart (sideOf sy m0).G E m :=
-  start_ev (PipeWrites.start_guardS h)
+theorem start_subsEv {G : Guard} {s : UInt16} {e : UInt8} {E : Env} {m : Machine} (h : FrameStart G E m) : FrameStart { G with subs := s, ev := e } E m :=
+  ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, h.known⟩
 
-/-- **The side pipe's entry on a real frame, at the end of the move.** If the frame enters, it starts in control, its instructions up to the write are `Clean`, each read of the block
-buffer routine up to the write meets `TilesOK`, and it does not come to the two places cut, then at the end of the move, before the write, the position is at or right of the mouth's left
-end. -/
+/-- a guard with more bytes known and protected asks more -/
+theorem clean_less {G : Guard} {k : List (Nat × UInt8)} {p : List Nat} {c : List UInt16} {m : Machine} (h : Clean (extG G k p c) m) :
+    Clean G m := by
+  refine ⟨fun t ht => ?_, h.read, h.jump, h.time⟩
+  rcases h.store t ht with ⟨a, b⟩ | b
+  · exact Or.inl ⟨a, fun hm => b (List.mem_append_left _ hm)⟩
+  · exact Or.inr b
+
+theorem start_less {G : Guard} {k : List (Nat × UInt8)} {p : List Nat} {c : List UInt16} {E : Env} {m : Machine}
+    (h : FrameStart (extG G k p c) E m) : FrameStart G E m :=
+  ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, fun q hq => h.known q (List.mem_append_left _ hq)⟩
+
+/-- the conditions of the room's guard are those of the side pipe's -/
+theorem clean_side {sy : Syms} {m0 m : Machine} (h : Clean (roomG sy m0) m) : Clean (sideOf sy m0).G m :=
+  clean_subsEv (G := roomG sy m0) (s := sy.PlayerSubs) (e := SideEntryRule.vs sy) h
+
+theorem start_side {sy : Syms} {m0 : Machine} {E : Env} {m : Machine} (h : FrameStart (roomG sy m0) E m) : FrameStart (sideOf sy m0).G E m :=
+  start_subsEv (G := roomG sy m0) (s := sy.PlayerSubs) (e := SideEntryRule.vs sy) h
+
+/-- the room's guard asks more than the vertical pipe's -/
+theorem clean_guardOf {sy : Syms} {m0 m : Machine} (h : Clean (roomG sy m0) m) : Clean (PipeWrites.guardOf sy m0) m :=
+  clean_less (G := PipeWrites.guardOf sy m0) (k := screenK sy m0) (p := screenI sy m0) (c := [PipeWrites.headAt sy m0]) h
+
+theorem start_guardOf {sy : Syms} {m0 : Machine} {E : Env} {m : Machine} (h : FrameStart (roomG sy m0) E m) : FrameStart (PipeWrites.guardOf sy m0) E m :=
+  start_less (G := PipeWrites.guardOf sy m0) (k := screenK sy m0) (p := screenI sy m0) (c := [PipeWrites.headAt sy m0]) h
+
+/-- **The side pipe's entry on a real frame, at the end of the move.** If the frame enters, it starts in control with the screen's bytes of the room, its instructions up to the write
+are `Clean`, each read of the block buffer routine up to the write meets `TilesOK`, and it does not come to the routine of the head's collision with a block, then at the end of the
+move, before the write, the position is at or right of the mouth's left end. -/
 theorem entry_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : sideFrameCheck sy m0 = true) (he : SideEntryRule.Enters sy m i)
-    (h0 : FrameStart (PipeWrites.guardOf sy m0) (envOf m0) m)
-    (hp : ∀ n, SideEntryRule.WriteStep sy m i n → ∀ j, j ≤ n → Clean (PipeWrites.guardOf sy m0) (trace m i j) ∧
+    (h0 : FrameStart (roomG sy m0) (envOf m0) m)
+    (hp : ∀ n, SideEntryRule.WriteStep sy m i n → ∀ j, j ≤ n → Clean (roomG sy m0) (trace m i j) ∧
       (AtRead (SideEntryRule.spots sy m0) (trace m i j) → TilesOK (SideEntryRule.spots sy m0) (trace m i j)) ∧
-      (trace m i j).pc ≠ PipeWrites.edgeStore sy m0 ∧ (trace m i j).pc ≠ PipeWrites.headAt sy m0) :
+      (trace m i j).pc ≠ PipeWrites.headAt sy m0) :
     ∃ n j, SideEntryRule.WriteStep sy m i n ∧ j ≤ n ∧ (trace m i j).pc = sy.PlayerSubs ∧ SidePipe.xLo sy ≤ px (SideEntryRule.spots sy m0) (trace m i j) := by
   simp only [sideFrameCheck, Bool.and_eq_true, bne_iff_ne] at hc
   obtain ⟨_, hc⟩ := hc
@@ -542,18 +618,18 @@ theorem entry_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : sideF
         by_cases hl : SidePipe.xLo sy ≤ px (SideEntryRule.spots sy m0) (trace m i j)
         · exact absurd ⟨j, hj, hs, hl⟩ hx
         · exact Nat.lt_of_not_le hl, (hp n hw j hj).2.1, by
-        show (trace m i j).pc ∉ [PipeWrites.edgeStore sy m0, PipeWrites.headAt sy m0]
-        simp only [List.mem_cons, List.not_mem_nil, or_false, not_or]
+        show (trace m i j).pc ∉ [PipeWrites.headAt sy m0]
+        simp only [List.mem_cons, List.not_mem_nil, or_false]
         exact (hp n hw j hj).2.2⟩)
     exact hn hw.2
 
 /-- **At the mouth, from one whole frame.** `P` is the position at the end of the move before the write (`moved`). A frame that enters, under the conditions of `entry_right_of_left`, has
 `P` at or right of the mouth's left end. -/
 theorem mouth_of_frame {sy : Syms} {m0 m : Machine} {i : UInt8} {P : Int} (hc : sideFrameCheck sy m0 = true) (he : SideEntryRule.Enters sy m i)
-    (h0 : FrameStart (PipeWrites.guardOf sy m0) (envOf m0) m)
-    (hp : ∀ n, SideEntryRule.WriteStep sy m i n → ∀ j, j ≤ n → Clean (PipeWrites.guardOf sy m0) (trace m i j) ∧
+    (h0 : FrameStart (roomG sy m0) (envOf m0) m)
+    (hp : ∀ n, SideEntryRule.WriteStep sy m i n → ∀ j, j ≤ n → Clean (roomG sy m0) (trace m i j) ∧
       (AtRead (SideEntryRule.spots sy m0) (trace m i j) → TilesOK (SideEntryRule.spots sy m0) (trace m i j)) ∧
-      (trace m i j).pc ≠ PipeWrites.edgeStore sy m0 ∧ (trace m i j).pc ≠ PipeWrites.headAt sy m0)
+      (trace m i j).pc ≠ PipeWrites.headAt sy m0)
     (hmoved : ∀ n j, SideEntryRule.WriteStep sy m i n → j ≤ n → (trace m i j).pc = sy.PlayerSubs → P = posP sy (trace m i j)) :
     SidePipe.mouthP sy 0 ≤ P := by
   obtain ⟨n, j, h1, h2, h3, h4⟩ := entry_right_of_left hc he h0 hp
@@ -599,9 +675,9 @@ def Report.show (r : Report) : String :=
 
 def Report.bad (r : Report) : Nat := r.startBad + r.cleanBad + r.tilesBad + r.eStart + r.eClean + r.eTiles + r.eCut + r.writeBad + r.subsN + r.leftBad + r.movedBad + r.pageBad
 
-/-- one real frame with the bits `pad` of the controller. `G` is the guard of the vertical pipe's walk: its conditions are those of `sideOf`. -/
-def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Report) : Report × Machine := Id.run do
-  let G := PipeWrites.guardOf sy m0
+/-- one real frame with the bits `pad` of the controller. `G` is the room's guard (`roomG`, computed once by the caller): its conditions are those of `sideOf`. The cut places counted are the routine of the head's
+collision and, apart, the scroll handler's store at the edges, which the walk no longer cuts. -/
+def scanFrame (sy : Syms) (m0 : Machine) (G : Guard) (m : Machine) (pad : UInt8) (r0 : Report) : Report × Machine := Id.run do
   let Q := SideEntryRule.spots sy m0
   let E := envOf m0
   let cuts := [PipeWrites.edgeStore sy m0, PipeWrites.headAt sy m0]

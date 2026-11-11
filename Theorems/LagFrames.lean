@@ -4,15 +4,17 @@ import Theorems.PipeWrites
 # Up to the vertical pipe: a frame not counted keeps the speed and the position
 
 A frame on which no timer runs is not counted (`lag`). Before the pipe such a frame comes from the pause, or from the master timer control (growth, injury, death).
-Here an abstract machine of `TaintRun` follows one whole frame, as in `PipeWrites`, from the idle loop. One byte is followed as the counter of `TaintRun` (`Env.rkI`): a walk
-that does not fail shows that no instruction writes it. The walk stops where the NMI calls the routine of the mode (`modeCall`), the instruction before `SkipMainOper`:
-a paused frame skips that call. So, under `Clean` on each instruction:
+Here an abstract machine of `TaintRun` follows one whole frame, as in `PipeWrites`, from the idle loop in control (`FrameStart` of `guardOf`). One byte is followed as the
+counter of `TaintRun` (`Env.rkI`): a walk that does not fail shows that no instruction writes it. The walk stops where the NMI calls the routine of the mode (`modeCall`),
+the instruction before `SkipMainOper`: a paused frame skips that call. So, under `Clean` on each instruction before the call:
 
-* `keeps_of_check`: a frame from the idle loop either calls the routine of the mode, or it ends with the byte as it began. One walk for each of the five bytes of the
-  speed, the subspeed and the position (`vfpI`).
+* `keeps_frame`: a frame from the idle loop in control either calls the routine of the mode, or it ends with the five bytes of the speed, the subspeed and the
+  position (`vfpI`) and the three bytes of control (`ctlI`: the routine, the mode, the task) as it began. One walk for each byte.
+* `known_of_keep`: so such a frame ends in control (`known_ctl` of `StartRun` the other way: the known bytes of `guardOf`).
 
-The stores with a target not known keep these bytes (they are in `prot`), and the walk forgets the rest as in `PipeWrites`. There is no game data in this file.
-Page: `1-1/a-5-5-3-LagFrames.md`.
+The five bytes of `V` are not in `prot` of `guardOf`: a store with a target not known makes the walk forget the followed byte, and then the walk fails at the frame's end.
+So the check shows that no store before the frame's end, on a path that does not call the mode's routine, touches the five bytes: the walk knows the target of each such
+store. (The three bytes of control are in `prot`.) There is no game data in this file. Page: `1-1/a-5-5-3-LagFrames.md`.
 -/
 
 namespace Smbrta.LagFrames
@@ -32,8 +34,11 @@ def I (a : UInt16) : Nat := (a &&& 0x7FF).toNat
 def vfpI (sy : Syms) : List Nat :=
   [I sy.Player_X_Speed, I sy.Player_X_MoveForce, I sy.Player_PageLoc, I sy.Player_X_Position, I sy.SprObject_X_MoveForce]
 
-/-- the guard of a frame not counted: no byte known when it starts; a store with a target not known keeps the bytes of `vfpI` too -/
-def lagGuard (sy : Syms) (m0 : Machine) : Guard := { guardOf sy m0 with known := [], prot := vfpI sy ++ (guardOf sy m0).prot }
+/-- the bytes that say that the game is in control: the routine, the mode, the task (the known bytes of `guardOf`) -/
+def ctlI (sy : Syms) : List Nat := [I sy.GameEngineSubroutine, I sy.OperMode, I sy.OperMode_Task]
+
+/-- the bytes that the walk follows, one walk each -/
+def lagI (sy : Syms) : List Nat := vfpI sy ++ ctlI sy
 
 /-- the machine of the walk, with the byte `b` followed -/
 def lagEnv (m0 : Machine) (b : Nat) : Env := { PipeEntryRule.envOf m0 with rkI := b }
@@ -66,11 +71,12 @@ structure CfgL where
   /-- the `pc` of the states of the table -/
   tc : ByteArray
 
-/-- states with the same key are joined: no part of the proof -/
+/-- states with the same key are joined, no part of the proof: the `pc`, the stack, the flags of the frame, the counter, both index registers, and `A` near the jump routine -/
 def keyL (G : Guard) (A : AS) : Nat :=
   let num := fun (b : AB) => b.k.toNat * 256 + (b.v &&& b.k).toNat
   let n := (if A.nmi then 1 else 0) + (if A.vb then 2 else 0) + (if A.strobe then 4 else 0) + (if A.lo == 0 then 8 else 0) + (if A.rk then 16 else 0) + (if A.spent then 32 else 0)
-  let n := if G.je ≤ A.pc && A.pc ≤ G.je + 18 then (n * 65536 + num A.a) * 65536 + num A.y else n
+  let n := (n * 65536 + num A.x) * 65536 + num A.y
+  let n := if G.je ≤ A.pc && A.pc ≤ G.je + 18 then n * 65536 + num A.a else n
   let n := n * 16777216 + A.s.toNat * 65536 + A.pc.toNat
   n * 18446744073709551616 + (n % 4294967291) * 4294967296 + stackHash A
 
@@ -93,15 +99,12 @@ def walkL (C : CfgL) : Nat → AS → Bool
       if B.k == A.k then B.pc == C.cut || (C.tc.get! B.pc.toNat != 0 && coverL C B) || walkL C n B
       else B.k == A.k + 1 && endOK B
 
-/-! ## Finding the table: a search, no part of the proof -/
+/-! ## Finding the table: a search, no part of the proof
 
-/-- what the search forgets: the bytes outside `prot`, the stack below the stack pointer -/
-def normL (G : Guard) (r : Nat) (A0 : AS) : AS :=
-  let A := { A0 with padShift := AB.top }
-  if G.je ≤ A.pc && A.pc ≤ G.je + 18 then A else
-  let B := AS.forgetK G.prot r A
-  let kn := (List.range (0x100 + A.s.toNat + 1 - G.stackLo)).foldl (fun k j => k.set! (G.stackLo + j) 0) B.kn
-  { B with kn }
+The guard is `guardOf`, the guard of a frame in control: its `prot` does not hold the five bytes of `V`. A store with a target not known makes the walk forget such a byte,
+so the walk fails if such a store comes before the frame's end on a path that does not call the mode's routine. The stores before the call go through an index (the screen
+buffer, the timers, the random bits), and the walk knows their targets only if it knows the index. So the search forgets no byte of RAM, and both index registers are in
+the key, as the search of `CtrlKeep` does. -/
 
 structure SL where
   pending : Std.TreeMap Nat AS compare := {}
@@ -116,8 +119,15 @@ structure SL where
   ends : Nat := 0
   failPcs : Std.HashMap Nat Nat := {}
 
-def routeL (G : Guard) (r : Nat) (X : SL) (B0 : AS) : SL :=
-  let B := normL G r B0
+/-- what the search forgets: the stack below the stack pointer -/
+def normL (G : Guard) (A0 : AS) : AS :=
+  let A := { A0 with padShift := AB.top }
+  if G.je ≤ A.pc && A.pc ≤ G.je + 18 then A else
+  let kn := (List.range (0x100 + A.s.toNat + 1 - G.stackLo)).foldl (fun k j => k.set! (G.stackLo + j) 0) A.kn
+  { A with kn }
+
+def routeL (G : Guard) (X : SL) (B0 : AS) : SL :=
+  let B := normL G B0
   let K := keyL G B
   match X.pending[K]? with
   | some Q =>
@@ -168,13 +178,13 @@ partial def runL (G : Guard) (E : Env) (ops : Array (AM Unit)) (cut : UInt16) (X
     | _ => pure ()
     for b in good do
       X := { X with leaders := X.leaders.insert b.pc.toNat () }
-      X := routeL G E.rkI X b
+      X := routeL G X b
     break
   return X
 
 partial def searchL (G : Guard) (E : Env) (cut : UInt16) : SL := Id.run do
   let ops := (aRows E).toArray
-  let mut X : SL := [startL G false, startL G true].foldl (routeL G E.rkI) {}
+  let mut X : SL := [startL G false, startL G true].foldl (routeL G) {}
   while true do
     match X.pending.minEntry? with
     | none => break
@@ -184,32 +194,33 @@ partial def searchL (G : Guard) (E : Env) (cut : UInt16) : SL := Id.run do
   return X
 
 /-- the table, from the search -/
-def tableOfL (X : SL) : Array AS × Std.HashMap Nat Nat × ByteArray := Id.run do
+def tableOfL (G : Guard) (X : SL) : Array AS × Std.HashMap Nat Nat × ByteArray := Id.run do
   let mut t : Array AS := #[]
   let mut idx : Std.HashMap Nat Nat := {}
   let mut tc := ByteArray.mk (Array.replicate 65536 0)
   for (k, _) in X.multi.toList do
     match X.done[k]? with
     | some (A, _) =>
-      idx := idx.insert k t.size
+      idx := idx.insert (keyL G A) t.size
       tc := tc.set! A.pc.toNat 1
       t := t.push A
     | none => pure ()
   return (t, idx, tc)
 
-/-- the table of the byte `b` -/
+/-- the walk of the byte `b`, with the guard of a frame in control (`guardOf`): its `prot` does not hold the five bytes of `V` -/
 def cfgL (sy : Syms) (m0 : Machine) (b : Nat) : CfgL :=
-  let G := lagGuard sy m0
+  let G := guardOf sy m0
   let E := lagEnv m0 b
-  let q := tableOfL (searchL G E (modeCall sy))
+  let q := tableOfL G (searchL G E (modeCall sy))
   { E, ops := (aRows E).toArray, G, cut := modeCall sy, t := q.1, kl := q.1.map knownOf, idx := q.2.1, tc := q.2.2 }
 
 /-- **The check of one byte.** -/
 def lagCheck1 (C : CfgL) : Bool :=
   decide (C.G.late < dotsPerFrame) && C.cut != C.G.idle && C.t.all (walkL C fuelG) && walkL C fuelG (startL C.G false) && walkL C fuelG (startL C.G true)
 
-/-- **The check**, for the five bytes -/
-def lagCheck (sy : Syms) (m0 : Machine) : Bool := (vfpI sy).all fun b => lagCheck1 (cfgL sy m0 b)
+/-- **The check**, for the five bytes and the three bytes of control -/
+def lagCheck (sy : Syms) (m0 : Machine) : Bool := (lagI sy).all fun b => lagCheck1 (cfgL sy m0 b)
+
 
 /-! ## A step that is not `DEC abs` of the byte
 
@@ -520,12 +531,12 @@ theorem keeps_one {C : CfgL} (hO : LagOK C) (hkl : C.kl = C.t.map knownOf) (hops
     simp only [h1.2] at h3
     exact h3
 
-/-- **A frame that does not call the mode's routine keeps the speed, the subspeed and the position.** The frame starts in the idle loop (`FrameStart` with no
-byte known), and each of its instructions before the call is `Clean`. `hc` is the check on the ROM. -/
+/-- **A frame that does not call the mode's routine keeps the speed, the subspeed, the position and the bytes of control.** The frame starts in the idle loop in
+control (`FrameStart` of `guardOf`), and each of its instructions before the call is `Clean`. `hc` is the check on the ROM. -/
 theorem keeps_frame {sy : Syms} {m0 : Machine} (hc : lagCheck sy m0 = true) {m : Machine} {i : UInt8}
-    (h0 : FrameStart (lagGuard sy m0) (PipeEntryRule.envOf m0) m)
-    (hcl : ∀ k, (trace m i k).frame = m.frame → (∀ j, j ≤ k → (trace m i j).pc ≠ modeCall sy) → Clean (lagGuard sy m0) (trace m i k)) :
-    (∃ k, (trace m i k).frame = m.frame ∧ (trace m i k).pc = modeCall sy) ∨ ∀ b ∈ vfpI sy, (frame m i).ram.get! b = m.ram.get! b := by
+    (h0 : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) m)
+    (hcl : ∀ k, (trace m i k).frame = m.frame → (∀ j, j ≤ k → (trace m i j).pc ≠ modeCall sy) → Clean (guardOf sy m0) (trace m i k)) :
+    (∃ k, (trace m i k).frame = m.frame ∧ (trace m i k).pc = modeCall sy) ∨ ∀ b ∈ lagI sy, (frame m i).ram.get! b = m.ram.get! b := by
   by_cases hx : ∃ k, (trace m i k).frame = m.frame ∧ (trace m i k).pc = modeCall sy
   · exact Or.inl hx
   · right
@@ -536,5 +547,19 @@ theorem keeps_frame {sy : Syms} {m0 : Machine} (hc : lagCheck sy m0 = true) {m :
     rcases keeps_one (C := cfgL sy m0 b) h1 rfl rfl rfl h0' hcl with h | h
     · exact absurd h hx
     · exact h
+
+/-- **A frame that keeps the bytes of control ends in control**: the known bytes of `guardOf` at its end -/
+theorem known_of_keep {sy : Syms} {m0 m m' : Machine} {E : Env} (h0 : FrameStart (guardOf sy m0) E m) (h : ∀ b ∈ lagI sy, m'.ram.get! b = m.ram.get! b) :
+    ∀ p ∈ (guardOf sy m0).known, m'.ram.get! p.1 = p.2 := by
+  have e : (guardOf sy m0).known = [(I sy.GameEngineSubroutine, sy.Eng_PlayerCtrl.toUInt8), (I sy.OperMode, sy.GameModeValue.toUInt8),
+      (I sy.OperMode_Task, sy.Task_GameCore.toUInt8)] := rfl
+  intro p hp
+  have hm : p.1 ∈ lagI sy := by
+    rw [e] at hp
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hp
+    refine List.mem_append_right _ ?_
+    rcases hp with rfl | rfl | rfl <;> simp [ctlI]
+  rw [h p.1 hm]
+  exact h0.known p hp
 
 end Smbrta.LagFrames

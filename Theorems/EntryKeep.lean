@@ -10,14 +10,14 @@ the reference entry, some of them under a mask. Here most of these bytes are pro
 the entry:
 
 * frame 0 (the frame before control) begins in a state of `TitleStart`'s set. A walk of that frame shows that it ends with the kept bytes (`kept`) at the entry's values (`nearCheck`);
-* each frame from control to the entry starts in the idle loop in control (`PipeWrites.FrameStart`), and each of its instructions meets `PipeWrites.Clean` with the kept bytes among the
-  bytes that a store through an index or a pointer does not touch (`guardOf`). A walk of one whole frame (as in `FrameKeep`, with every byte not known but the kept ones) shows that such
+* each frame from control to the entry starts in the idle loop in control (`PipeWrites.FrameStart`), and each of its instructions meets `PipeWrites.Clean` with the bytes of `held` (the kept
+  bytes and those of `endNames`) among the bytes that a store through an index or a pointer does not touch (`guardOf`). A walk of one whole frame (as in `FrameKeep`, with every byte not known but the kept ones) shows that such
   a frame ends with the kept bytes at their values when the routine at its end is the player's, and with the bytes `atEntry` at the entry's values when it is the pipe's (`keepCheck`).
 
-The frame of the entry ends in the idle loop (`IdleAt`): the walk shows this too. What stays assumed at the entry is `Rest`: the condition of `Entry` on the bytes of
-`restNames` only, and the pipe's timer. The bytes of `restNames` are those that differ at control or that the walk does not know there; those that change on the way on real runs;
-those that a frame may write when nothing on the screen is known (a new object, the music of an event, a new area); those that real frames write through an index; and two that
-the frame of a warp pipe writes. The walk knows the timer only by some of its bits at some ends of the entry frame, where the side pipe's code has also run.
+The frame of the entry ends in the idle loop (`IdleAt`) with the pipe's timer at least its first value (`timerOK`): the walk shows this too. The bytes of `endNames` are not kept,
+but the walk of the entry frame knows them at its end. What stays assumed at the entry is `Rest`: the condition of `Entry` on the bytes of `restNames` only. The bytes of
+`restNames` are those that change on the way on real runs; those that frame 0 does not know; those that a frame may write when nothing on the screen is known (a new object, the
+music of an event, a new area, a warp pipe); and those that real frames store to through an index.
 
 The searches are no part of the proof: the checks walk every state of their tables. There is no game data in this file. Page: `1-1/b-3-4-EntryKeep.md`.
 -/
@@ -33,27 +33,34 @@ open FrameKeep (Watch watchOK Watched Spot CleanK kstep preK normK keyK startK)
 
 /-! ## The bytes -/
 
-/-- **The bytes of the condition at the entry that are not proved here**: a name, an offset, a number of bytes.
-* not known at control, or other values there: the buttons up and down, the routine, the enemies' page, the screen's timer and the demo's, three bytes after the world's number in the
-  menu, the byte after the mode, the pause's bits, the saved song;
-* other values on the way on real runs: the first block's state, the first misc object, the first scores, Mario's state, the first two enemies' states, the sound effects;
-* written by a frame where nothing on the screen is known: the buttons left and right, the slots of the power-up and others, the music and the noise, the flagpole's number, the vine,
-  the first cannon, the frenzy, the duplicate, the warp zone, the colours, the loop, the next area, the star;
-* written through an index on real frames: the second block's state, the second enemy, the third enemy's state, two scores;
-* written by the frame of a warp pipe: the world and the flag of a new game timer. -/
+/-- **The bytes of the condition at the entry that are not proved here**: a name, an offset, a number of bytes. Each byte was measured alone, and fails one of these:
+* another value on some real frame from control to the entry: the buttons up and down, the routine, the enemies' page (2), the screen's timer, the states and flags of blocks 0 and 1,
+  misc object 8 (2), scores 0 to 2, Mario's state, the states of enemy slots 0 to 2, the state, the flag and the kind of enemy slot 5 (the power-up's), the two sound effects;
+* not known at frame 0 (no near state of `TitleStart` knows them): the demo's timer, three bytes after the world's number in the menu, the byte after the mode, the pause's bits,
+  the saved song;
+* written by the walk of a frame that ends with the player's routine, since it knows nothing of the objects, the area's data or the sound: the flag of enemy slot 4, the music
+  and the noise, the flagpole's number, the vine, the first cannon's offset, the frenzy, the duplicate, the warp zone, the colours, the loop, the next area, the star, the world and
+  the flag of a new game timer (a warp pipe);
+* stored through an index on real frames: the kinds of enemy slots 0 to 2, score 5. -/
 def restNames : List (String × Nat × Nat) :=
   [("Up_Down_Buttons", 0, 1), ("GameEngineSubroutine", 0, 1), ("EnemyObjectPageLoc", 0, 1), ("EnemyObjectPageSel", 0, 1), ("ScreenTimer", 0, 1), ("DemoTimer", 0, 1),
    ("WorldSelectNumber", 2, 3), ("OperMode", 1, 1), ("GamePauseStatus", 0, 1), ("AreaMusicBuffer_Alt", 0, 1),
    ("Block_State", 0, 2), ("Block_RepFlag", 0, 2), ("Misc_State", 8, 1), ("Misc_Y_Position", 8, 1), ("FloateyNum_Control", 0, 3), ("FloateyNum_Control", 5, 1),
    ("Player_State", 0, 1), ("Enemy_State", 0, 3), ("Enemy_State", 5, 1), ("Square1SoundQueue", 0, 1), ("Square2SoundQueue", 0, 1),
-   ("Left_Right_Buttons", 0, 1), ("Enemy_Flag", 4, 2), ("Enemy_ID", 0, 3), ("Enemy_ID", 4, 2), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1),
+   ("Enemy_Flag", 4, 2), ("Enemy_ID", 0, 3), ("Enemy_ID", 5, 1), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1),
    ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("FlagpoleFNum_Y_Pos", 0, 1), ("VineFlagOffset", 0, 1), ("VineHeight", 0, 1),
-   ("Cannon_Offset", 0, 1), ("Cannon_PageLoc", 0, 1), ("Cannon_X_Position", 0, 1), ("Cannon_Y_Position", 0, 1), ("EnemyFrenzyBuffer", 0, 1), ("EnemyFrenzyQueue", 0, 1),
+   ("Cannon_Offset", 0, 1), ("EnemyFrenzyBuffer", 0, 1), ("EnemyFrenzyQueue", 0, 1),
    ("DuplicateObj_Offset", 0, 1), ("WarpZoneControl", 0, 1), ("BackgroundColorCtrl", 0, 1), ("LoopCommand", 0, 1), ("AreaPointer", 0, 1), ("EntrancePage", 0, 1),
    ("StarInvincibleTimer", 0, 1), ("WorldNumber", 0, 1), ("FetchNewGameTimerFlag", 0, 1)]
 
 /-- these bytes as RAM indices -/
 def restIdx (nx : Names) : List Nat := SideChangeBound.bytesOf nx restNames
+
+/-- **the bytes proved at the entry that the frames do not keep**: the frame of the entry writes them, whatever they were when it began (the buttons left and right) -/
+def endNames : List (String × Nat × Nat) := [("Left_Right_Buttons", 0, 1)]
+
+/-- these bytes as RAM indices -/
+def endIdx (nx : Names) : List Nat := SideChangeBound.bytesOf nx endNames
 
 /-- every byte of the condition at the entry: its index, the bits it asks, the values of the reference entry -/
 def entryW (d : PipeChangeEnd.Data) (e : Machine) : List Watch :=
@@ -65,14 +72,19 @@ def atEntry (d : PipeChangeEnd.Data) (e : Machine) : List Watch := (entryW d e).
 /-- the mode and the task: each frame's start in control gives them -/
 def ctlIdx (sy : Syms) : List Nat := [(sy.OperMode &&& 0x7FF).toNat, (sy.OperMode_Task &&& 0x7FF).toNat]
 
-/-- **the bytes the frames keep** from control to the entry: those of `atEntry` but the mode and the task -/
-def kept (sy : Syms) (d : PipeChangeEnd.Data) (e : Machine) : List Watch := (atEntry d e).filter fun w => !(ctlIdx sy).contains w.1
+/-- the bytes of `atEntry` but the mode and the task: a store with a target not known does not touch them -/
+def held (sy : Syms) (d : PipeChangeEnd.Data) (e : Machine) : List Watch := (atEntry d e).filter fun w => !(ctlIdx sy).contains w.1
 
-/-- **The condition at the entry that stays assumed**: the bytes of `restNames` that `Entry` asks have the reference's values (all bits, or the bits of the mask), and the pipe's
-timer is at least its first value. -/
+/-- **the bytes the frames keep** from control to the entry: those of `atEntry` but the mode and the task, and but those of `endNames` -/
+def kept (sy : Syms) (d : PipeChangeEnd.Data) (e : Machine) : List Watch := (held sy d e).filter fun w => !(endIdx d.nx).contains w.1
+
+/-- **The condition at the entry that stays assumed**: the bytes of `restNames` that `Entry` asks have the reference's values (all bits, or the bits of the mask). The pipe's
+timer is no longer assumed: the walk of the entry frame gives it. -/
 abbrev Rest (d : PipeChangeEnd.Data) (e : Machine) (m : Machine) : Prop :=
-  (∀ i ∈ d.known, i ∈ restIdx d.nx → m.ram.get! i = e.ram.get! i) ∧ PipeChangeEnd.timerF ≤ (m.ram.get! (PipeChangeEnd.envOf d e).rkI).toNat ∧
-    PipeChangeEnd.BitsAt (d.bits.filter fun b => (restIdx d.nx).contains b.1) e m
+  (∀ i ∈ d.known, i ∈ restIdx d.nx → m.ram.get! i = e.ram.get! i) ∧ PipeChangeEnd.BitsAt (d.bits.filter fun b => (restIdx d.nx).contains b.1) e m
+
+/-- the pipe's timer as a RAM index -/
+def timerI (d : PipeChangeEnd.Data) (e : Machine) : Nat := (PipeChangeEnd.envOf d e).rkI
 
 /-- **The frame has ended in the idle loop**, as `Entry` asks: just before or just after the frame's first event, with the program counter and the stack of the reference -/
 structure IdleAt (E : Env) (e m : Machine) : Prop where
@@ -89,10 +101,11 @@ structure IdleAt (E : Env) (e m : Machine) : Prop where
   pc : m.pc = e.pc
   s : m.s = e.s
 
-/-- **The guard** of the frames from control to the entry: that of `PipeWrites`, with the kept bytes among the bytes that a store with a target not known does not touch -/
+/-- **The guard** of the frames from control to the entry: that of `PipeWrites`, with the kept bytes, those of `endNames` and the pipe's timer among the bytes that a store with a
+target not known does not touch -/
 def guardOf (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : Guard :=
   let G := PipeWrites.guardOf sy m0
-  { G with prot := (kept sy d e).map (·.1) ++ G.prot }
+  { G with prot := (held sy d e).map (·.1) ++ timerI d e :: G.prot }
 
 /-- no store of the move routine is set apart -/
 def spot : Spot := { entry := 0, store := 0, temps := [] }
@@ -108,6 +121,10 @@ def finE (rtI : Nat) (ctl vp : UInt8) (W W₃ : List Watch) (y x : AS → Bool) 
 def idleOK (e : Machine) (B : AS) : Bool :=
   decide (B.hi ≤ 9) && ((!B.vb && !B.nmi && B.hi == 0) || (B.vb && B.nmi && decide (1 ≤ B.lo))) && B.ppuCtrl.k &&& 0x80 == 0x80 && B.ppuCtrl.v &&& 0x80 == 0x80 &&
     !B.strobe && B.pc == e.pc && B.s == e.s
+
+/-- the pipe's timer is at least its first value: the bits known of it, with the others 0, make at least that value -/
+def timerOK (tI : Nat) (B : AS) : Bool :=
+  decide (tI < 2048) && decide (PipeChangeEnd.timerF ≤ ((B.getK tI).v &&& (B.getK tI).k).toNat)
 
 /-- the table -/
 structure CfgE where
@@ -148,14 +165,22 @@ def rtStoreAt (E : Env) (rtI : Nat) (pc : UInt16) : Bool :=
   let isJ := fun (a : UInt16) => op a == 0x20 && isSt ((op (a + 1)).toUInt16 + 256 * (op (a + 2)).toUInt16)
   isSt pc || isJ pc || ((op pc == 0xA0 || op pc == 0xA2) && (isSt (pc + 2) || isJ (pc + 2)))
 
-/-- the key of the search: that of `FrameKeep` with no watched byte, and `A` where it is about to be stored as the routine -/
-def keyE (E : Env) (S : Spot) (G : Guard) (A : AS) : Nat :=
-  let num := fun (b : AB) => b.k.toNat * 256 + (b.v &&& b.k).toNat
-  keyK S G [] A + (if rtStoreAt E G.rtI A.pc then (num A.a + 1) * 2 ^ 200 else 0)
+/-- the search keeps `Y` apart where a table is about to be read by `Y` (`LDA abs,Y`) and stored as the pipe's timer: the side pipe's code picks one of two values -/
+def tmrReadAt (E : Env) (tI : Nat) (pc : UInt16) : Bool :=
+  let op := fun (a : UInt16) => E.prg.get! (a &&& E.mask).toNat
+  op pc == 0xB9 && ((op (pc + 3) == 0x85 && (op (pc + 4)).toNat == tI) || (op (pc + 3) == 0x8D && (op (pc + 4)).toNat + 256 * (op (pc + 5)).toNat == tI))
 
-def routeE (E : Env) (S : Spot) (G : Guard) (X : SG) (B0 : AS) : SG :=
+/-- the key of the search: that of `FrameKeep` with no watched byte, `A` where it is about to be stored as the routine, what is known of the pipe's timer when the routine is known
+to be the pipe's, and `Y` where a table is about to be read for the timer -/
+def keyE (E : Env) (S : Spot) (G : Guard) (tI : Nat) (A : AS) : Nat :=
+  let num := fun (b : AB) => b.k.toNat * 256 + (b.v &&& b.k).toNat
+  let r := A.getK G.rtI
+  keyK S G [] A + (if rtStoreAt E G.rtI A.pc then (num A.a + 1) * 2 ^ 200 else 0) + (if r.k == 0xFF && r.v == G.ev then (num (A.getK tI) + 1) * 2 ^ 220 else 0) +
+    (if tmrReadAt E tI A.pc then (num A.y + 1) * 2 ^ 240 else 0)
+
+def routeE (E : Env) (S : Spot) (G : Guard) (tI : Nat) (X : SG) (B0 : AS) : SG :=
   let B := normK S G B0
-  let K := keyE E S G B
+  let K := keyE E S G tI B
   match X.pending[K]? with
   | some Q =>
     match X.done[K]? with
@@ -177,7 +202,7 @@ def routeE (E : Env) (S : Spot) (G : Guard) (X : SG) (B0 : AS) : SG :=
       { X with pending := X.pending.insert K J, done := X.done.insert K (J, some l'), multi := X.multi.insert K (), arr := X.arr.insert K (c + 1) }
     | none => { X with pending := X.pending.insert K B, done := X.done.insert K (B, none) }
 
-partial def runE (S : Spot) (G : Guard) (E : Env) (fin : AS → Bool) (ops : Array (AM Unit)) (X0 : SG) (A0 : AS) : SG := Id.run do
+partial def runE (S : Spot) (G : Guard) (E : Env) (tI : Nat) (fin : AS → Bool) (ops : Array (AM Unit)) (X0 : SG) (A0 : AS) : SG := Id.run do
   let mut X := X0
   let mut cur := A0
   let mut run := 0
@@ -201,19 +226,19 @@ partial def runE (S : Spot) (G : Guard) (E : Env) (fin : AS → Bool) (ops : Arr
     | _ => pure ()
     for b in good do
       X := { X with leaders := X.leaders.insert b.pc.toNat () }
-      X := routeE E S G X b
+      X := routeE E S G tI X b
     break
   return X
 
-partial def searchE (S : Spot) (G : Guard) (E : Env) (fin : AS → Bool) (W : List Watch) : SG := Id.run do
+partial def searchE (S : Spot) (G : Guard) (E : Env) (tI : Nat) (fin : AS → Bool) (W : List Watch) : SG := Id.run do
   let ops := (aRows E).toArray
-  let mut X : SG := [startK G W false, startK G W true].foldl (routeE E S G) {}
+  let mut X : SG := [startK G W false, startK G W true].foldl (routeE E S G tI) {}
   while true do
     match X.pending.minEntry? with
     | none => break
     | some (key, A) =>
       X := { X with pending := X.pending.erase key }
-      X := runE S G E fin ops X A
+      X := runE S G E tI fin ops X A
   return X
 
 /-- the table, from the search: every state that was reached more than once -/
@@ -230,20 +255,21 @@ def tableOfE (key : AS → Nat) (X : SG) : Array AS × Std.HashMap Nat (List Nat
     | none => pure ()
   return (t, idx, cut)
 
-def cfgOfE (S : Spot) (G : Guard) (E : Env) (fin : AS → Bool) (W : List Watch) : CfgE :=
-  let q := tableOfE (keyE E S G) (searchE S G E fin W)
-  { E, ops := (aRows E).toArray, S, G, fin, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key := keyE E S G }
+def cfgOfE (S : Spot) (G : Guard) (E : Env) (tI : Nat) (fin : AS → Bool) (W : List Watch) : CfgE :=
+  let q := tableOfE (keyE E S G tI) (searchE S G E tI fin W)
+  { E, ops := (aRows E).toArray, S, G, fin, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key := keyE E S G tI }
 
 /-- the fuel of a walk -/
 def fuelE : Nat := 20000
 
-/-- the end of a frame on the ROM -/
+/-- the end of a frame on the ROM: at the pipe's routine also the pipe's timer -/
 def finOf (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : AS → Bool :=
-  finE (guardOf sy m0 d e).rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) (kept sy d e) (atEntry d e) (FrameKeep.endOK (guardOf sy m0 d e)) (idleOK e)
+  finE (guardOf sy m0 d e).rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) (kept sy d e) (atEntry d e) (FrameKeep.endOK (guardOf sy m0 d e))
+    (fun B => idleOK e B && timerOK (timerI d e) B)
 
 /-- the table on the ROM -/
 def cfgOf (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : CfgE :=
-  cfgOfE spot (guardOf sy m0 d e) (PipeEntryRule.envOf m0) (finOf sy m0 d e) (kept sy d e)
+  cfgOfE spot (guardOf sy m0 d e) (PipeEntryRule.envOf m0) (timerI d e) (finOf sy m0 d e) (kept sy d e)
 
 /-- **The check of the frames.** The bytes and the guard's indices are in RAM, the player's routine is not the pipe's, the guard knows the player's routine when the frame starts,
 the program is that of the entry's condition, and every walk of the table and of the two start states succeeds. -/
@@ -260,12 +286,12 @@ def keepCheck (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) 
 with the kept bytes at their values, and in the idle loop as a frame in control starts (`FrameKeep.endOK`) -/
 def nearCheck (sy : Syms) (m0 : Machine) (c : TitleStart.Ctx) (W : List Watch) : Bool :=
   decide (c.E.prg.data = (PipeEntryRule.envOf m0).prg.data) && c.E.mask == (PipeEntryRule.envOf m0).mask &&
-    TitleStart.grpOK sy c (TitleStart.setsOf sy c).near (fun B => TitleStart.finNear sy B && watchOK W B && FrameKeep.endOK (PipeWrites.guardOf sy m0) B)
+    TitleStart.frame0Check sy c (fun B => TitleStart.finNear sy B && watchOK W B && FrameKeep.endOK (PipeWrites.guardOf sy m0) B)
 
-/-- **The check of the lists**: the names of `restNames` are known; the reference entry has the pipe's routine and lists it among the bytes of `Rest`; the masks are in RAM -/
+/-- **The check of the lists**: the names of `restNames` and `endNames` are known; the reference entry has the pipe's routine and lists it among the bytes of `Rest`; the masks are in RAM -/
 def listCheck (sy : Syms) (d : PipeChangeEnd.Data) (e : Machine) : Bool :=
   let rtI := (sy.GameEngineSubroutine &&& 0x7FF).toNat
-  restNames.all (fun p => (d.nx.lookup p.1).isSome) && d.known.contains rtI && (restIdx d.nx).contains rtI && e.ram.get! rtI == PipeEntryRule.vp sy &&
+  (restNames ++ endNames).all (fun p => (d.nx.lookup p.1).isSome) && d.known.contains rtI && (restIdx d.nx).contains rtI && e.ram.get! rtI == PipeEntryRule.vp sy &&
     d.bits.all (fun b => decide (b.1 < 2048))
 
 /-- what the checks on the ROM give -/
@@ -466,9 +492,34 @@ theorem keep_frame (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
   · rcases a3 with a3 | ⟨a3, _⟩
     · exact absurd (er.symm.trans hr) a3
     · exact FrameKeep.watched_of a3 h2
-  · rcases a4 with a4 | ⟨a4, a5⟩
+  · rcases a4 with a4 | ⟨a4, a5, _⟩
     · exact absurd (er.symm.trans hr) a4
     · exact ⟨FrameKeep.watched_of a4 h2, idle_of hC h2 a5⟩
+
+/-- the pipe's timer of a state that `timerOK` accepts: the known bits make at least its first value, and the other bits only add -/
+theorem timer_of {E : Env} {F : Nat × UInt8} {B : AS} {m : Machine} {tI : Nat} (hs : Sim E F B m) (h : timerOK tI B = true) :
+    PipeChangeEnd.timerF ≤ (m.ram.get! tI).toNat := by
+  simp only [timerOK, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨h1, h2⟩ := h
+  have e : m.ram.get! tI &&& (B.getK tI).k = (B.getK tI).v &&& (B.getK tI).k := hs.ram tI h1
+  rw [← e, UInt8.toNat_and] at h2
+  exact Nat.le_trans h2 Nat.and_le_left
+
+/-- **The end of the frame of the entry.** A frame that starts in the idle loop in control with the kept bytes at their values, whose every instruction is `Clean` for the guard,
+and that ends with the pipe's routine, ends with the bytes `atEntry` at their values, in the idle loop, and with the pipe's timer at least its first value. -/
+theorem pipe_end (hc : keepCheck sy m0 d e = true) {m : Machine} {i : UInt8}
+    (h0 : FrameStart (guardOf sy m0 d e) (PipeEntryRule.envOf m0) m) (hw : Watched (kept sy d e) m)
+    (hk : ∀ j, Clean (guardOf sy m0 d e) (trace m i j)) (hr : (frame m i).ram.get! (guardOf sy m0 d e).rtI = PipeEntryRule.vp sy) :
+    Watched (atEntry d e) (frame m i) ∧ IdleAt (PipeChangeEnd.envOf d e) e (frame m i) ∧ PipeChangeEnd.timerF ≤ ((frame m i).ram.get! (timerI d e)).toNat := by
+  have hC := keepOK_of_check hc
+  obtain ⟨B, h1, h2⟩ := fin_frame hc h0 hw hk
+  have hf : finOf sy m0 d e B = true := h1
+  simp only [finOf, finE, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, bne_iff_ne, ne_eq] at hf
+  obtain ⟨⟨⟨a1, a2⟩, _⟩, a4⟩ := hf
+  have er := rt_of h2 a1 a2
+  rcases a4 with a4 | ⟨a4, a5, a6⟩
+  · exact absurd (er.symm.trans hr) a4
+  · exact ⟨FrameKeep.watched_of a4 h2, idle_of hC h2 a5, timer_of h2 a6⟩
 
 /-- **One frame from control that ends in control ends at the start of a frame in control** (`FrameStart`), with the kept bytes at their values: the walk gives the idle loop,
 and control gives the routine, the mode and the task -/
@@ -502,20 +553,12 @@ variable {sy : Syms} {c : TitleStart.Ctx} {t0 : Nat} {seq : Nat → Machine} {in
 walk of its frame ends with them, in the idle loop as `FrameStart` asks. Control at frame 1 gives the routine, the mode and the task. -/
 theorem Begin.start {m0 : Machine} {W : List Watch} (hB : TitleStart.check sy c t0 = true) (hN : nearCheck sy m0 c W = true) (B : TitleStart.Begin sy c seq inp)
     (hn : seq 1 = frame (seq 0) (inp 0)) : FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq 1) ∧ Watched W (seq 1) := by
-  have P : TitleStart.Parts sy c t0 (TitleStart.setsOf sy c) := TitleStart.parts_of_check hB
-  obtain ⟨⟨S, hS, hs⟩, _⟩ := B.near P hn
-  have hi : TitleStart.inCore sy (seq 0) = true → SideChangeEnd.noStart (inp 0) = true := by
-    intro h
-    have := B.noPause B.pre (Nat.le_refl _)
-    rw [B.atZero.1, B.atZero.2] at this
-    exact this h
   unfold nearCheck at hN
   rw [Bool.and_eq_true, Bool.and_eq_true] at hN
   obtain ⟨⟨hp, hm⟩, hN'⟩ := hN
-  obtain ⟨B', h1, h2⟩ := TitleStart.grp_frame hN' hS hs (TitleStart.grp_pad hN' hS hs hi)
+  obtain ⟨B', h1, h2⟩ := B.frame0 hB hN' hn
   simp only [Bool.and_eq_true] at h1
   have hk : ∀ p ∈ (PipeWrites.guardOf sy m0).known, (seq 1).ram.get! p.1 = p.2 := FrameKeep.known_of_ctl (m0 := m0) B.ctl
-  rw [hn] at hk ⊢
   exact ⟨FrameKeep.start_of_sim h2 h1.2 (SideTransition.byteArray_eq (of_decide_eq_true hp)) (beq_iff_eq.1 hm) hk, FrameKeep.watched_of h1.1.2 h2⟩
 
 /-- **The machine at control has the bytes `W` at their values**: frame 0 begins in a near state of `TitleStart` (from the press of Start, `Begin`), and the walk of its frame ends
@@ -564,10 +607,24 @@ theorem watched_entry (hc : keepCheck sy m0 d e = true) (next : ∀ n, seq (n + 
   rw [e1] at hr ⊢
   exact hf.2 hr
 
-/-- **The condition at the entry**, from the idle loop, the bytes `atEntry` and `Rest` -/
-theorem entry_of_rest (hl : listCheck sy d e = true) {m : Machine} (hi1 : IdleAt (PipeChangeEnd.envOf d e) e m) (hw : Watched (atEntry d e) m) (hr : Rest d e m) :
+/-- **The bytes `atEntry` at the entry, in the idle loop, and the pipe's timer**: the frame before `a` ends with the pipe's routine -/
+theorem watched_entryT (hc : keepCheck sy m0 d e = true) (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {a : Nat} (ha : 2 ≤ a)
+    (start : ∀ n, 1 ≤ n → n < a → FrameStart (PipeWrites.guardOf sy m0) (PipeEntryRule.envOf m0) (seq n))
+    (clean : ∀ n, 1 ≤ n → n < a → ∀ j, Clean (guardOf sy m0 d e) (trace (seq n) (inp n) j))
+    (h1 : Watched (kept sy d e) (seq 1)) (hr : (seq a).ram.get! (guardOf sy m0 d e).rtI = PipeEntryRule.vp sy) :
+    Watched (atEntry d e) (seq a) ∧ IdleAt (PipeChangeEnd.envOf d e) e (seq a) ∧ PipeChangeEnd.timerF ≤ ((seq a).ram.get! (timerI d e)).toNat := by
+  have hw := watched_up hc next start clean h1 (a - 1) (by omega) (by omega)
+  have e1 : seq a = frame (seq (a - 1)) (inp (a - 1)) := by
+    have := next (a - 1)
+    rwa [Nat.sub_add_cancel (by omega)] at this
+  rw [e1] at hr ⊢
+  exact pipe_end hc (start_of (start (a - 1) (by omega) (by omega))) hw (clean (a - 1) (by omega) (by omega)) hr
+
+/-- **The condition at the entry**, from the idle loop, the bytes `atEntry`, the pipe's timer and `Rest` -/
+theorem entry_of_rest (hl : listCheck sy d e = true) {m : Machine} (hi1 : IdleAt (PipeChangeEnd.envOf d e) e m) (hw : Watched (atEntry d e) m)
+    (ht : PipeChangeEnd.timerF ≤ (m.ram.get! (timerI d e)).toNat) (hr : Rest d e m) :
     PipeChangeEnd.Entry d e m := by
-  obtain ⟨hb, ht, h2⟩ := hr
+  obtain ⟨hb, h2⟩ := hr
   simp only [listCheck, Bool.and_eq_true, List.all_eq_true, decide_eq_true_eq] at hl
   have hbits := hl.2
   refine ⟨⟨hi1.dot, hi1.flags, hi1.s0, hi1.ctrl, hi1.strobe, hi1.halted, hi1.trk, hi1.prg, hi1.mask, hi1.size, ⟨(e, d.known), List.mem_singleton.2 rfl, hi1.pc, hi1.s, fun i hi => ?_⟩,
@@ -635,8 +692,8 @@ theorem entry_of_title {c : TitleStart.Ctx} {t0 : Nat} (hB : TitleStart.check sy
     exact (rest.1 _ h2 h3).trans h4
   have h1 := Begin.watched hB hK.near T (next 0)
   by_cases h2 : 2 ≤ a
-  · have hw := watched_entry hK.keep next h2 start clean h1 hr
-    exact entry_of_rest hl hw.2 hw.1 rest
+  · have hw := watched_entryT hK.keep next h2 start clean h1 hr
+    exact entry_of_rest hl hw.2.1 hw.1 hw.2.2 rest
   · exfalso
     have e1 : a = 1 := by omega
     subst e1
@@ -652,7 +709,7 @@ end
 
 /-- `Rest` as a check, for a program -/
 def restOK (d : PipeChangeEnd.Data) (e m : Machine) : Bool :=
-  (d.known.all fun i => !(restIdx d.nx).contains i || m.ram.get! i == e.ram.get! i) && decide (PipeChangeEnd.timerF ≤ (m.ram.get! (PipeChangeEnd.envOf d e).rkI).toNat) &&
+  (d.known.all fun i => !(restIdx d.nx).contains i || m.ram.get! i == e.ram.get! i) &&
     (d.bits.filter fun b => (restIdx d.nx).contains b.1).all fun b => decide (b.1 < 2048) && (m.ram.get! b.1 &&& b.2) == (e.ram.get! b.1 &&& b.2)
 
 /-- `IdleAt` as a check, for a program -/

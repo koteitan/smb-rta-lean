@@ -8,6 +8,7 @@ for inputs with no Start on the frames of the game core. The frame after the pip
 end of a frame (`xtick`), and a walk with it (`xwalk`). After the clear most bytes are known, and an abstract run goes from row to row (`Row`, `chainOK`). There is no game data in this file.
 Two more parts: rows that know that the game timer is not 000 (`timeRows`), whose last row has control only, so that `left` is not 0 before control (`EndRun.first`);
 and a walk of the pipe's frames with the pause bit in pieces, so that a frame that ends paused takes nothing off `left` (`pause_keeps`, `EndRun.lagPaused`).
+The step `xstep1` also reads through a pointer that is not known when its high byte puts the address in the RAM or the ROM (`aIzyHi`, `s_aIzyHi`); it uses this only where its other rules fail.
 Page: `1-1/d-2-3-SideChangeEnd.md`.
 -/
 
@@ -60,7 +61,24 @@ def xbr (E : Env) (mask : UInt8) (neg : Bool) (A : AS) : List (Option AS) :=
           | some B => (xtick 2 B).map fun r2 => r2.bind fun D => if D.k ≤ A.k + 1 then some D else none
       else xtick 2 A1
 
-/-- a step: `astep1` if it goes, else the rules above -/
+/-! ## A read through a pointer that is not known
+
+An `LDA (zp),Y` through a pointer that the state does not know fails in `astep1`. If the pointer's high byte is known well enough, every address `p + y` is in the RAM or the ROM,
+not at a register: the read gives a byte that is not known and changes nothing else (`aIzyHi`, `s_aIzyHi`). `xstep1` uses this rule only where the old rules fail. -/
+
+/-- every address `p + y`, with `p` a pointer of this high byte and `y` a byte, is in the RAM or the ROM: the high byte is at most `0x1E`, or at least `0x80` (past the end of memory
+the address goes round to the zero page and the stack) -/
+def ptrHiOK (hi : TaintRun.AB) : Bool := decide (hi.maxv.toNat ≤ 0x1E) || decide (0x80 ≤ hi.minv.toNat)
+
+/-- the RAM and the ROM, as an interval that goes round the end of memory -/
+def ptrWide : TaintRun.AAd := ⟨0x8000, 0x1FFF⟩
+
+/-- `(zp),Y` through a pointer whose high byte is known well enough: the address is in `ptrWide`, and a page penalty may come -/
+def aIzyHi (E : Env) : AMode :=
+  afetch E >>= fun z => ard16zp E z >>= fun p =>
+    if ptrHiOK p.2 then (MonadState.get : AM AS) >>= fun _ => atick 0 1 >>= fun _ => Pure.pure ptrWide else failure
+
+/-- a step: `astep1` if it goes, else the rules above, and the read through a pointer not known -/
 def xstep1 (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) :=
   let rs := astep1 E ops A
   if rs.all (·.isSome) then rs
@@ -74,7 +92,12 @@ def xstep1 (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) :=
     else if cycOf op == 0 then [none]
     else
       match (ops[op.toNat]?.getD aJAM) { A with pc := A.pc + 1 } with
-      | none => [none]
+      | none =>
+        if op == 0xB1 then
+          match aLDA E (aIzyHi E) { A with pc := A.pc + 1 } with
+          | none => [none]
+          | some (_, B) => xtick (cycOf op) B
+        else [none]
       | some (_, B) => xtick (cycOf op) B
 
 def xsuccs (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) :=
@@ -532,6 +555,75 @@ theorem step_plain {A : AS} {m : Machine} (hs : Sim E F A m) (hn : A.nmi = false
   unfold stepK
   simp only [hidle, hi, Bool.false_eq_true, if_false]
 
+set_option maxRecDepth 100000 in
+theorem op_B1x : opTable[(0xB1 : UInt8).toNat]?.getD opJAM = opLDA mIzyR := by
+  rw [PipeTransitionAll.opTable_eq]
+  rfl
+
+/-- the page penalty, which may come or not -/
+theorem s_tick01x (b e : UInt16) : Snd E F TT (atick 0 1) (pagePenalty b e) := by
+  unfold pagePenalty
+  split
+  · exact s_tick (Nat.zero_le _) (Nat.le_refl _)
+  · exact s_tick0
+
+/-- the number of a pointer from its two bytes -/
+theorem ptr_toNat (u v : UInt8) : (u.toUInt16 ||| (v.toUInt16 <<< 8)).toNat = u.toNat + 256 * v.toNat := by
+  have hu := UInt8.toNat_lt u
+  have hv := UInt8.toNat_lt v
+  rw [UInt16.toNat_or, UInt16.toNat_shiftLeft]
+  simp only [UInt8.toNat_toUInt16]
+  have e1 : (8 : UInt16).toNat % 16 = 8 := by decide
+  rw [e1, Nat.shiftLeft_eq]
+  have e2 : v.toNat * 2 ^ 8 % 65536 = v.toNat * 2 ^ 8 := Nat.mod_eq_of_lt (by omega)
+  rw [e2, Nat.or_comm, ← Nat.shiftLeft_eq, ← Nat.shiftLeft_add_eq_or_of_lt hu, Nat.shiftLeft_eq]
+  omega
+
+/-- **The address is in the RAM or the ROM**, when the high byte of the pointer meets `ptrHiOK` -/
+theorem wide_ok {hi : TaintRun.AB} {u v y : UInt8} (hk : ptrHiOK hi = true) (h : hi.mem v) :
+    AdR ptrWide ((u.toUInt16 ||| (v.toUInt16 <<< 8)) + y.toUInt16) := by
+  right
+  refine ⟨by decide, ?_⟩
+  have e1 := ptr_toNat u v
+  have hu := UInt8.toNat_lt u
+  have hv := UInt8.toNat_lt v
+  have hy := UInt8.toNat_lt y
+  have hy2 : y.toUInt16.toNat = y.toNat := by simp
+  have hsum : ((u.toUInt16 ||| (v.toUInt16 <<< 8)) + y.toUInt16).toNat = (u.toNat + 256 * v.toNat + y.toNat) % 65536 := by
+    rw [UInt16.toNat_add, e1, hy2]
+  have g1 := TaintRun.minv_le h
+  have g2 := TaintRun.le_maxv h
+  simp only [ptrHiOK, Bool.or_eq_true, decide_eq_true_eq] at hk
+  have lo8 : (ptrWide.lo).toNat = 32768 := rfl
+  have hi8 : (ptrWide.hi).toNat = 8191 := rfl
+  rcases hk with hk | hk
+  · right
+    apply UInt16.le_iff_toNat_le.2
+    rw [hsum, hi8]
+    omega
+  · by_cases hlt : u.toNat + 256 * v.toNat + y.toNat < 65536
+    · left
+      apply UInt16.le_iff_toNat_le.2
+      rw [hsum, lo8]
+      omega
+    · right
+      apply UInt16.le_iff_toNat_le.2
+      rw [hsum, hi8]
+      omega
+
+/-- **The read through a pointer whose high byte is known well enough** follows the machine's addressing mode -/
+theorem s_aIzyHi : Snd E F AdR (aIzyHi E) mIzyR :=
+  Snd.bind s_fetch fun _ _ h => by
+    subst h
+    refine Snd.bind (s_rd16zp _) fun p q hr => ?_
+    obtain ⟨lo, hi⟩ := p
+    obtain ⟨u, v, rfl, _, h2⟩ := hr
+    by_cases hk : ptrHiOK hi = true
+    · simp only [hk, if_true]
+      exact Snd.get fun _ _ hs => Snd.bind (s_tick01x _ _) fun _ _ _ => Snd.pure (wide_ok hk h2)
+    · simp only [hk, Bool.false_eq_true, if_false]
+      exact Snd.fail
+
 /-- a step of the machine is followed by `xstep1` -/
 theorem s_xstep1 {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) (hs : Sim E F A m) :
     ∃ r ∈ xstep1 E ops A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 := by
@@ -597,7 +689,33 @@ theorem s_xstep1 {A : AS} {m : Machine} {ops : Array (AM Unit)} (hops : ops = (a
     have : cycOf op ≠ 0 := by simpa using o4
     omega
   cases e : (ops[op.toNat]?.getD aJAM) { A with pc := A.pc + 1 } with
-  | none => exact ⟨none, List.mem_singleton.2 rfl, fun B hB => by cases hB⟩
+  | none =>
+    dsimp only
+    by_cases ob : (op == 0xB1) = true
+    · rw [if_pos ob]
+      have ob' : op = 0xB1 := by simpa using ob
+      subst ob'
+      cases e2 : aLDA E (aIzyHi E) { A with pc := A.pc + 1 } with
+      | none => exact ⟨none, List.mem_singleton.2 rfl, fun B hB => by cases hB⟩
+      | some p =>
+        obtain ⟨u, B0⟩ := p
+        dsimp only
+        obtain ⟨_, g1, g2⟩ := TaintRun.s_LDA (E := E) (F := F) s_aIzyHi _ _ hs1 u B0 e2
+        rw [op_B1x, PipeTransitionAll.go_bind]
+        have ee : (cycTable.get! (0xB1 : UInt8).toNat).toNat = cycOf 0xB1 := rfl
+        rw [ee]
+        obtain ⟨r, hr, g3⟩ := s_xtick g1 (cycOf 0xB1)
+        refine ⟨r, hr, fun B hB => ?_⟩
+        obtain ⟨g4, g5⟩ := g3 B hB
+        refine ⟨g4, steprel_of_tick (A0 := A) (m0 := m) ?_ g2.1 g2.2 hc1 g5⟩
+        have a2 := g1.fr
+        rw [g2.1] at a2
+        have a4 := hs.fr
+        have a5 : ({ m with pc := m.pc + 1 } : Machine).frame = m.frame := rfl
+        rw [a5] at a2
+        omega
+    · rw [if_neg ob]
+      exact ⟨none, List.mem_singleton.2 rfl, fun B hB => by cases hB⟩
   | some p =>
     obtain ⟨u, B0⟩ := p
     dsimp only

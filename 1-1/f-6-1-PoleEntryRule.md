@@ -4,6 +4,8 @@
 
 **Claim.** This is a partial result. "He touches" is defined on real machines. If a frame touches, then when the frame's side check reads the page, Mario's position is not left of the left end of the pole's range. So the hypothesis `inRange` of `PoleJoin.Run` is gone, and it is now the theorem `Run.inRange`. The proof follows one pass of the side check with an abstract machine. It does not follow the rest of the frame. The rest stays as the hypotheses `Pass` and `pos`.
 
+**Now replaced in the run.** `PoleJoin.Run` no longer uses this pass. [The touch of the pole: one whole frame](f-6-16-PoleFrame.md) follows the whole frame of the touch, so `Pass` and `pos` are no longer hypotheses of the run, and `Run.inRange` comes from that walk. This page stays as the proof of one pass, and its program checks the old hypotheses on real frames.
+
 `frame(m, i)` is the real frame with the input `i`. `tr(n)` is the machine `n` instructions into that frame. `rt(m)` is `GameEngineSubroutine`. `e_f` is the number of the pole's routine. `page(m)` is `Player_PageLoc`, `x(m)` is `Player_X_Position`. `pg` is the pole's page, `col` its column. `w` is the instruction in `RunFR` that writes `rt`. `T_b`, `T_s` are the tiles of the pole's ball and shaft. `d_C` is the top of the pole's column in the block buffers. `R` is the number of rows of a block buffer.
 
 ```
@@ -32,7 +34,7 @@ no_write            :  walkCheck,  s(j + 1) = step(s(j)) (j < n),  Start(s(0)),
 touch_right_of_left :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pass(n))
                        →  ∃ n j,  WriteStep(n) ∧ j < n ∧ AtEntry(tr(j)) ∧ L_px ≤ px(tr(j))
 inRange_of_pass     :  ruleCheck,  Touches(m, i),  (∀ n,  WriteStep(n) → Pass(n)),  pos(P₂)  →  P₀ ≤ P₂
-Run.inRange         :  ruleCheck,  Run  →  P₀ ≤ P₂(g)
+Run.inRange         :  ruleCheck,  Run  →  P₀ ≤ P₂(g)          (up to this round; now from the whole frame, f-6-16)
 touches_of_ends     :  EndsTouch(m, i)  →  Touches(m, i)
 pole_rule_check (private) :  ruleCheck(sy, m₀) = true (native_decide)
 ```
@@ -41,12 +43,13 @@ pole_rule_check (private) :  ruleCheck(sy, m₀) = true (native_decide)
 
 `P₀ = 256·L_px` is `poleP`. The theorems without the ROM use the axioms `propext`, `Classical.choice`, `Quot.sound` only.
 
-Lean: `Theorems/PoleEntryRule.lean`, `Run` in `Theorems/PoleJoin.lean`, private `Proof/PoleEntryRule.lean` (`pole_rule_check`, `pole_rule_real`).
+Lean: `Theorems/PoleEntryRule.lean`, private `Proof/PoleEntryRule.lean` (`pole_rule_check`, `pole_rule_real`). `Run` in `Theorems/PoleJoin.lean` used them up to this round.
 
 The fields of `Run` changed as follows.
 
 * Removed: `inRange`.
 * Added: `fm`, `inp` (the machine when frame `g` begins, and its input), `touches` (`Touches(fm, inp)`), `pass` (`∀ n, WriteStep(n) → Pass(n)`), `pos` (`pos(P₂(g))`).
+* Then removed: `fm`, `inp`, `pass`, `pos`. `touches` is now `Touches(fm g, pad g)` on frame `g` of `keep`. Added: `tiles`, `edge`, `moved` ([The touch of the pole: one whole frame](f-6-16-PoleFrame.md)).
 
 ## How it works
 

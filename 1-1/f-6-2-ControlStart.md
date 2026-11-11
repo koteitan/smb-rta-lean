@@ -44,7 +44,7 @@ The 4 states with control know the routine (control), the mode, the task and the
 
 None of its own. `Run.atCtl₀` uses the conditions of the change that `Run.start` uses: the fields of `chg` (the entry, no Start, the sound at the exit, the time at the exit, the first control). They are listed on [the route page](0-1-Route.md).
 
-What stops being a hypothesis: `noCastle` of `PoleJoin.Run`, and `keep.start` of `FrameKeep.Frames`. What is new: the check `ctlCheck` on the ROM, and in `keep` the fields `ctl` (each frame before the touch ends in control) and `lagStart`. Later `lagStart` went again: `keep` now lists every frame, counted or not, and the walk covers the `lag` frames too ([One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md)).
+What stops being a hypothesis: `noCastle` of `PoleJoin.Run`, and `keep.start` of `FrameKeep.Frames`. What is new: the check `ctlCheck` on the ROM, and in `keep` the fields `ctl` (each frame before the touch ends in control; now only its routine and task, [One whole frame in control](f-6-19-FrameKeep.md)) and `lagStart`. Later `lagStart` went again: `keep` now lists every frame, counted or not, and the walk covers the `lag` frames too ([One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md)).
 
 **Files.** `Theorems/ControlStart.lean`, `Theorems/Route.lean` (`Run.atCtl₀`), private `Proof/ControlStart.lean` (`side_ctl`).
 

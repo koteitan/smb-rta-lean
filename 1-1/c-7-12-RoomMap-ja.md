@@ -13,7 +13,7 @@ Zero(m)       :=  ∀ d ∈ B,  m(d) & ~M(d) = 0
 Cond(m)       :=  ScreenPage のフレームの始めの条件に Zero のビットを足したもの
 ```
 
-`Cond(m)` は、前のフレームが待ちのループで終わり、`ScreenPage` のバイトがその参照の機械のビットを持ち、`Zero(m)` が成り立つことです。
+`Cond(m)` は、前のフレームが待ちのループで終わり、`ScreenPage` のバイトがその参照の機械のビットを持ち、[1 フレーム全部](c-7-16-SideFrame-ja.md) の画面の 5 バイト（スクロールの固定、両端の位置とページ）がその値を持ち、`Zero(m)` が成り立つことです。5 バイトのうち新しいのは左端の位置だけです。ほかの 4 つは `ScreenPage` が知っています。
 
 ```
 s_eraseT      :  コインを消す命令は、抽象機械が知らないポインタを通して A を書く。A がわかっていて、
@@ -45,25 +45,29 @@ Run.roomTiles   :  確認,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ 
 同じ抽象機械から、部屋のどのフレームも操作できる状態で始まることが出ます。[1 フレーム全部](c-7-16-SideFrame-ja.md) の抽象機械が求める形です。
 
 ```
-startCheckF        :  基準の機械は待ちのループにいてスタックポインタはガードの値、Cond はガードの 3 つのバイトを全部その値で知っている、
-                      プログラムは同じ、9 < vblank が終わるドット
-frameStart_of_cond :  startCheckF,  Cond(m)  →  FrameStart(m)
+startCheckF        :  基準の機械は待ちのループにいてスタックポインタはガードの値、Cond はガードの 8 つのバイト（ゲームの 3 つ、画面の 5 つ）を
+                      全部その値で知っている、プログラムは同じ、9 < vblank が終わるドット
+frameStart_of_cond :  startCheckF,  Cond(m)  →  FrameStart(m)          （1 フレーム全部 の部屋のガード G_room で）
 start_of_rowsF     :  map_of_rows の仮定,  startCheckF  →  ∀ n ∈ [b, a),  FrameStart(seq(n))
 Run.roomStartE     :  確認,  Run  →  FrameStart(fm(E − 1))          （StartE。前の欄 room.startE）
 map_startF（非公開） :  startCheckF = true（native_decide）
 ```
 
-抽象機械はまた、どの状態でも、`SiteOK` が与えない `Clean`（[1 フレーム全部](a-5-2-PipeWrites-ja.md)）の条件を確かめます。添字やポインタを通す書き込みは、行き先がわかっていてガードのバイトの外にあるか、コインを消す書き込みです。コインを消す書き込みの行き先は、`SiteOK` がブロックバッファの中に置きます。ジャンプのルーチンでは、番号がわかっていて表の中にあります。ポインタを通す読みと時間は `SiteOK` が与えます。だから部屋のどのフレームのどの命令も、新しい仮定なしに `Clean` です。
+抽象機械はまた、どの状態でも、`SiteOK` が与えない `Clean`（[1 フレーム全部](a-5-2-PipeWrites-ja.md)）の条件を、部屋のガード `G_room` で確かめます。守るバイトには画面の 5 バイトも入ります。添字やポインタを通す書き込みは、行き先がわかっていてガードのバイトの外にあるか、コインを消す書き込みです。コインを消す書き込みの行き先は、`SiteOK` がブロックバッファの中に置きます。ジャンプのルーチンでは、番号がわかっていて表の中にあります。ポインタを通す読みと時間は `SiteOK` が与えます。だから部屋のどのフレームのどの命令も、新しい仮定なしに `Clean` です。そしてどの状態も、頭がブロックに当たったときのルーチン（`h`、`G_room` が切るただ 1 つの場所）にいません。`SiteOK` では頭の読みは何もないかコインしか出さないので、抽象機械はそこに来ないのです。
 
 ```
 cleanS(A)          :=  pc(A) ≥ 0x8000  ∧  (pc(A) = erase  ∨  書き込みの行き先がわかっていて Plain)  ∧  (pc(A) = JumpEngine → A がわかっていて表の長さより小さい)
+歩きの各状態       :  tilesB(A)  ∧  cleanS(A)  ∧  pc(A) ∉ cuts(G_room) = {h}
 clean_of_sim       :  CleanFacts,  A が m を覆う,  cleanS(A),  SiteOK(m)  →  Clean(m)
 clean_of_rows      :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  Clean(tr_n(j))
+cuts_run           :  map_run の仮定  →  ∀ n ∈ [c, e),  ∀ j,  pc(tr_n(j)) ∉ cuts
+head_of_rows       :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  pc(tr_n(j)) ≠ h
 Run.roomCleanE     :  確認,  Run  →  CleanE                       （前の欄 room.cleanE）
-Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE     （RoomRun.InRoom）
+Run.roomHeadE      :  確認,  Run  →  HeadE:  ∀ j,  pc(tr(j)) ≠ h    （前の欄 room.edgeE の一部）
+Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE ∧ HeadE     （RoomRun.InRoom）
 ```
 
-`CleanFacts` は `mapCheck` の一部です。場所の待ちのループはガードのもので、最後のドットはガードのもの以下で、ブロックバッファのどのバイトもガードのバイトではありません。この確認を足しても、`mapCheck` はプログラムで約 2.6 秒です。
+`CleanFacts` は `mapCheck` の一部です。場所の待ちのループはガードのもので、最後のドットはガードのもの以下で、ブロックバッファのどのバイトもガードのバイトではありません。この確認を足して、`mapCheck` はプログラムで約 4 秒です（画面のバイトと切る場所を足す前は 2.6 秒）。
 
 ## しくみ
 
@@ -75,7 +79,7 @@ Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE     （Roo
 * ブロックバッファのルーチンが読む場所の各状態で、歩きは `tilesB` を確かめます。土管の列にない `B` のどのバイトも、どちらのタイルでもないとわかっていることです。`T₁` が 1 で、0 とわかっているビットがあれば、そのバイトは `T₁` ではないとわかります。この地図では、列にないどのバイトも、両方のタイルについてそういうビットを持ちます。
 * フレームの終わりで、歩きは `tilesB` と、`Cond` の始めの状態か、`rt` がわかっていて `rt_r` でないこと（フレームが操作のルーチンを出た）を求めます。
 
-**大きさ.** 探索は 210,934 ステップ、8,750 の枝分かれ、失敗 0 です。表は 9,378 状態です。`mapCheck` はプログラムで約 3.4 秒、`startCheckT` は約 3.5 秒です。非公開の証明のビルドは約 8 秒です。
+**大きさ.** 探索は 209,861 ステップ、9,132 の枝分かれ、失敗 0 です。表は 9,301 状態です。`mapCheck` はプログラムで約 4 秒、`startCheckT` は約 2.6 秒です。非公開の証明のビルドは約 10 秒です。
 
 **0 のビットだけの理由.** 消す命令は、歩きが知らない `B` のどれかのバイトに書きます。どこに 0 を書いても、0 とわかっているビットは残ります。1 とわかっているビットは残りません。どのバイトもそのまま残すには、消す命令がコインのバイトに書くことが要ります。
 

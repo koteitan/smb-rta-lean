@@ -360,9 +360,6 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N
     ¬FrameModel.Clean sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (fm n) (pad (n + 1)) (arr n) → fr.ab n < sy.AirFastSpeed.toNat
   /-- frame `E` enters the side pipe: an instruction of it, from `fm (E - 1)` with the input `pad E`, writes the side pipe's routine -/
   enters : SideEntryRule.Enters sy (fm (E - 1)) (pad E)
-  /-- up to the write, frame `E` does not come to the scroll handler's store of the position or to the routine of the head's collision with a block -/
-  edgeE : ∀ n, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → ∀ j, j ≤ n →
-    (PipeEntryRule.trace (fm (E - 1)) (pad E) j).pc ≠ PipeWrites.edgeStore sy m ∧ (PipeEntryRule.trace (fm (E - 1)) (pad E) j).pc ≠ PipeWrites.headAt sy m
   /-- `P(E)` is the position at the end of the move (`PlayerSubs`), before the write -/
   movedE : ∀ n j, SideEntryRule.WriteStep sy (fm (E - 1)) (pad E) n → j ≤ n → (PipeEntryRule.trace (fm (E - 1)) (pad E) j).pc = sy.PlayerSubs →
     fr.P E = posP sy (PipeEntryRule.trace (fm (E - 1)) (pad E) j)
@@ -2806,24 +2803,30 @@ def TilesE (r : RoomRun sy m N) : Prop :=
   ∀ n j, SideEntryRule.WriteStep sy (r.fm (r.E - 1)) (r.pad r.E) n → j ≤ n → PoleEntryRule.AtRead (SideEntryRule.spots sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j) →
     PoleEntryRule.TilesOK (SideEntryRule.spots sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j)
 
-/-- frame `E` starts in the idle loop, in control. No longer a field of `RoomRun`: `RoomMap.start_of_rowsF` proves it on the frames of the room, and `Route.Run.roomStartE` joins
-frame `E` to them. -/
-def StartE (r : RoomRun sy m N) : Prop := PipeWrites.FrameStart (PipeWrites.guardOf sy m) (PipeEntryRule.envOf m) (r.fm (r.E - 1))
+/-- frame `E` starts in the idle loop, in control, with the screen's bytes of the room (`SideFrame.roomG`). No longer a field of `RoomRun`: `RoomMap.start_of_rowsF` proves it on
+the frames of the room, and `Route.Run.roomStartE` joins frame `E` to them. -/
+def StartE (r : RoomRun sy m N) : Prop := PipeWrites.FrameStart (SideFrame.roomG sy m) (PipeEntryRule.envOf m) (r.fm (r.E - 1))
 
-/-- each instruction of frame `E` up to the write is `Clean`. No longer a field of `RoomRun`: `RoomMap.clean_of_rows` proves it on the frames of the room, and
+/-- each instruction of frame `E` up to the write is `Clean` with the room's guard. No longer a field of `RoomRun`: `RoomMap.clean_of_rows` proves it on the frames of the room, and
 `Route.Run.roomCleanE` joins frame `E` to them. -/
 def CleanE (r : RoomRun sy m N) : Prop :=
-  ∀ n, SideEntryRule.WriteStep sy (r.fm (r.E - 1)) (r.pad r.E) n → ∀ j, j ≤ n → PipeWrites.Clean (PipeWrites.guardOf sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j)
+  ∀ n, SideEntryRule.WriteStep sy (r.fm (r.E - 1)) (r.pad r.E) n → ∀ j, j ≤ n → PipeWrites.Clean (SideFrame.roomG sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j)
 
-/-- what the walk of the room's frames gives about frame `E`: the tiles at its reads, the start in control, `Clean` on each instruction up to the write (`Route.Run.inRoom`) -/
+/-- frame `E` does not come to the routine of the head's collision with a block. Once part of the field `edgeE`: `RoomMap.head_of_rows` proves it on the frames of the room, and
+`Route.Run.roomHeadE` joins frame `E` to them. -/
+def HeadE (r : RoomRun sy m N) : Prop := ∀ j, (PipeEntryRule.trace (r.fm (r.E - 1)) (r.pad r.E) j).pc ≠ PipeWrites.headAt sy m
+
+/-- what the walk of the room's frames gives about frame `E`: the tiles at its reads, the start in control, `Clean` on each instruction up to the write, no head's collision
+(`Route.Run.inRoom`) -/
 structure InRoom (r : RoomRun sy m N) : Prop where
   tiles : r.TilesE
   start : r.StartE
   clean : r.CleanE
+  head : r.HeadE
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `SideFrame.mouth_of_frame`: the walk of the whole frame `E`; `hr`: what the room's frames give about it -/
 theorem mouth_of (H : Checks sy m N) (hr : r.InRoom) : SidePipe.mouthP sy 0 ≤ r.fr.P r.E :=
-  SideFrame.mouth_of_frame H.sideFrame r.enters hr.start (fun n hw j hj => ⟨hr.clean n hw j hj, hr.tiles n j hw hj, r.edgeE n hw j hj⟩) r.movedE
+  SideFrame.mouth_of_frame H.sideFrame r.enters hr.start (fun n hw j hj => ⟨hr.clean n hw j hj, hr.tiles n j hw hj, hr.head j⟩) r.movedE
 
 /-- the frames as numbers -/
 def toCore (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) (hr : r.InRoom) : RoomCore sy m N :=
