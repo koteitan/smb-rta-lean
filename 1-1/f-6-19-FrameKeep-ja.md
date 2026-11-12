@@ -32,8 +32,10 @@ keep_frame        :  keepCheck,  FrameStart_K(m),  Watched(m),  (∀ n,  CleanK(
 keep_frame_start  :  keepCheck,  FrameStart_K(m),  Watched(m),  (∀ n,  CleanK(tr(n))),  Known_K(frame(m, i))
                        →   FrameStart_K(frame(m, i))  ∧  Watched(frame(m, i))
 
-Frames (keep)     :  all n, inp n                      フレーム n が始まる機械（数えるかどうかによらない）と、その入力
-                     next    :  all(n + 1) = frame(all n, inp n)
+RealRun S         :  S.seq n, S.inp n,  S.seq(n + 1) = frame(S.seq n, S.inp n)      走り全体の本物のフレーム
+Frames (keep)     :  all n := S.seq(a + n),  inp n := S.inp(a + n)        フレーム n が始まる機械（数えるかどうかによらない）と、その入力（定義）
+                     next    :  all(n + 1) = frame(all n, inp n)              （定理 Frames.next）
+                     seq0    :  seq 0 = S.seq a                                （定理 Frames.seq0）
                      ix      :  ix 0 = 0,   j < g → ix j < ix(j + 1),   j ≤ g → seq j = all(ix j)      数えるフレーム j は all(ix j) で終わる
                      ctl     :  n + 1 < ix g  →  rt(all(n + 1)) = 操作  ∧  OperMode_Task(all(n + 1)) = コア
                      clean   :  n < ix g  →  ∀ k,  CleanK(tr_n(k))                 tr_n:  all n からのフレームの命令
@@ -111,9 +113,9 @@ endOK(B)  :=  pc(B) = 待ちのループ  ∧  S(B) = S₀  ∧  ((lo = hi = 0  
 
 * **`keep.clean`: 触るまでの各フレーム（数えるかどうかによらず）の各命令の `CleanK`.** `PipeWrites` の条件に、3 つのバイトを `Prot_K` に足し、プレイヤーの書き込みを聞かないことにしたものです。上の本物のフレームで確かめました。
 * **`keep.ctl`: 触るフレームの前の各フレーム（数えるかどうかによらず）は操作のルーチンとゲームのコアのタスクで終わる.** 1 つの状態の 2 つのバイトです。モードは定理です（`Frames.ctlAll`）。ルーチンのバイトだけでは足りません（上）。
-* **`keep.all`、`keep.inp`、`keep.next`、`keep.ix`: フレームは操作できるときから続く本物のフレームで、数えるフレーム `j` は `seq j` で終わる.** 走りがどの機械でできているかを言うものです。
+* **`keep.ix`: 数えるフレーム `j` は `seq j` で終わる.** 走りがどの機械でできているかを言うものです。フレームそのものはもうフィールドではありません。`Frames` は走り全体の本物のフレーム（`RealRun`）と操作のフレーム `a` をとり、`all n = S.seq (a + n)`、`inp n = S.inp (a + n)` は定義です。`next` と `seq 0 = S.seq a` は定理です（`Frames.next`、`Frames.seq0`）。なので地上で操作できるときの機械は、走りの 2 つ目の切り替えの終わりの機械です（`Route.Run.atCtl`、項目 1-1-0-4）。
 
-仮定でなくなったもの: `fracStep`（各フレームは位置を 1/16 ピクセルの倍数だけ動かす）、そのあと `noCastle` と `keep.start`、そのあと `keep.ends`（`Frames.ends`）、`keep.lag` と `keep.lagStart`（`Frames.all_start`）。`CleanK` と `FrameStart_K` はもうジャンプ台の制御を名指ししません。新しいもの: `keep`（`all`、`inp`、`next`、`ix`、`ctl`、`clean`）と ROM のチェック `keepCheck`、`ControlStart.ctlCheck`。この回、モードが `ctl` からなくなり、`keepCheckOf` は `endCtl` を聞く歩きになりました。
+仮定でなくなったもの: `fracStep`（各フレームは位置を 1/16 ピクセルの倍数だけ動かす）、そのあと `noCastle` と `keep.start`、そのあと `keep.ends`（`Frames.ends`）、`keep.lag` と `keep.lagStart`（`Frames.all_start`）。`CleanK` と `FrameStart_K` はもうジャンプ台の制御を名指ししません。新しいもの: `keep`（`all`、`inp`、`next`、`ix`、`ctl`、`clean`）と ROM のチェック `keepCheck`、`ControlStart.ctlCheck`。そのあと、モードが `ctl` からなくなり、`keepCheckOf` は `endCtl` を聞く歩きになりました。この回、`all`、`inp`、`next` はフィールドでなくなりました（`RealRun` からの定義）。
 
 **変えたことで多く聞くもの.** `ctl` と `clean` は、数えるフレームに聞くことを `lag` のフレームにも聞くようになりました。操作中に終わらない `lag` のフレームは `ctl` の外です。コードによると、大きいマリオがダメージを受けたあとの、タイマーを止める制御のフレームがそうです。ダメージはダメージのルーチンとタイマーを止める制御を一緒に書きます。前の `lag` と `lagStart` は、城の旗、端数の下のビット、操作中のフレームの始まりが `lag` のフレームを通って保たれることだけを聞いていました。ですからそういう走りでも成り立ちえました。ポーズ中のフレームは操作中に終わります。
 

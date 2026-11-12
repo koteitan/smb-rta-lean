@@ -884,36 +884,54 @@ theorem ctl_of_frame {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : keepCheckOf 
   obtain ⟨B, _, _, h2, h3⟩ := end_of_walkW hW rfl h0 hw hk
   exact ctl_of_endCtl hg h3 h2 h1
 
-/-- **The frames of a run, as the walk needs them.** `all n` is the machine when frame `n` begins, counted or not (a `lag` frame), from the machine at control (`all 0`) on, and
-`inp n` its input. `seq j` is the machine at the end of the counted frame `j`: `all (ix j)`. The frames between two counted frames are the `lag` frames. Every field is a hypothesis.
+/-- **A run of real frames.** `seq n` is the machine when frame `n` begins, counted or not, and `inp n` its input. Each frame is the real frame of the one before.
+The parts of the route take their machines from one such run (`Route.Run.base`). -/
+structure RealRun where
+  seq : Nat → Machine
+  inp : Nat → UInt8
+  next : ∀ n, seq (n + 1) = frame (seq n) (inp n)
+
+/-- **The frames of a run, as the walk needs them.** They are the frames of the real run `S` from frame `a` on: `all n = S.seq (a + n)` is the machine when frame `n` begins,
+counted or not (a `lag` frame), from the machine at control (`all 0`) on, and `inp n` its input. These are definitions, so `all 0` is `S.seq a`, and each frame is the real frame of
+the one before (`Frames.next`). `seq j` is the machine at the end of the counted frame `j`: `all (ix j)`. The frames between two counted frames are the `lag` frames. Every field is a hypothesis.
 That each frame starts in the idle loop in control (`StartK`) is not a field: it follows from the machine at control, `ctl` and `clean` (`Frames.all_start`), and so do the
 watched bits of the `lag` frames. Of the three bytes of control, `ctl` asks two: the mode at each frame's end is a theorem (`Frames.ctlAll`). -/
-structure Frames (sy : Syms) (m0 : Machine) (g : Nat) (seq : Nat → Machine) where
-  all : Nat → Machine
-  inp : Nat → UInt8
-  /-- each frame is the real frame of the one before -/
-  next : ∀ n, all (n + 1) = frame (all n) (inp n)
+structure Frames (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) (seq : Nat → Machine) where
   /-- the counted frame `j` ends at `all (ix j)`; `ix 0 = 0` is control -/
   ix : Nat → Nat
   ix0 : ix 0 = 0
   order : ∀ j, j < g → ix j < ix (j + 1)
-  at_ix : ∀ j, j ≤ g → seq j = all (ix j)
+  at_ix : ∀ j, j ≤ g → seq j = S.seq (a + ix j)
   /-- every frame before the touch's frame ends with the routine and the task of control, counted or not -/
-  ctl : ∀ n, n + 1 < ix g → ctlRT sy (all (n + 1)) = true
+  ctl : ∀ n, n + 1 < ix g → ctlRT sy (S.seq (a + (n + 1))) = true
   /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` -/
-  clean : ∀ n, n < ix g → ∀ k, CleanK (guardK sy m0) (spotOf sy m0).store (trace (all n) (inp n) k)
+  clean : ∀ n, n < ix g → ∀ k, CleanK (guardK sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section
-variable {sy : Syms} {m0 : Machine} {g : Nat} {seq : Nat → Machine}
+variable {sy : Syms} {m0 : Machine} {S : RealRun} {a : Nat} {g : Nat} {seq : Nat → Machine}
+
+/-- the machine when frame `n` begins, counted or not: frame `a + n` of the real run -/
+abbrev Frames.all (_K : Frames sy m0 S a g seq) (n : Nat) : Machine := S.seq (a + n)
+
+/-- the input of frame `n` -/
+abbrev Frames.inp (_K : Frames sy m0 S a g seq) (n : Nat) : UInt8 := S.inp (a + n)
+
+/-- each frame is the real frame of the one before: from the real run -/
+theorem Frames.next (K : Frames sy m0 S a g seq) (n : Nat) : K.all (n + 1) = frame (K.all n) (K.inp n) := S.next (a + n)
+
+/-- the machine at control is the real run's frame `a` -/
+theorem Frames.seq0 (K : Frames sy m0 S a g seq) : seq 0 = S.seq a := by
+  rw [K.at_ix 0 (Nat.zero_le _), K.ix0]
+  rfl
 
 /-- the machine when the counted frame `j` begins: `seq (j − 1)`, or later by `lag` frames -/
-def Frames.fm (K : Frames sy m0 g seq) (j : Nat) : Machine := K.all (K.ix j - 1)
+def Frames.fm (K : Frames sy m0 S a g seq) (j : Nat) : Machine := K.all (K.ix j - 1)
 
 /-- the input of the counted frame `j` -/
-def Frames.pad (K : Frames sy m0 g seq) (j : Nat) : UInt8 := K.inp (K.ix j - 1)
+def Frames.pad (K : Frames sy m0 S a g seq) (j : Nat) : UInt8 := K.inp (K.ix j - 1)
 
 /-- the counted frames come in order -/
-theorem Frames.ix_mono (K : Frames sy m0 g seq) : ∀ j k, j ≤ k → k ≤ g → K.ix j + (k - j) ≤ K.ix k := by
+theorem Frames.ix_mono (K : Frames sy m0 S a g seq) : ∀ j k, j ≤ k → k ≤ g → K.ix j + (k - j) ≤ K.ix k := by
   intro j k hjk hk
   obtain ⟨d, rfl⟩ : ∃ d, k = j + d := ⟨k - j, by omega⟩
   induction d with
@@ -925,12 +943,12 @@ theorem Frames.ix_mono (K : Frames sy m0 g seq) : ∀ j k, j ≤ k → k ≤ g �
     omega
 
 /-- the counted frame `j` begins after control -/
-theorem Frames.one_le_ix (K : Frames sy m0 g seq) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ g) : 1 ≤ K.ix j := by
+theorem Frames.one_le_ix (K : Frames sy m0 S a g seq) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ g) : 1 ≤ K.ix j := by
   have h := K.ix_mono 0 j (by omega) h2
   omega
 
 /-- **The counted frame `j` ends at `seq j`**: the field `ends` of before, now a theorem -/
-theorem Frames.ends (K : Frames sy m0 g seq) : ∀ j, 1 ≤ j → j ≤ g → seq j = frame (K.fm j) (K.pad j) := by
+theorem Frames.ends (K : Frames sy m0 S a g seq) : ∀ j, 1 ≤ j → j ≤ g → seq j = frame (K.fm j) (K.pad j) := by
   intro j h1 h2
   have h := K.one_le_ix h1 h2
   rw [K.at_ix j h2, Frames.fm, Frames.pad, ← K.next]
@@ -938,7 +956,7 @@ theorem Frames.ends (K : Frames sy m0 g seq) : ∀ j, 1 ≤ j → j ≤ g → se
   omega
 
 /-- **Each instruction of the counted frame `j` meets `CleanK`**: the field `clean` read at the counted frames -/
-theorem Frames.cleanAt (K : Frames sy m0 g seq) : ∀ j, 1 ≤ j → j ≤ g → ∀ n, CleanK (guardK sy m0) (spotOf sy m0).store (trace (K.fm j) (K.pad j) n) := by
+theorem Frames.cleanAt (K : Frames sy m0 S a g seq) : ∀ j, 1 ≤ j → j ≤ g → ∀ n, CleanK (guardK sy m0) (spotOf sy m0).store (trace (K.fm j) (K.pad j) n) := by
   intro j h1 h2
   have a := K.ix_mono j g h2 (Nat.le_refl g)
   have b := K.one_le_ix h1 h2
@@ -946,7 +964,7 @@ theorem Frames.cleanAt (K : Frames sy m0 g seq) : ∀ j, 1 ≤ j → j ≤ g →
 
 /-- **Every frame up to the touch's frame starts in the idle loop in control with the watched bits**, counted or not, from the machine at control on. `hc` is the walk's check
 on the ROM. -/
-theorem Frames.all_start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.all_start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ n, n < K.ix g → StartK sy m0 (K.all n) ∧ Watched (watchOf sy) (K.all n) := by
   have e0 : seq 0 = K.all 0 := by rw [K.at_ix 0 (Nat.zero_le _), K.ix0]
   intro n
@@ -955,13 +973,13 @@ theorem Frames.all_start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq
   | succ i ih =>
     intro hi
     obtain ⟨a1, a2⟩ := ih (by omega)
-    have h1 := K.ctl i hi
+    have h1 : ctlRT sy (K.all (i + 1)) = true := K.ctl i hi
     rw [K.next i] at h1 ⊢
     have hkn := known_of_ctl (m0 := m0) (ctl_of_frame hc a1 a2 (K.clean i (by omega)) h1)
     exact keep_frame_startW (keepCheckOf_parts hc).2 rfl a1 a2 (K.clean i (by omega)) hkn
 
 /-- **Every frame up to the touch's frame ends with the watched bits**, counted or not -/
-theorem Frames.all_watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.all_watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ n, n ≤ K.ix g → Watched (watchOf sy) (K.all n) := by
   intro n hn
   cases n with
@@ -974,16 +992,16 @@ theorem Frames.all_watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g s
     exact keep_frameW (keepCheckOf_parts hc).2 rfl a1 a2 (K.clean i (by omega))
 
 /-- **Every frame before the touch's frame ends in control**, counted or not: the old field `ctl`, now from the routine and the task (`ctl`) and the walk -/
-theorem Frames.ctlAll (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.ctlAll (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ n, n + 1 < K.ix g → controllable sy (K.all (n + 1)) = true := by
   intro n hn
   obtain ⟨a1, a2⟩ := K.all_start hc hs0 h0 n (by omega)
-  have h1 := K.ctl n hn
+  have h1 : ctlRT sy (K.all (n + 1)) = true := K.ctl n hn
   rw [K.next n] at h1 ⊢
   exact ctl_of_frame hc a1 a2 (K.clean n (by omega)) h1
 
 /-- **The ends of the frames before `g`** are starts of frames in control with the watched bits, from the machine at control on. `hc` is the walk's check on the ROM. -/
-theorem Frames.run (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.run (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ j, j < g → StartK sy m0 (seq j) ∧ Watched (watchOf sy) (seq j) := by
   intro j hj
   have h := K.ix_mono j g (by omega) (Nat.le_refl _)
@@ -991,7 +1009,7 @@ theorem Frames.run (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0
   exact K.all_start hc hs0 h0 (K.ix j) (by omega)
 
 /-- **Each frame up to `g` starts in the idle loop in control** (`StartK`): the field `start` of before, now a theorem -/
-theorem Frames.start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ j, 1 ≤ j → j ≤ g → StartK sy m0 (K.fm j) := by
   intro j h1 h2
   have h := K.ix_mono j g h2 (Nat.le_refl _)
@@ -999,7 +1017,7 @@ theorem Frames.start (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (h
   exact (K.all_start hc hs0 h0 (K.ix j - 1) (by omega)).1
 
 /-- **Every frame keeps the watched bits**, from the machine at control on. `hc` is the walk's check on the ROM. -/
-theorem Frames.watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ j, j ≤ g → Watched (watchOf sy) (seq j) := by
   intro j hj
   have h := K.ix_mono j g hj (Nat.le_refl _)
@@ -1007,12 +1025,12 @@ theorem Frames.watched (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) 
   exact K.all_watched hc hs0 h0 (K.ix j) (by omega)
 
 /-- no castle flag up to frame `g` -/
-theorem Frames.noCastle (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.noCastle (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ j, j ≤ g → CastleWalk.castle sy (seq j) = false :=
   fun j hj => castle_of_watched (K.watched hc hs0 h0 j hj)
 
 /-- the fraction is a multiple of 1/16 px up to frame `g` -/
-theorem Frames.frac (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
+theorem Frames.frac (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq) (hs0 : StartK sy m0 (seq 0)) (h0 : Watched (watchOf sy) (seq 0)) :
     ∀ j, j ≤ g → posP sy (seq j) % 16 = 0 :=
   fun j hj => frac_of_watched (K.watched hc hs0 h0 j hj)
 

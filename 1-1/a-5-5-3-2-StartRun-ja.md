@@ -42,7 +42,7 @@ Lags.known_end :  lagCheck,  Lags,  1 ≤ E,  n ∈ [ix 1, ix E),  FrameStart(se
 Lags.starts    :  lagCheck,  walkCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)
 Lags.lagStart  :  同じもの   →   数えないフレームで FrameStart(seq n)          （前のフィールド lags.start）
 Pipe.startE    :  lagCheck,  walkCheck,  FrameStart(fm 1)   →   FrameStart(fm E)    （前のフィールド Pipe.start）
-Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(pipe.fm 1)        （Run のフィールド title と pipeAt を使う）
+Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(pipe.fm 1)        （Run のフィールド title と定理 pipeAt を使う）
 ```
 
 `walkCheck` と `titleCheck` は ROM での確認で、非公開の `walk_check` と `title_ctl_check` が `native_decide` で示します（証明のビルドで 2 つ合わせて約 4 秒）。
@@ -63,8 +63,8 @@ Lean: `Theorems/StartRun.lean`、`Theorems/PipeFrames.lean` の `Lags`、`Lags.k
 * **数えないフレーム.** 歩きはポーズのバイトを知りません。なのでポーズのフレームは歩きの道の 1 つです。帰納法は `ix 1` から `ix E` までの `seq` の全部のフレームを、
   数えるものも数えないものもたどります。
 * **操作できるときの機械.** `TitleStart` は、フレーム 0 がその集合の近い状態か止まった状態で始まることを示します。`titleCheck`（`TitleStart.frame0Check`）はその状態からフレーム 0 を
-  Start も含めてどの入力でももう一度追い、操作できる終わりはフレームの始まりであることを確かめます。`Run.pipeStart₁` は `pipeAt` を通してこれを `pipe.fm 1` で読みます。
-* **`one_le`.** `fm 0` は走りの機械ではないので、入るフレームはフレーム 1 以降でなければなりません。新しいフィールド `1 ≤ E` です。
+  Start も含めてどの入力でももう一度追い、操作できる終わりはフレームの始まりであることを確かめます。`Run.pipeStart₁` は定理 `Run.pipeAt` を通してこれを `pipe.fm 1` で読みます。
+* **`one_le`.** 入るフレームはフレーム 1 以降でなければなりません。これはいまは定理です（`Pipe.one_le`、`Route.Run.pipeOne`）。`fm 0` は走りのフレーム 0 で、フレーム 0 は操作できる状態で終わり（`title`）、入るフレームは土管のルーチンで終わります（`Enters`）。2 つのルーチンは違います（`EntryKeep.KeepOK.ne`）。
 
 ## 本物のフレームで確かめたこと
 
@@ -91,10 +91,10 @@ Lean: `Theorems/StartRun.lean`、`Theorems/PipeFrames.lean` の `Lags`、`Lags.k
 * **`lags.clean`**: そのフレームの各命令は `Clean`。同じフレームについての `chg.upClean₁`（パート b）と同じ種類の条件で、守るバイトは少ないです。地上の `FrameKeep.Frames.clean` とも同じ種類です。
 * **`lags.game`**（[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md)）。いまは「操作できる状態で終わる」も含みます。
 * `lags.store` はもう仮定しません。`LagFrames` の確認が証明します。
-* **`one_le`**: `1 ≤ E`。
-* **この項目でないもの.** `Run.pipeStart₁` は `pipeAt`（`pipe.fm 1 = chg.seq 1`、パート 0）を使います。
+* `one_le` はもう仮定ではありません。`Pipe.one_le` が証明します。
+* **この項目でないもの.** `Run.pipeStart₁` は `Run.pipeAt`（`pipe.fm 1 = base.seq 1`、パート 0）を使います。これは定理です。`pipe` のフレームは `base` のフレームで、数えるフレーム 1 はフレーム 1 です。
 
-`StartRun.starts` と `Begin.start₁` はガードについて一般です。パート b の `Run.upStart₁` は同じ帰納法を `chg.seq` で `EntryKeep` の中で行います。2 つは 1 つの補題にまとめられます。
+`StartRun.starts` と `Begin.start₁` はガードについて一般です。パート b の `Run.upStart₁` は同じ帰納法を `base.seq` で `EntryKeep` の中で行います。2 つは 1 つの補題にまとめられます。
 
 **ファイル.** `Theorems/StartRun.lean`、`Theorems/PipeFrames.lean`、`Theorems/Route.lean`、`Theorems/PipeWrites.lean`、非公開の `Proof/StartRun.lean`。
 

@@ -46,7 +46,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-0-1 The theorem from the assumptions to 1748
   - ✅ 1-1-0-2 The timer and the grid from the rule on one frame
   - ✅ 1-1-0-3 The fireworks and the level change from the rule on one frame
-  - 🚨 1-1-0-4 Joining the assumptions of the parts
+  - ✅ 1-1-0-4 Joining the assumptions of the parts (`pipeAt`, `roomCtl`, `roomEnter`, `atCtl` removed: the parts take their machines from one sequence `base`)
   - 🚨 1-1-0-5 Assumptions of the whole
     - 🚨 1-1-0-5-1 Each frame follows the rule of its kind (`step`)
     - 🚨 1-1-0-5-2 The kinds of frame come in the order of the parts (`plan`)
@@ -84,7 +84,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - ✅ 1-1-a-5-5-3-1 A frame that does not call the mode's routine (a pause) keeps them (`keeps_frame`)
         - 🚨 1-1-a-5-5-3-2 It starts in the idle loop; its instructions before the call are `Clean`
           - ✅ 1-1-a-5-5-3-2-1 It starts in the idle loop (`lags.start` removed; induction from control)
-          - 🚨 1-1-a-5-5-3-2-2 Each counted frame up to the entry ends in control, each instruction `Clean` (`lags.ctl`, `lags.clean`, `one_le`; a frame not counted without the call: by the check)
+          - 🚨 1-1-a-5-5-3-2-2 Each counted frame up to the entry ends in control, each instruction `Clean` (`lags.ctl`, `lags.clean`; `one_le` a theorem; a frame not counted without the call: by the check)
           - ✅ 1-1-a-5-5-3-2-3 Stores before the call do not touch the speed and the position (`lags.store` removed; the walk knows each store's target)
         - 🚨 1-1-a-5-5-3-3 A frame not counted that calls the routine keeps them and ends in control (`lags.game`)
     - 🚨 1-1-a-5-6 Open flat ground, in the air only during a jump
@@ -139,9 +139,9 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-c-7-12 The block map: bits that are 0 in the map stay 0 on every frame (proved, `RoomMap`); the 1 bits and the numbers of the other fields assumed
     - 🚨 1-1-c-7-13 Standing during the fall (`facing`, `stand_fast`, `stand_P`)
     - 🚨 1-1-c-7-14 No run jumps from the wall and clears the block with no landing (`way`)
-    - 🚨 1-1-c-7-15 The first machine is the change's (`roomCtl`)
+    - ✅ 1-1-c-7-15 The first machine is the change's (`roomCtl` removed: by definition)
     - ✅ 1-1-c-7-16 The write ends the side check (`pass`): proved by one whole frame (`SideFrame`)
-    - ✅ 1-1-c-7-17 The pipe's tiles only in its column: `RoomMap` and the link `roomEnter` (1-1-0-4)
+    - ✅ 1-1-c-7-17 The pipe's tiles only in its column: `RoomMap` and the theorem `roomEnter`
     - 🚨 1-1-c-7-18 `P(E)` is the position at the end of the move (`movedE`)
       - ✅ 1-1-c-7-18-1 The edge store and the head up to the write (`edgeE` gone)
       - 🚨 1-1-c-7-18-2 `P(E)` is the position at the end of the move (`movedE`)
@@ -160,7 +160,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-d-3-2 A `lag` frame ends paused (`chg.paused₂`); that it keeps `left` is proved
     - 🚨 1-1-d-3-3 No pause after the pipe (`chg.noStart₂`)
     - 🚨 1-1-d-3-4 No pause sound at the exit (`chg.quiet₂`)
-    - 🚨 1-1-d-3-5 The time is not up at the exit (`chg.time₂`); `left` not 0 before control is proved; `b₂` is the first control by definition
+    - 🚨 1-1-d-3-5 The game timer is not 000 at the exit (`chg.time₂`; the sound's pause flag is proved); `left` not 0 before control is proved; `b₂` is the first control by definition
   - 🚨 1-1-d-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-d-4-1 The same for every input (`GMerge`)
     - 🚨 1-1-d-4-2 The bytes when the timer has run out (H3)
@@ -193,7 +193,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - ✅ 1-1-e-2-9-2-1 Before the routine (`vBefore` gone; the walk and `moves`)
         - 🚨 1-1-e-2-9-2-2 After the scroll handler (`vAfter`)
       - 🚨 1-1-e-2-9-3 The collision routine as on the machine at control (`box`)
-    - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `atCtl`; `ends` from `keep`)
+    - 🚨 1-1-e-2-10 Frames are read from machines (`reads`; `atCtl` a theorem, `ends` from `keep`)
 - 🚨 1-1-f The flag (1085 → 1218)
   - ✅ 1-1-f-1 The bound on the push back
   - ✅ 1-1-f-2 The height of a jump

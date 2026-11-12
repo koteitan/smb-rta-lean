@@ -74,6 +74,9 @@ the speed, the subspeed and the position.
 * **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
   frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, `lags.game`. `lags.store` is proved now.
 * **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
+* **The frames are those of the run (item 1-1-0-4).** `Lags` takes the real frames of the whole run (`FrameKeep.RealRun`, `Route.Run.base`) as a parameter. Where the counted frames are is
+  data, `gap t` (the frames not counted after the counted frame `t`), and `ixOf gap` is a definition: the counted frame 1 is frame 1 and `ixOf gap t < ixOf gap (t + 1)`. So the
+  machine of `pipe` at control is the run's frame 1 (`Lags.fm_one`, `Route.Run.pipeAt`); the old link `pipeAt`, the old fields `seq`, `sin`, `next`, `ix`, `order`, `fm_ix`, `inp_ix` of `Lags` and the fields `fm`, `inp`, `one_le` of `Route.Pipe` are gone (`Pipe.fm` is `Lags.fm`, a definition; `Pipe.one_le` is a theorem).
 * **Not in this item.** `openP`, `openB` (item 1-1-a-5-4) and `edge`, `moved` (item 1-1-a-5-9) stay hypotheses.
 
 **Files.** `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.

@@ -43,7 +43,7 @@ Lags.known_end :  lagCheck,  Lags,  1 ≤ E,  n ∈ [ix 1, ix E),  FrameStart(se
 Lags.starts    :  lagCheck,  walkCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)
 Lags.lagStart  :  the same   →   FrameStart(seq n) for a frame not counted          (the old field lags.start)
 Pipe.startE    :  lagCheck,  walkCheck,  FrameStart(fm 1)   →   FrameStart(fm E)       (the old field Pipe.start)
-Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(pipe.fm 1)              (with the fields title and pipeAt of Run)
+Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(pipe.fm 1)              (with the field title and the theorem pipeAt of Run)
 ```
 
 `walkCheck` and `titleCheck` are checks on the ROM, by `native_decide` in the private `walk_check` and `title_ctl_check` (about 4 s together in the proof build).
@@ -64,8 +64,8 @@ Lean: `Theorems/StartRun.lean`; `Lags`, `Lags.known_end`, `Lags.starts`, `Lags.l
 * **The frames not counted.** The walk does not know the pause byte. So a paused frame is one of its paths. The induction goes over every frame of `seq`
   from `ix 1` to `ix E`, counted or not.
 * **The machine at control.** `TitleStart` proves that frame 0 begins in a near or held state of its set. `titleCheck` (`TitleStart.frame0Check`) walks frame 0 from
-  these states again with any input, Start included, and asks that each end with control is the start of a frame. `Run.pipeStart₁` reads it on `pipe.fm 1` through `pipeAt`.
-* **`one_le`.** `fm 0` is no machine of the run, so the entering frame must be frame 1 or later. This is a new field, `1 ≤ E`.
+  these states again with any input, Start included, and asks that each end with control is the start of a frame. `Run.pipeStart₁` reads it on `pipe.fm 1` through the theorem `Run.pipeAt`.
+* **`one_le`.** The entering frame must be frame 1 or later. This is now a theorem (`Pipe.one_le`, `Route.Run.pipeOne`): `fm 0` is the run's frame 0, frame 0 ends in control (`title`), and an entering frame ends with the pipe's routine (`Enters`). The two routines differ (`EntryKeep.KeepOK.ne`).
 
 ## Checked on real frames
 
@@ -93,10 +93,10 @@ It checks that every frame ends in control, so it covers the new `lags.ctl` (the
   and as `FrameKeep.Frames.clean` above ground.
 * **`lags.game`** ([Frames not counted, up to the pipe](a-5-5-3-LagFrames.md)), now with "it ends in control".
 * `lags.store` is no longer assumed: the check of `LagFrames` proves it.
-* **`one_le`**: `1 ≤ E`.
-* **Not in this item.** `pipeAt` (`pipe.fm 1 = chg.seq 1`, part 0) is used by `Run.pipeStart₁`.
+* `one_le` is no longer assumed: `Pipe.one_le` proves it.
+* **Not in this item.** `Run.pipeAt` (`pipe.fm 1 = base.seq 1`, part 0) is used by `Run.pipeStart₁`. It is a theorem: `pipe`'s frames are frames of `base`, and its counted frame 1 is frame 1.
 
-`StartRun.starts` and `Begin.start₁` are general in the guard. Part b's `Run.upStart₁` does the same induction on `chg.seq` inside `EntryKeep`; the two can share one lemma.
+`StartRun.starts` and `Begin.start₁` are general in the guard. Part b's `Run.upStart₁` does the same induction on `base.seq` inside `EntryKeep`; the two can share one lemma.
 
 **Files.** `Theorems/StartRun.lean`, `Theorems/PipeFrames.lean`, `Theorems/Route.lean`, `Theorems/PipeWrites.lean`, private `Proof/StartRun.lean`.
 

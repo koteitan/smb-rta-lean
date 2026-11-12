@@ -88,7 +88,7 @@ before the call, whether the frame calls `c`, whether `V` changes, and whether i
 * **`game`**: a frame not counted that calls the mode's routine keeps `V` and ends in control. It is false during the injury blink (above).
   Read from the code: a frame calls `c` when the pause bit is 0 at the check. Such a frame runs the timers, unless the master timer control is 2 or more when it starts. The
   master timer control gets a value other than 0 only together with a change of the routine (`SetPRout`, the value 255). So, if every counted frame ends in control, no frame
-  not counted should call `c`. This is not proved, for two reasons. `Lags` does not say which frames are not counted (`ix` is not tied to the interval timer). And that the
+  not counted should call `c`. This is not proved, for two reasons. `Lags` does not say which frames are not counted (`gap` is not tied to the interval timer). And that the
   master timer control stays 0 needs a walk of the whole frame through the mode's routine, while these walks stop at `c`.
 * **Not in this item.** That the counted frames are those of `clock` (only the frame numbers join them, as before). That each counted frame is a `Frame` (item 0-0-0-3-1).
 

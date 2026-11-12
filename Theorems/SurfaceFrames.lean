@@ -771,7 +771,7 @@ end Real
 `seq j`. `CtrlKeep.arrAt` is the instruction at which it first comes to the player's routine: it does so, since it ends with the game not paused (`unpaused`, `OnFrames.arrive`).
 The frames not counted do not come to the player's routine (`lagNo`), so they keep the bytes the routine needs (`OnFrames.lagKeep`). -/
 structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat → Machine) (fr : Nat → Frame (top sy) (amax sy m0))
-    (K : FrameKeep.Frames sy m0 g seq) where
+    {S : FrameKeep.RealRun} {a : Nat} (K : FrameKeep.Frames sy m0 S a g seq) where
   reads : Reads sy g seq fr
   /-- a counted frame ends with the game not paused: the low bit of the pause byte is 0 -/
   unpaused : ∀ j, 1 ≤ j → j ≤ T → j < g → CtrlKeep.Unpaused sy m0 (seq j)
@@ -789,7 +789,7 @@ structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat
     BoxRun sy m0 B (seq (j - 1)) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (seq j)
 
 section Frames
-variable {B : Box} {T J g : Nat} {seq : Nat → Machine} {fr : Nat → Frame (top sy) (amax sy m0)} {K : FrameKeep.Frames sy m0 g seq}
+variable {B : Box} {T J g : Nat} {seq : Nat → Machine} {fr : Nat → Frame (top sy) (amax sy m0)} {Sr : FrameKeep.RealRun} {ar : Nat} {K : FrameKeep.Frames sy m0 Sr ar g seq}
 
 /-- the machine when the counted frame `j` begins: that of `K` -/
 abbrev OnFrames.fm (_ : OnFrames sy m0 B T J g seq fr K) : Nat → Machine := K.fm
@@ -920,7 +920,7 @@ end Frames
 
 section Run
 
-variable {B : Box} {T Jn g : Nat} {seq : Nat → Machine} {fr : Nat → Frame (top sy) (amax sy m0)} {inp : Nat → HIn} {K : FrameKeep.Frames sy m0 g seq}
+variable {B : Box} {T Jn g : Nat} {seq : Nat → Machine} {fr : Nat → Frame (top sy) (amax sy m0)} {inp : Nat → HIn} {Sr : FrameKeep.RealRun} {ar : Nat} {K : FrameKeep.Frames sy m0 Sr ar g seq}
 
 /-- the inputs of the first `n` frames: `inp j` is the input of the counted frame `j` -/
 def wlist (inp : Nat → HIn) (n : Nat) : List HIn := (List.range n).map fun k => inp (k + 1)

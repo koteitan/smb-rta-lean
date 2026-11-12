@@ -16,7 +16,7 @@ Start on a frame of the game core pauses the game (`PauseRoutine`, before the co
 
 ## The theorem
 
-`tm n` is the machine `n` frames after the press, `ti n` its input. `seq`, `inp` are the machines and inputs of the route from frame 0 (`chg.seq`, `chg.inp`). `x` is the reference machine: from power-on, no button for 39 frames, Start on frame 39, the machine after that frame.
+`tm n` is the machine `n` frames after the press, `ti n` its input. `seq`, `inp` are the machines and inputs of the route from frame 0 (`base.seq`, `base.inp`). `x` is the reference machine: from power-on, no button for 39 frames, Start on frame 39, the machine after that frame.
 
 ```
 Press(m)  :  m is in the idle loop at the start of a frame (the program counter and the stack pointer of x, dot < 10, the NMI as at a frame's start),
@@ -49,7 +49,7 @@ Begin.timer    :  timer(seq 0) = t0  ∧  phase(seq 0) = 2
 Begin.still    :  v(seq 1) = 0
 Begin.anyNear  :  seq 0 is in a near or held state,  v(seq 1) = 0                   (any input)
 Begin.frame0   :  frame0Check(fin)  ⟹  the end of frame 0 meets fin                  (any input; StartRun, EntryKeep and HurryMusic use it)
-Route.Run.zero, Route.Run.still          from Run.title and Run.pipeAt (pipe.fm 1 = chg.seq 1)
+Route.Run.zero, Route.Run.still          from Run.title and the theorem Run.pipeAt (pipe.fm 1 = base.seq 1)
 HurryMusic.Run.zero, HurryMusic.Run.quiet₀   from Run.title
 ```
 
@@ -86,7 +86,7 @@ the movie's own press                  meets Press; frame 0 has timer 401, phase
 
 * `press` is a hypothesis on one state. It holds on all 339 runs above. A run in which the title shows another world (A with Start after a game over), or a byte of `K` with another value, is outside. `PauseSoundBuffer` = 0 at the press is part of it: it holds on every real run seen, the 6 runs after a game over among them, but it is not proved from the power-on.
 * There was a field `noPause` (no Start on frame 0). It is gone: `StartRun.titleCheck` and `EntryKeep.nearCheck` are now `frame0Check` (every end of frame 0 from the near and held states, with any input, meets their condition or is far), as `HurryMusic.nearCheck` is, and `Begin.frame0` replaces `Begin.near`. Both checks pass in the proof build.
-* `atZero`, `first`, `ctl`, `pipeAt` say which machine is frame 0, and that the two sequences agree. They hold by how the sequences are made.
+* `atZero`, `first`, `ctl` say which machine is frame 0. They hold by how the sequence is made. `pipeAt` is no longer a field: `pipe` takes its machines from `base`, and its counted frame 1 is frame 1 (`Run.pipeAt`, a theorem).
 
 **Files.** `Theorems/TitleStart.lean`, `Theorems/Route.lean` (`Run.title`, `Run.pipeAt`, `Run.zero`, `Run.still`), `Theorems/HurryMusic.lean`, the private `Proof/TitleStart.lean`.
 

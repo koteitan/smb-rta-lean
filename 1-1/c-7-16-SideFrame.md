@@ -79,12 +79,12 @@ A program (`side-frame-check`). The runs are those of `side-rule-check` on [The 
 
 * Removed: `pass`, `pos` (and `tiles`, see [The block map in the room](c-7-12-RoomMap.md)). `Checks.sideRule` became `Checks.sideFrame`. Then `edgeE` (no `w_edge`, no `h` up to the write): `w_edge` is followed by the walk, and `h` is `HeadE`.
 * Left: `movedE` (`P(E)` is `posP` at the end of the move before the write), a fact about frame `E` alone.
-* Not fields: `StartE`, `CleanE`, `TilesE`, `HeadE`. `Route.Run.inRoom` proves them from the walk of the room's frames and the link `roomEnter` of `Route.Run`.
+* Not fields: `StartE`, `CleanE`, `TilesE`, `HeadE`. `Route.Run.inRoom` proves them from the walk of the room's frames and the theorem `Route.Run.roomEnter`.
 
 ## Assumptions (not proved in Lean)
 
 * **`movedE`.** `P(E)` is the position at the end of the move. The frames up to `t0` read `P(n)` at the frame's end (`read_P`); frame `E` is later than `t0`, and nothing reads it from the machine yet. On real frames the two are the same (above).
-* **The link `roomEnter`** (item 1-1-0-4): frame `E` of `RoomRun` is a frame of `Route.Changes` in the room. `StartE`, `CleanE`, `TilesE`, `HeadE` rest on it, and on `SiteOK` of the room's frames (`chg.roomSites`).
+* **`Route.Run.roomEnter`** (item 1-1-0-4, a theorem): frame `E` of `RoomRun` is a frame of `Route.Base` in the room. `StartE`, `CleanE`, `TilesE`, `HeadE` rest on it, and on `SiteOK` of the room's frames (`chg.roomSites`).
 * **The right end of the mouth.** Only the left end comes out. `RoomJoin` uses only the left end.
 
 **Files.** `Theorems/SideFrame.lean`, `Theorems/RoomJoin.lean`, private `Proof/SideFrame.lean`.

@@ -38,7 +38,7 @@ E + T + D + 107 + ((c_E − T − D) mod 21) ≤ L,  D ≥ 33          Run.hD、
 L ≥ 1748 + j                                                   level_ge_of_parts
 ```
 
-Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.change₂`、`Run.hE`、`Run.hT`、`Run.hc`、`Run.zero`、`Run.still`、`Run.s_zero`、`Run.ph_zero`、`Run.hD`、`Run.hL`、`Run.start`、`Run.atCtl₀`、`Run.entry₁`、`Run.upStart₁`、`Run.pipeStart₁`、`Run.roomStart`、`Run.inRoom`、`Changes.roomAt`、`RoomChecks`、`level_ge_of_parts`、非公開の `route_1_1`。`#print axioms route_1_1` に `sorryAx` はありません。`native_decide` の分があります。
+Lean: `Theorems/Route.lean` の `Run`、`Base`、`Changes`、`Run.pipeAt`、`Run.pipeOne`、`Run.roomCtl`、`Run.roomEnter`、`Run.atCtl`、`Changes.b₁_lt_a₂`、`Run.change₁`、`Run.change₂`、`Run.hE`、`Run.hT`、`Run.hc`、`Run.zero`、`Run.still`、`Run.s_zero`、`Run.ph_zero`、`Run.hD`、`Run.hL`、`Run.start`、`Run.atCtl₀`、`Run.entry₁`、`Run.upStart₁`、`Run.pipeStart₁`、`Run.roomStart`、`Run.inRoom`、`Changes.roomAt`、`RoomChecks`、`level_ge_of_parts`、非公開の `route_1_1`。`#print axioms route_1_1` に `sorryAx` はありません。`native_decide` の分があります。
 
 ## 仮定の一覧
 
@@ -46,12 +46,11 @@ Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.chang
 
 | パート | フィールド | 内容 | 確かめた範囲 |
 |---|---|---|---|
-| a | `pipe.fm`, `inp`, `clean`, `tiles`, `edge`, `moved` | 入るフレームは本物の機械の上にある（操作できる状態で始まることは証明: `Pipe.startE`、`Run.pipeStart₁`）。書き込みまでの各命令は `Clean`、右足の読みは `TilesOK`。書き込みまでに画面の端で位置を書かず、頭でブロックに当たらない。`P₂` は移動の終わり（`PlayerSubs`）の位置 | 本物の 68,311 フレーム、入る 177 回（[1 フレーム全部: ルーチンのバイトを書く命令](a-5-2-PipeWrites-ja.md)、[移動の終わりの位置](a-5-9-MoveEnd-ja.md)） |
+| a | `pipe.enter`, `clean`, `tiles`, `edge`, `moved` | 入るフレームは本物の機械、`base` の機械の上にある（`pipe.fm t = base.seq (ixOf gap t)` は定義。操作できる状態で始まることは証明: `Pipe.startE`、`Run.pipeStart₁`）。書き込みまでの各命令は `Clean`、右足の読みは `TilesOK`。書き込みまでに画面の端で位置を書かず、頭でブロックに当たらない。`P₂` は移動の終わり（`PlayerSubs`）の位置 | 本物の 68,311 フレーム、入る 177 回（[1 フレーム全部: ルーチンのバイトを書く命令](a-5-2-PipeWrites-ja.md)、[移動の終わりの位置](a-5-9-MoveEnd-ja.md)） |
 | a | `pipe.openP`, `openB` | 出だしの位置の上限 | [縦の土管に入る](a-4-PipeEntry-ja.md) |
 | a | `pipe.own` | フレーム 1 から `E` までは、そのフレーム自身の機械から読む。操作できるときの速さが 0 であることは証明（`Run.still`） | 本物の 434,206 フレーム（[土管までのフレームを機械から読む](a-5-5-PipeFrames-ja.md)） |
-| a | `pipe.lags` | 操作から入るまでの各フレームの各命令は、数えるものも数えないものも `Clean`。数えるフレームは操作できる状態で終わる。モードのルーチンを呼ぶ数えないフレームは速さと位置を変えず、操作できる状態で終わる。各フレームがアイドルループで始まること、呼ばない数えないフレームが 3 つの値を保ち操作できる状態で終わることは証明（`Lags.starts`、`lag_check`） | 本物の 193,149 フレーム、入る 134 回（[操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md)）、範囲内の本物の 167,271 の数えないフレーム（[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md)） |
-| a | `pipe.one_le` | 1 ≤ `E` | フレームの番号の付け方から |
-| b | `chg.dA`, `dB`, `b₁`, `firstB₁`, `ha₁`, `hb₁`, `ctlBy₁` | `chg.seq` のどの機械が入るときと操作できるときか。`a₁` はフレーム 1 から最初に操作できない機械（定義。`dA` はそこまでの上限）。`b₁` は `a₁` から最初に操作できる機械（定義、`firstB₁`。`dB` はその上限。`ctlBy₁`: `a₁ + dB` で操作できる） | 下の 2 つの走りで `route-check` |
+| a | `pipe.lags` | 数えるフレームは `base` のフレーム。数えるフレーム `t` はフレーム `ixOf gap t` で、数えるフレーム 1 はフレーム 1（定義。`Run.pipeAt`）。操作から入るまでの各フレームの各命令は、数えるものも数えないものも `Clean`。数えるフレームは操作できる状態で終わる。モードのルーチンを呼ぶ数えないフレームは速さと位置を変えず、操作できる状態で終わる。各フレームがアイドルループで始まること、呼ばない数えないフレームが 3 つの値を保ち操作できる状態で終わることは証明（`Lags.starts`、`lag_check`） | 本物の 193,149 フレーム、入る 134 回（[操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md)）、範囲内の本物の 167,271 の数えないフレーム（[土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md)） |
+| b | `base.dA`, `dB`, `chg.ha₁`, `hb₁`, `ctlBy₁` | `base.seq` のどの機械が入るときと操作できるときか。`a₁` はフレーム 1 から最初に操作できない機械（定義 `Base.a₁`。`dA` はそこまでの上限）。`b₁` は `a₁` から最初に操作できる機械（定義 `Base.b₁`。`dB` はその上限。`ctlBy₁`: `a₁ + dB` で操作できる）。`ha₁`、`hb₁`: `a₁`、`b₁` での `lag` を除いた数 | 下の 2 つの走りで `route-check` |
 | b | `chg.entryRest₁` | 入るとき: `EntryKeep.restNames` の 56 バイト（待ちの繰り返し、土管のタイマー、ほかの 72 バイトは `title`、`upClean₁` から: `Run.entry₁`。各フレームが操作中に始まることは `Run.upStart₁` で証明） | 437 個の入る状態（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)、[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)） |
 | b | `chg.upClean₁` | それらのフレームの各命令は `Clean`（`EntryKeep.held` の 70 バイトと土管のタイマーを守る） | 同じ走り。入るまでに決まった物の枠を添字で埋める走りは定理の外 |
 | b | `chg.places₁` | 土管のフレームの表の各場所で、点の数が上限以下で、機械がその場所の行のどれかを持つ | 437 個の走りの土管の全部のフレーム、3 種類の入力。証明はしていません |
@@ -59,21 +58,19 @@ Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.chang
 | b | `chg.noStart₁` | 土管のあとのゲームコアのフレームで Start を押さない | 入力についての条件。TAS では成り立つ |
 | b | `chg.paused₁` | 切り替えの `lag` のフレームはポーズで終わる（`GamePauseStatus` の最下位ビットが立つ） | Start のある 995 + 823 の `lag` のフレーム、TAS のポーズ（[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)）。証明はしていません |
 | b | `chg.time₁` | 1 つ目の切り替えの出口で音のポーズのフラグが 0、ゲームのタイマーが 000 でない。`b₁` は定義から最初の操作。`left₁` が操作の前に 0 にならないことは証明 | 入る状態 15 個 × 3 種類、615 回の走り、TAS（[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)）。土管の中でポーズすると成り立たない（そのとき `quiet₁` も成り立たない） |
-| c | `room` | 部屋のフレームの構造。各フレームは `Clean` か、止めて `ReadFrame`。フレーム、縦の状態、覚えている速さは機械から読む（`read_vs`、`read_ab`）。入るフレームは本物の機械で入る（`enters`）。1 フレーム全部の抽象機械は `movedE` を使う。その始まり（画面のバイトも）、`Clean`、タイル、頭が当たらないことはつなぎ `roomEnter` を通して `RoomMap` から。最初の機械は `chg` の部屋での操作の機械（`roomCtl`） | TAS と本物の走り（[地下の部屋をつなぐ](c-5-RoomJoin-ja.md)、[本物のフレームと横のモデル](../0-0/0-3-2-FrameModel-ja.md)）（[部屋のブロックの地図](c-7-12-RoomMap-ja.md)、[横の土管に入るフレーム: 1 フレーム全部](c-7-16-SideFrame-ja.md)） |
-| c | `roomEnter` | `room` の入るフレーム `E` の機械と入力は、`chg` の部屋のフレームの 1 つのもの | 列の作り方から |
-| d | `chg.dR`, `d₂`, `ha₂`, `hb₂`, `ctlBy₂` | `a₂` は `b₁` のあとで最初にプレイヤーのルーチンを出た機械、`b₂` はそのあと最初に操作できる機械（定義）。そこまでのフレーム数の上限 | 下の 2 つの走りで `route-check` |
+| c | `room` | 部屋のフレームの構造。各フレームは `Clean` か、止めて `ReadFrame`。フレーム、縦の状態、覚えている速さは機械から読む（`read_vs`、`read_ab`）。入るフレームは本物の機械で入る（`enters`）。1 フレーム全部の抽象機械は `movedE` を使う。その始まり（画面のバイトも）、`Clean`、タイル、頭が当たらないことは `Run.roomEnter` を通して `RoomMap` から。部屋の機械は `base` のフレーム `b₁` からのもの（定義: フレーム `n` は `seq(b₁ + (n − C))` で終わる）。なので最初の機械は部屋で操作できる機械（`Run.roomCtl`）、入るフレームは部屋のフレーム `b₁ + (E − 1 − C)`（`Run.roomEnter`） | TAS と本物の走り（[地下の部屋をつなぐ](c-5-RoomJoin-ja.md)、[本物のフレームと横のモデル](../0-0/0-3-2-FrameModel-ja.md)）（[部屋のブロックの地図](c-7-12-RoomMap-ja.md)、[横の土管に入るフレーム: 1 フレーム全部](c-7-16-SideFrame-ja.md)） |
+| d | `base.dR`, `d₂`, `chg.ha₂`, `hb₂`, `ctlBy₂` | `a₂` は `b₁` のあとで最初にプレイヤーのルーチンを出た機械、`b₂` はそのあと最初に操作できる機械（定義 `Base.a₂`、`Base.b₂`）。そこまでのフレーム数の上限。`a₂`、`b₂` での `lag` を除いた数 | 下の 2 つの走りで `route-check` |
 | d | `chg.entry₂` | 入るときの 16 バイトが参照と同じ（ルーチン、プレイヤーの縦の位置、画面のバッファ、音、面の番号）。ほかは部屋の歩きから（`ScreenPage.entry_rest`） | 部屋の 1 フレーム全部の歩きは入るフレームの終わりで `Entry2` の 90 バイトのうち 78 を知る（[部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md)） |
 | d | `chg.roomSites` | 部屋の各命令の `SiteOK`。`Room` は 1 つ目の切り替えの時間の段から（`Changes.roomAt`）、入るまでプレイヤーのルーチンにいることは `a₂` の定義から | 本物の 130,030 フレームと書き換えた走り（[部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md)） |
 | d | `chg.noStart₂` | 土管のあとのゲームコアのフレームで Start を押さない | 入力についての条件。TAS では成り立つ |
 | d | `chg.quiet₂` | 出口でポーズの音が鳴っていない | 土管のフレームで Start を押すと成り立たない（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。押さない走りでは成り立つ |
 | d | `chg.paused₂` | 切り替えの `lag` のフレームはポーズで終わる | 土管のフレームで Start を押した走り 264 回の 46,829 フレーム（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。証明はしていません |
-| d | `chg.time₂` | 出口で時間が切れていない（タイマーの数字が全部 0 ではない） | 本物の走り 132 回と、Start を押した 75 回（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。`left₂` が操作の前に 0 にならないことは証明 |
-| e, f | `pole` | 地上の 1 フレームごとの形（`frames`）、土台の近くの当たり判定、旗に触るフレーム（`touches`、`tiles`、`edge`、`moved`。`keep` の最後のフレーム、1 フレーム全部の歩き `PoleFrame`）、城の旗 | 本物の走り（[地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md)、[旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md)、[操作から城まで](f-5-PoleJoin-ja.md)） |
-| e | `atCtl` | `pole` の最初の機械は `chg` の操作の機械 | 列の作り方から |
+| d | `chg.time₂` | 出口でゲームタイマーが 000 でない（ポーズの音のフラグは要らない） | 本物の走り 132 回と、Start を押した 75 回（[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)）。`left₂` が操作の前に 0 にならないことは証明 |
+| e, f | `pole` | 地上の 1 フレームごとの形（`frames`）、土台の近くの当たり判定、旗に触るフレーム（`touches`、`tiles`、`edge`、`moved`。`keep` の最後のフレーム、1 フレーム全部の歩き `PoleFrame`）、城の旗。触るまでのフレームは `base` のフレーム `b₂` からのもの（`keep` の定義: `all n = seq(b₂ + n)`）。なので最初の機械は操作できる機械（`Run.atCtl`） | 本物の走り（[地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md)、[旗に触るフレームを本物のフレームで](f-6-1-PoleEntryRule-ja.md)、[操作から城まで](f-5-PoleJoin-ja.md)） |
 | 全体 | `clock`, `z₁`, `z₂` | 全部のフレームの種類とカウンタ。1 フレームごとの規則と、どのフレームがどのパートか | ポーズを入れた走りを含む 7 つの全部のフレームと、TAS（[城から 1-2 まで](g-1-CastleToLevel-ja.md)） |
 | 全体 | `title` | タイトルで Start を押したフレームのあとの機械: 何もしないループにいて、走りが書く前に読む 52 バイトとポーズの音のバッファが基準の機械と同じ。フレーム 0 でゲームコアなら Start を押さない（それより前は Start を押してポーズしてよい）。フレーム 0 は最初に操作できるフレームの前のフレーム。ここから、フレーム 0 はタイマー `t0`、位相 2 で始まり、操作できるときの速さは 0（`Run.zero`、`Run.still`。この 2 つはフレーム 0 の条件を使わない） | TAS と本物の 339 通り: タイトルの何フレーム目かの Start、タイトルでの任意のボタン、A と Start、ゲームコアでのポーズ、ゲームオーバーのあと、ゲーム中のリセット（`title-check`）（[タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md)） |
-| 全体 | `read₀`, `pipeAt` | `clock` のフレーム 0 の前のカウンタは、フレーム 0 が始まるときの機械のもの。`pipe` の操作できるときの機械は、`chg` のフレーム 1 が始まるときの機械 | 列の作り方から |
-| 全体 | `chg.seq`, `inp`, `next` | 2 つの切り替えに共通の本物の機械の列 1 本。番号は `clock` と同じ | 列の作り方から、どの走りでも成り立つ |
+| 全体 | `read₀` | `clock` のフレーム 0 の前のカウンタは、フレーム 0 が始まるときの機械のもの | 列の作り方から |
+| 全体 | `base`（`seq`、`inp`、`next`） | 走り全体の本物の機械の列 1 本。番号は `clock` と同じ。`pipe`、`room`、`pole`、`chg` はこの列から機械をとる | 列の作り方から、どの走りでも成り立つ |
 | 全体 | `flag`, `L` | 城に入った直後の本物の機械の条件 `Good`（処理 2、旗の高さ、`T`、`c`）、`L` まで Start なし、フレーム `L` のあとレベルの番号が変わる | 全部のフレームの規則と処理 5 は証明（[城に入ったあとの星の旗の規則](g-2-1-FlagRule-ja.md)）。条件は TAS、遅く触る走り、本物の花火、Start なしの乱数、タイマーを書き換えた走りで確認 |
 
 `E = C_s + c + j`、タイマーの式、格子の式は `Run` のフィールドではなくなりました。`clock` から証明します（`Run.hE`、`Run.hT`、`Run.hc`）。フレーム 0 の前のタイマーと位相は `title` と `read₀` から出します（`Run.zero`、`Run.s_zero`、`Run.ph_zero`）。`D ≥ 33` とレベルが変わるフレームの式は `flag` から証明します（`Run.hD`、`Run.hL`）。`change₁` と `change₂` もフィールドではなくなりました。`chg` から証明します（`Run.change₁`、`Run.change₂`）。`level_ge_of_parts` はこのほかに `2 ≤ q` を使います。ゲームの値で計算して確かめます。また ROM での確かめ `pipe_end`、`side_bound`、`side_end`、`side_start`、`side_ctl`、`room_start`、`RoomChecks`（`screen_facts`、`screen_timer_same`、`screen_rt`、`pipe_end`、`screen_start`）、`flag_checked`、`title_check` と、星の旗の待ち時間が 6 以上であることを使います。これらは非公開の定理で、仮定ではありません。
@@ -97,7 +94,7 @@ Lean: `Theorems/Route.lean` の `Run`、`Changes`、`Run.change₁`、`Run.chang
 
 ## 2 つの切り替え（`chg`）
 
-`chg` には本物の機械の列が 1 本あります。`seq n` はフレーム `n` が始まるときの機械で、`seq (n + 1)` はフレーム `n` が残したものです。`clock` と同じです。`r(n)` は `n` より前の `lag` でないフレームの数です（`seen`）。
+`base` には本物の機械の列が 1 本あります。`seq n` はフレーム `n` が始まるときの機械で、`seq (n + 1)` はフレーム `n` が残したものです。`clock` と同じです。`r(n)` は `n` より前の `lag` でないフレームの数です（`seen`）。
 
 ```
 seq(n + 1) = frame(seq n, inp n)
@@ -115,7 +112,18 @@ quiet₁ : a₁ ≤ n ≤ b₁ ∧ ExitAt(seq n)  →  Quiet ∧ Song ∧ Shape 
 paused₂ : a₂ ≤ n < b₂ ∧ kind(n) = lag  →  Paused(seq(n + 1))
 noStart₂ : a₂ ≤ n < b₂ ∧ coreFrame(seq n)  →  inp n に Start はない
 quiet₂ : a₂ ≤ n ≤ b₂ ∧ ExitAt(seq n)  →  Quiet(seq n)
-time₂ : a₂ ≤ n ≤ b₂ ∧ ExitAt(seq n)  →  Time(seq n)
+time₂ : a₂ ≤ n ≤ b₂ ∧ ExitAt(seq n)  →  Timer(seq n)
+```
+
+パートは機械を `base` からとるので、`Run` の前のつなぎは定理です:
+
+```
+pipe.fm 1 = seq 1                                            Run.pipeAt      （ixOf gap 1 = 1、定義）
+room.fm C_r = seq b₁                                         Run.roomCtl     （room.fm n = seq(b₁ + (n − C_r))、定義）
+b₁ < a₂                                                      Changes.b₁_lt_a₂（Room(seq b₁)、entry₂、RoomChecks）
+k = b₁ + (E_b − 1 − C_r),  b₁ ≤ k < a₂,  room.fm(E_b − 1) = seq k     Run.roomEnter   （r(a₂) − r(b₁) ≤ a₂ − b₁: seen_le_add）
+pole.seq 0 = seq b₂                                          Run.atCtl       （keep.all n = seq(b₂ + n)、定義）
+1 ≤ E_a                                                      Run.pipeOne     （pipe.fm 0 = seq 0。フレーム 0 は操作できる状態で終わり、入るフレームは土管のルーチンで終わる）
 ```
 
 ここから:
@@ -128,7 +136,7 @@ Entry2(seq a₂)                                               ScreenPage.entry_
 timer(seq a₂) ≥ 160                                          ScreenPage.entry_long（Room と RoomChecks）
 StartAt(room.fm room.C)                                      Run.roomStart（pipe_end と room_start）
 ─────────────────────────────────────────
-a₂ ≤ n < b₂ → left₂(seq n) ≠ 0                              EndRun.first（time₂ と b₂ の定義）
+a₂ ≤ n < b₂ → left₂(seq n) ≠ 0                              EndRun.firstF（time₂ と b₂ の定義）
 E_b + 282 ≤ C_s                                              Run.change₂（EndRun.bound と side_bound、side_end）
 ```
 
@@ -146,7 +154,7 @@ E_b + 282 ≤ C_s                                              Run.change₂（E
 * フレームがはみ出したのは、物を書き込んだ状態だけです。書き換えのない走りでは、切り替えの中のこういうフレームは、ポーズのほかは `setup` だけです。
 * 地上への切り替えの最後の 122 フレームでは、6 個の物を書いてもはみ出しませんでした。ここの `lag` の規則はポーズでだけ確かめました。
 
-これらのフィールドは 1 フレームごとの仮定で、証明していません。`seq` と `pipe`、`room`、`pole` のつながりはフレームの番号だけです。
+これらのフィールドは 1 フレームごとの仮定で、証明していません。`pipe`、`room`、`pole`、`chg` は機械を `base` からとるので、定義でつながっています。つながっていないもの: `clock` の種類が機械と合うのは、フレーム 0（`read₀`）、城に入ったあと（`flag`）、`paused₁`、`paused₂`、数 `ha₁`、`hb₁`、`ha₂`、`hb₂` だけです。触ったあとの `pole.seq`（`atCastle`、`direct`、`other` の城の旗）は `base` から読んでいません。
 
 ## 仮定が空でないこと
 
@@ -157,7 +165,7 @@ E_b + 282 ≤ C_s                                              Run.change₂（E
 | TAS | 368, 459, 570, 852 | 1092 | 1218 | 370 | 1588 | 1748 |
 | TAS の 1089 のあと、左、A、A、A | 368, 459, 570, 852 | 1093 | 1219 | 369 | 1588 | 1748 |
 
-どちらも数の仮定を全部満たし、`L` は式と一致します。`route-check` は `chg` も読みます。`a₁, b₁, a₂, b₂` = 369, 460, 571, 853 で、`lag` を除いて 1 を引くと 368, 459, 570, 852 です。入るときの `left` は 91 と 282 で、条件はどちらも成り立ちます。`z₁, z₂` = 418, 732 で、位相が動かないほかのフレームはなく、`left` が 2 以上減るフレームもありません。`changes-check FM2 pause F D` は、380、416、450、575、730、845 のポーズで同じ数を、50 または 60 の `lag` のフレームとともに出します。切り替えの中には Start を受けつけないフレームがあり、そこではムービーがずれて、確認は 2 つめの切り替えを終えずに終了コード 1 で終わります。`clock` の規則は、どちらの走りでも全部のフレームで成り立ちます（作業用のプログラム）。地上の構造は `pole-join-check` で、同じ走りに成り立つことを確かめました。部屋の構造は TAS について、リポジトリに入れていない作業用のプログラムで確かめました。全部のフィールドを Lean の項として TAS から作ってはいません。
+どちらも数の仮定を全部満たし、`L` は式と一致します。`route-check` は `chg` も読みます。`a₁, b₁, a₂, b₂` = 369, 460, 571, 853 で、`lag` を除いて 1 を引くと 368, 459, 570, 852 です。入るときの `left` は 91 と 282 で、条件はどちらも成り立ちます。`z₁, z₂` = 418, 732 で、位相が動かないほかのフレームはなく、`left` が 2 以上減るフレームもありません。つなぎも確かめます。フレーム 1 は数えるフレームで、部屋の入るフレーム `b₁ + (E_b − 1 − C_r)` はどちらの走りでも 570 = `a₂ − 1` です。100（縦の土管の前）、380、416、450、575、730、845 のポーズでも `a₂ − 1` です。`changes-check FM2 pause F D` は、380、416、450、575、730、845 のポーズで同じ数を、50 または 60 の `lag` のフレームとともに出します。切り替えの中には Start を受けつけないフレームがあり、そこではムービーがずれて、確認は 2 つめの切り替えを終えずに終了コード 1 で終わります。`clock` の規則は、どちらの走りでも全部のフレームで成り立ちます（作業用のプログラム）。地上の構造は `pole-join-check` で、同じ走りに成り立つことを確かめました。部屋の構造は TAS について、リポジトリに入れていない作業用のプログラムで確かめました。全部のフィールドを Lean の項として TAS から作ってはいません。
 
 ## いちばん危ない場合
 

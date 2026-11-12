@@ -195,7 +195,7 @@ EndRun.start  : Statement ∧ EndStatement ∧ startCheck ∧ EndRun ∧ (∀ n 
 Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq 0)
 ```
 
-段の中で `left` が 0 なのは最後の段だけです。最後の段には 6 つの状態があり、操作できるのは 2 つです。ほかの 4 つは時間切れです。段は `left` が 0 のところで終わるので、`left` が操作の前に 0 にならないことが要ります（`EndRun.first`。`chg.time₂` と `chg.ctlFirst₂` から証明）。`Route` の新しいフィールドは `atCtl : pole.seq 0 = chg.seq chg.b₂` です。`chg` の条件 `entry₂`、`noStart₂`、`quiet₂` は `Run.change₂` と同じものを使います。
+段の中で `left` が 0 なのは最後の段だけです。最後の段には 6 つの状態があり、操作できるのは 2 つです。ほかの 4 つは時間切れです。段は `left` が 0 のところで終わるので、`left` が操作の前に 0 にならないことが要ります（`EndRun.first`。`chg.time₂` と `chg.ctlFirst₂` から証明）。`Route.Run.atCtl : pole.seq 0 = base.seq b₂` は定理です。`keep` のフレームは `base` のフレーム `b₂` からのものです。`chg` の条件 `entry₂`、`noStart₂`、`quiet₂` は `Run.change₂` と同じものを使います。
 
 最後の段からは縦のバイトと、A のボタン、当たり判定のビットも出ます。知らない主なものは `PlayerSize` と `EventMusicQueue` です。
 
@@ -254,7 +254,7 @@ Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq
 * [操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md) の `keep.ends`、`keep.clean` と定理 `keep.start`: フレームは同じなので、`ends` はここのフィールドではなくなりました。
 * `box`: 1〜8 フレーム目で、当たり判定が操作のときの機械と同じ結果になること。
 * `reads`: `fr` を機械から読むこと。`Frame` であること自体は [最高速の上限](../0-0/0-1-TopSpeed-ja.md) の前提のままです。
-* `chg.time₂`、`chg.ctlFirst₂`、`atCtl`。
+* `chg.time₂`、`chg.ctlFirst₂`、定理 `Run.atCtl`。
 
 **ファイル.** `Theorems/SurfaceFrames.lean`、`Theorems/CtrlKeep.lean`、`Theorems/VertModel.lean`、`Theorems/FrameModel.lean`（`move_masked`）、非公開の `Proof/SurfaceFrames.lean`（`side_start`）、`Proof/PoleJoin.lean`（`pole_numbers`。`ctrlCheck` を含むようになった）。
 

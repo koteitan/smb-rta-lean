@@ -78,12 +78,12 @@ Lean: `Theorems/SideFrame.lean`、`Theorems/RoomJoin.lean` の `RoomRun`、非�
 
 * なくなった: `pass`、`pos`（と `tiles`。[部屋のブロックの地図](c-7-12-RoomMap-ja.md) を見てください）。`Checks.sideRule` は `Checks.sideFrame` になりました。そのあと `edgeE`（書き込みまでに `w_edge` にも `h` にも来ない）もなくなりました。`w_edge` は抽象機械が追い、`h` は `HeadE` です。
 * 残る: `movedE`（`P(E)` は書き込みより前の移動の終わりの `posP`）。フレーム `E` だけのことです。
-* 欄でないもの: `StartE`、`CleanE`、`TilesE`、`HeadE`。`Route.Run.inRoom` が、部屋のフレームの抽象機械と `Route.Run` のつなぎ `roomEnter` から証明します。
+* 欄でないもの: `StartE`、`CleanE`、`TilesE`、`HeadE`。`Route.Run.inRoom` が、部屋のフレームの抽象機械と定理 `Route.Run.roomEnter` から証明します。
 
 ## 仮定（Lean で証明していない）
 
 * **`movedE`.** `P(E)` は移動の終わりの位置です。`t0` までのフレームは `P(n)` をフレームの終わりで読みます（`read_P`）。フレーム `E` は `t0` よりあとで、まだ機械から読んでいません。本物のフレームでは 2 つは同じです（上）。
-* **つなぎ `roomEnter`**（項目 1-1-0-4）: `RoomRun` のフレーム `E` は、部屋の中の `Route.Changes` のフレームの 1 つです。`StartE`、`CleanE`、`TilesE`、`HeadE` はこれと、部屋のフレームの `SiteOK`（`chg.roomSites`）の上に立ちます。
+* **`Route.Run.roomEnter`**（項目 1-1-0-4、定理）: `RoomRun` のフレーム `E` は、部屋の中の `Route.Base` のフレームです。`StartE`、`CleanE`、`TilesE`、`HeadE` はこれと、部屋のフレームの `SiteOK`（`chg.roomSites`）の上に立ちます。
 * **口の右端.** 出てくるのは左端だけです。`RoomJoin` は左端だけを使います。
 
 **ファイル.** `Theorems/SideFrame.lean`、`Theorems/RoomJoin.lean`、非公開の `Proof/SideFrame.lean`。

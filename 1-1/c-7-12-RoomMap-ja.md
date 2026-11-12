@@ -33,10 +33,10 @@ room_map（非公開）              :  2 つの確認をつけた map_of_rows
 
 `InRowsT(m)` は、`m` が部屋への切り替えの時間の段の機械であることです。`Route.Changes` は最初の操作でこれを与えます（`Changes.roomAt` も同じものを使います）。入るフレーム `a₂` までのフレームでの `SiteOK`（`roomSites`）と操作のルーチン（`roomStay`）も与えます。
 
-Lean: `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。`Theorems/RoomJoin.lean` に `RoomRun.TilesE`（フレーム `E` の読みでのタイル。`RoomRun.mouth_of` の仮定で、もう欄ではない）。`Theorems/Route.lean` につなぎ `roomEnter` と `Run.roomTiles`。
+Lean: `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。`Theorems/RoomJoin.lean` に `RoomRun.TilesE`（フレーム `E` の読みでのタイル。`RoomRun.mouth_of` の仮定で、もう欄ではない）。`Theorems/Route.lean` に `Run.roomEnter` と `Run.roomTiles`。
 
 ```
-roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          （Route.Run の欄）
+roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          （定理 Route.Run.roomEnter。k = b₁ + (E − 1 − C)）
 Run.roomTiles   :  確認,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ n → AtRead(tr(j)) → TilesOK(tr(j))
 ```
 
@@ -100,7 +100,7 @@ Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE ∧ HeadE 
 ## 前提（Lean では証明していない）
 
 * **`SiteOK`.** 最初の操作から入るまでのフレームの各命令で。それらの各フレームは操作のルーチンで始まる。これは [部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md) が仮定しているものです（`Route.Changes.roomSites`。`roomStay` は定理）。
-* **つなぎ `roomEnter`.** `RoomRun` のフレーム `E`（`fm(E − 1)`、`pad(E)`）は、部屋の中の `Route.Changes` のフレームの 1 つです。同じフレームの 2 つの番号づけのつなぎで、`roomCtl` と同じ種類です（項目 1-1-0-4）。`RoomRun` の欄 `tiles` はなくなりました。`Run.roomTiles` が `room_map` とこのつなぎから証明します。
+* **`roomEnter` は定理です.** `RoomRun` のフレーム `E`（`fm(E − 1)`、`pad(E)`）は、部屋の中の `Route.Base` のフレームです。部屋の機械は `base` のフレーム `b₁` からのものなので、フレーム `b₁ + (E − 1 − C)` で、`a₂` より前です（`Route.Run.roomEnter`、項目 1-1-0-4）。確認 `RoomChecks` を使います。`RoomRun` の欄 `tiles` はなくなりました。`Run.roomTiles` が `room_map` とこのつなぎから証明します。
 * **地図の残り**（項目 1-1-c-7-12）. 証明したのは、地図で 0 のビットだけです。レンガ、床、壁がそのまま残ることと、ほかのフィールドの数が地図のものであることは、証明していません。
 
 **ファイル.** `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。

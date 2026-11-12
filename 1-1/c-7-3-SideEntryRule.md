@@ -100,7 +100,7 @@ A program (`side-rule-check`).
 * **The write in `Pass`.** Only `w` makes `rt` equal `e_s`. Earlier in that frame the side check started, and from there it did not go to an exit. Read from the code, and checked on the real frames above. The rest of the frame (NMI, sound, screen, enemies) is not followed.
 * **`Start`.** The stack pointer, the adders' offset, the dot, the flags. As for the pole.
 * **`RowOK`.** Read from the code, as for the pole.
-* **`TilesOK`.** The two tiles are only in the pipe's column of the block buffers. [The block map in the room](c-7-12-RoomMap.md) proves it at every read of every frame of the room, on the machines of the change into the room and out of it (`Route.Changes`), from what the room's frames already assume there (`SiteOK`). `Route.Run.roomTiles` joins frame `E` of `RoomRun` to those machines by the link `roomEnter`; the field `tiles` is gone.
+* **`TilesOK`.** The two tiles are only in the pipe's column of the block buffers. [The block map in the room](c-7-12-RoomMap.md) proves it at every read of every frame of the room, on the machines of the change into the room and out of it (`Route.Changes`), from what the room's frames already assume there (`SiteOK`). `Route.Run.roomTiles` joins frame `E` of `RoomRun` to those machines by the theorem `Route.Run.roomEnter`; the field `tiles` is gone.
 * **`pos`.** `P(E)` is the position at the read of the page. This is part of making a `Frame` from a real frame. No longer a field of `RoomRun`: [one whole frame](c-7-16-SideFrame.md) needs `P(E)` only at the end of the move (`movedE`).
 * **The right end, the height, the ground.** Only the left end comes out here. `RoomJoin` uses only the left end.
 

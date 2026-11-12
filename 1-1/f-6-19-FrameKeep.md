@@ -32,8 +32,10 @@ keep_frame        :  keepCheck,  FrameStart_K(m),  Watched(m),  (∀ n,  CleanK(
 keep_frame_start  :  keepCheck,  FrameStart_K(m),  Watched(m),  (∀ n,  CleanK(tr(n))),  Known_K(frame(m, i))
                        →   FrameStart_K(frame(m, i))  ∧  Watched(frame(m, i))
 
-Frames (keep)     :  all n, inp n                      the machine when frame n begins, counted or not, and its input
-                     next    :  all(n + 1) = frame(all n, inp n)
+RealRun S         :  S.seq n, S.inp n,  S.seq(n + 1) = frame(S.seq n, S.inp n)      the real frames of the whole run
+Frames (keep)     :  all n := S.seq(a + n),  inp n := S.inp(a + n)        the machine when frame n begins, counted or not, and its input (definitions)
+                     next    :  all(n + 1) = frame(all n, inp n)              (the theorem Frames.next)
+                     seq0    :  seq 0 = S.seq a                                (the theorem Frames.seq0)
                      ix      :  ix 0 = 0,   j < g → ix j < ix(j + 1),   j ≤ g → seq j = all(ix j)      the counted frame j ends at all(ix j)
                      ctl     :  n + 1 < ix g  →  rt(all(n + 1)) = control  ∧  OperMode_Task(all(n + 1)) = core
                      clean   :  n < ix g  →  ∀ k,  CleanK(tr_n(k))                 tr_n:  the instructions of the frame from all n
@@ -111,9 +113,9 @@ The check `keepCheckOf` (`keep_check` in the private proof) is the first row. Th
 
 * **`keep.clean`: `CleanK` on each instruction of each frame up to the touch, counted or not.** It is the condition of `PipeWrites`, with the three bytes added to `Prot_K` and the player's store not asked. Checked on the real frames above.
 * **`keep.ctl`: each frame before the touch's frame ends with the routine of control and the task of the game core, counted or not.** Two bytes of one state. The mode is a theorem (`Frames.ctlAll`). The routine byte alone is not enough (above).
-* **`keep.all`, `keep.inp`, `keep.next`, `keep.ix`: the frames are real frames one after the other from control on, and the counted frame `j` ends at `seq j`.** This says which machines the run is made of.
+* **`keep.ix`: the counted frame `j` ends at `seq j`.** This says which machines the run is made of. The frames themselves are no longer fields: `Frames` takes the real frames of the whole run (`RealRun`) and the frame `a` of control, and `all n = S.seq (a + n)`, `inp n = S.inp (a + n)` are definitions; `next` and `seq 0 = S.seq a` are theorems (`Frames.next`, `Frames.seq0`). So the machine at control above ground is the run's machine at the end of the second change (`Route.Run.atCtl`, item 1-1-0-4).
 
-What stopped being a hypothesis: `fracStep` (each frame moves the position by a multiple of 1/16 px), then `noCastle` and `keep.start`, then `keep.ends` (`Frames.ends`), `keep.lag` and `keep.lagStart` (`Frames.all_start`). `CleanK` and `FrameStart_K` no longer name the jumpspring's control. What is new: `keep` (`all`, `inp`, `next`, `ix`, `ctl`, `clean`), and the checks `keepCheck` and `ControlStart.ctlCheck` on the ROM. This round the mode left `ctl`, and `keepCheckOf` became the walk with `endCtl`.
+What stopped being a hypothesis: `fracStep` (each frame moves the position by a multiple of 1/16 px), then `noCastle` and `keep.start`, then `keep.ends` (`Frames.ends`), `keep.lag` and `keep.lagStart` (`Frames.all_start`). `CleanK` and `FrameStart_K` no longer name the jumpspring's control. What is new: `keep` (`all`, `inp`, `next`, `ix`, `ctl`, `clean`), and the checks `keepCheck` and `ControlStart.ctlCheck` on the ROM. Then the mode left `ctl`, and `keepCheckOf` became the walk with `endCtl`. This round `all`, `inp`, `next` left the fields (definitions from `RealRun`).
 
 **What the change asks more.** `ctl` and `clean` now also ask of the `lag` frames what they ask of the counted frames. A `lag` frame that does not end in control is outside `ctl`. By the code, a frame of the master timer control after an injury of a big Mario is such a frame: the injury sets the routine of the injury and the master timer control together. The old `lag` and `lagStart` asked only that the castle flag, the fraction's low bits and the start of a frame in control come through the `lag` frames, so such a run could meet them. A paused frame ends in control.
 

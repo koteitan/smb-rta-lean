@@ -1298,8 +1298,9 @@ of the counted frame `j`, so `seq 0` is the machine at control. `g` is the frame
 fields of `fr g` up to `P₂` are the real frame's: the touch moves him, and that is not a `Frame`. `B.m` is the machine of the private proof at control. Every field is a hypothesis of the theorem:
 none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `tiles`, `edge`, `moved` and `keep`, by the walk of the whole frame of the touch (`PoleFrame`, `Run.inRange`).
 That the fraction of `P₂(g)` is a multiple of 1/16 px is a theorem from `keep`, the walk of one whole frame in control (`FrameKeep`), and the check on the ROM (`Run.frac`). That no machine up to the touch
-has the castle flag is a theorem from the machine at control, `keep` and the check (`Run.noCastle_of`); so the castle entry is after the touch (`Run.afterTouch`). -/
-structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc : Nat) (F : Int) where
+has the castle flag is a theorem from the machine at control, `keep` and the check (`Run.noCastle_of`); so the castle entry is after the touch (`Run.afterTouch`).
+The frames up to the touch are those of the real run `S` from frame `a` on (`keep`), so the machine at control is `S.seq a` (`Run.seq0`). -/
+structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc : Nat) (F : Int) (S : FrameKeep.RealRun) (a : Nat) where
   fr : Nat → Frame (top sy) (amax sy m0)
   g : Nat
   c : Nat
@@ -1311,7 +1312,7 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   /-- the frames up to the touch on the real machine, counted or not, as the walk of one whole frame in control needs them: each is the real frame of the one before, the counted
   frame `j` ends at `seq j`, the frames before the touch's frame end in control, and each instruction meets `FrameKeep.CleanK`. That each frame starts in the idle loop in control,
   and that the `lag` frames keep the castle flag and the fraction's low 4 bits, are theorems (`FrameKeep.Frames.all_start`, `FrameKeep.Frames.start`). -/
-  keep : FrameKeep.Frames sy m0 g seq
+  keep : FrameKeep.Frames sy m0 S a g seq
   /-- the frames: read from the machines; each one from a clean state follows `hstep`, up to a hit; the ones before `J` run the collision routine as on the machine at control.
   They are the frames of `keep`. -/
   frames : SurfaceFrames.OnFrames sy m0 B T J g seq fr keep
@@ -1335,16 +1336,21 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs (flagOf sy seq) g (Nc + 5)
 
 /-- the frames up to the touch follow each other: they are read from the machines -/
-theorem Run.next {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F) :
+theorem Run.next {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) :
     ∀ j, 1 ≤ j → j < R.g → Next (R.fr j) (R.fr (j + 1)) :=
   SurfaceFrames.next_of_reads R.frames.reads
 
+/-- **The machine at control is the real run's frame `a`**: by the definition of the frames of `keep` (the old link `Route.Run.atCtl`) -/
+theorem Run.seq0 {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) :
+    R.seq 0 = Sr.seq ar :=
+  R.keep.seq0
+
 /-- at control he is stopped at the position of the machine `B.m` -/
-theorem Run.startP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.startP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) : (R.fr 1).P = posP sy B.m :=
   SurfaceFrames.start_P R.frames R.one_le st
 
-theorem Run.startV {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.startV {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (st : SurfaceFrames.Start sy B (R.seq 0)) : (R.fr 1).v = 0 :=
   SurfaceFrames.start_v hN R.frames R.one_le st
 
@@ -1352,14 +1358,14 @@ theorem Run.startV {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F
 def fracCheck (sy : Syms) (m : Machine) : Bool := decide (posP sy m % 16 = 0)
 
 /-- the machine at control has the castle flag down and the fraction a multiple of 1/16 px: the watched bits of `FrameKeep` -/
-theorem Run.watched₀ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.watched₀ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (h0 : castle sy (R.seq 0) = false) : FrameKeep.Watched (FrameKeep.watchOf sy) (R.seq 0) := by
   have h1 : posP sy B.m % 16 = 0 := by simpa [fracCheck] using hq
   exact FrameKeep.watched_of_parts h0 (by rw [st.P]; exact h1)
 
 /-- **The fraction is a multiple of 1/16 px** on each frame up to the touch: it is one at control (`fracCheck` on the machine `B.m`, `Start.P`), and each frame keeps it: the walk of one
 whole frame in control (`FrameKeep.keep_frame`, on the frames of `keep`). `hk` is the walk's check on the ROM. -/
-theorem Run.fracP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.fracP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     ∀ j, 1 ≤ j → j ≤ R.g → (R.fr j).P % 16 = 0 := by
   have h0 := R.watched₀ st hq hc0.castle
@@ -1368,7 +1374,7 @@ theorem Run.fracP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F 
   exact R.keep.frac hk hc0.start h0 (j - 1) (by omega)
 
 /-- at the touch, `P₂` too: the move adds `16·v₂` -/
-theorem Run.frac {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.frac {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     (R.fr R.g).P₂ % 16 = 0 := by
   have h1 := R.fracP st hq hk hc0 R.g R.one_le (Nat.le_refl _)
@@ -1376,20 +1382,20 @@ theorem Run.frac {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F :
   omega
 
 /-- so the checked touch with the fraction of `P₂(g)` is one of `CastleWalk.fracs` -/
-theorem Run.frac_mem {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.frac_mem {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     fracOf (R.fr R.g).P₂ ∈ fracs :=
   fracOf_mem (R.frac st hq hk hc0)
 
 /-- **No castle flag up to the touch**: with the castle flag down at control, the walk keeps it down on every frame up to the touch (`keep`). `hk` is the walk's check on the ROM.
 The machine at control (`hc0`: the start of a frame in control, the castle flag down) comes from the rows of the change (`ControlStart.EndRun.atCtl`). The old field `noCastle`. -/
-theorem Run.noCastle_of {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.noCastle_of {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     ∀ j, j ≤ R.g → castle sy (R.seq j) = false :=
   R.keep.noCastle hk hc0.start (R.watched₀ st hq hc0.castle)
 
 /-- **The castle entry comes after the touch**: up to the touch no machine has the castle flag (`Run.noCastle_of`). `hc0` is the machine at control, `hk` the walk's check on the ROM. -/
-theorem Run.afterTouch {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (R : Run sy m0 b vs B T J Nc F)
+theorem Run.afterTouch {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) : R.g < R.c := by
   by_cases h : R.c ≤ R.g
   · have h1 := R.noCastle_of st hq hk hc0 R.c h
@@ -1399,7 +1405,7 @@ theorem Run.afterTouch {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat
 
 /-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleFrame.inRange_of_frame`) on frame `g` of `keep`. The frame starts in control
 (`FrameKeep.Frames.start`, from the machine at control) and each instruction is `CleanK` (`keep.clean`). `hc` is the walk's check on the ROM, `hk` that of `FrameKeep`. -/
-theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} (hc : PoleFrame.poleFrameCheck sy m0 = true) (R : Run sy m0 b vs B T J Nc F)
+theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (hc : PoleFrame.poleFrameCheck sy m0 = true) (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     poleP sy m0 ≤ (R.fr R.g).P₂ :=
   PoleFrame.inRange_of_frame hc R.touches (R.keep.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _))
@@ -1443,7 +1449,7 @@ theorem numbers_of_check {X F : Int} {N E T J Nc lo : Nat} (h : joinCheck sy m0 
 
 section Join
 
-variable {b : Machine} {vs : List Jump.VS} {n : Nat} {X F : Int} {N E T J dx dy rows Nc lo : Nat}
+variable {b : Machine} {vs : List Jump.VS} {n : Nat} {X F : Int} {N E T J dx dy rows Nc lo : Nat} {Sr : FrameKeep.RealRun} {ar : Nat}
 
 /-- what the machine at control gives: `hN` the numbers of the machine of the private proof, `st` the state of the real machine at control -/
 abbrev AtControl (sy : Syms) (m0 : Machine) (n dx dy rows J : Nat) (m : Machine) : Prop :=
@@ -1452,7 +1458,7 @@ abbrev AtControl (sy : Syms) (m0 : Machine) (n dx dy rows J : Nat) (m : Machine)
 /-- `hB` of `slow_short` on a run, with `B = PA + X + 16·top·(T − N)` and `PA` the position of `SurfaceRun.above` -/
 theorem hB_run (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (H : Numbers sy m0 X N E T J Nc lo F)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ R.g) (hd : e + d = T)
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ R.g) (hd : e + d = T)
     (hPf : feetP sy m0 ≤ (R.fr e).P₂) :
     (R.fr e).P₂ + 16 * (top sy : Int) * (d : Int) ≤
       posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
@@ -1465,7 +1471,7 @@ theorem hB_run (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J 
 /-- The position bound forbids standing on the base by frame `T`: with his feet over it on frame `w − 1`, `w` is past `T`. -/
 theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (H : Numbers sy m0 X N E T J Nc lo F)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (w : Nat) (h2 : 2 ≤ w) (hg : w ≤ R.g) (hPf : feetP sy m0 ≤ (R.fr (w - 1)).P₂) :
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (w : Nat) (h2 : 2 ≤ w) (hg : w ≤ R.g) (hPf : feetP sy m0 ≤ (R.fr (w - 1)).P₂) :
     T + 1 ≤ w := by
   by_cases hw : T + 1 ≤ w
   · exact hw
@@ -1484,7 +1490,7 @@ theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 /-- No touch up to frame `T`: this is `P₂(g) < P₀` from the position bound, hits included. -/
 theorem touch_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hc : PoleFrame.poleFrameCheck sy m0 = true) (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) : T + 1 ≤ R.g := by
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) : T + 1 ≤ R.g := by
   have H := numbers_of_check hn
   by_cases hgT : R.g ≤ T
   · exfalso
@@ -1506,7 +1512,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
-    (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
+    (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hd : IsDirect sy R.touchY R.touchRising) :
     T + 7 ≤ R.g ∧ (R.g ≤ T + 8 → R.g + Nc ≤ R.c) ∧ R.g + Nc ≤ R.c + 1 := by
   have H := numbers_of_check hn
@@ -1565,7 +1571,7 @@ theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
-    (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
+    (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) : T + 7 + Nc ≤ R.c := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
@@ -1584,7 +1590,7 @@ theorem touch_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N 
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
-    (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
+    (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     (T + 1 ≤ R.g ∧ R.g + Nc + 6 ≤ R.c) ∨ (T + 7 ≤ R.g ∧ R.g ≤ T + 8 ∧ R.g + Nc ≤ R.c) ∨ (T + 9 ≤ R.g ∧ R.g + Nc ≤ R.c + 1) := by
   have H := numbers_of_check hn

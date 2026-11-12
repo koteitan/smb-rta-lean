@@ -16,7 +16,7 @@
 
 ## 定理
 
-`tm n` は押してから `n` フレームあとの機械、`ti n` はその入力です。`seq`、`inp` はフレーム 0 からの道筋の機械と入力です（`chg.seq`、`chg.inp`）。`x` は基準の機械です。電源を入れ、39 フレームは何も押さず、フレーム 39 で Start を押し、そのフレームのあとの機械です。
+`tm n` は押してから `n` フレームあとの機械、`ti n` はその入力です。`seq`、`inp` はフレーム 0 からの道筋の機械と入力です（`base.seq`、`base.inp`）。`x` は基準の機械です。電源を入れ、39 フレームは何も押さず、フレーム 39 で Start を押し、そのフレームのあとの機械です。
 
 ```
 Press(m)  :  m はフレームの始まりで何もしないループにいる（x のプログラムカウンタとスタックポインタ、ドット < 10、NMI はフレームの始まりのとおり）、
@@ -49,7 +49,7 @@ Begin.timer    :  timer(seq 0) = t0  ∧  phase(seq 0) = 2
 Begin.still    :  v(seq 1) = 0
 Begin.anyNear  :  seq 0 は近い状態か止まった状態にある,  v(seq 1) = 0               （どの入力でも）
 Begin.frame0   :  frame0Check(fin)  ⟹  フレーム 0 の終わりは fin を満たす          （どの入力でも。StartRun、EntryKeep、HurryMusic が使う）
-Route.Run.zero, Route.Run.still              Run.title と Run.pipeAt（pipe.fm 1 = chg.seq 1）から
+Route.Run.zero, Route.Run.still              Run.title と定理 Run.pipeAt（pipe.fm 1 = base.seq 1）から
 HurryMusic.Run.zero, HurryMusic.Run.quiet₀   Run.title から
 ```
 
@@ -86,7 +86,7 @@ HurryMusic.Run.zero, HurryMusic.Run.quiet₀   Run.title から
 
 * `press` は 1 つの状態の仮定です。上の 339 通りでは全部成り立ちます。タイトルが別のワールドを示す走り（ゲームオーバーのあとの A と Start）や、`K` のバイトが別の値の走りは外です。押したときの `PauseSoundBuffer` = 0 もその一部です。見た本物の走り（ゲームオーバーのあとの 6 通りも）では全部成り立ちますが、電源からは証明していません。
 * フィールド `noPause`（フレーム 0 で Start を押さない）がありましたが、なくしました。`StartRun.titleCheck` と `EntryKeep.nearCheck` を、`HurryMusic.nearCheck` と同じく `frame0Check`（近い状態と止まった状態からどの入力でも、フレーム 0 の終わりは全部、その条件を満たすか遠い状態）にし、`Begin.near` の代わりに `Begin.frame0` を使います。どちらの確かめも証明のビルドで通ります。
-* `atZero`、`first`、`ctl`、`pipeAt` はどの機械がフレーム 0 かと、2 つの列が合っていることです。列の作り方から成り立ちます。
+* `atZero`、`first`、`ctl` はどの機械がフレーム 0 かです。列の作り方から成り立ちます。`pipeAt` はもう欄ではありません。`pipe` は機械を `base` からとり、数えるフレーム 1 はフレーム 1 です（定理 `Run.pipeAt`）。
 
 **ファイル.** `Theorems/TitleStart.lean`、`Theorems/Route.lean`（`Run.title`、`Run.pipeAt`、`Run.zero`、`Run.still`）、`Theorems/HurryMusic.lean`、非公開の `Proof/TitleStart.lean`。
 

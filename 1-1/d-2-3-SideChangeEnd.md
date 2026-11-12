@@ -2,7 +2,7 @@
 
 # The last frames of the change out of the side pipe
 
-**Claim.** This is a partial result. A machine that meets a condition on one state at the exit has no control on the next 121 frames, for any inputs with no Start on the frames of the game core. With the first frames of the change, this removes the hypothesis `fallAfter`: a run with these inputs takes at least 282 counted frames from the entry to control. During the change, a frame that ends paused takes nothing off `left`. If at the exit the game timer is not 000 and the sound's pause flag is 0, `left` is not 0 before the first control after the entry.
+**Claim.** This is a partial result. A machine that meets a condition on one state at the exit has no control on the next 121 frames, for any inputs with no Start on the frames of the game core. With the first frames of the change, this removes the hypothesis `fallAfter`: a run with these inputs takes at least 282 counted frames from the entry to control. During the change, a frame that ends paused takes nothing off `left`. If at the exit the game timer is not 000, whatever the sound's pause flag is, `left` is not 0 before the first control after the entry.
 
 `m₀`, `run`, `ctl`, `0^k`, `E` and `T = run(E, 0^160)` are those of [What decides the change out of the side pipe](d-2-1-SideTransitionAll.md). `EntryCond`, `During`, `left` and `frame(m, i)` are those of [The first frames of the change out of the side pipe](d-2-2-SideChangeBound.md). `m[b]` is the byte `b` of `m`.
 
@@ -26,14 +26,15 @@ All other bytes are free: Mario's `x`, size, status and speed, the coins, the sc
 
 **How the end of `During` meets this condition.** `Entry2(M)` is `EntryCond(M)` and 8 more bytes `X` with the values of `E`: `AreaPointer`, `EntrancePage`, `CurrentPlayer`, `JoypadOverride`, `GameTimerExpiredFlag`, `AreaNumber`, `PrimaryHardMode`, `NoteLengthTblAdder`. `During2(m)` is `During(m)` with these bytes known too. The check shows that the frames of the pipe keep them. The frame on which the timer runs out then gives every byte of `Kx` except the two bytes of the sound's pause, and the low bit of `GamePauseStatus`. `Quiet(m)` says that these two bytes have the values of `T`, which are 0. A press of Start changes them while the pause sound plays. `Quiet` is not proved. It is a hypothesis on the state at the exit.
 
-`NoStart(m, i)` says: if `m` is in the game core with a routine other than the pipe's, the input `i` has no Start. `InRows(m)` says that `m` is covered by one of the abstract states of the rows, below. `InRowsT(m)` says that `m` is covered by one of the abstract states of the rows of the time, below.
+`NoStart(m, i)` says: if `m` is in the game core with a routine other than the pipe's, the input `i` has no Start. `InRows(m)` says that `m` is covered by one of the abstract states of the rows, below. `InRowsT(m)` says that `m` is covered by one of the abstract states of the rows of the time, below. `InRowsTF(m)` says that `m` is covered by one of the abstract states of the rows of the time with the flag not 0, below. `InTime(m) := InRowsT(m) ∨ InRowsTF(m)`.
 
 ```
-Time(m)    :=  m[PauseModeFlag] = 0  ∧  ( m[GameTimerDisplay], m[GameTimerDisplay + 1], m[GameTimerDisplay + 2] ) ≠ ( 0, 0, 0 )
+Timer(m)   :=  ( m[GameTimerDisplay], m[GameTimerDisplay + 1], m[GameTimerDisplay + 2] ) ≠ ( 0, 0, 0 )
+Time(m)    :=  m[PauseModeFlag] = 0  ∧  Timer(m)
 Paused(m)  :=  m[GamePauseStatus] & 1 = 1
 ```
 
-`Time` says that the time is not up at the exit. `Paused` says that the frame ends paused.
+`Timer` says that the game timer is not 000 at the exit. `Time` adds that the sound's pause flag is 0. `Paused` says that the frame ends paused.
 
 ```
 entry      :  ∀ M,  Entry2(M) → EntryCond(M)
@@ -49,10 +50,15 @@ rowsT      :  ∀ m, InRowsT(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  
 zeroT      :  ∀ m,  InRowsT(m) ∧ left(m) = 0 → ctl(m)
 pauseKeeps :  ∀ m, During2(m) → ∀ i,  Paused(frame(m, i)) ∧ During2(frame(m, i)) → left(m) ≤ left(frame(m, i))
 rowsNotPaused :  ∀ m,  InRows(m) → ¬Paused(m)
+stepTT     :  ∀ m, During2(m) → ∀ i :  During2(frame(m, i))  ∨  ( Exit(frame(m, i))  ∧  ( Quiet(frame(m, i)) ∧ Timer(frame(m, i)) → InTime(frame(m, i)) ) )
+rowsTF     :  ∀ m, InRowsTF(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  InRowsTF(frame(m, i))
+zeroTF     :  ∀ m,  InRowsTF(m) ∧ left(m) = 0 → ctl(m)
 no_control_exit :  ExitCond(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 122, ¬ctl(sⱼ)
 EndRun.fall     :  a run with the fields of `EndRun`, frames before the first `left = 0` :  left(seq n) ≤ left(seq (n+1)) + 1
 EndRun.bound    :  a run with the fields of `EndRun` :  cnt(a) + 282 ≤ cnt(b)
 EndRun.first    :  a run with the fields of `EndRun`, (∀ n ∈ [a, b],  Exit(seq n) → Time(seq n))  ∧  (∀ n ∈ [a, b),  ¬ctl(seq n))
+                   →  ∀ n ∈ [a, b),  left(seq n) ≠ 0
+EndRun.firstF   :  a run with the fields of `EndRun`, (∀ n ∈ [a, b],  Exit(seq n) → Timer(seq n))  ∧  (∀ n ∈ [a, b),  ¬ctl(seq n))
                    →  ∀ n ∈ [a, b),  left(seq n) ≠ 0
 ```
 
@@ -62,9 +68,9 @@ EndRun.first    :  a run with the fields of `EndRun`, (∀ n ∈ [a, b],  Exit(s
 lagPaused  :  ∀ n ∈ [a, b),  lag(n) → Paused(seq (n + 1))
 ```
 
-The two hypotheses of `EndRun.first` are `chg.time₂` and `Changes.ctlFirst₂` of `Route`. The second is a theorem: `Route` defines `chg.b₂` as the first state with control from the entry on. `EndRun.first` takes the place of `chg.first₂` (`left` is not 0 before control).
+The two hypotheses of `EndRun.firstF` are `chg.time₂` (`Timer`) and `Changes.ctlFirst₂` of `Route`. The second is a theorem: `Route` defines `chg.b₂` as the first state with control from the entry on. `EndRun.firstF` takes the place of `chg.first₂` (`left` is not 0 before control). `EndRun.first` is as before, with `Time`.
 
-Lean: `Theorems/SideChangeEnd.lean` (`s_xtick`, `s_xbr`, `s_xstep1`, `xframe_of_walk`, `link_frame`, `chain_step`, `exit_cover`, `during_step`, `sim_normD`, `link_frameD`, `chain_stepD`, `ctl_of_zero`, `TimeOK`, `timeRows`, `InRowsT`, `Paused`, `pause_keeps`, `not_paused_rows`, `EndStatement`, `endStatement_of_check`, `no_control_exit`, `EndRun`, `st_step_paused`, `EndRun.fall`, `EndRun.bound`, `EndRun.first`, `aIzyHi`, `wide_ok`, `s_aIzyHi`), private `side_end_checks` (`native_decide`), `side_end`, `side_exit_no_control`, `side_change_end`.
+Lean: `Theorems/SideChangeEnd.lean` (`s_xtick`, `s_xbr`, `s_xstep1`, `xframe_of_walk`, `link_frame`, `chain_step`, `exit_cover`, `during_step`, `sim_normD`, `link_frameD`, `chain_stepD`, `ctl_of_zero`, `TimeOK`, `timeRows`, `InRowsT`, `TimerOK`, `timeRowsF`, `InRowsTF`, `flagCheck`, `InTime`, `Paused`, `pause_keeps`, `not_paused_rows`, `EndStatement`, `endStatement_of_check`, `no_control_exit`, `EndRun`, `st_step_paused`, `EndRun.fall`, `EndRun.bound`, `EndRun.first`, `EndRun.firstF`, `aIzyHi`, `wide_ok`, `s_aIzyHi`), private `side_end_checks` (`native_decide`), `side_end`, `side_exit_no_control`, `side_change_end`.
 
 ## How it works
 
@@ -75,6 +81,8 @@ Lean: `Theorems/SideChangeEnd.lean` (`s_xtick`, `s_xbr`, `s_xstep1`, `xframe_of_
 **The rows.** After the clear 1,769 of the 2,048 bytes are known. The bytes that the clear leaves come from `ExitCond`, or they are free. Each frame goes from the states of one row to those of the next: 123 rows in all, with `left` from 122 to 0. The last row holds the states with control, and the states of the time-up path, because the digits of the game timer are free: `left` is 0 in both.
 
 **The rows of the time.** To remove the time-up states from the last row, there is one more set of rows, `timeRows`. They start from the states of the rows with the flag 0, and `dg` says that the three digits of the game timer are not all 0. On the last frame, the instruction that tests the time splits into 24 pieces, each with one bit of one digit at 1. So the time-up path is gone. The frame of the entrance's setup loads the timer from the level if `FetchNewGameTimerFlag` is not 0. That path writes the digits, so it loses `dg`. The search keeps this flag apart. At the frame's end, a digit with a bit known to be 1 gives `dg` back (`normD`, `sim_normD`), so the two paths join again. The check of these rows is `chainOKD`. Every state of a row where `left` is 0 has control (`zeroCtl`). A state at the exit with `Quiet` and `Time` is in these rows (`stepT`).
+
+**The rows of the time with the flag not 0.** If the flag is not 0, one of its bits is 1. While the two pause bytes are 0, the sound routine takes the pause path and does not write the flag. So the bit stays 1, and the song does not start. For each bit there is one more set of rows of the time (`timeRowsF`, 8 sets). They start from the states of `timeBase`, with this bit of the flag 1 in place of the flag 0. Such a state is a piece of `TaintRun.splitDg` with the flag as the byte of `D` (`cov_dg`). In all 8 sets every state of a row where `left` is 0 has control (`flagCheck`). A state at the exit with `Quiet` and `Timer` is in `timeRows` if the flag is 0, and in the set of a bit that is 1 if not (`stepTT`). So `EndRun.firstF` does not assume the flag.
 
 **Frames that end paused.** A frame that ends paused runs neither the timers nor the mode's routine. The frames of the pipe are walked once more, with the pause bit read in pieces and the pause byte kept apart (`pauseCheck`). Every state at a frame's end where the counter has fallen knows that the bit is 0 (`finRkP`). So a frame of the pipe that ends paused does not move the counter, and takes nothing off `left` (`pause_keeps`). Every state of the rows knows that the bit is 0 (`notPausedRows`), so no frame in the rows ends paused. If the `lag` frames end paused, they take nothing off `left` (`st_step_paused`).
 
@@ -91,9 +99,10 @@ Lean: `Theorems/SideChangeEnd.lean` (`s_xtick`, `s_xbr`, `s_xstep1`, `xframe_of_
 | rows, flag 0 | 682,944 |
 | rows, flag not 0 | 691,797 |
 | rows of the time | 684,535 |
+| rows of the time, one bit of the flag 1 (8 sets, each) | 691,694 |
 | a frame of the pipe, timer ≥ 2, the pause bit in pieces | 252,566 |
 
-About 9 s in a program (before: about 6 s), about 11 s in the private proof build (before: about 6 s).
+The rows of the time with the flag not 0 take about 1.6 s a set, about 12 s for the 8 sets. About 21 s in a program (before: about 9 s), about 29 s in the private proof build (before: about 11 s; measured while other proofs were built).
 
 ## Why Start is excluded
 
@@ -105,7 +114,35 @@ Measured, with temporary programs (not kept), with the read through a pointer ab
 * Rows from the exit with `PauseModeFlag`, `PauseSoundBuffer` and `PauseSoundQueue` not known, in place of the two cases of the flag and `Quiet`: the same loop fails from the fourth frame on. From the frame where the song starts, the frames end at up to 207,531 places and reach the limit of 4,000,000 steps.
 * Rows of the time with only the flag not known (the pause bytes as `Quiet` says): the same failures.
 
-The reason is the same in all three. The abstract machine joins a state where the song has started with one where it has not. After the join it does not keep "the queue is not 0" past the branch on it. So the rows fail as soon as the song is not known. Rows that keep the cases apart need one set of rows per case: 8 for the flag not 0 (one known bit each), 41 for the delay of the song after an unpause (below). This is not done.
+The reason is the same in all three. The abstract machine joins a state where the song has started with one where it has not. After the join it does not keep "the queue is not 0" past the branch on it. So the rows fail as soon as the song is not known. Rows that keep the cases apart need one set of rows per case. The 8 sets of the rows of the time for the flag not 0 (one known bit each) are made (above, "The rows of the time with the flag not 0"). The delay of the song after an unpause needs 41 sets (below). This is not done. The attempt to take the sound routine as one step is in the next section.
+
+## The sound routine as one step: an attempt
+
+**The idea.** Show once, on the ROM, that one call of the sound routine, from its entry to its return, writes only the sound's bytes and the APU's registers, keeps every other RAM byte, returns to its caller with the stack as it was, and takes a number of dots in an interval `[lo, hi]`. If this held for any values of the sound's bytes, the walks of the rows could step over the call in one step and run with the song not known.
+
+**The sound's bytes.** 38 bytes (`SoundWalk.soundNames`): the queues, the buffers, the song's pointer, offsets and counters, the counters of the effects, the three pause bytes. The only other byte the routine reads is `OperMode`. Every write to RAM is to a fixed address (zero page or absolute). A write with an index added goes only to an APU register. The Lean machine has no APU, so such a write changes nothing.
+
+**Measured** (`sound-check`, from the real place of the call 200 frames after the exit; the other bytes are those of that machine):
+
+| state at the call | abstract steps | failures | dots of the call |
+|---|---|---|---|
+| the song known | 115 | 0 | 1,179 |
+| the 38 sound bytes not known | 260,322 | 2,025 | 240 to 87,237 (up to the frame's end) |
+| the same, the queues and buffers read in pieces by the lowest bit that is 1 | 294,803 | 2,136 | the same |
+| the same, and bit 7 of the high byte of `MusicData` at 1 | the limit, 2,000,000 | 15,630 | the same |
+
+The failures are the four reads `LDA (MusicData),Y` of the four voices (the pointer is not known), the loop that finds the song's header, and the ticks that reach the frame's end. Pieces by the lowest bit that is 1: a byte `x` is split into the piece `x & mask = 0` and, for each bit `j` of `mask`, the piece where the bits of `mask` below `j` are 0 and bit `j` is 1 (`SoundWalk.ctzPieces`; used only by the program, not proved). With them the header's loop ends, but the loops that read the song's data do not, since the pointer and the offsets are not known.
+
+**"For any values" is false.** Checked on the Lean machine, from the real place of the call:
+
+* A call that does not return. With the pointer in the ROM and the noise's loop-back offset at a place where the song's data is 0, the loop that looks for the noise's data (`FetchNoiseBeatData`) comes back to the same place forever. It does not return in 200,000 steps.
+* A call that reads a register. With the high byte of the pointer in the range of the PPU's registers, the read `LDA (MusicData),Y` of the second square voice reads the PPU's status register. That read clears the vblank flag.
+
+So a summary can hold only on a set of values of the sound's bytes. That set is a set of pairs of the pointer and the offsets, and known bits byte by byte cannot express it.
+
+**The table of real song states.** From the exit, 123 frames with no input, for 44 states at the exit: with `Quiet`, with the unpause sound at each count from 1 to 42, and with the unpause pressed on the frame of the exit. There were 5,412 calls and 207 states of the sound's bytes. From each state, the abstract walk closes at the return: 16,940 steps in all, no failure, 303 to 3,291 dots a call. The real calls took 101 to 1,097 cycles.
+
+**Why the rows cannot use it.** The states of the rows do not know the sound's bytes. So "the machine's sound bytes are in the table" has to be carried from frame to frame outside the abstract state. That needs a lemma on the machine: a step does not change the bytes it does not write. The proofs of the abstract machine do not give it. `Sim` relates one abstract state to one machine, and it does not relate the machines before and after a step. So it does not give either that the state after the call knows the bytes, other than the sound's, that the state before the call knew. Rows with one set for each state of the table are as big as one set for each delay (the 41 sets above). This is not done. `Quiet` (1-1-d-3-4) and `NoStart` (1-1-d-3-3) stay.
 
 ## Measured but not a theorem
 
@@ -143,13 +180,17 @@ So the rows would serve the last 41 frames from frame 50. The state at frame 50 
 * `Quiet`: no pause sound is running at the exit. On the runs measured it fails when Start was pressed in the last frames of the pipe. `left` still falls by exactly one on those runs, measured only. It does not follow from the rows and the entry: the conditions allow Start on the frames of the pipe, so the states during the pipe do not know the bytes of the pause sound, and the sound of a press on the last frames of the pipe still plays at the exit. It needs rows that run with the song not known (see "Why Start is excluded"). On 880 runs with Start at random on the frames of the pipe (44 entries, 20 runs each), the exits were: 280 with `Quiet`; 584 with the sound of the unpause still playing (in `PauseSoundBuffer`, with `PauseModeFlag` not 0); 16 with the unpause pressed on the frame of the exit (in `PauseSoundQueue`, with the flag not 0). None was paused. In the second kind the song starts 1 to 41 frames late, by the counter of the pause sound, so rows for it need one set per delay. The third kind alone would need one more set of rows: 16 of the 600 exits without `Quiet`. Item 1-1-d-3-4.
 * `NoStart`: no Start on the frames of the game core after the pipe.
 * `lagPaused`: a `lag` frame ends paused. `lag` is a label of `Frames`, and this field is its only link to the machine. On the real runs, every frame of the pipe where the timers do not run ended paused. After the exit the only such frame is the `setup` frame, which is not a `lag` frame. A `lag` frame where the timers do not run for another reason does not meet this field: a frame with `TimerControl` not 0, or the frame after a handler that runs past its frame. For the frames of the pipe the check shows that every frame ends in the idle loop, so none runs past. Neither kind was seen on the runs measured. It does not follow from the rows: they show that no state after the exit is paused and that a frame of the pipe that ends paused keeps `left`, but nothing ties the label `lag` to the machine. Item 1-1-d-3-2.
-* `Time`: at the exit the game timer is not 000 and the sound's pause flag is 0. A run with 000 has used 400 seconds. For the flag: no real exit with `Quiet` and `ExitCond` had the flag not 0. The timer's part does not follow from the change and the room alone (read from the code). The frames of the pipe do not run the game timer, so its digits at the exit are those at the entry. But the timer can show 000 at the entry: on a frame in control it falls from 001 to 000, and the time-up comes only when `GameTimerCtrlTimer` has run out again, 24 frames later. On these frames the player can enter the pipe. So it needs the count of the timer over the route. The flag's part would need rows of the time for the flag not 0: the flag not 0 and the timer not 000 are two facts, and the abstract machine has one `dg`. With one known bit of the flag per set of rows, that is 8 more sets of about 690,000 steps each. Rows of the time with the flag not known fail (see "Why Start is excluded"). Item 1-1-d-3-5.
+* `Timer`: at the exit the game timer is not 000. The sound's pause flag is no longer assumed (the rows of the time with the flag not 0). A run with 000 has used 400 seconds. It does not follow from the change and the room alone (read from the code). The frames of the pipe do not run the game timer, so its digits at the exit are those at the entry. But the timer can show 000 at the entry: on a frame in control it falls from 001 to 000, and the time-up comes only when `GameTimerCtrlTimer` has run out again, 24 frames later. On these frames the player can enter the pipe. So it needs the count of the timer over the route. Item 1-1-d-3-5.
 * `b` is the first state with control after the entry. In the route this holds by the definition of `chg.b₂` (`Changes.ctlFirst₂`).
 * [The whole route](0-1-Route.md) uses this theorem: `Changes.run₂` is an `EndRun`.
 
-**Files.** `Theorems/SideChangeEnd.lean`, private `Proof/SideChangeEnd.lean`.
+**Files.** `Theorems/SideChangeEnd.lean`, private `Proof/SideChangeEnd.lean`. The measurements of the sound routine: `Theorems/SoundWalk.lean` (program only, no theorem).
 
 **To reproduce.**
 ```
-.lake/build/bin/smbrta side-end-check FM2    # the check, the conditions on real entries and exits, left on real frames, the time and the pauses on real frames, about 50 s
+.lake/build/bin/smbrta side-end-check FM2    # the check, the conditions on real entries and exits, left on real frames, the time and the pauses on real frames, about 60 s
+.lake/build/bin/smbrta sound-check           # one call of the sound routine: the walk with the 38 sound bytes not known, real calls with the bytes at random
+.lake/build/bin/smbrta sound-check "ctz;MusicDataHigh=80/80"   # the walk with the reads in pieces and the pointer's high bit 1
+.lake/build/bin/smbrta sound-check table     # the table of real song states, and the walk from each
+.lake/build/bin/smbrta sound-check flagrows  # the rows of the time, and the 8 sets with the flag not 0, about 30 s
 ```

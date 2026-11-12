@@ -33,10 +33,10 @@ room_map (private)              :  map_of_rows with the two checks
 
 `InRowsT(m)` says that `m` is a machine of the rows of the time of the change into the room. `Route.Changes` gives it at the first control (`Changes.roomAt` uses the same), with `SiteOK` (`roomSites`) and the player's routine (`roomStay`) on the frames up to the entry `a₂`.
 
-Lean: `Theorems/RoomMap.lean`; private `Proof/RoomMap.lean`. In `Theorems/RoomJoin.lean`: `RoomRun.TilesE`, the tiles at the reads of frame `E`, a hypothesis of `RoomRun.mouth_of` (no longer a field). In `Theorems/Route.lean`: the link `roomEnter` and `Run.roomTiles`.
+Lean: `Theorems/RoomMap.lean`; private `Proof/RoomMap.lean`. In `Theorems/RoomJoin.lean`: `RoomRun.TilesE`, the tiles at the reads of frame `E`, a hypothesis of `RoomRun.mouth_of` (no longer a field). In `Theorems/Route.lean`: `Run.roomEnter` and `Run.roomTiles`.
 
 ```
-roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          (a field of Route.Run)
+roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          (the theorem Route.Run.roomEnter, k = b₁ + (E − 1 − C))
 Run.roomTiles   :  the checks,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ n → AtRead(tr(j)) → TilesOK(tr(j))
 ```
 
@@ -100,7 +100,7 @@ Program `room-map-check FM2 [N]`. Each frame of the room before it leaves the pl
 ## Assumptions (not proved in Lean)
 
 * **`SiteOK`** on each instruction of the frames from the first control to the entry, and the player's routine on each of those frames. These are what [The screen's page in the room, and the long timer of the side pipe](d-2-4-ScreenPage.md) assumes (`Route.Changes.roomSites`; `roomStay` is a theorem).
-* **The link `roomEnter`.** Frame `E` of `RoomRun` (`fm(E − 1)`, `pad(E)`) is a frame of `Route.Changes` in the room. This is a link between two numberings of the same frames, as `roomCtl` is (item 1-1-0-4). The field `tiles` of `RoomRun` is gone: `Run.roomTiles` proves it from `room_map` and this link.
+* **`roomEnter` is a theorem.** Frame `E` of `RoomRun` (`fm(E − 1)`, `pad(E)`) is a frame of `Route.Base` in the room: the room's machines are those of `base` from frame `b₁` on, so it is frame `b₁ + (E − 1 − C)`, and that is before `a₂` (`Route.Run.roomEnter`, item 1-1-0-4). This uses the checks `RoomChecks`. The field `tiles` of `RoomRun` is gone: `Run.roomTiles` proves it from `room_map` and this link.
 * **The rest of the map** (item 1-1-c-7-12). Only the bits that are 0 in the map are proved. That bricks, the floor and the wall stay as they are, and that the numbers of the other fields are those of the map, are not proved.
 
 **Files.** `Theorems/RoomMap.lean`, private `Proof/RoomMap.lean`.

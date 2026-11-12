@@ -195,7 +195,7 @@ EndRun.start  : Statement ∧ EndStatement ∧ startCheck ∧ EndRun ∧ (∀ n 
 Run.start     : the same conditions, on a run of Route  Start(B, pole.seq 0)
 ```
 
-`left` is 0 only on the last row. It has 6 states, and 2 have control. The other 4 are the time-up states. The rows end where `left` is 0, so `left` must not be 0 before control (`EndRun.first`, proved from `chg.time₂` and `chg.ctlFirst₂`). `Route` has a new field `atCtl : pole.seq 0 = chg.seq chg.b₂`. The conditions `entry₂`, `noStart₂`, `quiet₂` of `chg` are used as `Run.change₂` uses them.
+`left` is 0 only on the last row. It has 6 states, and 2 have control. The other 4 are the time-up states. The rows end where `left` is 0, so `left` must not be 0 before control (`EndRun.first`, proved from `chg.time₂` and `chg.ctlFirst₂`). `Route.Run.atCtl : pole.seq 0 = base.seq b₂` is a theorem: the frames of `keep` are those of `base` from frame `b₂` on. The conditions `entry₂`, `noStart₂`, `quiet₂` of `chg` are used as `Run.change₂` uses them.
 
 The last row also gives the vertical bytes, the A button and the collision bits. The main bytes it does not know are `PlayerSize` and `EventMusicQueue`.
 
@@ -254,7 +254,7 @@ So frame 1 alone closes. It is one frame of 233, and the states grow on the next
 * `keep.ends`, `keep.clean` and the theorem `keep.start` of [One whole frame in control](f-6-19-FrameKeep.md): the frames are the same, so `ends` is not a field here any more.
 * `box`: on frames 1 to 8 the collision routine gives the same result as on the machine at control.
 * `reads`: `fr` is read from the machines. That it is a `Frame` stays an assumption of [Top speed](../0-0/0-1-TopSpeed.md).
-* `chg.time₂`, `chg.ctlFirst₂`, `atCtl`.
+* `chg.time₂`, `chg.ctlFirst₂`, and the theorem `Run.atCtl`.
 
 **Files.** `Theorems/SurfaceFrames.lean`, `Theorems/CtrlKeep.lean`, `Theorems/VertModel.lean`, `Theorems/FrameModel.lean` (`move_masked`), private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`, which now includes `ctrlCheck`).
 
