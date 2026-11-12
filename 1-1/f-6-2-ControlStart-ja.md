@@ -44,7 +44,7 @@ Route.Run.atCtl₀ :  切り替えのチェック,  startCheck,  ctlCheck,  Rout
 
 ここだけの仮定はありません。`Run.atCtl₀` は `Run.start` と同じ切り替えの条件を使います。`chg` のフィールド（入るとき、Start なし、出口での音、出口での時間、最初の操作）です。[道筋のページ](0-1-Route-ja.md)に挙げてあります。
 
-仮定でなくなったもの: `PoleJoin.Run` の `noCastle`、`FrameKeep.Frames` の `keep.start`。新しいもの: ROM のチェック `ctlCheck`、`keep` のフィールド `ctl`（触る前の各フレームは操作中に終わる。今はそのルーチンとタスクだけ、[操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md)）と `lagStart`。そのあと `lagStart` はまたなくなりました。`keep` は数えるかどうかによらず全部のフレームを持ち、歩きが `lag` のフレームも覆います（[操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md)）。
+仮定でなくなったもの: `PoleJoin.Run` の `noCastle`、`FrameKeep.Frames` の `keep.start`。新しいもの: ROM のチェック `ctlCheck`、`keep` のフィールド `ctl`（触る前の各フレームは操作中に終わる。そのあとルーチンとタスクだけになり、いまは定理です。代わりの仮定は、触る前のフレームがルーチン、モード、タスクを番地で書かないこと `noStore`、[操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md)）と `lagStart`。そのあと `lagStart` はまたなくなりました。`keep` は数えるかどうかによらず全部のフレームを持ち、歩きが `lag` のフレームも覆います（[操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md)）。
 
 **ファイル.** `Theorems/ControlStart.lean`、`Theorems/Route.lean`（`Run.atCtl₀`）、非公開の `Proof/ControlStart.lean`（`side_ctl`）。
 

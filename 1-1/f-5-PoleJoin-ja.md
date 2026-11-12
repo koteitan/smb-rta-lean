@@ -106,6 +106,7 @@ Run.afterTouch  :  同じもの  →  g < c
 * そのあと、`keep` からなくなったもの: `fm`、`pad`（`all` と `ix` から読む `Frames.fm`、`Frames.pad` になった）、`ends`（定理 `Frames.ends` になった）、`lag`、`lagStart`（定理 `Frames.all_start` になった）。`keep` に増えたもの: `all`、`inp`、`next`、`ix`、`ix0`、`order`、`at_ix`。`ctl` と `clean` は、数えるかどうかによらず、触るまでの全部のフレームについて言うようになった。`PoleJoin` の型は変わっていません。
 * そのあと、なくなったもの: `fm`、`inp`、`pass`、`pos`。`touches` は `keep` のフレーム `g` について言います（`Touches(keep.fm g, keep.pad g)`）。増えたもの: `tiles`、`edge`、`moved`（[旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md)）。`keep` の `ctl` は、ルーチンとタスクの 2 バイトだけを仮定します。モードがゲームのものであることは定理 `Frames.ctlAll` です。`touch_ge`、`direct_castle`、`castle_ge`、`touch_castle` の引数 `hc` は `(hc : PoleFrame.poleFrameCheck sy m0 = true)` になりました（前は `PoleEntryRule.ruleCheck`）。`Run.inRange` は `hc` のあと `R`、`st`、`hq`、`hk`、`hc0` をとります。
 * そのあと（項目 1-1-0-4）: `Run` は走り全体の本物のフレームと操作のフレームをとります。`Run sy m0 b vs B T J Nc F S a`、`S : FrameKeep.RealRun`、`a : Nat`。`keep : FrameKeep.Frames sy m0 S a g seq` も同じです。`keep` からなくなったもの: `all`、`inp`、`next`（`all n = S.seq (a + n)` は定義、`Frames.next` は定理）。新しい定理 `Run.seq0 : seq 0 = S.seq a`。前のつなぎ `Route.Run.atCtl` はいまは同じ名前の定理です。非公開の `pole_join`、`pole_touch`、`pole_touch_castle` は `S`、`a` を暗黙の引数にとります。
+* そのあと、`keep` からなくなったもの: `ctl`（`keepCheckOf` の 2 つ目の歩きからの定理 `Frames.ctlAll` になった）。`keep` に増えたもの: `noStore`（触るフレームの前のフレームのどの命令も、ルーチン、モード、タスクを番地で書かない）。`edge` が変わりました。画面の端の書き込みと頭の当たりのルーチンを禁じません。書き込みまで、そのどちらかのすぐあとでは、旗の範囲より左にいる、というものです（`PoleFrame.again`）。型は変わっていません。
 
 本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
 
@@ -130,8 +131,8 @@ Run.afterTouch  :  同じもの  →  g < c
 | `fr`、`seq`、`frames.reads` | フレームは機械から読む。`g` では `P₂` までのフィールドだけが本物（触ると動かされる）。`next` は定理 | [地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md) |
 | `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
 | `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
-| `touches`、`tiles`、`edge`、`moved` | `keep` のフレーム `g` は本物の機械で触る。書き込みまで、旗のタイルを読んだ横の判定は旗の列を読んでいる（`TileRead`）。画面の端の書き込みにも頭の当たりにも来ない。`P₂(g)` は移動の終わりの位置。`P₀ ≤ P₂(g)` はこれらと `keep` からの定理 `Run.inRange`（1 フレーム全部の歩き） | [旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md) |
-| `keep` | 触るまでの本物の機械のフレーム（数えるかどうかによらない）。操作できるときから続く。走りのフレーム `a` からのフレーム（`all n = S.seq (a + n)` は定義、`next` は定理）。数えるフレーム `j` は `seq j` で終わる（`ix`）。触るフレームの前のフレームは操作のルーチンとタスクで終わる（`ctl`。操作中に終わることは定理 `Frames.ctlAll`）。各命令は `CleanK` を満たす（`clean`）。各フレームが操作中に始まること、`lag` のフレームが城の旗と端数の下 4 ビットを保つことは定理 `Frames.all_start`、`Frames.start`。`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
+| `touches`、`tiles`、`edge`、`moved` | `keep` のフレーム `g` は本物の機械で触る。書き込みまで、旗のタイルを読んだ横の判定は旗の列を読んでいる（`TileRead`）。画面の端の書き込みと頭の当たりのルーチンのすぐあとでは、旗の範囲より左にいる。`P₂(g)` は移動の終わりの位置。`P₀ ≤ P₂(g)` はこれらと `keep` からの定理 `Run.inRange`（1 フレーム全部の歩き） | [旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md) |
+| `keep` | 触るまでの本物の機械のフレーム（数えるかどうかによらない）。操作できるときから続く。走りのフレーム `a` からのフレーム（`all n = S.seq (a + n)` は定義、`next` は定理）。数えるフレーム `j` は `seq j` で終わる（`ix`）。触るフレームの前のフレームのどの命令も、ルーチン、モード、タスクを番地で書かない（`noStore`。それらのフレームが操作中に終わることは定理 `Frames.ctlAll`）。各命令は `CleanK` を満たす（`clean`）。各フレームが操作中に始まること、`lag` のフレームが城の旗と端数の下 4 ビットを保つことは定理 `Frames.all_start`、`Frames.start`。`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
 | `atCastle` | フレーム `c` の終わりの機械の城の旗。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
 | `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |

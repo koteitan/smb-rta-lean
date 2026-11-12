@@ -72,6 +72,12 @@ def extG (G : Guard) (k : List (Nat × UInt8)) (p : List Nat) (c : List UInt16) 
 routine of the head's collision with a block as the one place cut -/
 def roomG (sy : Syms) (m0 : Machine) : Guard := extG (PipeWrites.guardOf sy m0) (screenK sy m0) (screenI sy m0) [PipeWrites.headAt sy m0]
 
+/-- **The bump of the head on a solid block**: the collision routine's first store of the vertical speed after its jump to the foot check. The head's check comes there when the
+block above the head is solid (or in the water, or while a block bounces): it sets the vertical speed so that the jump stops. With `PipeWrites.headAt` (a brick or a block with an
+item) these are the two places where the head's collision changes the vertical motion. -/
+def bumpAt (sy : Syms) (m0 : Machine) : UInt16 :=
+  findStore m0 (PipeWrites.findJmp m0 sy.PlayerBGCollision sy.DoFootCheck 200) (sy.Player_Y_Speed &&& 0xFF).toUInt8 40
+
 /-- the places, from the symbols and the ROM -/
 def sideOf (sy : Syms) (m0 : Machine) : Side :=
   { G := { roomG sy m0 with subs := sy.PlayerSubs, ev := SideEntryRule.vs sy }
@@ -668,19 +674,23 @@ structure Report where
   movedBad : Nat := 0
   pageBad : Nat := 0
   pxs : List Nat := []
+  /-- frames in control that come to the bump on a solid block -/
+  bumpN : Nat := 0
   deriving Inhabited
 
 def Report.show (r : Report) : String :=
-  s!"frames {r.frames}, in control {r.ctl} (not FrameStart {r.startBad}), instructions {r.instrs} (not Clean {r.cleanBad}), reads {r.reads} (not TilesOK {r.tilesBad}), frames at a cut place {r.cutFrames}; entries {r.entries} (not FrameStart {r.eStart}, not Clean {r.eClean}, not TilesOK {r.eTiles}, at a cut place {r.eCut}, not the write {r.writeBad}, not one arrival at the end of the move {r.subsN}, left of the mouth there {r.leftBad}, moved {r.movedBad}, the page read elsewhere {r.pageBad}), positions {r.pxs.eraseDups.mergeSort}"
+  s!"frames {r.frames}, in control {r.ctl} (not FrameStart {r.startBad}), instructions {r.instrs} (not Clean {r.cleanBad}), reads {r.reads} (not TilesOK {r.tilesBad}), frames at a cut place {r.cutFrames}; entries {r.entries} (not FrameStart {r.eStart}, not Clean {r.eClean}, not TilesOK {r.eTiles}, at a cut place {r.eCut}, not the write {r.writeBad}, not one arrival at the end of the move {r.subsN}, left of the mouth there {r.leftBad}, moved {r.movedBad}, the page read elsewhere {r.pageBad}), positions {r.pxs.eraseDups.mergeSort}; frames at the bump on a solid block {r.bumpN}"
 
 def Report.bad (r : Report) : Nat := r.startBad + r.cleanBad + r.tilesBad + r.eStart + r.eClean + r.eTiles + r.eCut + r.writeBad + r.subsN + r.leftBad + r.movedBad + r.pageBad
 
 /-- one real frame with the bits `pad` of the controller. `G` is the room's guard (`roomG`, computed once by the caller): its conditions are those of `sideOf`. The cut places counted are the routine of the head's
-collision and, apart, the scroll handler's store at the edges, which the walk no longer cuts. -/
+collision and, apart, the scroll handler's store at the edges, which the walk no longer cuts. Apart, the frames that come to the bump on a solid block (`bumpAt`, which the walk of the
+room's frames cuts; not in `bad`). -/
 def scanFrame (sy : Syms) (m0 : Machine) (G : Guard) (m : Machine) (pad : UInt8) (r0 : Report) : Report × Machine := Id.run do
   let Q := SideEntryRule.spots sy m0
   let E := envOf m0
   let cuts := [PipeWrites.edgeStore sy m0, PipeWrites.headAt sy m0]
+  let bump := bumpAt sy m0
   let t := m.frame + 1
   let mut c : Machine := { m with pad }
   let ctl := controllable sy m
@@ -689,12 +699,14 @@ def scanFrame (sy : Syms) (m0 : Machine) (G : Guard) (m : Machine) (pad : UInt8)
   let mut clean := true
   let mut tiles := true
   let mut cutSeen := false
+  let mut bumpSeen := false
   let mut subs : List Machine := []
   let mut pages : List Nat := []
   let mut entered := false
   let mut atSubs : Option Machine := none
   let mut n := 0
   while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) do
+    if c.pc == bump then bumpSeen := true
     if !entered then
       if cuts.contains c.pc then cutSeen := true
       if c.pc == sy.PlayerSubs then subs := c :: subs
@@ -728,6 +740,7 @@ def scanFrame (sy : Syms) (m0 : Machine) (G : Guard) (m : Machine) (pad : UInt8)
       | none => pure ()
     n := n + 1
   if ctl && cutSeen then r := { r with cutFrames := r.cutFrames + 1 }
+  if ctl && bumpSeen then r := { r with bumpN := r.bumpN + 1 }
   match atSubs with
   | some u => if posP sy u != posP sy c then r := { r with movedBad := r.movedBad + 1 }
   | none => pure ()

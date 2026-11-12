@@ -4,7 +4,7 @@
 
 **Claim.** An abstract machine follows a frame from the idle loop to the frame's end. If an instruction of the frame makes the routine byte the side pipe's, then at the end of the move (`PlayerSubs`) before that write, the position is at or right of the mouth's left end. So three hypotheses of `RoomRun` are gone: `pass` (the write ends one pass of the side check), `pos` (`P(E)` is the position when the side check reads the page) and `edgeE` (no store at the screen's edges and no head's collision up to the write).
 
-The walk needs conditions on single states, as for the vertical pipe ([One whole frame](a-5-2-PipeWrites.md), [The position at the end of the move](a-5-9-MoveEnd.md)). Four of them are proved on the real machines of the run, from the walk of [The block map in the room](c-7-12-RoomMap.md): frame `E` starts in control with the screen's bytes of the room (`StartE`), each of its instructions up to the write is `Clean` (`CleanE`), its reads find the side pipe's tiles only in the pipe's column (`TilesE`), and it does not come to the routine of the head's collision with a block (`HeadE`). One stays assumed: `movedE`.
+The walk needs conditions on single states, as for the vertical pipe ([One whole frame](a-5-2-PipeWrites.md), [The position at the end of the move](a-5-9-MoveEnd.md)). Four of them are proved on the real machines of the run, from the walk of [The block map in the room](c-7-12-RoomMap.md): frame `E` starts in control with the screen's bytes of the room (`StartE`), each of its instructions up to the write is `Clean` (`CleanE`), its reads find the side pipe's tiles only in the pipe's column (`TilesE`), and it does not come to the routine of the head's collision with a block (`HeadE`). `movedE` is no longer assumed either: [the position at the end of the entering frame](c-7-18-2-SideEntryEnd.md) proves the position at the frame's end with this machine and the walk of the room.
 
 The walk follows the scroll handler's store of the position at the screen's edges (`w_edge`). It knows the screen's bytes of the room (the scroll lock, the edges' positions and pages), and where the scroll handler asks whether he is off the screen it splits the position into its values. Left of the mouth, the store comes only at the left edge (`x = 0`), and it writes the position that is already there. So `edgeE` is gone.
 
@@ -72,18 +72,19 @@ A program (`side-frame-check`). The runs are those of `side-rule-check` on [The 
 | one frame per height, position, state and facing near the mouth, overwritten | 38,400 | 38,400 | 144,438,759 | 191,144 | 1,295 |
 
 * In every row, every frame in control meets `FrameStart` with `G_room` (its 5 screen's bytes have the room's values), every instruction of it meets `Clean` with `G_room`, and every read of the block buffer routine meets `TilesOK`. No frame in control comes to `w_edge` or `h`: the walk now follows `w_edge`, and `h` is proved (`HeadE`).
+* The bump of the head on a solid block `bumpAt` (`SideFrame.bumpAt`; the walk of [The block map in the room](c-7-12-RoomMap.md) cuts it and proves that no frame of the room comes there): no frame of the first three rows comes there. In the row of overwritten states 2,686 frames come there: heights near the mouth with the head inside a block, which the room does not give (they do not meet `SiteOK`).
 * The program takes about 2 minutes.
 * All 1,715 entries write with `w`. Each comes to the end of the move once before the write. There the position is 195 to 216 px, never left of `x₀` (195). It is the frame's end position (`movedE` agrees with `read_P`), and it is the position at every read of the page in the side check.
 
 ## The fields of `RoomRun`
 
 * Removed: `pass`, `pos` (and `tiles`, see [The block map in the room](c-7-12-RoomMap.md)). `Checks.sideRule` became `Checks.sideFrame`. Then `edgeE` (no `w_edge`, no `h` up to the write): `w_edge` is followed by the walk, and `h` is `HeadE`.
-* Left: `movedE` (`P(E)` is `posP` at the end of the move before the write), a fact about frame `E` alone.
+* `movedE` is gone too (item 1-1-c-7-18-2): `P(E)` is now read at the frame's end, and [the position at the end of the entering frame](c-7-18-2-SideEntryEnd.md) is proved by two walks, the first of them on this page's machine with no hypothesis on the position. `RoomJoin` no longer uses this page's theorem `mouth_of_frame` (nor `Checks.sideFrame`); `entry_right_of_left` stays proved.
 * Not fields: `StartE`, `CleanE`, `TilesE`, `HeadE`. `Route.Run.inRoom` proves them from the walk of the room's frames and the theorem `Route.Run.roomEnter`.
 
 ## Assumptions (not proved in Lean)
 
-* **`movedE`.** `P(E)` is the position at the end of the move. The frames up to `t0` read `P(n)` at the frame's end (`read_P`); frame `E` is later than `t0`, and nothing reads it from the machine yet. On real frames the two are the same (above).
+* **`movedE`** is no longer assumed: see [the position at the end of the entering frame](c-7-18-2-SideEntryEnd.md).
 * **`Route.Run.roomEnter`** (item 1-1-0-4, a theorem): frame `E` of `RoomRun` is a frame of `Route.Base` in the room. `StartE`, `CleanE`, `TilesE`, `HeadE` rest on it, and on `SiteOK` of the room's frames (`chg.roomSites`).
 * **The right end of the mouth.** Only the left end comes out. `RoomJoin` uses only the left end.
 

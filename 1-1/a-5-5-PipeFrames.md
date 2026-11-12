@@ -21,10 +21,13 @@ speed_end         :  the same  →  ∀ t ∈ [1, E],  |fr(t).v'| ≤ v_top
 end_le            :  the same,  1 ≤ N,  fr(N).P' ≤ B  →  ∀ k,  N + k < E  →  fr(N + k).P' ≤ B + 16·v_top·k
 no_entry_of_reads :  16 ≤ v_top,  1 ≤ N,  (∀ t,  Enter t → L ≤ fr(t).P₂),  (∀ t ≤ N,  fr(t).P₂ ≤ B),  fr(N).P' ≤ B,
                      Reads,  v(fm 1) = 0,  B + 16·v_top·(T − N) < L,  Enter E   →   T < E
+pos_le            :  16 ≤ v_top,  Reads,  v(fm 1) = 0   →   ∀ k,  1 + k ≤ E  →  fr(1 + k).P ≤ fr(1).P + 16·v_top·k
+no_entry_of_start :  16 ≤ v_top,  1 ≤ N,  2·N ≤ T,  (∀ t,  Enter t → L ≤ fr(t).P₂),  fr(1).P ≤ B,  (N < E → fr(N).P' ≤ B),
+                     Reads,  v(fm 1) = 0,  B + 16·v_top·(T − N) < L,  Enter E,  1 ≤ E   →   T < E          (no bound on every frame up to N)
 
 Pipe.next, Pipe.speed (Route)        :  the old fields next and speed, as theorems
-Pipe.reads (Route)                   :  Reads, from the frames read from their own machines and the frames not counted (own, lags, lag_check, walk_check, the start at control)
-pipe_no_entry_real (private)         :  Enters(fm E, inp E),  FrameStart(fm E),  clean, tiles, edge, moved, openP, openB,  Reads,  still   →   367 < E
+Pipe.reads (Route)                   :  Reads, from the frames read from their own machines and the frames not counted (own, lags, lag_check, walk_check, pause_check, the start at control)
+pipe_no_entry_real (private)         :  Enters(fm E, inp E),  FrameStart(fm E),  clean, tiles, edge, moved,  fr(1).P = P₀,  (32 < E → fr(32).P' ≤ P₀ + 9744),  Reads,  still,  1 ≤ E   →   367 < E
 ```
 
 `Reads` is no longer a field. [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) proves it from `Pipe.own` (each counted frame ends at its own machine) and
@@ -39,8 +42,9 @@ Lean: `Theorems/PipeFrames.lean`, `Pipe` in `Theorems/Route.lean`, private `Proo
 * **Following.** The end of `fr(t)` and the start of `fr(t+1)` are read from the same machine `fm(t+1)`. So `Next` holds by the definition.
 * **Speed.** At `fm(1)` the speed is 0. `Frame.bound` says: if the speed at a frame's start is at most `v_top`, so is the speed at its end. `Next` passes this to the next frame.
   This is an induction from frame 1 to `E`.
-* **The bound.** If `E ≤ N`, `openP` says `fr(E).P₂ ≤ B`. If `E > N`, the end of frame `N + k` is at most `B + 16·v_top·k` (`end_le`). With `E = N + k + 1` and
-  `fr(E).P₂ ≤ fr(E).P + 16·v_top`, this gives `fr(E).P₂ ≤ B + 16·v_top·(E − N)`. If `E ≤ T`, that is left of `L`, so he cannot enter.
+* **The bound.** If `E ≤ N`: frame `E` begins at most `16·v_top·(E − 1)` right of control (`pos_le`), so `fr(E).P₂ ≤ fr(1).P + 16·v_top·E ≤ B + 16·v_top·N`, and with
+  `2·N ≤ T` this is left of `L` (`no_entry_of_start`; before, the field `openP` gave `fr(E).P₂ ≤ B`). If `E > N`, the end of frame `N + k` is at most `B + 16·v_top·k` (`end_le`). With `E = N + k + 1` and
+  `fr(E).P₂ ≤ fr(E).P + 16·v_top`, this gives `fr(E).P₂ ≤ B + 16·v_top·(E − N)`. If `E ≤ T`, that is left of `L`, so he cannot enter. The bound at frame `N` is asked only when `N < E`.
 * The old `no_entry_by` assumed `next` on every frame after `N`, and `speed` at `N`. Here only the frames up to `E` are used.
 
 ## Checked on real frames
@@ -58,7 +62,7 @@ the speed, the subspeed and the position.
 
 * The speed at control: with 120 different frames for Start on the title screen, it is 0 all 120 times. The horizontal state and the position are those of the machine `m₀` of the private
   proof all 120 times. On the TAS it is 0 too.
-* On the TAS, `P₂` up to frame 32 is at most `P₀ + 9744`, and the position at the start of frame 33 is exactly `P₀ + 9744` (`openP`, `openB`).
+* On the TAS, `P₂` up to frame 32 is at most `P₀ + 9744`, and the position at the start of frame 33 is exactly `P₀ + 9744` (the old fields `openP`, `openB`; now [The opening on real frames](a-5-4-OpenFrames.md)).
 * Frames that are not counted come during a pause, and while he grows, shrinks or dies. While `TimerControl` is not 0, the game does not count down the interval timer (read from the
   code). None of the measured frames changes the speed, the subspeed or the position. Of the 300 random runs, 51 end in a death and 12 change his size.
   **Correction (this round):** a run stops at the first counted frame that ends out of control. So the frames not counted after a growth, an injury or a death were not measured
@@ -72,12 +76,13 @@ the speed, the subspeed and the position.
 * **Each frame is a `Frame`.** This is the type of `fr`. It was assumed before; it is item 0-0-0-3-1 (`FrameModel.frame_read` gives it under `ReadFrame`). It is checked on the real frames above.
   New is that it is used for frames 1 to `N` as well.
 * **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
-  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, `lags.game`. `lags.store` is proved now.
+  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, and (this round, in place of `lags.game`)
+  `lags.paused`, `lags.keeps` ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). `lags.store` is proved now.
 * **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
 * **The frames are those of the run (item 1-1-0-4).** `Lags` takes the real frames of the whole run (`FrameKeep.RealRun`, `Route.Run.base`) as a parameter. Where the counted frames are is
   data, `gap t` (the frames not counted after the counted frame `t`), and `ixOf gap` is a definition: the counted frame 1 is frame 1 and `ixOf gap t < ixOf gap (t + 1)`. So the
   machine of `pipe` at control is the run's frame 1 (`Lags.fm_one`, `Route.Run.pipeAt`); the old link `pipeAt`, the old fields `seq`, `sin`, `next`, `ix`, `order`, `fm_ix`, `inp_ix` of `Lags` and the fields `fm`, `inp`, `one_le` of `Route.Pipe` are gone (`Pipe.fm` is `Lags.fm`, a definition; `Pipe.one_le` is a theorem).
-* **Not in this item.** `openP`, `openB` (item 1-1-a-5-4) and `edge`, `moved` (item 1-1-a-5-9) stay hypotheses.
+* **Not in this item.** `openP` is gone and `openB` is a theorem from the field `opening` (item 1-1-a-5-4, [The opening on real frames](a-5-4-OpenFrames.md)). `edge`, `moved` (item 1-1-a-5-9) stay hypotheses.
 
 **Files.** `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.
 

@@ -42,7 +42,7 @@ Run.roomTiles   :  確認,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ 
 
 `Run.roomTiles` は、`Route.Changes` のフレーム `b₁ … a₂ − 1` での `map_of_rows`（部屋に入る切り替えの段、`roomSites`、`roomStay` から）を、`roomEnter` のフレーム `k` で使います。
 
-同じ抽象機械から、部屋のどのフレームも操作できる状態で始まることが出ます。[1 フレーム全部](c-7-16-SideFrame-ja.md) の抽象機械が求める形です。
+同じ抽象機械から、部屋のどのフレームも操作できる状態で始まることが出ます。[1 フレーム全部](c-7-16-SideFrame-ja.md) の抽象機械が求める形です。入るフレームでのこれらのことと、書き込みからフレームの終わりまでの部屋の歩きで、`P(E)` は口にあります（[入るフレームの終わりの位置](c-7-18-2-SideEntryEnd-ja.md)、`Run.roomMouthE`）。`TilesE`、`StartE`、`CleanE`、`HeadE` は定理として残ります。
 
 ```
 startCheckF        :  基準の機械は待ちのループにいてスタックポインタはガードの値、Cond はガードの 8 つのバイト（ゲームの 3 つ、画面の 5 つ）を
@@ -53,18 +53,23 @@ Run.roomStartE     :  確認,  Run  →  FrameStart(fm(E − 1))          （Sta
 map_startF（非公開） :  startCheckF = true（native_decide）
 ```
 
-抽象機械はまた、どの状態でも、`SiteOK` が与えない `Clean`（[1 フレーム全部](a-5-2-PipeWrites-ja.md)）の条件を、部屋のガード `G_room` で確かめます。守るバイトには画面の 5 バイトも入ります。添字やポインタを通す書き込みは、行き先がわかっていてガードのバイトの外にあるか、コインを消す書き込みです。コインを消す書き込みの行き先は、`SiteOK` がブロックバッファの中に置きます。ジャンプのルーチンでは、番号がわかっていて表の中にあります。ポインタを通す読みと時間は `SiteOK` が与えます。だから部屋のどのフレームのどの命令も、新しい仮定なしに `Clean` です。そしてどの状態も、頭がブロックに当たったときのルーチン（`h`、`G_room` が切るただ 1 つの場所）にいません。`SiteOK` では頭の読みは何もないかコインしか出さないので、抽象機械はそこに来ないのです。
+抽象機械はまた、どの状態でも、`SiteOK` が与えない `Clean`（[1 フレーム全部](a-5-2-PipeWrites-ja.md)）の条件を、部屋のガード `G_room` で確かめます。守るバイトには画面の 5 バイトも入ります。添字やポインタを通す書き込みは、行き先がわかっていてガードのバイトの外にあるか、コインを消す書き込みです。コインを消す書き込みの行き先は、`SiteOK` がブロックバッファの中に置きます。ジャンプのルーチンでは、番号がわかっていて表の中にあります。ポインタを通す読みと時間は `SiteOK` が与えます。だから部屋のどのフレームのどの命令も、新しい仮定なしに `Clean` です。そしてどの状態も、頭で上下の動きを変える 2 つの場所にいません。頭がブロックに当たったときのルーチン（`h = headAt`、レンガかアイテムのブロック）と、頭の判定のあとの上下の速さの書き込み（`bumpAt`、固いブロック、水中、ブロックが跳ねている間）です。歩きはこの 2 つを切ります（ガード `G_B`。`G_room` に切る場所を 1 つ足したもので、`Clean` の条件は `G_room` と同じ、`clean_of_GB`）。`SiteOK` では頭の読みは何もないかコインしか出さないので、抽象機械はどちらにも来ないのです。なので部屋のどのフレームも、頭がブロックに当たって上下の動きを変えることはありません。[地下の部屋をつなぐ](c-5-RoomJoin-ja.md) の `vframes` はもうこれを仮定しません（項目 1-1-c-7-10）。
+
+`bumpAt` は ROM から見つけます。当たり判定のルーチンの、足の判定へのジャンプのあとで、最初の上下の速さの書き込みです。
 
 ```
 cleanS(A)          :=  pc(A) ≥ 0x8000  ∧  (pc(A) = erase  ∨  書き込みの行き先がわかっていて Plain)  ∧  (pc(A) = JumpEngine → A がわかっていて表の長さより小さい)
-歩きの各状態       :  tilesB(A)  ∧  cleanS(A)  ∧  pc(A) ∉ cuts(G_room) = {h}
+歩きの各状態       :  tilesB(A)  ∧  cleanS(A)  ∧  pc(A) ∉ cuts(G_B) = {h, bumpAt}
 clean_of_sim       :  CleanFacts,  A が m を覆う,  cleanS(A),  SiteOK(m)  →  Clean(m)
 clean_of_rows      :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  Clean(tr_n(j))
 cuts_run           :  map_run の仮定  →  ∀ n ∈ [c, e),  ∀ j,  pc(tr_n(j)) ∉ cuts
 head_of_rows       :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  pc(tr_n(j)) ≠ h
+bump_of_rows       :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  pc(tr_n(j)) ≠ bumpAt
 Run.roomCleanE     :  確認,  Run  →  CleanE                       （前の欄 room.cleanE）
 Run.roomHeadE      :  確認,  Run  →  HeadE:  ∀ j,  pc(tr(j)) ≠ h    （前の欄 room.edgeE の一部）
-Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE ∧ HeadE     （RoomRun.InRoom）
+Run.roomBump       :  確認,  Run  →  ∀ n,  C ≤ n < E  →  ∀ j,  pc(tr_n(j)) ≠ h  ∧  pc(tr_n(j)) ≠ bumpAt
+                      （部屋のフレーム n + 1 は base のフレーム b₁ + (n − C) で、roomEnter より a₂ の前）
+Run.inRoom         :  確認,  Run  →  InRoom:  mouthE ∧ bump          （Run.roomMouthE、Run.roomBump）
 ```
 
 `CleanFacts` は `mapCheck` の一部です。場所の待ちのループはガードのもので、最後のドットはガードのもの以下で、ブロックバッファのどのバイトもガードのバイトではありません。この確認を足して、`mapCheck` はプログラムで約 4 秒です（画面のバイトと切る場所を足す前は 2.6 秒）。
@@ -95,7 +100,8 @@ Run.inRoom         :  確認,  Run  →  TilesE ∧ StartE ∧ CleanE ∧ HeadE 
 
 * どのフレームも `Cond` で始まり、`Zero` が成り立ちます。どの読みでも `TilesOK` です。`SiteOK` を満たさない命令はありません。
 * 動画の部屋の最初の操作（動画のフレーム 653 のあと）では、ブロックバッファは 1 バイトずつ地図と同じです。
-* `mapCheck` と `startCheckT` は真です。
+* `mapCheck` と `startCheckT` は真です。2 つめの切る場所（`bumpAt`）を足しても `mapCheck` は約 4.4 秒で、歩きは同じです（209,861 歩、表 9,301）。
+* 動画の部屋と、`side-frame-check` の自分の入力の走りでは、`bumpAt` にも `h` にも来るフレームはありません（[1 フレーム全部](c-7-16-SideFrame-ja.md) を見てください）。
 
 ## 前提（Lean では証明していない）
 

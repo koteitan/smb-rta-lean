@@ -8,7 +8,8 @@ counted frame is read from its own machine. The frames not counted between two c
 [The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md) assumed is now a theorem from these conditions.
 
 The old field `lags.store` (a store before the call does not touch the five bytes) is gone: the check proves it. A frame not counted that does not call the routine also ends
-in control by the check, so `lags.ctl` is now asked only of the counted frames.
+in control by the check, so `lags.ctl` is now asked only of the counted frames. The old field `lags.game` (a frame not counted that calls the routine keeps the three values) is
+gone too: a frame not counted ends paused, and such a frame does not call the routine ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)).
 
 Notation. `fm(t)` and `inp(t)` are the machine and the input of counted frame `t`. `seq(n)` and `sin(n)` are the machine and the input of frame `n`, every frame counted.
 Counted frame `t` is frame `ix(t)`. `tr(m, i, k)` is the machine after `k` instructions of the frame of `m` with the input `i`, and `frame(m, i)` is the machine at its end.
@@ -26,18 +27,20 @@ known_of_keep  :  FrameStart(m),  K(m') = K(m)   →   ctl(m')
 Lags           :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,   ix t < ix(t + 1),  and
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                     (each counted frame before the entry ends in control)
                     clean :  ∀ n ∈ [ix 1, ix E),  ∀ k,  Clean(tr(seq n, sin n, k))
-                  and for a frame not counted,  1 ≤ t < E,  ix t < n < ix(t + 1):
-                    game  :  (∃ k,  frame(tr k) = frame(seq n)  ∧  pc(tr k) = c)   →   V(seq(n + 1)) = V(seq n)  ∧  ctl(seq(n + 1))
+                  and for a frame not counted,  1 ≤ t < E,  ix t < n < ix(t + 1)  (LagPause):
+                    paused :  bit₀(seq(n + 1)) = 1                                   (it ends paused)
+                    keeps  :  ∀ k,  KeepsPause(tr(seq n, sin n, k))                  (no store through an index or a pointer to the pause byte)
 
-Lags.known_end :  lagCheck,  Lags,  1 ≤ E,  ix 1 ≤ n < ix E,  FrameStart(seq n)   →   ctl(seq(n + 1))
-Lags.starts    :  lagCheck,  walkCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)      (StartRun)
-lags_keep      :  lagCheck,  walkCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
+Lags.no_call   :  pauseCheck,  Lags,  FrameStart(seq n)   →   a frame not counted does not call c
+Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ E,  ix 1 ≤ n < ix E,  FrameStart(seq n)   →   ctl(seq(n + 1))
+Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)      (StartRun)
+lags_keep      :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
 ReadsOwn       :  ∀ t ∈ [1, E],  the start of fr(t) is V(fm t);   ∀ t ∈ [1, E),  the end of fr(t) is V(frame(fm t, inp t))
-reads_of_lags  :  lagCheck,  walkCheck,  ReadsOwn,  Lags,  FrameStart(fm 1)   →   Reads
+reads_of_lags  :  lagCheck,  walkCheck,  pauseCheck,  ReadsOwn,  Lags,  FrameStart(fm 1)   →   Reads
 Pipe.reads     :  the old field reads, a theorem (Route)
 ```
 
-`lagCheck` is a check on the ROM, by `native_decide` in the private `lag_check`. The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
+`lagCheck` is a check on the ROM, by `native_decide` in the private `lag_check`; `pauseCheck` is that of `pause_check` ([LagPause](a-5-5-3-3-LagPause.md)). The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
 Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.starts`, `lags_keep`, `reads_of_lags` in `Theorems/PipeFrames.lean`; `Pipe.own`, `Pipe.lags`,
 `Pipe.reads` in `Theorems/Route.lean`; private `Proof/PipeWrites.lean`.
@@ -56,9 +59,10 @@ Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.sta
   `store` was a field.
 * **The counter's value.** `TaintRun` follows `DEC abs` of the counter only when the counter is at least 2. Here the byte can be 0 or 1. So the step is restated (`s_astep1L`),
   with the condition that the step is not `DEC abs` of the byte in place of the bound. The walk checks this condition at every step.
-* **The frames.** `lags_keep` goes from frame `ix(t) + 1` to `ix(t + 1)`. On each frame, `keeps_frame` gives `V` kept, or the frame calls `c`, and then `game` gives it.
-  The induction `Lags.starts` asks `ctl` at the end of each frame from control to the entry: `ctl` gives it for a counted frame, `game` for a frame not counted that calls `c`,
-  and `keeps_frame` (with `K`) for one that does not (`Lags.known_end`).
+* **The frames.** `lags_keep` goes from frame `ix(t) + 1` to `ix(t + 1)`. On each frame, `keeps_frame` gives `V` kept, or the frame calls `c`. A frame not counted does not
+  call `c` (`Lags.no_call`: it ends paused, `paused`, `keeps`).
+  The induction `Lags.starts` asks `ctl` at the end of each frame from control to the entry: `ctl` gives it for a counted frame, and `keeps_frame` (with `K`) for a frame not
+  counted (`Lags.known_end`).
 * **Numbers.** For each of the 8 bytes: 108,633 steps, 7,157 forks, 0 failures, a table of 7,846 states; 3 paths reach `c`, 6 end the frame. The search takes about 0.17 s and the
   check about 0.25 s natively, for each byte.
 
@@ -75,21 +79,19 @@ before the call, whether the frame calls `c`, whether `V` changes, and whether i
 | a pause near the entry, then the TAS's inputs (200; 40 enter) | 1,480 | 14,140 | 14,140 | 0 | 0 | 0 | 0 | 0 |
 | followed past a counted frame out of control (240; not part of the check) | 79,764 | 88,236 | 83,778 | 4,449 | 8,388 | 9 | 23 | 3,939 |
 
-* In the runs that stop at the first counted frame out of control, every frame not counted ends paused, and none calls `c`. So `game` is never used there.
+* In the runs that stop at the first counted frame out of control, every frame not counted ends paused, and none calls `c`. This is the new field `paused`.
 * **Which frames not counted call `c`.** Only in the last row: 4,449 frames, after an injury or a death. Each of them starts with the master timer control not 0.
   17 of them end in control. During the injury blink (routine 10) the game runs the player's routine while the master timer control
-  stops the timers, so he moves on frames not counted: 14 of the 4,449 frames. For example `(v, f, P) = (3, 108, 78720) → (2, 156, 78752)`. So `game` is false there. Each such
+  stops the timers, so he moves on frames not counted: 14 of the 4,449 frames. For example `(v, f, P) = (3, 108, 78720) → (2, 156, 78752)`. These frames do not end paused. Each such
   run has a counted frame out of control before the entry: an injury or a death. It is outside the theorem by `ctl` (items 1-1-0-6-2 and 1-1-0-6-3).
 
 ## Assumed (not proved in Lean)
 
 * **`lags.store` is no longer assumed**: the check proves that no store before the call, on a frame that does not call it, touches the five bytes.
 * **`lags.ctl`**, now only for the counted frames before the entry: each ends in control. A frame not counted that does not call `c` ends in control by the check.
-* **`game`**: a frame not counted that calls the mode's routine keeps `V` and ends in control. It is false during the injury blink (above).
-  Read from the code: a frame calls `c` when the pause bit is 0 at the check. Such a frame runs the timers, unless the master timer control is 2 or more when it starts. The
-  master timer control gets a value other than 0 only together with a change of the routine (`SetPRout`, the value 255). So, if every counted frame ends in control, no frame
-  not counted should call `c`. This is not proved, for two reasons. `Lags` does not say which frames are not counted (`gap` is not tied to the interval timer). And that the
-  master timer control stays 0 needs a walk of the whole frame through the mode's routine, while these walks stop at `c`.
+* **`game` is no longer assumed** (this round): a frame not counted does not call the mode's routine. It ends paused (`paused`), and a frame that ends paused does not call it
+  ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). What stays assumed there is `paused` and `keeps`. Which frames are not counted (`gap`)
+  is still not tied to the interval timer.
 * **Not in this item.** That the counted frames are those of `clock` (only the frame numbers join them, as before). That each counted frame is a `Frame` (item 0-0-0-3-1).
 
 **Files.** `Theorems/LagFrames.lean`, `Theorems/PipeFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.

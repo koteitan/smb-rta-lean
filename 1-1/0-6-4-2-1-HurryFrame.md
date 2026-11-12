@@ -67,7 +67,7 @@ the movie's frames in control or entrance     833 frames, Start 833, off 833, Cl
 
 ## What is not proved
 
-* `Start` and `CleanM` on the frame that starts the music. They are conditions on one frame and its instructions, of the same kind as those of `PipeWrites` and `FrameKeep`, checked above. In `HurryMusic.Run`, `Start` on that frame is now a theorem by `frame_start`, from the first frame of the frames in control before it ([runs with the hurry-up music](0-6-4-HurryMusic.md)).
+* `Start` and `CleanM` on the frame that starts the music. They are conditions on one frame and its instructions, of the same kind as those of `PipeWrites` and `FrameKeep`, checked above. In `HurryMusic.Run`, `Start` on that frame is now a theorem by `frame_start`, from the first frame of the frames in control before it ([runs with the hurry-up music](0-6-4-HurryMusic.md)). `Start` on that first frame is a theorem too: frame 1 from the press of Start on the title, the last frame of a change from the rows of the change ([the last frame of a change](0-6-4-2-2-2-1-HurryStart.md)).
 * That the stores of the digits routine are the only stores through an index that hit the digits or the six bytes: this is part of `CleanM`, checked above.
 
 **Files.** `Theorems/HurryFrame.lean` (`CleanM`, `Start`, `CleanAt`, `finS`, `frame_music`, `frame_start`), the private `Proof/HurryFrame.lean` (`music_check`). The symbol `Eng_PlayerEntrance` (`tools/smb-symbols.txt`).

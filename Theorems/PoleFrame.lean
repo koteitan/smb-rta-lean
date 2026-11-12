@@ -16,8 +16,9 @@ the adder, so the place of the read is known. After a read of the side check, th
 before the pole's (`TileRead`). Then the comparisons of the climbing code do not come to the write. In the pole's column the pixel's low 4 bits make the climbing code leave.
 No path makes the routine byte the pole's.
 
-The two places of `PipeWrites.guardS` are cut: the scroll handler's store of the position at the screen's edges, and the routine of the head's collision with a block.
-There is no game data in this file. Page: `1-1/f-6-16-PoleFrame.md`.
+No place is cut. The two places that `PipeWrites.guardS` cuts are followed: the scroll handler's store of the position at the screen's edges, and the routine of the head's
+collision with a block. Either makes the walk forget the position. Right after each of them (`again`) the walk splits the position again, as at the end of the move: there he is left
+of the pole's range, unless he was in it at the end of the move (a hypothesis). There is no game data in this file. Page: `1-1/f-6-16-PoleFrame.md`.
 -/
 
 namespace Smbrta.PoleFrame
@@ -41,6 +42,8 @@ structure Pole where
   K : FrameKeep.Spot
   Q : Spots
   andAt : UInt16
+  /-- the places where the position is split again: right after the scroll handler's store of the position at the screen's edges, and right after the routine of the head's collision -/
+  again : List UInt16
   deriving Inhabited
 
 /-- the places of `PoleEntryRule.spots` with the three values of the adders' offset: a big Mario, a big one in the water, a small or crouching one -/
@@ -48,16 +51,26 @@ def spotsF (sy : Syms) (m0 : Machine) : Spots :=
   let ads := [romByte m0 sy.BlockBufferAdderData, romByte m0 (sy.BlockBufferAdderData + 1), romByte m0 (sy.BlockBufferAdderData + 2)]
   { PoleEntryRule.spots sy m0 with ads, idx := ads.flatMap fun e => [e + 3, e + 4, e + 5, e + 6] }
 
-/-- the guard of `FrameKeep` with the pole's routine, the split at the end of the move, and the two places cut of `PipeWrites.guardS` -/
+/-- the guard of `FrameKeep` with the pole's routine and the split at the end of the move; no place is cut -/
 def guardT (sy : Syms) (m0 : Machine) : Guard :=
-  { FrameKeep.guardK sy m0 with ev := vf sy, subs := sy.PlayerSubs, cuts := [PipeWrites.edgeStore sy m0, PipeWrites.headAt sy m0] }
+  { FrameKeep.guardK sy m0 with ev := vf sy, subs := sy.PlayerSubs, cuts := [] }
+
+/-- right after the scroll handler's store of the position at the screen's edges: the instruction after its store of the page -/
+def edgeAt (sy : Syms) (m0 : Machine) : UInt16 := findStore m0 (PipeWrites.edgeStore sy m0 + 2) (sy.Player_PageLoc &&& 0xFF).toUInt8 16 + 2
+
+/-- right after the routine of the head's collision: the collision routine's jump to the foot check, after its call of that routine -/
+def headBack (sy : Syms) (m0 : Machine) : UInt16 := PipeWrites.findJmp m0 sy.PlayerBGCollision sy.DoFootCheck 200
+
+/-- the places where the walk splits the position again -/
+def again (sy : Syms) (m0 : Machine) : List UInt16 := [edgeAt sy m0, headBack sy m0]
 
 /-- the places, from the symbols and the ROM -/
 def poleOf (sy : Syms) (m0 : Machine) : Pole :=
   { G := guardT sy m0
     K := FrameKeep.spotOf sy m0
     Q := spotsF sy m0
-    andAt := findOp m0 (FrameKeep.guardK sy m0).loadY 0x29 16 }
+    andAt := findOp m0 (FrameKeep.guardK sy m0).loadY 0x29 16
+    again := again sy m0 }
 
 /-! ## The conditions on one state -/
 
@@ -70,9 +83,9 @@ column, and the page is at most one before the pole's. -/
 def TileRead (Q : Spots) (m : Machine) : Prop :=
   m.pc = Q.read + 2 → m.ram.get! Q.saveI ∈ Q.idx → (m.a = Q.ball ∨ m.a = Q.shaft) → onCol Q (readAt Q m) = true ∧ Q.pg ≤ (m.ram.get! Q.pI).toNat + 1
 
-/-- what the frame asks of one state: left of the pole's range at the end of the move, `TileRead`, no place of the cuts -/
+/-- what the frame asks of one state: left of the pole's range at the end of the move and right after the places `again`, `TileRead`, no place of the cuts -/
 def HypT (T : Pole) (m : Machine) : Prop :=
-  (m.pc = T.G.subs → px T.Q m < T.Q.left) ∧ TileRead T.Q m ∧ m.pc ∉ T.G.cuts
+  (m.pc = T.G.subs → px T.Q m < T.Q.left) ∧ (m.pc ∈ T.again → px T.Q m < T.Q.left) ∧ TileRead T.Q m ∧ m.pc ∉ T.G.cuts
 
 /-! ## The pieces -/
 
@@ -94,7 +107,7 @@ def offTile (Q : Spots) (A : AS) : Bool :=
 /-- the pieces before a step -/
 def zoneT (T : Pole) (A : AS) : List AS :=
   if T.G.cuts.contains A.pc then []
-  else if A.pc == T.G.subs then splitL T.Q A
+  else if A.pc == T.G.subs || T.again.contains A.pc then splitL T.Q A
   else if A.pc == T.Q.adc && sideNow T.Q A && nearP T.Q A then fillB T.Q.xI A
   else if A.pc == T.andAt && sideNow T.Q A && nearP T.Q A then highA A
   else if A.pc == T.Q.read + 2 && sideNow T.Q A && offTile T.Q A then T.Q.bits.map fun b => { A with a := PipeEntryRule.neBit T.Q.ball b }
@@ -361,7 +374,7 @@ structure ZoneOK (T : Pole) : Prop where
   ptr : T.Q.ptrI + 1 < 2048
 
 theorem cov_zoneT {T : Pole} {A : AS} {m : Machine} (hb : ZoneOK T) (hh : HypT T m) (hs : Sim E F A m) : ∃ B ∈ zoneT T A, Sim E F B m := by
-  obtain ⟨hS, hT, hC⟩ := hh
+  obtain ⟨hS, hA, hT, hC⟩ := hh
   unfold zoneT
   by_cases h0 : T.G.cuts.contains A.pc = true
   · exfalso
@@ -369,9 +382,12 @@ theorem cov_zoneT {T : Pole} {A : AS} {m : Machine} (hb : ZoneOK T) (hh : HypT T
     rw [hs.pc]
     exact List.mem_of_elem_eq_true h0
   rw [if_neg h0]
-  by_cases h1 : (A.pc == T.G.subs) = true
+  by_cases h1 : (A.pc == T.G.subs || T.again.contains A.pc) = true
   · rw [if_pos h1]
-    exact cov_splitL hb.pre (hS (by rw [hs.pc]; exact beq_iff_eq.1 h1)) hs
+    simp only [Bool.or_eq_true, beq_iff_eq] at h1
+    rcases h1 with h1 | h1
+    · exact cov_splitL hb.pre (hS (by rw [hs.pc]; exact h1)) hs
+    · exact cov_splitL hb.pre (hA (by rw [hs.pc]; exact List.mem_of_elem_eq_true h1)) hs
   rw [if_neg h1]
   by_cases h1a : (A.pc == T.Q.adc && sideNow T.Q A && nearP T.Q A) = true
   · rw [if_pos h1a]
@@ -543,12 +559,14 @@ def ptrOK (sy : Syms) (m0 : Machine) : Bool := decide ((spotsF sy m0).ptrI + 1 <
 /-- **The check on the ROM.** -/
 def poleFrameCheck (sy : Syms) (m0 : Machine) : Bool := ptrOK sy m0 && frameCheck (poleOf sy m0) (envOf m0)
 
-/-- **The touch on a real frame, at the end of the move.** If the frame touches, it starts in control (`StartK`), each of its instructions is `CleanK`, and up to the write each
-state meets `TileRead` and does not come to the two places cut, then at the end of the move, before the write, the position is at or right of the left end of the pole's range. -/
+/-- **The touch on a real frame, at the end of the move.** If the frame touches, it starts in control (`StartK`), each of its instructions is `CleanK`, up to the write each
+state meets `TileRead`, and right after the scroll handler's store at the screen's edges or after the routine of the head's collision (`again`) he is in the pole's range only if he
+was in it at the end of the move, then at the end of the move, before the write, the position is at or right of the left end of the pole's range. -/
 theorem touch_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : poleFrameCheck sy m0 = true) (he : Touches sy m i)
     (h0 : FrameKeep.StartK sy m0 m) (hk : ∀ j, CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i j))
     (hh : ∀ n, WriteStep sy m i n → ∀ j, j ≤ n → TileRead (spotsF sy m0) (trace m i j) ∧
-      (trace m i j).pc ≠ PipeWrites.edgeStore sy m0 ∧ (trace m i j).pc ≠ PipeWrites.headAt sy m0) :
+      ((trace m i j).pc ∈ again sy m0 → (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j) →
+        ∃ k, k ≤ n ∧ (trace m i k).pc = sy.PlayerSubs ∧ (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i k))) :
     ∃ n j, WriteStep sy m i n ∧ j ≤ n ∧ (trace m i j).pc = sy.PlayerSubs ∧ (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j) := by
   simp only [poleFrameCheck, Bool.and_eq_true] at hc
   obtain ⟨hp, hc⟩ := hc
@@ -564,10 +582,13 @@ theorem touch_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : poleF
         show px (spotsF sy m0) (trace m i j) < (spotsF sy m0).left
         by_cases hl : (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j)
         · exact absurd ⟨j, hj, hs, hl⟩ hx
+        · exact Nat.lt_of_not_le hl, fun ha => by
+        show px (spotsF sy m0) (trace m i j) < (spotsF sy m0).left
+        by_cases hl : (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j)
+        · exact absurd ((hh n hw j hj).2 ha hl) hx
         · exact Nat.lt_of_not_le hl, (hh n hw j hj).1, by
-        show (trace m i j).pc ∉ [PipeWrites.edgeStore sy m0, PipeWrites.headAt sy m0]
-        simp only [List.mem_cons, List.not_mem_nil, or_false, not_or]
-        exact (hh n hw j hj).2⟩)
+        show (trace m i j).pc ∉ ([] : List UInt16)
+        simp⟩)
     exact hn hw.2
 
 /-- **In the pole's range, from one whole frame.** `P` is the position at the end of the move before the write (`moved`). A frame that touches, under the conditions of
@@ -575,7 +596,8 @@ theorem touch_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : poleF
 theorem inRange_of_frame {sy : Syms} {m0 m : Machine} {i : UInt8} {P : Int} (hc : poleFrameCheck sy m0 = true) (he : Touches sy m i)
     (h0 : FrameKeep.StartK sy m0 m) (hk : ∀ j, CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i j))
     (hh : ∀ n, WriteStep sy m i n → ∀ j, j ≤ n → TileRead (spotsF sy m0) (trace m i j) ∧
-      (trace m i j).pc ≠ PipeWrites.edgeStore sy m0 ∧ (trace m i j).pc ≠ PipeWrites.headAt sy m0)
+      ((trace m i j).pc ∈ again sy m0 → (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j) →
+        ∃ k, k ≤ n ∧ (trace m i k).pc = sy.PlayerSubs ∧ (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i k)))
     (hmoved : ∀ n j, WriteStep sy m i n → j ≤ n → (trace m i j).pc = sy.PlayerSubs → P = posP sy (trace m i j)) :
     SurfaceRun.poleP sy m0 ≤ P := by
   obtain ⟨n, j, h1, h2, h3, h4⟩ := touch_right_of_left hc he h0 hk hh
@@ -603,7 +625,7 @@ def cleanKB (G : Guard) (q : UInt16) (m : Machine) : Bool :=
 /-- what real frames say about the hypotheses -/
 structure Report where
   frames : Nat := 0
-  /-- frames in control, and how many do not meet `StartK`; instructions of them not `CleanK`; side reads after which `TileRead` fails; frames that come to a cut place -/
+  /-- frames in control, and how many do not meet `StartK`; instructions of them not `CleanK`; side reads after which `TileRead` fails; frames that come to the edge store or the head's routine -/
   ctl : Nat := 0
   startBad : Nat := 0
   instrs : Nat := 0
@@ -612,13 +634,27 @@ structure Report where
   tileBad : Nat := 0
   outside : Nat := 0
   cutFrames : Nat := 0
-  /-- frames that touch; of them: not `StartK`; an instruction not `CleanK`; `TileRead` failing up to the write; a cut place before it; not one arrival at the end of the move
+  /-- frames that touch; of them: not `StartK`; an instruction not `CleanK`; `TileRead` failing up to the write; the edge store or the head's routine before it (no
+  hypothesis now); at a place of `again` before it, at or right of the pole's range (`edge`); not one arrival at the end of the move
   before it; the position there left of the range; the position there is not the frame's start moved by the speed there (`P₂ = P + 16·v₂`, `moved`) -/
   touches : Nat := 0
   tStart : Nat := 0
   tClean : Nat := 0
   tTile : Nat := 0
   tCut : Nat := 0
+  tAgain : Nat := 0
+  /-- frames in control at a place of `again`, any frame: how many times; at or right of the pole's range there; after the head's routine, not at the position of the end of the
+  move; the largest position there -/
+  agains : Nat := 0
+  againRight : Nat := 0
+  headMoved : Nat := 0
+  againMax : Nat := 0
+  /-- of them: after the edge store; after the head's routine; left of the range at the end of the move and at or right of it there (moved into the range) -/
+  edgeN : Nat := 0
+  headN : Nat := 0
+  intoRange : Nat := 0
+  /-- at the entry of the head's routine with the page the pole's or the one before: (the metatile, the height, the position) -/
+  headNear : List (UInt8 × UInt8 × Nat) := []
   subsN : Nat := 0
   leftBad : Nat := 0
   movedBad : Nat := 0
@@ -626,9 +662,9 @@ structure Report where
   deriving Inhabited
 
 def Report.show (r : Report) : String :=
-  s!"frames {r.frames}, in control {r.ctl} (not StartK {r.startBad}), instructions {r.instrs} (not CleanK {r.cleanBad}), side reads {r.reads} (TileRead fails {r.tileBad}, outside the block buffers {r.outside}), frames at a cut place {r.cutFrames}; touches {r.touches} (not StartK {r.tStart}, not CleanK {r.tClean}, TileRead fails {r.tTile}, at a cut place {r.tCut}, not one arrival at the end of the move {r.subsN}, left of the range there {r.leftBad}, moved {r.movedBad}), positions {r.pxs.eraseDups.mergeSort}"
+  s!"frames {r.frames}, in control {r.ctl} (not StartK {r.startBad}), instructions {r.instrs} (not CleanK {r.cleanBad}), side reads {r.reads} (TileRead fails {r.tileBad}, outside the block buffers {r.outside}), frames at the edge store or the head's routine {r.cutFrames}; at a place of again {r.agains} (after the edge store {r.edgeN}, after the head's routine {r.headN}; at or right of the range {r.againRight}, largest {r.againMax}, moved into the range from the end of the move {r.intoRange}, after the head's routine not at the end of the move's position {r.headMoved}; the head's routine near the pole (metatile, height, position) {r.headNear.eraseDups.take 24}); touches {r.touches} (not StartK {r.tStart}, not CleanK {r.tClean}, TileRead fails {r.tTile}, at the edge store or the head's routine {r.tCut}, in the range at a place of again but not at the end of the move {r.tAgain}, not one arrival at the end of the move {r.subsN}, left of the range there {r.leftBad}, moved {r.movedBad}), positions {r.pxs.eraseDups.mergeSort}"
 
-def Report.bad (r : Report) : Nat := r.startBad + r.cleanBad + r.tileBad + r.tStart + r.tClean + r.tTile + r.tCut + r.subsN + r.leftBad + r.movedBad
+def Report.bad (r : Report) : Nat := r.startBad + r.cleanBad + r.tileBad + r.tStart + r.tClean + r.tTile + r.tAgain + r.intoRange + r.subsN + r.leftBad + r.movedBad
 
 /-- one real frame with the bits `pad` of the controller -/
 def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Report) : Report × Machine := Id.run do
@@ -637,6 +673,8 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
   let Q := spotsF sy m0
   let E := envOf m0
   let cuts := [PipeWrites.edgeStore sy m0, PipeWrites.headAt sy m0]
+  let ag := again sy m0
+  let hb := headBack sy m0
   let t := m.frame + 1
   let mut c : Machine := { m with pad }
   let ctl := controllable sy m
@@ -645,6 +683,8 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
   let mut clean := true
   let mut tiles := true
   let mut cutSeen := false
+  let mut agBad := false
+  let mut lastSubs : Option Nat := none
   let mut subs : List Machine := []
   let mut touched := false
   let mut n := 0
@@ -652,6 +692,16 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
     if !touched then
       if cuts.contains c.pc then cutSeen := true
       if c.pc == sy.PlayerSubs then subs := c :: subs
+    if c.pc == sy.PlayerSubs then lastSubs := some (px Q c)
+    if ctl && c.pc == PipeWrites.headAt sy m0 && Q.pg ≤ (c.ram.get! Q.pI).toNat + 1 && r.headNear.length < 400 then
+      r := { r with headNear := (c.a, c.ram.get! (sy.Player_Y_Position &&& 0x7FF).toNat, px Q c) :: r.headNear }
+    if ctl && ag.contains c.pc then
+      let p := px Q c
+      r := { r with agains := r.agains + 1, againRight := r.againRight + (if Q.left ≤ p then 1 else 0), againMax := Nat.max r.againMax p,
+                    headMoved := r.headMoved + (if c.pc == hb && lastSubs != some p then 1 else 0),
+                    edgeN := r.edgeN + (if c.pc == hb then 0 else 1), headN := r.headN + (if c.pc == hb then 1 else 0),
+                    intoRange := r.intoRange + (match lastSubs with | some q => if q < Q.left && Q.left ≤ p then 1 else 0 | none => 0) }
+      if !touched && Q.left ≤ p && !(match lastSubs with | some q => decide (Q.left ≤ q) | none => false) then agBad := true
     let ok := cleanKB G q c
     if ctl then r := { r with instrs := r.instrs + 1, cleanBad := r.cleanBad + (if ok then 0 else 1) }
     if !ok && !touched then clean := false
@@ -671,6 +721,7 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
         tClean := r.tClean + (if clean then 0 else 1)
         tTile := r.tTile + (if tiles then 0 else 1)
         tCut := r.tCut + (if cutSeen then 1 else 0)
+        tAgain := r.tAgain + (if agBad then 1 else 0)
         subsN := r.subsN + (if subs.length == 1 then 0 else 1) }
       match subs.head? with
       | some u =>

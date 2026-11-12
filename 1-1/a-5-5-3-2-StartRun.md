@@ -3,8 +3,9 @@
 # Every frame from control to the pipe starts in the idle loop
 
 **Claim.** From the press of Start on the title, the machine at control starts a frame in the idle loop, in control. From there, every frame up to the entry into the vertical pipe,
-counted or not, starts so too, if each counted frame ends in control, each frame not counted that calls the mode's routine ends in control, and each instruction is `Clean`.
-A frame not counted that does not call the mode's routine ends in control by the check of [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md). So these are no longer assumed:
+counted or not, starts so too, if each counted frame ends in control, each frame not counted ends paused, and each instruction is `Clean` (and does not write the pause byte
+through an index or a pointer, on a frame not counted). A frame not counted does not call the mode's routine ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)),
+so it ends in control by the check of [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md). So these are no longer assumed:
 
 * `Pipe.start` (item 1-1-a-5-2-1): the frame that enters starts in the idle loop, in control;
 * `lags.start` (item 1-1-a-5-5-3-2): each frame not counted starts in the idle loop.
@@ -34,19 +35,25 @@ starts_dep     :  the same, with the known bytes at the end of frame n asked onl
 starts_clean, starts_clean_dep :  the same with no bit watched (W = []) and Clean_G in place of CleanK_G
 Begin.start₁   :  check (TitleStart),  titleCheck(c, G, m₀),  Begin,  seq 1 = frame(seq 0, inp 0),  the bytes of G.known in seq 1   →   FrameStart_G(seq 1)
 Begin.start₁G  :  the same for G = guardOf; ctl(seq 1) (the field Begin.ctl) gives the known bytes
+Begin.pos₁     :  check,  titlePosCheck(c, m₀),  Begin,  seq 1 = frame(seq 0, inp 0)   →   P(seq 1) = P(m₀)          (this round)
+Begin.hs₁      :  the same   →   startHS(seq 1) = startHS(m₀)       (the speed, the subspeed, the facing and moving directions, the running speed; this round)
 
 Lags           :  ix t < ix(t + 1),  fm t = seq(ix t),  and
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                      (the counted frames)
                     clean :  ∀ n ∈ [ix 1, ix E),  ∀ k,  Clean(tr_n(k))
-                    game  :  for a frame not counted that calls c:  V(seq(n + 1)) = V(seq n)  ∧  ctl(seq(n + 1))
-Lags.known_end :  lagCheck,  Lags,  1 ≤ E,  n ∈ [ix 1, ix E),  FrameStart(seq n)   →   ctl(seq(n + 1))
-Lags.starts    :  lagCheck,  walkCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)
+                    paused, keeps :  a frame not counted ends paused, and does not write the pause byte through an index or a pointer   (LagPause)
+Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ E,  n ∈ [ix 1, ix E),  FrameStart(seq n)   →   ctl(seq(n + 1))
+Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)
 Lags.lagStart  :  the same   →   FrameStart(seq n) for a frame not counted          (the old field lags.start)
-Pipe.startE    :  lagCheck,  walkCheck,  FrameStart(fm 1)   →   FrameStart(fm E)       (the old field Pipe.start)
+Pipe.startE    :  lagCheck,  walkCheck,  pauseCheck,  FrameStart(fm 1)   →   FrameStart(fm E)       (the old field Pipe.start)
 Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(pipe.fm 1)              (with the field title and the theorem pipeAt of Run)
+Run.pipePos    :  title_check,  title_pos_check   →   P(pipe.fm 1) = P(m₀)
+Run.pipeHS     :  title_check,  title_pos_check   →   startHS(pipe.fm 1) = startHS(m₀)
 ```
 
 `walkCheck` and `titleCheck` are checks on the ROM, by `native_decide` in the private `walk_check` and `title_ctl_check` (about 4 s together in the proof build).
+`titlePosCheck` walks frame 0 as `titleCheck` does, and asks at each end with control that the bytes of the position and of the horizontal state are known, with the values of `m₀`
+(the private `title_pos_check`, about 1.6 s natively).
 `lagCheck` is the check of [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md), in the private `lag_check`.
 The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`. `#print axioms route_1_1` shows no `sorryAx`.
 
@@ -57,8 +64,8 @@ Lean: `Theorems/StartRun.lean`; `Lags`, `Lags.known_end`, `Lags.starts`, `Lags.l
 
 * **One whole frame.** The walk is the one of `FrameKeep` ([part f](f-6-19-FrameKeep.md)): the abstract machine of `TaintRun` follows a frame from `FrameStart`, under `CleanK` on each
   instruction, and every path ends at the start of the next frame (the idle loop, its stack pointer, a window of the dot, the NMI on, the strobe off). The bytes of `G.known` at the end are
-  not known to the walk. They come from `ctl` at the end of a counted frame, from `game` at the end of a frame not counted that calls the mode's routine, and from the check of
-  `LagFrames` at the end of one that does not (`Lags.known_end`). The last needs that the frame starts in control, so the induction asks the known bytes at the end of frame `n`
+  not known to the walk. They come from `ctl` at the end of a counted frame, and from the check of `LagFrames` at the end of a frame not counted, which does not call the mode's
+  routine (`Lags.no_call`, `Lags.known_end`). The last needs that the frame starts in control, so the induction asks the known bytes at the end of frame `n`
   only when frame `n` starts so (`starts_dep`). Here the walk has the guard of `PipeWrites` (`guardOf`), no bit watched and no place of the move routine (`walkCheck`), so its
   condition on one instruction is `Clean` itself. 641,723 steps, 65,610 forks, 0 failures, a table of 43,259 states; the search 1.5 s and the check 2.2 s natively.
 * **The frames not counted.** The walk does not know the pause byte. So a paused frame is one of its paths. The induction goes over every frame of `seq`
@@ -88,10 +95,10 @@ It checks that every frame ends in control, so it covers the new `lags.ctl` (the
 ## Assumed (not proved in Lean)
 
 * **`lags.ctl`**: each counted frame from control to the entry ends in control. A condition on one state of each frame. It fails on a growth, an injury and a death.
-  A frame not counted that calls the mode's routine is asked to end in control in `lags.game`; one that does not call it ends in control by the check.
+  A frame not counted ends in control by the check: it ends paused (`lags.paused`), so it does not call the mode's routine.
 * **`lags.clean`**: each instruction of these frames is `Clean`. It is the same kind of condition as `chg.upClean₁` (part b) on the same frames, with fewer bytes protected,
   and as `FrameKeep.Frames.clean` above ground.
-* **`lags.game`** ([Frames not counted, up to the pipe](a-5-5-3-LagFrames.md)), now with "it ends in control".
+* **`lags.game` is no longer assumed** (this round): in its place `lags.paused` and `lags.keeps` ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)).
 * `lags.store` is no longer assumed: the check of `LagFrames` proves it.
 * `one_le` is no longer assumed: `Pipe.one_le` proves it.
 * **Not in this item.** `Run.pipeAt` (`pipe.fm 1 = base.seq 1`, part 0) is used by `Run.pipeStart₁`. It is a theorem: `pipe`'s frames are frames of `base`, and its counted frame 1 is frame 1.

@@ -93,7 +93,7 @@ The distance of the TAS equals the bound on every frame from 32 to 362, and it i
 * **What Down means.** `rule` is about `Up_Down_Buttons` at the collision. The frame code clears it when Down is pressed on the ground with Left or Right held
   (read from the code; seen at frame 368). This only removes entries.
 * **The position bound.** `hopen`, `hB`, `hv`, `hn` of `pipe_no_entry` are hypotheses. Those of [The opening](a-3-Opening.md) and of the [Top speed bound](../0-0/0-1-TopSpeed.md) are their source, with their
-  assumptions: the first `N` frames follow the model on open flat ground, and later frames follow `Frame`. `Route` does not assume `hv` and `hn`: it reads the frames from the machines, and the following of the frames up to `E` and their speed are theorems ([The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md)).
+  assumptions: the first `N` frames follow the model on open flat ground, and later frames follow `Frame`. `Route` does not assume `hv` and `hn`: it reads the frames from the machines, and the following of the frames up to `E` and their speed are theorems ([The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md)). Nor does it assume `hopen` and `hB`: the position at control comes from the title, and the bound at frame `N` from each of the first `N` frames being a step of the model ([The opening on real frames](a-5-4-OpenFrames.md)).
 * **Not proved: that frame 368 is reached.** `pipe_gap` says only that the bound passes `L` at frame 368. The entry at 368 itself is the TAS on the emulator.
 
 **Files.** `Theorems/PipeEntry.lean`, private `Proof/PipeEntry.lean`.

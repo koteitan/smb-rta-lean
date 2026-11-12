@@ -2,13 +2,13 @@
 
 # One whole frame in control keeps the castle flag and the fraction's low bits
 
-**Claim.** A whole frame that starts in control keeps two things. The castle flag stays down. The fraction of the position stays a multiple of 1/16 px. The frame also ends at the start of the next frame in control, as far as the walk can see: in the idle loop, with the stack pointer, the dot and the PPU of a frame's start. This is a theorem about any machine and any input. Its conditions are one state at the frame's start and one condition on each instruction of the frame. The proof follows the whole frame with the abstract machine of `TaintRun.lean`, as [`PipeWrites`](a-5-2-PipeWrites.md) does.
+**Claim.** A whole frame that starts in control keeps two things. The castle flag stays down. The fraction of the position stays a multiple of 1/16 px. The frame also ends at the start of the next frame in control, as far as the walk can see: in the idle loop, with the stack pointer, the dot and the PPU of a frame's start. If no instruction of the frame writes the routine byte, the mode byte or the task byte by its address, the frame ends in control. This is a theorem about any machine and any input. Its conditions are one state at the frame's start and one condition on each instruction of the frame. The proof follows the whole frame with the abstract machine of `TaintRun.lean`, as [`PipeWrites`](a-5-2-PipeWrites.md) does.
 
 So the hypothesis `fracStep` of `PoleJoin.Run` is gone. It is the theorem `Run.fracP`, from the frames of the run (the field `keep`) and the check on the ROM. The field `noCastle` is gone too: it is the theorem `Run.noCastle_of`, from the machine at control ([The machine at control above ground](f-6-2-ControlStart.md)). The field `keep.start` (each frame starts in control) is gone: it is the theorem `Frames.start`. It needs a smaller field, `keep.ctl`: each frame before the touch ends in control.
 
 Last round the fields `keep.ends`, `keep.lag` and `keep.lagStart` went. `keep` now lists every frame from control on, counted or not, as real frames one after the other (`all`, `inp`, `next`), and where the counted frames end (`ix`). A `lag` frame needs no rule of its own: the walk covers every frame that starts in control, paused or not. So the `lag` frames keep the castle flag, the fraction's low bits and the start of a frame in control by the same theorem as the counted frames (`Frames.all_start`), when they meet the same two conditions: `ctl` and `clean` now ask them of the `lag` frames too.
 
-This round `ctl` asks two bytes instead of three: each frame before the touch's frame ends with the routine of control and the task of the game core. That the mode is the game's then is a theorem (`ctl_of_frame`, `Frames.ctlAll`): the walk of `keepCheckOf` keeps the mode and the task, and at every end of a frame it checks `endCtl`.
+Last round `ctl` asked two bytes of each frame's end: the routine of control and the task of the game core. This round the field `ctl` is gone. The three bytes are in `Prot_K`, so under `CleanK` no store through an index or a pointer changes them. Only an instruction that names one of them by its address can. A second walk (`ctlKeepCheck`, now a part of `keepCheckOf`) cuts the paths at such instructions. Every other path ends with the three bytes still known with the values of control. So the new field `keep.noStore` says: no instruction of a frame before the touch's frame writes one of the three bytes by its address. That each such frame ends in control is a theorem (`Frames.ctlAll`). The walk comes to 8 such instructions, listed below. So `noStore` names the 8 ways a frame can leave control: the touch itself, a pipe, an injury or a power-up, a death, and others.
 
 `frame(m, i)` is the real frame with the input `i`. `tr(n)` is the machine `n` instructions into it. `all n` is the machine when frame `n` begins, counted or not, and `all 0` the machine at control above ground. `seq j` is the machine at the end of the counted frame `j`, and `seq 0 = all 0`.
 
@@ -37,7 +37,7 @@ Frames (keep)     :  all n := S.seq(a + n),  inp n := S.inp(a + n)        the ma
                      next    :  all(n + 1) = frame(all n, inp n)              (the theorem Frames.next)
                      seq0    :  seq 0 = S.seq a                                (the theorem Frames.seq0)
                      ix      :  ix 0 = 0,   j < g → ix j < ix(j + 1),   j ≤ g → seq j = all(ix j)      the counted frame j ends at all(ix j)
-                     ctl     :  n + 1 < ix g  →  rt(all(n + 1)) = control  ∧  OperMode_Task(all(n + 1)) = core
+                     noStore :  n + 1 < ix g  →  ∀ k,  ¬CtlStore(tr_n(k))
                      clean   :  n < ix g  →  ∀ k,  CleanK(tr_n(k))                 tr_n:  the instructions of the frame from all n
 fm j  :=  all(ix j − 1),   pad j  :=  inp(ix j − 1)                       where the counted frame j begins, and its input
 AtCtl(m)          :=  FrameStart_K(m)  ∧  castle(m) = false                 the machine at control
@@ -48,6 +48,11 @@ Frames.run        :  the same   →   ∀ j < g,  FrameStart_K(seq j)  ∧  Watc
 Frames.start      :  the same   →   ∀ j,  1 ≤ j ≤ g  →  FrameStart_K(fm j)
 Frames.watched    :  the same   →   ∀ j ≤ g,  Watched(seq j)
 Frames.ctlAll     :  the same   →   ∀ n,  n + 1 < ix g  →  controllable(all(n + 1))
+
+CtlStore(m)       :=  the instruction at pc(m) is STA, STX, STY, INC, DEC, ASL, LSR, ROL or ROR, zero page or absolute,
+                      and its address (mod 2048, below 0x2000) is GameEngineSubroutine, OperMode or OperMode_Task
+keep_frame_startC :  ctlKeepCheck,  FrameStart_K(m),  Watched(m),  (∀ n,  CleanK(tr(n))),  (∀ n,  ¬CtlStore(tr(n)))
+                       →   FrameStart_K(frame(m, i))  ∧  Watched(frame(m, i))
 
 endCtl(B)         :  rt(B) is known not to be control  ∨  the task is known not to be core  ∨  the mode is known to be game
 ctl_of_frame      :  keepCheckOf,  FrameStart_K(m),  Watched(m),  (∀ n,  CleanK(tr(n))),  rt(frame(m, i)) = control,  task(frame(m, i)) = core
@@ -61,7 +66,7 @@ Run.noCastle_of   :  the same  →  ∀ j ≤ g,  castle(seq j) = false
 
 `P(j)` is `posP(seq(j − 1))`, read from the machines (`frames.reads`). `AtCtl(seq 0)` is a theorem on a real run: `ControlStart.EndRun.atCtl`, from the rows of the change out of the side pipe ([The machine at control above ground](f-6-2-ControlStart.md)).
 
-`Frames.all_start` is an induction on `n`, over every frame, counted or not. The frame `n` begins at `all n` with `FrameStart_K` and `Watched`. It ends at `all(n + 1)` (`next`). `keep_frame_start` gives `FrameStart_K(all(n + 1))` and `Watched(all(n + 1))`, with `Known_K(all(n + 1))` from `ctl`. The touch's frame, the last one (`n = ix g − 1`), is not asked to end in control: there the routine changes. `keep_frame` gives `Watched(all(ix g))` without it (`Frames.all_watched`). The theorems on the counted frames read these at `seq j = all(ix j)` and `fm j = all(ix j − 1)`: `ix` grows, so `ix j ≤ ix g` (`Frames.ix_mono`).
+`Frames.all_start` is an induction on `n`, over every frame, counted or not. The frame `n` begins at `all n` with `FrameStart_K` and `Watched`. It ends at `all(n + 1)` (`next`). `keep_frame_startC` gives `FrameStart_K(all(n + 1))` and `Watched(all(n + 1))`, with `noStore` on the frame `n`. The touch's frame, the last one (`n = ix g − 1`), is not asked to end in control: there the routine changes. `keep_frame` gives `Watched(all(ix g))` without it (`Frames.all_watched`). The theorems on the counted frames read these at `seq j = all(ix j)` and `fm j = all(ix j − 1)`: `ix` grows, so `ix j ≤ ix g` (`Frames.ix_mono`).
 
 ## The walk
 
@@ -81,11 +86,25 @@ Two steps are the walk's own:
 * **The sum of the low bits.** `ADC zp` with the low 4 bits of `A` and of the byte and the carry known gives the low 4 bits of the sum: `(a + b + c) mod 16 = (a mod 16 + b mod 16 + c) mod 16` (`s_adcL`, proved against `adc`). The move routine adds `16·v` this way: the speed shifted left four times has its low 4 bits 0.
 * **The index of the move routine.** At its entry an index `X` that is not known splits into 9 pieces: `X = 0`, or the lowest bit 1 of `X` is bit `b` (`b = 0, …, 7`). With `X = 0` the walk knows the store's target. With `X ≠ 0` the store is the usual one of `PipeWrites`, and `CleanK` says that its target is `Plain`. The player's move takes `X` from the jumpspring's control; the pieces cover it with no condition on that byte.
 
-The check `keepCheckOf` (`keep_check` in the private proof) is the first row. The frame's ends: all with `endOK` and `endCtl`.
+**The walk of the frames before the touch (`ctlKeepCheck`)** is the same walk, with one more rule: a path stops at an instruction that writes the routine, the mode or the task by its address (`walkKC`). By the hypothesis `noStore` the frame does not come there. At each frame's end it asks `Watched`, `endOK`, and the three bytes known with the values of control (`knownAll`). Then `endOK` and the three bytes give `FrameStart_K` of the next frame (`start_of_sim`), and the values give `controllable` (`ctl_of_known`). The ROM has 37 instructions that write one of the three bytes by its address. The walk comes to 8 of them:
+
+| place in the code | what it writes |
+|---|---|
+| `PlayerHole` | the routine of losing a life: a fall into a pit |
+| `ChgAreaMode` | the task 0: an area change |
+| `SetPRout` | the routine of an injury, of a death by an enemy or by the time, or of a power-up |
+| the side pipe's entry (after `ChkGERtn`) | the routine of the side pipe |
+| `HandleAxeMetatile` | the task 0 (and then the mode): the axe |
+| `RunFR` (the pole) | the routine of the pole: the touch |
+| `VineCollision` | the routine of the climb at the top of the screen |
+| the vertical pipe's entry | the routine of the vertical pipe |
+
+The check `keepCheckOf` (`keep_check` in the private proof) is the first two rows of the table: both walks. The frame's ends: all with `endOK` and `endCtl` in the first; all with `endOK` and the three bytes of control in the second.
 
 | walk | steps | forks | failures | table | time |
 |---|---|---|---|---|---|
-| castle flag and fraction, 9 pieces, the mode and the task in the key, `endOK` and `endCtl` at the ends (`keepCheckOf`, this round) | 707,869 | 69,388 | 0 | 46,576 | search 2.8 s, check 3.9 s in a program |
+| castle flag and fraction, 9 pieces, the mode and the task in the key, `endOK` and `endCtl` at the ends (`keepCheckOf`, its first part) | 707,869 | 69,388 | 0 | 46,576 | search 2.8 s, check 3.9 s in a program |
+| the same, with the paths cut at the writes of the three bytes, `endOK` and the three bytes of control at the ends (`ctlKeepCheck`, this round) | 67,115 | 6,987 | 0 | 4,520 | search 0.1 s, check 0.2 s in a program |
 | castle flag and fraction, 9 pieces, `endOK` at the ends (`keepCheck`, the last round) | 707,685 | 69,404 | 0 | 46,573 | check 3.8 s in a program, `Proof.FrameKeep` 5.0 s |
 | the same, with the jumpspring's control known to be 0 at the start and in `Prot_K` (the last round) | 1,044,377 | 101,574 | 0 | 79,266 | check 4.9 s in a program |
 | castle flag only, no pieces | 907,094 | 92,482 | 0 | 72,016 | check 4.5 s |
@@ -105,19 +124,21 @@ The check `keepCheckOf` (`keep_check` in the private proof) is the first row. Th
 | random inputs with a pause, from the movie's frames 1002 to 1091 | 400 | 76,106 (24,517 paused) | 250,174,812 | 241 |
 
 * Every frame meets `FrameStart_K` and starts with `Watched`. Every instruction meets `CleanK`. Every frame ends with `Watched`.
-* Every frame that ends with the routine of control ends with `controllable`. In a run that touches, every frame before the touch's frame ends with the routine of control, paused frames too. So `ctl` holds on these runs.
+* Every frame that ends with the routine of control ends with `controllable`. In a run that touches, every frame before the touch's frame ends with the routine of control, paused frames too.
+* In a run that touches, no frame before the touch's frame has an instruction that writes the routine, the mode or the task by its address. So `noStore` holds on these runs. Frames with such an instruction: 1 in the movie and 216 and 241 in the runs from the movie's frames, all touch's frames (`RunFR` and then the end of the level, on a direct grab); 44, 7 and 15 in the random runs from control, the runs into the left edge and the runs with a pause from control, all at `SetPRout`, in runs that do not touch.
+* Every frame that meets the conditions and has no such instruction ends with `controllable` (as `keep_frame_startC` and `ctl_of_known` say).
 * The store at `q` with `X = 0` comes once on every frame that is not paused: the player's move. No other store through an index or a pointer touches `Prot_K`.
 * The latest dot of an instruction is 66,674, below the limit `dotsPerFrame − 64`.
 
 ## Hypotheses (not proved in Lean)
 
 * **`keep.clean`: `CleanK` on each instruction of each frame up to the touch, counted or not.** It is the condition of `PipeWrites`, with the three bytes added to `Prot_K` and the player's store not asked. Checked on the real frames above.
-* **`keep.ctl`: each frame before the touch's frame ends with the routine of control and the task of the game core, counted or not.** Two bytes of one state. The mode is a theorem (`Frames.ctlAll`). The routine byte alone is not enough (above).
+* **`keep.noStore`: no instruction of a frame before the touch's frame, counted or not, writes the routine, the mode or the task by its address.** A condition on each instruction. The walk comes to 8 such places (above); each of them is a way to leave control. That the frames end in control is a theorem (`Frames.ctlAll`). `noStore` with the walk gives the old `ctl`, so it is not weaker than `ctl`; it names the places in the code instead of the bytes at the end.
 * **`keep.ix`: the counted frame `j` ends at `seq j`.** This says which machines the run is made of. The frames themselves are no longer fields: `Frames` takes the real frames of the whole run (`RealRun`) and the frame `a` of control, and `all n = S.seq (a + n)`, `inp n = S.inp (a + n)` are definitions; `next` and `seq 0 = S.seq a` are theorems (`Frames.next`, `Frames.seq0`). So the machine at control above ground is the run's machine at the end of the second change (`Route.Run.atCtl`, item 1-1-0-4).
 
-What stopped being a hypothesis: `fracStep` (each frame moves the position by a multiple of 1/16 px), then `noCastle` and `keep.start`, then `keep.ends` (`Frames.ends`), `keep.lag` and `keep.lagStart` (`Frames.all_start`). `CleanK` and `FrameStart_K` no longer name the jumpspring's control. What is new: `keep` (`all`, `inp`, `next`, `ix`, `ctl`, `clean`), and the checks `keepCheck` and `ControlStart.ctlCheck` on the ROM. Then the mode left `ctl`, and `keepCheckOf` became the walk with `endCtl`. This round `all`, `inp`, `next` left the fields (definitions from `RealRun`).
+What stopped being a hypothesis: `fracStep` (each frame moves the position by a multiple of 1/16 px), then `noCastle` and `keep.start`, then `keep.ends` (`Frames.ends`), `keep.lag` and `keep.lagStart` (`Frames.all_start`). `CleanK` and `FrameStart_K` no longer name the jumpspring's control. What is new: `keep` (`all`, `inp`, `next`, `ix`, `ctl`, `clean`), and the checks `keepCheck` and `ControlStart.ctlCheck` on the ROM. Then the mode left `ctl`, and `keepCheckOf` became the walk with `endCtl`. Then `all`, `inp`, `next` left the fields (definitions from `RealRun`). This round `ctl` left the fields, and `noStore` came; `keepCheckOf` has the second walk `ctlKeepCheck`.
 
-**What the change asks more.** `ctl` and `clean` now also ask of the `lag` frames what they ask of the counted frames. A `lag` frame that does not end in control is outside `ctl`. By the code, a frame of the master timer control after an injury of a big Mario is such a frame: the injury sets the routine of the injury and the master timer control together. The old `lag` and `lagStart` asked only that the castle flag, the fraction's low bits and the start of a frame in control come through the `lag` frames, so such a run could meet them. A paused frame ends in control.
+**What the change asks more.** `noStore` (before it `ctl`) and `clean` also ask of the `lag` frames what they ask of the counted frames. A `lag` frame that does not end in control is outside `noStore`. By the code, a frame of the master timer control after an injury of a big Mario is such a frame: the injury sets the routine of the injury and the master timer control together. The old `lag` and `lagStart` asked only that the castle flag, the fraction's low bits and the start of a frame in control come through the `lag` frames, so such a run could meet them. A paused frame ends in control.
 
 **Files.** `Theorems/FrameKeep.lean`, `Theorems/ControlStart.lean`, `Theorems/PoleJoin.lean`, private `Proof/FrameKeep.lean`, `Proof/ControlStart.lean`.
 
@@ -125,5 +146,6 @@ What stopped being a hypothesis: `fracStep` (each frame moves the position by a 
 ```
 .lake/build/bin/smbrta keep-check                     # the walk, as a program (about 10 s)
 .lake/build/bin/smbrta keep-ctl-search                # the walk of keepCheckOf, with endCtl (about 12 s)
+.lake/build/bin/smbrta keep-store-search              # the walk with the writes of the three bytes cut (ctlKeepCheck), and both walks of keepCheckOf (about 4 s)
 .lake/build/bin/smbrta keep-frames-check FM2 100      # the conditions on real frames (about 4 min)
 ```

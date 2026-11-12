@@ -20,6 +20,11 @@ and asks that it is known to be 1 at the end of a frame that did not come to the
 * `arrive_of`, `arrive_at`: a frame in control that ends with the game not paused comes to the player's routine, a first time at `arrAt`;
 * `keep_of_noCut`: a frame in control that does not come to the player's routine keeps the bytes of `keepA`.
 
+At the cut the walk of the pause bit can go on (`CfgR.after`): a walk of `FrameKeep` follows the frame from the player's routine to its end (`afterCheck`), with four more
+protected bytes (`spareI`: the pause byte, the area's type, the swimming flag, the change of size). The condition on each instruction is then `CleanK` and `Spare`. So
+(`area_end`): a frame in control keeps the area's type, the swimming flag and the change of size, and a frame that comes to the player's routine ends not paused; so a frame
+that ends paused does not come there (`noCut_of_paused`).
+
 The searches are no part of the proof: the check walks every state of its table. There is no game data in this file. Page: `1-1/e-2-SurfaceFrames.md`.
 -/
 
@@ -66,6 +71,8 @@ structure CfgR where
   idx : Std.HashMap Nat Nat
   /-- the `pc` of the states of the table -/
   tc : ByteArray
+  /-- what the walk asks besides `atCut` at the cut: for the pause bit, that the walk from the cut to the frame's end succeeds (`CtrlKeep.after`) -/
+  after : AS → Bool := fun _ => true
 
 /-- what the walk asks at the cut: the byte still followed and not decremented, the stack pointer, no NMI pending, the NMI off, the routine byte -/
 def atCut (C : CfgR) (B : AS) : Bool :=
@@ -92,7 +99,7 @@ def walkR (C : CfgR) : Nat → AS → Bool
     | none => false
     | some B =>
       if B.k == A.k then
-        (if B.pc == C.cut then atCut C B else (C.tc.get! B.pc.toNat != 0 && coverR C B) || walkR C n B)
+        (if B.pc == C.cut then atCut C B && C.after B else (C.tc.get! B.pc.toNat != 0 && coverR C B) || walkR C n B)
       else B.k == A.k + 1 && endR C B
 
 /-- the state when the frame starts, with the byte followed and the low bit of the pause byte known: `b` -/
@@ -243,6 +250,96 @@ def ctrlCheck (sy : Syms) (m0 : Machine) : Bool :=
    (keepI sy).all fun b => ctrlCheck1 (cfgOf sy m0 q b false)) &&
   ctrlCheck1 (cfgOf sy m0 (cutTable sy m0 true) (sy.Player_X_Speed &&& 0x7FF).toNat true)
 
+/-! ## From the cut to the frame's end
+
+At the cut the walk of the pause bit can hand over to a walk of `FrameKeep` (`FrameKeep.walkK`): it follows the frame from the player's routine to its end, forgets the
+bytes outside the guard's protected bytes as `FrameKeep` does, and asks at the frame's end the watched bits (`FrameKeep.Watch`). Its guard protects more bytes (`guardP`):
+a store through an index or a pointer does not write them. -/
+
+/-- the guard of `FrameKeep`, with the bytes `l` protected too -/
+def guardP (sy : Syms) (m0 : Machine) (l : List Nat) : Guard := { FrameKeep.guardK sy m0 with prot := l ++ (FrameKeep.guardK sy m0).prot }
+
+/-- the state at the cut, for the walk after it: the byte is no longer followed, of the bytes of `W` only the watched bits are kept, and the bits of `V` are set to
+their values -/
+def toA (W V : List FrameKeep.Watch) (B : AS) : AS :=
+  let B := W.foldl (fun A w => A.setK w.1 ⟨(A.getK w.1).v &&& w.2.1, (A.getK w.1).k &&& w.2.1⟩) B
+  { V.foldl (fun A w => A.setK w.1 ⟨w.2.2 &&& w.2.1, w.2.1⟩) B with rk := false, spent := false }
+
+/-- the states at the cut that a walk reaches: for the search after the cut, no part of the proof -/
+def cutsR (C : CfgR) : Nat → AS → List AS
+  | 0, _ => []
+  | n + 1, A => (preL C.G A).flatMap fun A₁ => (gsucc C.G C.E C.ops A₁).flatMap fun r =>
+    match r with
+    | none => []
+    | some B =>
+      if B.k == A.k then (if B.pc == C.cut then [B] else if C.tc.get! B.pc.toNat != 0 && coverR C B then [] else cutsR C n B) else []
+
+/-- every state at the cut that the walk of `C` reaches, from the table and the frame's start -/
+def cutsOf (C : CfgR) : List AS :=
+  (C.t.toList ++ [startP C.G C.pz false false, startP C.G C.pz false true, startP C.G C.pz true false, startP C.G C.pz true true]).flatMap (cutsR C fuelG)
+
+/-- the search after the cut, from the states `starts`: no part of the proof -/
+def afterSearch (sy : Syms) (m0 : Machine) (l : List Nat) (W V : List FrameKeep.Watch) (starts : List AS) : SG :=
+  let S := FrameKeep.spotOf sy m0
+  let G := guardP sy m0 l
+  let E := PipeEntryRule.envOf m0
+  let key := FrameKeep.keyK S G W
+  FrameKeep.searchKW S G E W key (aRows E).toArray ((starts.map (toA W V)).foldl (FrameKeep.routeKW S G key) {})
+
+/-- the table of the walk after the cut -/
+def afterCfg (sy : Syms) (m0 : Machine) (l : List Nat) (W V : List FrameKeep.Watch) (starts : List AS) : FrameKeep.CfgK :=
+  let S := FrameKeep.spotOf sy m0
+  let G := guardP sy m0 l
+  let E := PipeEntryRule.envOf m0
+  let key := FrameKeep.keyK S G W
+  let q := FrameKeep.tableOfKW key (afterSearch sy m0 l W V starts)
+  { E, ops := (aRows E).toArray, S, G, W, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key, fin := fun _ => true }
+
+/-- the pause bit, watched 0 -/
+def pauseW (sy : Syms) (m0 : Machine) : List FrameKeep.Watch := [(pauseI sy m0, 0x01, 0)]
+
+/-- **The bytes that the walk after the cut protects** besides those of `FrameKeep.guardK`: the pause byte, the area's type, the swimming flag, the change of size -/
+def spareI (sy : Syms) (m0 : Machine) : List Nat :=
+  [pauseI sy m0, (sy.AreaType &&& 0x7FF).toNat, (sy.SwimmingFlag &&& 0x7FF).toNat, (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat]
+
+/-- **A store through an index or a pointer does not write the bytes of `spareI`** (one instruction). With `FrameKeep.CleanK` it is `CleanK` of the guard that protects
+them too (`cleanP_of`). -/
+def Spare (sy : Syms) (m0 m : Machine) : Prop := ∀ t, wTarget (opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ∉ spareI sy m0
+
+/-- `Spare`, for a program -/
+def spareB (sy : Syms) (m0 m : Machine) : Bool :=
+  match wTarget (opAt m) m with
+  | some t => !(decide (t < 0x2000) && (spareI sy m0).contains (t &&& 0x7FF).toNat)
+  | none => true
+
+/-- **The area's type is `v`, the swimming flag is 0 and no change of size is going on** on the machine `m` -/
+def AreaOK (sy : Syms) (v : UInt8) (m : Machine) : Prop := peek m sy.AreaType = v ∧ peek m sy.SwimmingFlag = 0 ∧ peek m sy.PlayerChangeSizeFlag = 0
+
+/-- the area's type `v`, the swimming flag 0, the change of size 0: set at the cut, and watched at the frame's end -/
+def valA (sy : Syms) (v : UInt8) : List FrameKeep.Watch :=
+  [((sy.AreaType &&& 0x7FF).toNat, 0xFF, v), ((sy.SwimmingFlag &&& 0x7FF).toNat, 0xFF, 0), ((sy.PlayerChangeSizeFlag &&& 0x7FF).toNat, 0xFF, 0)]
+
+/-- what the walk after the cut watches: the pause bit 0, the area's type `v`, the swimming flag 0, the change of size 0 -/
+def watchA (sy : Syms) (m0 : Machine) (v : UInt8) : List FrameKeep.Watch := pauseW sy m0 ++ valA sy v
+
+/-- the walk of the pause bit with the table `q` -/
+abbrev cfgPz (sy : Syms) (m0 : Machine) (q : Table) : CfgR := cfgOf sy m0 q (sy.Player_X_Speed &&& 0x7FF).toNat true
+
+/-- the table of the walk after the cut, from the states at the cut of the walk of the pause bit -/
+def afterOf (sy : Syms) (m0 : Machine) (v : UInt8) (q : Table) : FrameKeep.CfgK :=
+  afterCfg sy m0 (spareI sy m0) (watchA sy m0 v) (valA sy v) (cutsOf (cfgPz sy m0 q))
+
+/-- the walk of the pause bit that asks at the cut that the walk `CA` from there to the frame's end succeeds -/
+def cfgPA (sy : Syms) (m0 : Machine) (v : UInt8) (q : Table) (CA : FrameKeep.CfgK) : CfgR :=
+  { cfgPz sy m0 q with after := fun B => FrameKeep.walkK CA FrameKeep.fuelK (toA (watchA sy m0 v) (valA sy v) B) }
+
+/-- **The check of the whole frame**: the walk of the pause bit up to the cut, and from there the walk after the cut, with the pause byte, the area's type, the swimming flag
+and the change of size protected; it asks at the frame's end the pause bit 0, the area's type `v`, the swimming flag 0, the change of size 0 -/
+def afterCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
+  let q := cutTable sy m0 true
+  let CA := afterOf sy m0 v q
+  ctrlCheck1 (cfgPA sy m0 v q CA) && CA.t.all (FrameKeep.walkK CA FrameKeep.fuelK)
+
 /-! ## The walk covers the frame up to the cut -/
 
 section
@@ -278,7 +375,8 @@ theorem cover_liveR (ht : C.t.all (walkR C Fu) = true) (hkl : C.kl = C.t.map kno
 theorem live_stepR (ht : C.t.all (walkR C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray)
     {A : AS} {m : Machine} (hl : LiveR C F A m) (hc : FrameKeep.CleanK C.G C.q m) :
     (∃ A', LiveR C F A' (go step m).2 ∧ (go step m).2.frame = m.frame ∧ (go step m).2.pc ≠ C.cut ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
-    ((go step m).2.frame = m.frame ∧ (go step m).2.pc = C.cut ∧ ∃ B, atCut C B = true ∧ Sim C.E F B (go step m).2) ∨
+    ((go step m).2.frame = m.frame ∧ (go step m).2.pc = C.cut ∧ m.fdot + 3 ≤ (go step m).2.fdot ∧
+      ∃ B, atCut C B = true ∧ C.after B = true ∧ Sim C.E F B (go step m).2) ∨
     ((go step m).2.frame = m.frame + 1 ∧ ∃ B, endR C B = true ∧ Sim C.E F B (go step m).2) := by
   obtain ⟨hs, hk, n, hw⟩ := hl
   cases n with
@@ -300,8 +398,8 @@ theorem live_stepR (ht : C.t.all (walkR C Fu) = true) (hkl : C.kl = C.t.map know
       rcases h2 with ⟨k1, k2, k3⟩ | ⟨k1, k2⟩
       · rw [if_pos (by simp [k1, hk1])] at hw3
         by_cases hcut : B.pc = C.cut
-        · rw [if_pos (by simp [hcut])] at hw3
-          exact Or.inr (Or.inl ⟨k2, by rw [h1.pc]; exact hcut, B, hw3, h1⟩)
+        · rw [if_pos (by simp [hcut]), Bool.and_eq_true] at hw3
+          exact Or.inr (Or.inl ⟨k2, by rw [h1.pc]; exact hcut, k3, B, hw3.1, hw3.2, h1⟩)
         · rw [if_neg (by simp [hcut])] at hw3
           have hcut' : (go step m).2.pc ≠ C.cut := by rw [h1.pc]; exact hcut
           simp only [Bool.or_eq_true, Bool.and_eq_true] at hw3
@@ -333,7 +431,7 @@ theorem frame_runR (ht : C.t.all (walkR C Fu) = true) (hkl : C.kl = C.t.map know
       show PipeEntryRule.nxt (M.frame + 1) (trace M i j) = _
       have hn : ¬ ((trace M i j).frame ≥ M.frame + 1 || (trace M i j).halted) = true := by simp [hfj, hh]
       simp only [PipeEntryRule.nxt, if_neg hn]
-    rcases live_stepR ht hkl hops hl (hcl j) with ⟨A', h1, h2, h3, _⟩ | ⟨h1, h2, B, h3, h4⟩ | ⟨h1, _⟩
+    rcases live_stepR ht hkl hops hl (hcl j) with ⟨A', h1, h2, h3, _⟩ | ⟨h1, h2, _, B, h3, _, h4⟩ | ⟨h1, _⟩
     · rw [← e] at h1 h2 h3
       exact ih (j + 1) A' (by omega) h1 (h2.trans hfj) h3
     · rw [← e] at h1 h2 h4
@@ -407,10 +505,11 @@ theorem at_cut (hO : ctrlCheck1 C = true) (hkl : C.kl = C.t.map knownOf) (hops :
 
 /-- **One byte, the whole frame.** A frame from the idle loop in control whose instructions meet `CleanK` either comes to the cut (a first time, before its end), or
 it ends in a state that the walk covers with `endR`: the followed byte as it began, and the low bit of the pause byte 1. -/
-theorem cut_or_end (hO : ctrlCheck1 C = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hE : C.E.pad = AB.top)
+theorem cut_or_end2 (hO : ctrlCheck1 C = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hE : C.E.pad = AB.top)
     {m : Machine} {i : UInt8} (h0 : FrameStart C.G C.E m) (hcl : ∀ n, FrameKeep.CleanK C.G C.q (trace m i n)) :
-    (∃ k, (trace m i k).pc = C.cut ∧ (trace m i k).frame = m.frame ∧ k ≤ fuelPerFrame ∧ ∀ j, j < k → (trace m i j).pc ≠ C.cut) ∨
-    ∃ B, endR C B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (frame m i) := by
+    (∃ k, (trace m i k).pc = C.cut ∧ (trace m i k).frame = m.frame ∧ k ≤ fuelPerFrame ∧ (∀ j, j < k → (trace m i j).pc ≠ C.cut) ∧
+      m.fdot + 3 * k ≤ (trace m i k).fdot ∧ ∃ B, atCut C B = true ∧ C.after B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (trace m i k)) ∨
+    ((∀ j, (trace m i j).frame = m.frame → (trace m i j).pc ≠ C.cut) ∧ ∃ B, endR C B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (frame m i)) := by
   have H := okR_of_check hO
   obtain ⟨A0, hl0⟩ := start_liveR hO hE h0 (i := i)
   have hp0 : (trace m i 0).pc ≠ C.cut := by
@@ -419,8 +518,10 @@ theorem cut_or_end (hO : ctrlCheck1 C = true) (hkl : C.kl = C.t.map knownOf) (ho
     exact fun h => H.cutIdle h.symm
   have key : ∀ j, (∃ A, LiveR C (m.frame, m.ram.get! C.E.rkI) A (trace m i j) ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot ∧
         ∀ j', j' ≤ j → (trace m i j').pc ≠ C.cut) ∨
-      (∃ k, k ≤ j ∧ (trace m i k).pc = C.cut ∧ (trace m i k).frame = m.frame ∧ ∀ j', j' < k → (trace m i j').pc ≠ C.cut) ∨
-      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, endR C B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (trace m i j)) := by
+      (∃ k, k ≤ j ∧ (trace m i k).pc = C.cut ∧ (trace m i k).frame = m.frame ∧ (∀ j', j' < k → (trace m i j').pc ≠ C.cut) ∧
+        m.fdot + 3 * k ≤ (trace m i k).fdot ∧ ∃ B, atCut C B = true ∧ C.after B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (trace m i k)) ∨
+      ((trace m i j).frame = m.frame + 1 ∧ (∀ j', (trace m i j').frame = m.frame → (trace m i j').pc ≠ C.cut) ∧
+        ∃ B, endR C B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (trace m i j)) := by
     intro j
     induction j with
     | zero =>
@@ -430,35 +531,93 @@ theorem cut_or_end (hO : ctrlCheck1 C = true) (hkl : C.kl = C.t.map knownOf) (ho
       · rw [show j' = 0 by omega]
         exact hp0
     | succ j ih =>
-      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨k, hk1, hk2, hk3, hk4⟩ | ⟨h1, B, h2, h3⟩
+      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨k, hk1, hk2, hk3, hk4, hk5, hk6⟩ | ⟨h1, h1', B, h2, h3⟩
       · have hh := h1.1.halted
         have hn : ¬ (((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true) := by simp [h2, hh]
         have e : trace m i (j + 1) = (go step (trace m i j)).2 := by
           show PipeEntryRule.nxt (m.frame + 1) (trace m i j) = _
           simp only [PipeEntryRule.nxt, if_neg hn]
-        rcases live_stepR H.table hkl hops h1 (hcl j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, a2, B, _, _⟩ | ⟨a1, B, a2, a3⟩
+        rcases live_stepR H.table hkl hops h1 (hcl j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, a2, a3, B, b1, b2, b3⟩ | ⟨a1, B, a2, a3⟩
         · rw [← e] at a1 a2 a3 a4
           refine Or.inl ⟨A', a1, a2.trans h2, by omega, fun j' hj' => ?_⟩
           by_cases h5 : j' ≤ j
           · exact h4 j' h5
           · rw [show j' = j + 1 by omega]
             exact a3
-        · rw [← e] at a1 a2
-          exact Or.inr (Or.inl ⟨j + 1, Nat.le_refl _, a2, a1.trans h2, fun j' hj' => h4 j' (by omega)⟩)
+        · rw [← e] at a1 a2 a3 b3
+          exact Or.inr (Or.inl ⟨j + 1, Nat.le_refl _, a2, a1.trans h2, fun j' hj' => h4 j' (by omega), by omega, B, b1, b2, b3⟩)
         · rw [← e] at a1 a3
-          exact Or.inr (Or.inr ⟨by rw [a1, h2], B, a2, a3⟩)
-      · exact Or.inr (Or.inl ⟨k, by omega, hk2, hk3, hk4⟩)
+          have hf1 : (trace m i (j + 1)).frame = m.frame + 1 := by rw [a1, h2]
+          refine Or.inr (Or.inr ⟨hf1, fun j' hj' => ?_, B, a2, a3⟩)
+          by_cases h5 : j' ≤ j
+          · exact h4 j' h5
+          · exfalso
+            have hst : ((trace m i (j + 1)).frame ≥ m.frame + 1 || (trace m i (j + 1)).halted) = true := by simp [hf1]
+            have e2 := PipeEntryRule.trace_stop hst (j' - (j + 1))
+            rw [show j + 1 + (j' - (j + 1)) = j' by omega] at e2
+            rw [e2, hf1] at hj'
+            omega
+      · exact Or.inr (Or.inl ⟨k, by omega, hk2, hk3, hk4, hk5, hk6⟩)
       · have hst : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by simp [h1]
         rw [PipeEntryRule.trace_stop hst 1]
-        exact Or.inr (Or.inr ⟨h1, B, h2, h3⟩)
-  rcases key fuelPerFrame with ⟨A, h1, _, h3, _⟩ | ⟨k, hk1, hk2, hk3, hk4⟩ | ⟨_, B, h2, h3⟩
+        exact Or.inr (Or.inr ⟨h1, h1', B, h2, h3⟩)
+  rcases key fuelPerFrame with ⟨A, h1, _, h3, _⟩ | ⟨k, hk1, hk2, hk3, hk4, hk5, hk6⟩ | ⟨_, h1', B, h2, h3⟩
   · exfalso
     have a1 := h1.1.hi
     have a2 := h1.1.lim
     have a3 : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
     omega
-  · exact Or.inl ⟨k, hk2, hk3, hk1, hk4⟩
+  · exact Or.inl ⟨k, hk2, hk3, hk1, hk4, hk5, hk6⟩
   · right
+    rw [PipeEntryRule.frame_trace]
+    exact ⟨h1', B, h2, h3⟩
+
+/-- **One byte, the whole frame.** A frame from the idle loop in control whose instructions meet `CleanK` either comes to the cut (a first time, before its end), or
+it ends in a state that the walk covers with `endR`: the followed byte as it began, and the low bit of the pause byte 1. -/
+theorem cut_or_end (hO : ctrlCheck1 C = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray) (hE : C.E.pad = AB.top)
+    {m : Machine} {i : UInt8} (h0 : FrameStart C.G C.E m) (hcl : ∀ n, FrameKeep.CleanK C.G C.q (trace m i n)) :
+    (∃ k, (trace m i k).pc = C.cut ∧ (trace m i k).frame = m.frame ∧ k ≤ fuelPerFrame ∧ ∀ j, j < k → (trace m i j).pc ≠ C.cut) ∨
+    ∃ B, endR C B = true ∧ Sim C.E (m.frame, m.ram.get! C.E.rkI) B (frame m i) := by
+  rcases cut_or_end2 hO hkl hops hE h0 hcl with ⟨k, h1, h2, h3, h4, _⟩ | ⟨_, h⟩
+  · exact Or.inl ⟨k, h1, h2, h3, h4⟩
+  · exact Or.inr h
+
+/-- **From the cut to the frame's end**, by a walk of `FrameKeep` (`CA`): the machine `k` instructions into the frame of `m`, covered by a state from which the walk
+succeeds, comes to the frame's end in a state with the watched bits of `CA`. Each instruction meets `CleanK` of the guard of `CA`. -/
+theorem after_end {CA : FrameKeep.CfgK} {Fu Fu' : Nat} {F : Nat × UInt8} (ht : CA.t.all (FrameKeep.walkK CA Fu) = true) (hkl : CA.kl = CA.t.map knownOf)
+    (hops : CA.ops = (aRows CA.E).toArray) (hT : 2 ≤ F.2.toNat) {m : Machine} {i : UInt8} {k : Nat} {A : AS}
+    (hw : FrameKeep.walkK CA Fu' A = true) (hs : Sim CA.E F A (trace m i k)) (hf : (trace m i k).frame = m.frame) (hd : m.fdot + 3 * k ≤ (trace m i k).fdot)
+    (hcl : ∀ j, FrameKeep.CleanK CA.G CA.S.store (trace m i j)) :
+    ∃ B, FrameKeep.watchOK CA.W B = true ∧ Sim CA.E F B (frame m i) := by
+  have key : ∀ d, (∃ A, FrameKeep.LiveK CA F A (trace m i (k + d)) ∧ (trace m i (k + d)).frame = m.frame ∧ m.fdot + 3 * (k + d) ≤ (trace m i (k + d)).fdot) ∨
+      ((trace m i (k + d)).frame = m.frame + 1 ∧ ∃ B, FrameKeep.watchOK CA.W B = true ∧ Sim CA.E F B (trace m i (k + d))) := by
+    intro d
+    induction d with
+    | zero => exact Or.inl ⟨A, ⟨hs, Fu', hw⟩, hf, hd⟩
+    | succ d ih =>
+      rcases ih with ⟨A, h1, h2, h3⟩ | ⟨h1, B, h2, h3⟩
+      · have hh := h1.1.halted
+        have hn : ¬ (((trace m i (k + d)).frame ≥ m.frame + 1 || (trace m i (k + d)).halted) = true) := by simp [h2, hh]
+        have e : trace m i (k + (d + 1)) = (go step (trace m i (k + d))).2 := by
+          show PipeEntryRule.nxt (m.frame + 1) (trace m i (k + d)) = _
+          simp only [PipeEntryRule.nxt, if_neg hn]
+        rw [e]
+        rcases FrameKeep.live_stepK ht hkl hops hT h1 (hcl (k + d)) with ⟨A', a1, _, a3, a4⟩ | ⟨a1, B, a2, _, _, _, a3⟩
+        · exact Or.inl ⟨A', a1, by rw [a3, h2], by omega⟩
+        · exact Or.inr ⟨by rw [a1, h2], B, a2, a3⟩
+      · have hst : ((trace m i (k + d)).frame ≥ m.frame + 1 || (trace m i (k + d)).halted) = true := by simp [h1]
+        rw [show k + (d + 1) = k + d + 1 by omega, PipeEntryRule.trace_stop hst 1]
+        exact Or.inr ⟨h1, B, h2, h3⟩
+  have a1 := hs.hi
+  have a2 := hs.lim
+  have a3 : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
+  rcases key (fuelPerFrame - k) with ⟨A, h1, _, h3⟩ | ⟨_, B, h2, h3⟩
+  · exfalso
+    rw [show k + (fuelPerFrame - k) = fuelPerFrame by omega] at h1 h3
+    have b1 := h1.1.hi
+    have b2 := h1.1.lim
+    omega
+  · rw [show k + (fuelPerFrame - k) = fuelPerFrame by omega] at h3
     rw [PipeEntryRule.frame_trace]
     exact ⟨B, h2, h3⟩
 
@@ -654,6 +813,113 @@ theorem keep_of_noCut (hc : ctrlCheck sy m0 = true) {m : Machine} {i : UInt8} (h
     have h1 := hs.rkv hB.1.1
     rw [if_neg (by simp [hB.1.2])] at h1
     exact h1
+
+/-! ### The whole frame: from the cut to the frame's end -/
+
+/-- fewer known bits -/
+theorem mem_weak {b : AB} {x : UInt8} (w : UInt8) (h : b.mem x) : (⟨b.v &&& w, b.k &&& w⟩ : AB).mem x := by
+  show x &&& (b.k &&& w) = (b.v &&& w) &&& (b.k &&& w)
+  have h' : x &&& b.k = b.v &&& b.k := h
+  rw [← UInt8.and_assoc, h', UInt8.and_assoc, UInt8.and_assoc, UInt8.and_comm w (b.k &&& w), UInt8.and_assoc, UInt8.and_self]
+
+/-- of the bytes of `W`, only the watched bits stay known -/
+theorem sim_weakW {E : Env} {F : Nat × UInt8} {m : Machine} : ∀ (W : List FrameKeep.Watch) (A : AS), (∀ w ∈ W, w.1 < 2048) → Sim E F A m →
+    Sim E F (W.foldl (fun A w => A.setK w.1 ⟨(A.getK w.1).v &&& w.2.1, (A.getK w.1).k &&& w.2.1⟩) A) m
+  | [], _, _, hs => hs
+  | w :: W, A, hW, hs => by
+    simp only [List.foldl_cons]
+    exact sim_weakW W _ (fun x hx => hW x (List.mem_cons_of_mem _ hx)) (PipeEntryRule.sim_setK' hs (mem_weak _ (hs.ram w.1 (hW w List.mem_cons_self))))
+
+/-- the byte is no longer followed: the machine of `FrameKeep` -/
+theorem sim_env {b : Nat} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim (envR m0 b) F A m) :
+    Sim (PipeEntryRule.envOf m0) (F.1, 2) { A with rk := false, spent := false } m :=
+  { hs with rkv := fun h => by cases h }
+
+/-- **The state at the cut, for the walk after it**, covers the machine if the bits of `V` have their values -/
+theorem sim_toA {W V : List FrameKeep.Watch} {b : Nat} {F : Nat × UInt8} {B : AS} {m : Machine} (hs : Sim (envR m0 b) F B m) (hW : ∀ w ∈ W, w.1 < 2048)
+    (hV : FrameKeep.Watched V m) : Sim (PipeEntryRule.envOf m0) (F.1, 2) (toA W V B) m :=
+  sim_env (FrameKeep.sim_watch hV V (fun _ h => h) _ (sim_weakW W B hW hs))
+
+/-- `CleanK` with the bytes `l` protected too -/
+theorem cleanK_prot {G : Guard} {l : List Nat} {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK G q m)
+    (hs : ∀ t, wTarget (opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ∉ l) : FrameKeep.CleanK { G with prot := l ++ G.prot } q m := by
+  refine ⟨fun t ht hq => ?_, hc.read, hc.jump, hc.time⟩
+  rcases hc.store t ht hq with ⟨h1, h2⟩ | h1
+  · exact Or.inl ⟨h1, fun h => (List.mem_append.1 h).elim (hs t ht h1) h2⟩
+  · exact Or.inr h1
+
+/-- **`CleanK` with the bytes of `spareI` protected**: `CleanK` and `Spare` -/
+theorem cleanP_of {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK (FrameKeep.guardK sy m0) q m) (hs : Spare sy m0 m) :
+    FrameKeep.CleanK (guardP sy m0 (spareI sy m0)) q m :=
+  cleanK_prot hc hs
+
+theorem watchA_lt (v : UInt8) : ∀ w ∈ watchA sy m0 v, w.1 < 2048 := by
+  intro w hw
+  simp only [watchA, pauseW, valA, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+  rcases hw with rfl | rfl | rfl | rfl
+  · exact pauseI_lt sy m0
+  · exact PipeTransitionAll.mask_lt _
+  · exact PipeTransitionAll.mask_lt _
+  · exact PipeTransitionAll.mask_lt _
+
+theorem afterCheck_parts {v : UInt8} (h : afterCheck sy m0 v = true) :
+    ctrlCheck1 (cfgPA sy m0 v (cutTable sy m0 true) (afterOf sy m0 v (cutTable sy m0 true))) = true ∧
+    (afterOf sy m0 v (cutTable sy m0 true)).t.all (FrameKeep.walkK (afterOf sy m0 v (cutTable sy m0 true)) FrameKeep.fuelK) = true :=
+  Eq.mp (Bool.and_eq_true (ctrlCheck1 (cfgPA sy m0 v (cutTable sy m0 true) (afterOf sy m0 v (cutTable sy m0 true))))
+    ((afterOf sy m0 v (cutTable sy m0 true)).t.all (FrameKeep.walkK (afterOf sy m0 v (cutTable sy m0 true)) FrameKeep.fuelK))) h
+
+/-- **A frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's routine it ends with the game not paused.** The
+frame starts in the idle loop in control (`FrameKeep.StartK`), each instruction meets `CleanK` and `Spare` (no store through an index or a pointer writes the bytes of
+`spareI`), and `AreaOK`: the area's type is `v`, the swimming flag 0, the change of size 0. `hc`, `ha` are the checks on the ROM: up to the player's routine the walks
+of `ctrlCheck`; from there to the frame's end the walk after the cut, which watches the four bytes. -/
+theorem area_end (hc : ctrlCheck sy m0 = true) {v : UInt8} (ha : afterCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsp : ∀ n, Spare sy m0 (trace m i n))
+    (hv : AreaOK sy v m) :
+    AreaOK sy v (frame m i) ∧ ((∃ k, (trace m i k).frame = m.frame ∧ (trace m i k).pc = sy.PlayerCtrlRoutine) → Unpaused sy m0 (frame m i)) := by
+  obtain ⟨ha1, ha2⟩ := afterCheck_parts ha
+  generalize cutTable sy m0 true = q at ha1 ha2
+  rcases cut_or_end2 (C := cfgPA sy m0 v q (afterOf sy m0 v q)) ha1 rfl rfl rfl (cfg_start q _ true h0) hcl with
+    ⟨k, h1, h2, _, h4, h5, B, _, hB2, hs⟩ | ⟨hno, _⟩
+  · have hw : FrameKeep.walkK (afterOf sy m0 v q) FrameKeep.fuelK (toA (watchA sy m0 v) (valA sy v) B) = true := hB2
+    have A := ctrl_keep hc h0 hcl h1 h2 h4
+    have hV : FrameKeep.Watched (valA sy v) (trace m i k) := by
+      intro w hw
+      simp only [valA, List.mem_cons, List.not_mem_nil, or_false] at hw
+      rcases hw with rfl | rfl | rfl
+      · show (trace m i k).ram.get! (sy.AreaType &&& 0x7FF).toNat &&& 0xFF = v &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [keepA])).trans hv.1
+      · show (trace m i k).ram.get! (sy.SwimmingFlag &&& 0x7FF).toNat &&& 0xFF = 0 &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [keepA])).trans hv.2.1
+      · show (trace m i k).ram.get! (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat &&& 0xFF = 0 &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [keepA])).trans hv.2.2
+    have hsA := sim_toA (W := watchA sy m0 v) hs (watchA_lt v) hV
+    have hclA : ∀ j, FrameKeep.CleanK (guardP sy m0 (spareI sy m0)) (FrameKeep.spotOf sy m0).store (trace m i j) := fun j => cleanP_of (hcl j) (hsp j)
+    obtain ⟨B', hB', hs'⟩ := after_end (CA := afterOf sy m0 v q) (F := (m.frame, 2)) ha2 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw hsA h2 h5 hclA
+    have hW := FrameKeep.watched_of hB' hs'
+    have e1 := hW _ (List.mem_append_left _ (List.mem_singleton.2 rfl))
+    have e2 := hW _ (List.mem_append_right _ (List.mem_cons_self (a := ((sy.AreaType &&& 0x7FF).toNat, (0xFF : UInt8), v))))
+    have e3 := hW _ (List.mem_append_right _ (List.mem_cons_of_mem _ (List.mem_cons_self (a := ((sy.SwimmingFlag &&& 0x7FF).toNat, (0xFF : UInt8), (0 : UInt8))))))
+    have e4 := hW _ (List.mem_append_right _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_singleton.2 rfl))))
+    simp only [FrameKeep.and_ff] at e2 e3 e4
+    refine ⟨⟨e2, e3, e4⟩, fun _ => ?_⟩
+    have e1' : (frame m i).ram.get! (pauseI sy m0) &&& 1 = (0 : UInt8) &&& 1 := e1
+    exact e1'.trans rfl
+  · refine ⟨⟨?_, ?_, ?_⟩, fun ⟨k, hk1, hk2⟩ => absurd hk2 (hno k hk1)⟩
+    · rw [keep_of_noCut hc h0 hcl hno _ (by simp [keepA])]
+      exact hv.1
+    · rw [keep_of_noCut hc h0 hcl hno _ (by simp [keepA])]
+      exact hv.2.1
+    · rw [keep_of_noCut hc h0 hcl hno _ (by simp [keepA])]
+      exact hv.2.2
+
+/-- **A frame in control that ends paused does not come to the player's routine**, under the conditions of `area_end` -/
+theorem noCut_of_paused (hc : ctrlCheck sy m0 = true) {v : UInt8} (ha : afterCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsp : ∀ n, Spare sy m0 (trace m i n))
+    (hv : AreaOK sy v m) (hp : ¬ Unpaused sy m0 (frame m i)) : ∀ k, (trace m i k).frame = m.frame → (trace m i k).pc ≠ sy.PlayerCtrlRoutine :=
+  fun k h1 h2 => hp ((area_end hc ha h0 hcl hsp hv).2 ⟨k, h1, h2⟩)
 
 end
 

@@ -2,6 +2,7 @@ import Theorems.PipeEntry
 import Theorems.SurfaceFrames
 import Theorems.LagFrames
 import Theorems.StartRun
+import Theorems.LagPause
 
 /-!
 # Up to the vertical pipe: the frames read from the machines
@@ -15,10 +16,10 @@ is the machine at control, and frame 0 is not read.
 * `speed_of_reads`: with the speed 0 at control, every frame from 1 to `E` begins and ends with at most the top speed (`TopSpeed.Frame.bound`).
 * `no_entry_of_reads`: the bound of `no_entry_by` from these, with no `next` and no `speed`. Its conclusion is `T < E`.
 * `reads_of_lags`: `Reads` from `ReadsOwn` (each counted frame ends at its own machine) and `Lags` (the frames not counted between them, which keep the three values:
-  `lags_keep`, by `LagFrames.keeps_frame` for a frame that does not call the mode's routine).
+  `lags_keep`, by `LagFrames.keeps_frame`, since a frame not counted ends paused and so does not call the mode's routine: `Lags.no_call`, by `LagPause`).
 * `Lags.starts`: every frame from control to the entry starts in the idle loop in control, by induction from the machine at control (`StartRun.starts_clean_dep`). So the start
-  of a frame not counted (`Lags.lagStart`) and of the entering frame (`Lags.startE`) are theorems. A counted frame ends in control by `Lags.ctl`; a frame not counted that
-  does not call the mode's routine ends in control by the check of `LagFrames` (`Lags.known_end`).
+  of a frame not counted (`Lags.lagStart`) and of the entering frame (`Lags.startE`) are theorems. A counted frame ends in control by `Lags.ctl`; a frame not counted
+  ends in control by the check of `LagFrames` (`Lags.known_end`).
 
 No game data. Pages: `1-1/a-5-5-PipeFrames.md`, `1-1/a-5-5-3-2-StartRun.md`.
 -/
@@ -116,17 +117,68 @@ theorem no_entry_of_reads (h16 : 16 ≤ top) (Enter : Nat → Prop) (L B : Int) 
     rw [Int.mul_add, Int.mul_one] at h3
     omega
 
+/-- from control, each frame up to `E` moves at most `16·top`: frame `1 + k` begins at most `16·top·k` right of frame 1 -/
+theorem pos_le (h16 : 16 ≤ top) (R : Reads sy E fm fr) (h0 : vOf sy (fm 1) = 0) : ∀ k : Nat, 1 + k ≤ E → (fr (1 + k)).P ≤ (fr 1).P + 16 * top * (k : Int)
+  | 0, _ => by simp
+  | k + 1, h => by
+    have ih := pos_le h16 R h0 k (by omega)
+    have hv := speed_of_reads h16 R h0 k (by omega)
+    rw [show k + 1 = 1 + k by omega] at hv
+    have hb := ((fr (1 + k)).bound h16 hv).2
+    have hn := (next_of_reads R (1 + k) (by omega) (by omega)).2.2
+    rw [show 1 + (k + 1) = 1 + k + 1 by omega, hn]
+    have e : 16 * top * ((k + 1 : Nat) : Int) = 16 * top * (k : Int) + 16 * top := by
+      push_cast
+      rw [Int.mul_add, Int.mul_one]
+    rw [e]
+    omega
+
+/-- **No entry by frame `T`, with a bound on the position only at control and at the end of frame `N`.** The position at control is at most `B` (`hP1`), the speed there is 0, and
+each frame moves at most `16·top`: so an entry at frame `E ≤ N` would be at most `B + 16·top·N`, which is not more than `B + 16·top·(T − N)` when `2·N ≤ T`. After `N` it is
+the argument of `no_entry_of_reads`, with the bound at the end of frame `N` (`hB`), needed only when `N < E`. This takes the place of the bound on every frame up to `N` (`hopen`). -/
+theorem no_entry_of_start (h16 : 16 ≤ top) (Enter : Nat → Prop) (L B : Int) (N T : Nat) (hN : 1 ≤ N) (h2N : 2 * N ≤ T)
+    (hrule : ∀ t, Enter t → L ≤ (fr t).P₂)
+    (hP1 : (fr 1).P ≤ B)
+    (hB : N < E → (fr N).P' ≤ B)
+    (R : Reads sy E fm fr) (h0 : vOf sy (fm 1) = 0)
+    (hgap : B + 16 * top * ((T - N : Nat) : Int) < L)
+    (hE : Enter E) (hE1 : 1 ≤ E) : T < E := by
+  have hc : 0 ≤ 16 * top := by omega
+  by_cases hEN : E ≤ N
+  · exfalso
+    have hL := hrule E hE
+    obtain ⟨k, rfl⟩ : ∃ k, E = 1 + k := ⟨E - 1, by omega⟩
+    have h1 := pos_le h16 R h0 k (Nat.le_refl _)
+    have hv := speed_of_reads h16 R h0 k (by omega)
+    rw [show k + 1 = 1 + k by omega] at hv
+    have h2 := PipeEntry.p2_le (fr (1 + k)) hv
+    have h3 : 16 * top * ((k : Int) + 1) ≤ 16 * top * ((T - N : Nat) : Int) :=
+      Int.mul_le_mul_of_nonneg_left (by omega) hc
+    rw [Int.mul_add, Int.mul_one] at h3
+    omega
+  · refine Nat.lt_of_not_le fun hET => ?_
+    have hL := hrule E hE
+    obtain ⟨k, hk⟩ : ∃ k, E = N + k + 1 := ⟨E - N - 1, by omega⟩
+    have h1 := end_le h16 R h0 hN (hB (by omega)) k (by omega)
+    have hv := speed_of_reads h16 R h0 (N + k) (by omega)
+    have h2 := PipeEntry.p2_le (fr (N + k + 1)) hv
+    have hn := (next_of_reads R (N + k) (by omega) (by omega)).2.2
+    have h3 : 16 * top * ((k : Int) + 1) ≤ 16 * top * ((T - N : Nat) : Int) :=
+      Int.mul_le_mul_of_nonneg_left (by omega) hc
+    rw [← hk] at h2 hn
+    rw [Int.mul_add, Int.mul_one] at h3
+    omega
+
 end Read
 
 /-! ## The frames not counted
 
 `Reads` reads the end of frame `t` from the machine of the next counted frame, `fm (t + 1)`. Between the two there may be frames not counted (`lag`). Here each counted frame
-ends at its own machine, `frame (fm t) (inp t)`, and the frames not counted are a sequence of real frames between. They keep the three values: by `LagFrames.keeps_frame`
-when they do not call the routine of the mode (a paused frame), and by assumption (`Lags.game`) when they do (the master timer control). `keeps_frame` needs that the frame
-starts in the idle loop in control and that its instructions before the call are `Clean`: the start follows by induction from the machine at control (`Lags.starts`, by
+ends at its own machine, `frame (fm t) (inp t)`, and the frames not counted are a sequence of real frames between. They keep the three values by `LagFrames.keeps_frame`:
+a frame not counted ends paused (`Lags.paused`), so it does not call the routine of the mode (`LagPause.no_call_of_paused`, under `Lags.keeps`). `keeps_frame` needs that
+the frame starts in the idle loop in control and that its instructions before the call are `Clean`: the start follows by induction from the machine at control (`Lags.starts`, by
 `StartRun.starts_clean_dep`), since every frame from control to the entry ends in control and each of its instructions is `Clean` (`Lags.clean`). A counted frame ends in
-control by `Lags.ctl`, a frame not counted that calls the mode's routine by `Lags.game`, and one that does not call it by `LagFrames.keeps_frame`: it keeps the routine,
-the mode and the task. -/
+control by `Lags.ctl`, a frame not counted by `LagFrames.keeps_frame`: it keeps the routine, the mode and the task. -/
 
 open PipeTransition (frame)
 open PipeEntryRule (trace)
@@ -179,37 +231,38 @@ theorem ixOf_lt (gap : Nat → Nat) : ∀ t, 1 ≤ t → ixOf gap t < ixOf gap (
 /-- **The frames, with the frames not counted.** They are the frames of the real run `S`: `S.seq n` is the machine when frame `n` of the run begins, every frame counted,
 and `S.inp n` is its input. The counted frame `t` is the frame `ixOf gap t`; the frames between two counted frames are not counted. Each counted frame from control
 (`ixOf gap 1`, frame 1) to the entry (`ixOf gap E`) ends in control, and each
-instruction of each frame from control to the entry, counted or not, is `Clean`. If a frame not counted calls the routine of the mode, it keeps the speed, the subspeed and
-the position, and it ends in control. That each frame starts in the idle loop is not a field: it follows from the machine at control (`Lags.starts`). That a frame not counted
-that does not call the routine keeps the three values and ends in control is not a field either: the check of `LagFrames` shows it (`lags_keep`, `Lags.known_end`). -/
-structure Lags (sy : Syms) (m0 : Machine) (S : FrameKeep.RealRun) (E : Nat) where
+instruction of each frame from control to the entry, counted or not, is `Clean`. A frame not counted ends paused: the low bit of the pause byte `g` is 1 when it ends; and
+none of its instructions writes the pause byte through an index or a pointer. That each frame starts in the idle loop is not a field: it follows from the machine at
+control (`Lags.starts`). That a frame not counted does not call the routine of the mode is not a field: it ends paused (`LagPause.no_call_of_paused`, `Lags.no_call`).
+So it keeps the three values and ends in control, by the check of `LagFrames` (`lags_keep`, `Lags.known_end`). -/
+structure Lags (sy : Syms) (m0 : Machine) (g : Nat) (S : FrameKeep.RealRun) (E : Nat) where
   /-- the number of frames not counted after the counted frame `t` -/
   gap : Nat → Nat
   /-- each counted frame from control to the entry ends in control -/
   ctl : ∀ t, 1 ≤ t → t < E → controllable sy (S.seq (ixOf gap t + 1)) = true
   /-- each instruction of each frame from control to the entry, counted or not, is `Clean` -/
   clean : ∀ n, ixOf gap 1 ≤ n → n < ixOf gap E → ∀ k, Clean (guardOf sy m0) (trace (S.seq n) (S.inp n) k)
-  /-- if a frame not counted calls the routine of the mode, it keeps the speed, the subspeed and the position, and it ends in control -/
-  game : ∀ t n, 1 ≤ t → t < E → ixOf gap t < n → n < ixOf gap (t + 1) →
-    (∃ k, (trace (S.seq n) (S.inp n) k).frame = (S.seq n).frame ∧ (trace (S.seq n) (S.inp n) k).pc = LagFrames.modeCall sy) →
-    Same3 sy (S.seq n) (S.seq (n + 1)) ∧ controllable sy (S.seq (n + 1)) = true
+  /-- a frame not counted ends paused: the low bit of the pause byte is 1 -/
+  paused : ∀ t n, 1 ≤ t → t < E → ixOf gap t < n → n < ixOf gap (t + 1) → (S.seq (n + 1)).ram.get! g &&& 1 = 1
+  /-- no instruction of a frame not counted writes the pause byte through an index or a pointer -/
+  keeps : ∀ t n, 1 ≤ t → t < E → ixOf gap t < n → n < ixOf gap (t + 1) → ∀ k, LagPause.KeepsPause g (trace (S.seq n) (S.inp n) k)
 
-variable {m0 : Machine} {S : FrameKeep.RealRun}
+variable {m0 : Machine} {g : Nat} {S : FrameKeep.RealRun}
 
 /-- the machine when the counted frame `t` begins: frame `ixOf gap t` of the run -/
-abbrev Lags.fm (L : Lags sy m0 S E) (t : Nat) : Machine := S.seq (ixOf L.gap t)
+abbrev Lags.fm (L : Lags sy m0 g S E) (t : Nat) : Machine := S.seq (ixOf L.gap t)
 
 /-- the input of the counted frame `t` -/
-abbrev Lags.inp (L : Lags sy m0 S E) (t : Nat) : UInt8 := S.inp (ixOf L.gap t)
+abbrev Lags.inp (L : Lags sy m0 g S E) (t : Nat) : UInt8 := S.inp (ixOf L.gap t)
 
 /-- **The machine of the counted frame 1 is frame 1 of the run**, by the definition of `ixOf` (the old link `Route.Run.pipeAt`) -/
-theorem Lags.fm_one (L : Lags sy m0 S E) : L.fm 1 = S.seq 1 := rfl
+theorem Lags.fm_one (L : Lags sy m0 g S E) : L.fm 1 = S.seq 1 := rfl
 
 /-- the machine of the counted frame 0 is frame 0 of the run -/
-theorem Lags.fm_zero (L : Lags sy m0 S E) : L.fm 0 = S.seq 0 ∧ L.inp 0 = S.inp 0 := ⟨rfl, rfl⟩
+theorem Lags.fm_zero (L : Lags sy m0 g S E) : L.fm 0 = S.seq 0 ∧ L.inp 0 = S.inp 0 := ⟨rfl, rfl⟩
 
 /-- the counted frames are in order -/
-theorem Lags.ix_le (L : Lags sy m0 S E) {t : Nat} (h1 : 1 ≤ t) : ∀ d, t + d ≤ E → ixOf L.gap t ≤ ixOf L.gap (t + d)
+theorem Lags.ix_le (L : Lags sy m0 g S E) {t : Nat} (h1 : 1 ≤ t) : ∀ d, t + d ≤ E → ixOf L.gap t ≤ ixOf L.gap (t + d)
   | 0, _ => Nat.le_refl _
   | d + 1, h => by
     have g1 := L.ix_le h1 d (by omega)
@@ -218,7 +271,7 @@ theorem Lags.ix_le (L : Lags sy m0 S E) {t : Nat} (h1 : 1 ≤ t) : ∀ d, t + d 
     omega
 
 /-- a frame not counted lies between control and the entry -/
-theorem Lags.between (L : Lags sy m0 S E) {t n : Nat} (ht1 : 1 ≤ t) (ht2 : t < E) (hn1 : ixOf L.gap t < n) (hn2 : n < ixOf L.gap (t + 1)) :
+theorem Lags.between (L : Lags sy m0 g S E) {t n : Nat} (ht1 : 1 ≤ t) (ht2 : t < E) (hn1 : ixOf L.gap t < n) (hn2 : n < ixOf L.gap (t + 1)) :
     ixOf L.gap 1 ≤ n ∧ n < ixOf L.gap E := by
   have g1 := L.ix_le (Nat.le_refl 1) (t - 1) (by omega)
   have g2 := L.ix_le (t := t + 1) (by omega) (E - (t + 1)) (by omega)
@@ -227,7 +280,7 @@ theorem Lags.between (L : Lags sy m0 S E) {t n : Nat} (ht1 : 1 ≤ t) (ht2 : t <
   omega
 
 /-- each frame from control to the entry is counted, or lies between two counted frames -/
-theorem Lags.cases (L : Lags sy m0 S E) : ∀ d, 1 + d ≤ E → ∀ n, ixOf L.gap 1 ≤ n → n < ixOf L.gap (1 + d) →
+theorem Lags.cases (L : Lags sy m0 g S E) : ∀ d, 1 + d ≤ E → ∀ n, ixOf L.gap 1 ≤ n → n < ixOf L.gap (1 + d) →
     (∃ t, 1 ≤ t ∧ t < E ∧ ixOf L.gap t = n) ∨ ∃ t, 1 ≤ t ∧ t < E ∧ ixOf L.gap t < n ∧ n < ixOf L.gap (t + 1)
   | 0, _, n, h1, h2 => absurd h2 (by rw [Nat.add_zero]; omega)
   | d + 1, hd, n, h1, h2 => by
@@ -238,36 +291,46 @@ theorem Lags.cases (L : Lags sy m0 S E) : ∀ d, 1 + d ≤ E → ∀ n, ixOf L.g
       · exact Or.inl ⟨1 + d, by omega, by omega, h4⟩
       · exact Or.inr ⟨1 + d, by omega, by omega, by omega, h2⟩
 
-/-- **Each frame from control to the entry that starts in the idle loop in control ends in control**: a counted frame by `ctl`, a frame not counted that calls the
-mode's routine by `game`, and one that does not by the check of `LagFrames` -/
-theorem Lags.known_end (hc : LagFrames.lagCheck sy m0 = true) (L : Lags sy m0 S E) (hE : 1 ≤ E) {n : Nat} (h1 : ixOf L.gap 1 ≤ n) (h2 : n < ixOf L.gap E)
+/-- **A frame not counted does not call the routine of the mode**: it ends paused (`LagPause.no_call_of_paused`). `hp` is the check on the ROM, `hs` the start of the frame. -/
+theorem Lags.no_call (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E) {t n : Nat} (ht1 : 1 ≤ t) (ht2 : t < E) (hn1 : ixOf L.gap t < n)
+    (hn2 : n < ixOf L.gap (t + 1)) (hs : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq n)) :
+    ¬ ∃ k, (trace (S.seq n) (S.inp n) k).frame = (S.seq n).frame ∧ (trace (S.seq n) (S.inp n) k).pc = LagFrames.modeCall sy := by
+  obtain ⟨g1, g2⟩ := L.between ht1 ht2 hn1 hn2
+  have he := L.paused t n ht1 ht2 hn1 hn2
+  rw [S.next] at he
+  exact LagPause.no_call_of_paused hp hs (L.clean n g1 g2) (L.keeps t n ht1 ht2 hn1 hn2) he
+
+/-- **Each frame from control to the entry that starts in the idle loop in control ends in control**: a counted frame by `ctl`, and a frame not counted by the check
+of `LagFrames`, since it does not call the mode's routine (`Lags.no_call`) -/
+theorem Lags.known_end (hc : LagFrames.lagCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E) (hE : 1 ≤ E) {n : Nat}
+    (h1 : ixOf L.gap 1 ≤ n) (h2 : n < ixOf L.gap E)
     (hs : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq n)) : ∀ p ∈ (guardOf sy m0).known, (S.seq (n + 1)).ram.get! p.1 = p.2 := by
   have h2' : n < ixOf L.gap (1 + (E - 1)) := by rw [show 1 + (E - 1) = E by omega]; exact h2
   rcases L.cases (E - 1) (by omega) n h1 h2' with ⟨t, ht1, ht2, rfl⟩ | ⟨t, ht1, ht2, hn1, hn2⟩
   · exact StartRun.known_ctl (L.ctl t ht1 ht2)
   · rcases LagFrames.keeps_frame hc hs (fun k _ _ => L.clean n h1 h2 k) with hx | hx
-    · exact StartRun.known_ctl (L.game t n ht1 ht2 hn1 hn2 hx).2
+    · exact absurd hx (L.no_call hp ht1 ht2 hn1 hn2 hs)
     · rw [S.next]
       exact LagFrames.known_of_keep hs hx
 
 /-- **Each frame from control to the entry starts in the idle loop in control**, from the machine at control: by induction (`StartRun.starts_clean_dep`), with
 `clean` and `known_end`. `hc` and `hk` are the checks on the ROM. -/
-theorem Lags.starts (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (L : Lags sy m0 S E) (hE : 1 ≤ E)
+theorem Lags.starts (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E) (hE : 1 ≤ E)
     (h1 : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm 1)) :
     ∀ n, ixOf L.gap 1 ≤ n → n ≤ ixOf L.gap E → FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq n) :=
   StartRun.starts_clean_dep (S := StartRun.noSpot) hk rfl S.next h1 L.clean
-    (fun _ a b hs => L.known_end hc hE a b hs)
+    (fun _ a b hs => L.known_end hc hp hE a b hs)
 
 /-- **A frame not counted starts in the idle loop in control**: from `Lags.starts` -/
-theorem Lags.lagStart (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (L : Lags sy m0 S E) (h1 : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm 1))
+theorem Lags.lagStart (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E) (h1 : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm 1))
     {t n : Nat} (ht1 : 1 ≤ t) (ht2 : t < E) (hn1 : ixOf L.gap t < n) (hn2 : n < ixOf L.gap (t + 1)) :
     FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq n) := by
   obtain ⟨g1, g2⟩ := L.between ht1 ht2 hn1 hn2
-  exact L.starts hc hk (by omega) h1 n g1 (by omega)
+  exact L.starts hc hk hp (by omega) h1 n g1 (by omega)
 
 /-- **The frames not counted keep the three values**: from the end of frame `t` to the start of frame `t + 1`. `hc` and `hk` are checks on the ROM, `h1` the start of the
 machine at control. -/
-theorem lags_keep (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (L : Lags sy m0 S E)
+theorem lags_keep (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E)
     (hs : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm 1)) (t : Nat) (h1 : 1 ≤ t) (h2 : t < E) :
     Same3 sy (frame (L.fm t) (L.inp t)) (L.fm (t + 1)) := by
   have e0 : frame (L.fm t) (L.inp t) = S.seq (ixOf L.gap t + 1) := (S.next _).symm
@@ -285,28 +348,27 @@ theorem lags_keep (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkChec
       have hn2 : ixOf L.gap t + 1 + d < ixOf L.gap (t + 1) := by omega
       rw [show ixOf L.gap t + 1 + (d + 1) = (ixOf L.gap t + 1 + d) + 1 by omega, S.next (ixOf L.gap t + 1 + d)]
       obtain ⟨g1, g2⟩ := L.between h1 h2 hn1 hn2
-      rcases LagFrames.keeps_frame hc (L.lagStart hc hk hs h1 h2 hn1 hn2) (fun k _ _ => L.clean _ g1 g2 k) with hx | hx
-      · have := (L.game t _ h1 h2 hn1 hn2 hx).1
-        rw [S.next] at this
-        exact this
+      have hst := L.lagStart hc hk hp hs h1 h2 hn1 hn2
+      rcases LagFrames.keeps_frame hc hst (fun k _ _ => L.clean _ g1 g2 k) with hx | hx
+      · exact absurd hx (L.no_call hp h1 h2 hn1 hn2 hst)
       · exact same3_of_bytes fun b hb => hx b (List.mem_append_left _ hb)
   have := key (ixOf L.gap (t + 1) - (ixOf L.gap t + 1)) (by omega)
   rw [show ixOf L.gap t + 1 + (ixOf L.gap (t + 1) - (ixOf L.gap t + 1)) = ixOf L.gap (t + 1) by omega] at this
   exact this
 
 /-- **`Reads` from the frames read from their own machines and the frames not counted.** -/
-theorem reads_of_lags (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (L : Lags sy m0 S E) (R : ReadsOwn sy E L.fm L.inp fr)
+theorem reads_of_lags (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E) (R : ReadsOwn sy E L.fm L.inp fr)
     (hs : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm 1)) : Reads sy E L.fm fr where
   v := R.v
   f := R.f
   P := R.P
-  v' := fun t h1 h2 => (R.v' t h1 h2).trans (lags_keep hc hk L hs t h1 h2).1.symm
-  f' := fun t h1 h2 => (R.f' t h1 h2).trans (lags_keep hc hk L hs t h1 h2).2.1.symm
-  P' := fun t h1 h2 => (R.P' t h1 h2).trans (lags_keep hc hk L hs t h1 h2).2.2.symm
+  v' := fun t h1 h2 => (R.v' t h1 h2).trans (lags_keep hc hk hp L hs t h1 h2).1.symm
+  f' := fun t h1 h2 => (R.f' t h1 h2).trans (lags_keep hc hk hp L hs t h1 h2).2.1.symm
+  P' := fun t h1 h2 => (R.P' t h1 h2).trans (lags_keep hc hk hp L hs t h1 h2).2.2.symm
 
 /-- **The entering frame starts in the idle loop in control**: the old field `start` of `Route.Pipe`, from `Lags.starts` -/
-theorem Lags.startE (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (L : Lags sy m0 S E) (hE : 1 ≤ E)
+theorem Lags.startE (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (L : Lags sy m0 g S E) (hE : 1 ≤ E)
     (h1 : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm 1)) : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm E) := by
-  exact L.starts hc hk hE h1 (ixOf L.gap E) (by have := L.ix_le (Nat.le_refl 1) (E - 1) (by omega); rw [show 1 + (E - 1) = E by omega] at this; exact this) (Nat.le_refl _)
+  exact L.starts hc hk hp hE h1 (ixOf L.gap E) (by have := L.ix_le (Nat.le_refl 1) (E - 1) (by omega); rw [show 1 + (E - 1) = E by omega] at this; exact this) (Nat.le_refl _)
 
 end Smbrta.PipeFrames

@@ -18,9 +18,11 @@ every read of every frame from the first control to the entry, the side pipe's t
 The walk also checks at each state the conditions of `PipeWrites.Clean` that `SiteOK` does not give (`cleanS`): a store through an index or a pointer has a known target
 outside the guard's bytes, or it is the erase of a coin; the jump routine's index is known and in its table. So every instruction of these frames is `Clean` (`clean_of_rows`).
 And the room's condition at the start of each frame is a `PipeWrites.FrameStart` (`startCheckF`, `start_of_rowsF`). The guard is the room's (`SideFrame.roomG`): the
-screen's bytes that the scroll handler reads are known at each frame's start and protected from stores through an index or a pointer, and no state of the walk is at the
-routine of the head's collision with a block, the place that the guard cuts (`cuts_run`, `head_of_rows`): `SiteOK` lets a read for the head give only nothing or a coin.
-The walk of one whole frame of the side pipe (`SideFrame`) needs these four facts on the entering frame.
+screen's bytes that the scroll handler reads are known at each frame's start and protected from stores through an index or a pointer. The walk cuts two places (`roomGB`): the
+routine of the head's collision with a block (`PipeWrites.headAt`) and the bump of the head on a solid block (`SideFrame.bumpAt`). No state of the walk is at either of them
+(`cuts_run`, `head_of_rows`, `bump_of_rows`): `SiteOK` lets a read for the head give only nothing or a coin. So no frame of the room changes the vertical motion by the head's
+collision with a block. The walks of the entering frame (`SideEntryEnd`, `SideEntryRest`) use these facts on the entering frame (and `SideFrame` four of them), and
+`RoomJoin.RoomRun.vframes` the last one on the frames before it.
 
 What stays assumed is what `ScreenPage` assumes: `SiteOK` on each instruction of the frames, and that each frame before the entry starts in the player's routine. The condition at
 the first control comes from the rows of the time of the change (`start_of_rows`). No game data: the map comes from a reference machine. Page: `1-1/c-7-12-RoomMap.md`.
@@ -716,9 +718,21 @@ def knownT (sy : Syms) (nm : Names) (m0 : Machine) : List (Nat × UInt8) :=
 /-- the side pipe's places, on the machine `m0` -/
 abbrev spotsT (sy : Syms) (m0 : Machine) : Spots := SideEntryRule.spots sy m0
 
+/-- the guard of the walk: the room's (`SideFrame.roomG`), with the two places of the head's collision cut: the routine of the head's collision with a block
+(`PipeWrites.headAt`) and the bump on a solid block (`SideFrame.bumpAt`). Its conditions on one state are those of `roomG` (`clean_of_GB`). -/
+def roomGB (sy : Syms) (m0 : Machine) : PipeWrites.Guard := { SideFrame.roomG sy m0 with cuts := [PipeWrites.headAt sy m0, SideFrame.bumpAt sy m0] }
+
+/-- the conditions of `Clean` do not look at the places cut -/
+theorem clean_cuts {G : PipeWrites.Guard} {c : List UInt16} {m : Machine} (h : PipeWrites.Clean { G with cuts := c } m) : PipeWrites.Clean G m :=
+  ⟨h.store, h.read, h.jump, h.time⟩
+
+theorem clean_of_GB {sy : Syms} {m0 m : Machine} (h : PipeWrites.Clean (roomGB sy m0) m) : PipeWrites.Clean (SideFrame.roomG sy m0) m := by
+  unfold roomGB at h
+  exact clean_cuts h
+
 /-- the configuration of the walk -/
 abbrev cfgT (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
-  cfgOfT (spotsT sy m0) (SideFrame.roomG sy m0) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (knownT sy nm m0)
+  cfgOfT (spotsT sy m0) (roomGB sy m0) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (knownT sy nm m0)
 
 /-- **The check on the ROM**: the walk, the side pipe's page and the block buffers, and the reference has no bit in the block buffers that the map has not. The machines are
 computed once. -/
@@ -727,12 +741,12 @@ def mapCheck (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
   let Q := spotsT sy m0
   let r := refR m0
   let mr := mapRef m0
-  walkCheckT Q (SideFrame.roomG sy m0) P (aidsOf sy nm m0) (envOf nm sy r) r (knownOf nm ++ bufK P.bufLo P.bufN mr ++ scrK sy m0) && Q.pg == 0 && decide (Q.bufLo + Q.bufBytes ≤ 2048) &&
+  walkCheckT Q (roomGB sy m0) P (aidsOf sy nm m0) (envOf nm sy r) r (knownOf nm ++ bufK P.bufLo P.bufN mr ++ scrK sy m0) && Q.pg == 0 && decide (Q.bufLo + Q.bufBytes ≤ 2048) &&
     (List.range P.bufN).all fun j => r.ram.get! (P.bufLo + j) &&& ~~~ mr.ram.get! (P.bufLo + j) == 0
 
 /-- what the check gives -/
 structure MapFacts (sy : Syms) (nm : Names) (m0 : Machine) : Prop where
-  ok : RoomOKT (spotsT sy m0) (SideFrame.roomG sy m0) (envR sy nm m0) (placesR sy nm m0) (refR m0) (knownT sy nm m0) (cfgT sy nm m0) ScreenPage.fuelS
+  ok : RoomOKT (spotsT sy m0) (roomGB sy m0) (envR sy nm m0) (placesR sy nm m0) (refR m0) (knownT sy nm m0) (cfgT sy nm m0) ScreenPage.fuelS
   sub : ∀ j, j < (placesR sy nm m0).bufN → (refR m0).ram.get! ((placesR sy nm m0).bufLo + j) &&& ~~~ (mapRef m0).ram.get! ((placesR sy nm m0).bufLo + j) = 0
 
 theorem mapFacts_of_check {sy : Syms} {nm : Names} {m0 : Machine} (h : mapCheck sy nm m0 = true) : MapFacts sy nm m0 := by
@@ -845,7 +859,7 @@ theorem clean_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS 
     (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
     (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
     ∀ n, b ≤ n → n < a → ∀ j, PipeWrites.Clean (SideFrame.roomG sy m0) (trace (seq n) (inp n) j) :=
-  clean_run hF.ok next (start_of_rows hc hin hctl) sites stay
+  fun n h1 h2 j => clean_of_GB (clean_run hF.ok next (start_of_rows hc hin hctl) sites stay n h1 h2 j)
 
 /-- **No frame of the room comes to the routine of the head's collision with a block**, on the real machines, under the conditions of `map_of_rows`: a read for the head gives
 nothing or a coin (`SiteOK`), so the walk never comes there -/
@@ -857,7 +871,20 @@ theorem head_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS m
   intro n h1 h2 j he
   apply cuts_run hF.ok next (start_of_rows hc hin hctl) sites stay n h1 h2 j
   rw [he]
-  exact List.mem_singleton.2 rfl
+  exact List.mem_cons_self
+
+/-- **No frame of the room comes to the bump of the head on a solid block**, on the real machines, under the conditions of `map_of_rows`: the store of the vertical speed after the
+head's check (`SideFrame.bumpAt`). The head's check comes there only after a read for the head that gives a tile other than nothing or a coin, and `SiteOK` lets such a read give only
+these. With `head_of_rows`: no frame of the room changes the vertical motion by the head's collision with a block. -/
+theorem bump_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS m0 = true) {seq : Nat → Machine} {inp : Nat → UInt8}
+    (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat} (hin : PipeChangeEnd.InRowsT sy nm d e (seq b)) (hctl : controllable sy (seq b) = true)
+    (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
+    (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
+    ∀ n, b ≤ n → n < a → ∀ j, (trace (seq n) (inp n) j).pc ≠ SideFrame.bumpAt sy m0 := by
+  intro n h1 h2 j he
+  apply cuts_run hF.ok next (start_of_rows hc hin hctl) sites stay n h1 h2 j
+  rw [he]
+  exact List.mem_cons_of_mem _ List.mem_cons_self
 
 end
 

@@ -66,7 +66,7 @@ frame_start :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j)),  ctl(fra
 
 ## 証明していないこと
 
-* 音楽を始めるフレームの `Start` と `CleanM`。1 フレームとその命令の条件で、`PipeWrites` や `FrameKeep` と同じ種類のものです。上で確かめました。`HurryMusic.Run` では、そのフレームの `Start` は `frame_start` で定理になりました。その前の操作中のフレームの最初のフレームからです（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。
+* 音楽を始めるフレームの `Start` と `CleanM`。1 フレームとその命令の条件で、`PipeWrites` や `FrameKeep` と同じ種類のものです。上で確かめました。`HurryMusic.Run` では、そのフレームの `Start` は `frame_start` で定理になりました。その前の操作中のフレームの最初のフレームからです（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。その最初のフレームの `Start` も定理です。フレーム 1 はタイトルで Start を押したことから、切り替えの最後のフレームは切り替えの段から出ます（[切り替えの最後のフレーム](0-6-4-2-2-2-1-HurryStart-ja.md)）。
 * 数字と 6 バイトに添字つきで書くのが数字のルーチンの書き込みだけであること。これは `CleanM` の一部で、上で確かめました。
 
 **ファイル.** `Theorems/HurryFrame.lean`（`CleanM`、`Start`、`CleanAt`、`finS`、`frame_music`、`frame_start`）、非公開の `Proof/HurryFrame.lean`（`music_check`）。記号 `Eng_PlayerEntrance`（`tools/smb-symbols.txt`）。

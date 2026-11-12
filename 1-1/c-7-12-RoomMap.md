@@ -42,7 +42,7 @@ Run.roomTiles   :  the checks,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j 
 
 `Run.roomTiles` is `map_of_rows` on the frames `b₁ … a₂ − 1` of `Route.Changes` (from the rows of the change into the room, `roomSites`, `roomStay`), at the frame `k` of `roomEnter`.
 
-The same walk gives that each frame of the room starts in control, as the walk of [one whole frame](c-7-16-SideFrame.md) asks:
+The same walk gives that each frame of the room starts in control, as the walk of [one whole frame](c-7-16-SideFrame.md) asks. These facts on the entering frame, with the walk of the room from the write to the frame's end, put `P(E)` at the mouth ([the position at the end of the entering frame](c-7-18-2-SideEntryEnd.md), `Run.roomMouthE`); `TilesE`, `StartE`, `CleanE`, `HeadE` stay theorems.
 
 ```
 startCheckF        :  the reference machine is in the idle loop with the guard's stack pointer, Cond knows the guard's 8 bytes (3 of the game, 5 of the screen)
@@ -53,18 +53,23 @@ Run.roomStartE     :  the checks,  Run  →  FrameStart(fm(E − 1))          (S
 map_startF (private) :  startCheckF = true  (native_decide)
 ```
 
-The walk also checks, at every state, the conditions of `Clean` ([One whole frame](a-5-2-PipeWrites.md)) that `SiteOK` does not give, with the room's guard `G_room`: its protected bytes include the 5 screen's bytes. A store through an index or a pointer has a known target outside the guard's bytes, or it is the erase of a coin, whose target `SiteOK` puts in the block buffers. At the jump routine the index is known and in its table. `SiteOK` gives the reads through a pointer and the time. So every instruction of every frame of the room is `Clean`, with no new assumption. And at no state is it at the routine of the head's collision with a block (`h`, the one place that `G_room` cuts): `SiteOK` lets a read for the head give only nothing or a coin, so the walk never comes there.
+The walk also checks, at every state, the conditions of `Clean` ([One whole frame](a-5-2-PipeWrites.md)) that `SiteOK` does not give, with the room's guard `G_room`: its protected bytes include the 5 screen's bytes. A store through an index or a pointer has a known target outside the guard's bytes, or it is the erase of a coin, whose target `SiteOK` puts in the block buffers. At the jump routine the index is known and in its table. `SiteOK` gives the reads through a pointer and the time. So every instruction of every frame of the room is `Clean`, with no new assumption. And at no state is it at either of the two places where the head changes the vertical motion: the routine of the head's collision with a block (`h = headAt`: a brick or a block with an item) and the store of the vertical speed after the head's check (`bumpAt`: a solid block, or in the water, or while a block bounces). The walk cuts both (the guard `G_B`: `G_room` with one more place cut; its conditions of `Clean` are those of `G_room`, `clean_of_GB`). `SiteOK` lets a read for the head give only nothing or a coin, so the walk never comes to either. So no frame of the room changes the vertical motion by the head's collision with a block, and the field `vframes` of [Joining the bonus room](c-5-RoomJoin.md) no longer assumes it (item 1-1-c-7-10).
+
+`bumpAt` is found in the ROM: the collision routine's first store of the vertical speed after its jump to the foot check.
 
 ```
 cleanS(A)          :=  pc(A) ≥ 0x8000  ∧  (pc(A) = erase  ∨  the store's target is known and Plain)  ∧  (pc(A) = JumpEngine → A known, A < the length of its table)
-walk, at each state :  tilesB(A)  ∧  cleanS(A)  ∧  pc(A) ∉ cuts(G_room) = {h}
+walk, at each state :  tilesB(A)  ∧  cleanS(A)  ∧  pc(A) ∉ cuts(G_B) = {h, bumpAt}
 clean_of_sim       :  CleanFacts,  A covers m,  cleanS(A),  SiteOK(m)  →  Clean(m)
 clean_of_rows      :  the hypotheses of map_of_rows  →  ∀ n ∈ [b, a),  ∀ j,  Clean(tr_n(j))
 cuts_run           :  the hypotheses of map_run  →  ∀ n ∈ [c, e),  ∀ j,  pc(tr_n(j)) ∉ cuts
 head_of_rows       :  the hypotheses of map_of_rows  →  ∀ n ∈ [b, a),  ∀ j,  pc(tr_n(j)) ≠ h
+bump_of_rows       :  the hypotheses of map_of_rows  →  ∀ n ∈ [b, a),  ∀ j,  pc(tr_n(j)) ≠ bumpAt
 Run.roomCleanE     :  the checks,  Run  →  CleanE                       (the old field room.cleanE)
 Run.roomHeadE      :  the checks,  Run  →  HeadE:  ∀ j,  pc(tr(j)) ≠ h    (once part of the field room.edgeE)
-Run.inRoom         :  the checks,  Run  →  TilesE ∧ StartE ∧ CleanE ∧ HeadE     (RoomRun.InRoom)
+Run.roomBump       :  the checks,  Run  →  ∀ n,  C ≤ n < E  →  ∀ j,  pc(tr_n(j)) ≠ h  ∧  pc(tr_n(j)) ≠ bumpAt
+                      (the room's frame n + 1 is frame b₁ + (n − C) of base, before a₂ by roomEnter)
+Run.inRoom         :  the checks,  Run  →  InRoom:  mouthE ∧ bump          (Run.roomMouthE, Run.roomBump)
 ```
 
 `CleanFacts` is part of `mapCheck`: the idle loop of the places is the guard's, their last dot is at most the guard's, and no byte of the block buffers is a byte of the guard. With these checks `mapCheck` takes about 4 s in a program (2.6 s before the screen's bytes and the cut were added).
@@ -95,7 +100,8 @@ Program `room-map-check FM2 [N]`. Each frame of the room before it leaves the pl
 
 * On every frame: the frame starts in `Cond`, and `Zero` holds. At every read: `TilesOK`. No instruction fails `SiteOK`.
 * At the movie's first control in the room (after movie frame 653) the block buffers are the map, byte by byte.
-* `mapCheck` and `startCheckT` are true.
+* `mapCheck` and `startCheckT` are true. With the second cut place (`bumpAt`) `mapCheck` still takes about 4.4 s; the walk is the same (209,861 steps, table 9,301).
+* No frame of the movie's room and of the runs of own inputs of `side-frame-check` comes to `bumpAt` or `h` (see [one whole frame](c-7-16-SideFrame.md)).
 
 ## Assumptions (not proved in Lean)
 

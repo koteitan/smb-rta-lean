@@ -1321,9 +1321,12 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   /-- up to the routine's write, a read of the side check that gives one of the pole's tiles reads the pole's column, with the page at most one before the pole's -/
   tiles : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n →
     PoleFrame.TileRead (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
-  /-- up to the write, the frame does not come to the scroll handler's store of the position (at the screen's edges), nor to the routine of the head's collision with a block -/
-  edge : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n →
-    (PipeEntryRule.trace (keep.fm g) (keep.pad g) j).pc ≠ PipeWrites.edgeStore sy m0 ∧ (PipeEntryRule.trace (keep.fm g) (keep.pad g) j).pc ≠ PipeWrites.headAt sy m0
+  /-- up to the write, the scroll handler's store of the position at the screen's edges and the routine of the head's collision with a block do not bring him into the pole's
+  range: if he is in it right after one of them (`PoleFrame.again`), he was in it at the end of the move -/
+  edge : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n → (PipeEntryRule.trace (keep.fm g) (keep.pad g) j).pc ∈ PoleFrame.again sy m0 →
+    (PoleFrame.spotsF sy m0).left ≤ PoleEntryRule.px (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (keep.fm g) (keep.pad g) j) →
+    ∃ k, k ≤ n ∧ (PipeEntryRule.trace (keep.fm g) (keep.pad g) k).pc = sy.PlayerSubs ∧
+      (PoleFrame.spotsF sy m0).left ≤ PoleEntryRule.px (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (keep.fm g) (keep.pad g) k)
   /-- `P₂(g)` is the position at the end of the move (`PlayerSubs`), up to the write -/
   moved : ∀ n j, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → j ≤ n →
     (PipeEntryRule.trace (keep.fm g) (keep.pad g) j).pc = sy.PlayerSubs → (fr g).P₂ = posP sy (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)

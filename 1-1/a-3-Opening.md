@@ -49,6 +49,7 @@ What makes 9744 the limit (seen in the search and in the TAS):
 
 ## Assumptions (not proved in Lean)
 
+* On real frames these are one condition on each of the first 32 frames, the field `opening` of `Route.Pipe`: the frame is a step of this model ([The opening on real frames](a-5-4-OpenFrames.md)).
 * Those of the open-area bound of [Reach](../0-0/0-2-Reach.md): `hstep` is the horizontal part of a frame.
 * Flat open ground: no blocks, holes or walls, so Mario is in the air only during a jump.
 * The length of a jump depends only on `|v|` at the takeoff and lies between the lengths of a
