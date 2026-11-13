@@ -31,15 +31,18 @@ OpenRun(air)  :  air(1) = 0,  そして t ∈ [1, N],  t < E  の各 t で  ∃ 
 OpenRunM(air) :  OpenRun(air) の移動を  (P(fm(t + 1)) − P(fm t) − 16·v(hs(fm(t + 1)))) mod 2²⁴ = 0  にしたもの
 
 Real  （t ∈ [1, N],  t < E  の各 t で）:
-  cleanK    :  ∀ k,  CleanK(tr(t, k))                     （PipeWrites.Clean に城の旗と位置の端数の保護を足したもの。ただし移動のルーチン自身の書き込みは除く）
-  spare     :  ∀ k,  Spare(tr(t, k))                      （添字やポインタでの書き込みが、ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化を書かない）
-  st        :  st(fm t) ∈ {0, 1, 2}
-  spring    :  JumpspringAnimCtrl(fm t) = 0
+  cleanK    :  ∀ k,  CleanK_F(tr(t, k))                   （PipeWrites.Clean に城の旗、位置の端数、ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化の保護を
+                                                          足したもの。ただし移動のルーチン自身の書き込みは除く。前の cleanK と spare）
   after     :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = PlayerSubs  →  b(t) の hs と P の 8 バイトは tr(t, k) のもの,  ab(b t) = |v(b t)|,  bits(b t) = FF
   flat      :  ground(t)  ∧  ¬jump(in t)   →   ground(t + 1)
   jump      :  ground(t)  ∧  jump(in t)    →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  1 ≤ d < n で ¬ground(t + d),  ground(t + n)
 そして 1 回だけ:
   page      :  N < E  →  page(fm(N + 1)) ≠ 255
+1 ≤ n < ix(N)、n < ix(E) の各フレーム n（数えるものも数えないものも）の各命令で（OpenMap）:
+  map       :  MapOK(tr_n(k))                             （添字やポインタでの書き込みが、プレイヤーの状態、ジャンプ台のバイト、ブロックバッファを書かない。
+                                                          ブロックバッファのルーチンの読み出しはバッファの中）
+
+Real.stSpring :  確認,  Real,  FrameStart(seq 1),  MapAt(seq 1)   →   st(fm t) ∈ {0, 1, 2}  ∧  JumpspringAnimCtrl(fm t) = 0     （前のフィールド st、spring）
 
 air(t)        :=  j − t   （j は [t, N + Zb) で ground(j) となる最初の数えるフレーム。なければ N + Zb）
 Held(m)       :=  ab(m) = |v(m)|  ∧  bits(m) = FF  ∧  AreaType(m) = v₀  ∧  SwimmingFlag(m) = 0  ∧  PlayerChangeSizeFlag(m) = 0
@@ -71,7 +74,7 @@ Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              （Run.pipeO
 確かめるようになりました（ネイティブで約 2.2 秒）。`lag_check` は 17 バイトを追うようになりました（ネイティブで約 6 秒）。ROM のない定理が使う公理は `propext`、
 `Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
+Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`（`Real.stSpring` が使う）、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
 `titlePosCheck`、`Begin.bytesAll₁`、`Theorems/Route.lean` の `Pipe.opening`、`Run.pipeKeep₁`、`Run.pipeHeld`、`Run.pipeOpening`、`Run.pipeOpenB`、非公開の `Proof/OpenFrames.lean`（`open_checks`、`open_left`）、
 `Proof/LagPause.lean`、`Proof/Opening.lean`、`Proof/PipeWrites.lean`。
 
@@ -88,8 +91,8 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/PipeFram
   （`exact_of_page`）。
 * **プレイヤーのルーチンでの状態.** フレームはアイドルループで操作できる状態で始まります（`Lags.starts`。`CtrlKeep` の歩きのガードは、アイドルループ、スタックポインタ、
   わかっているバイトが同じです）。ポーズでなく終わる（`Lags.unpaused`: 数えるフレームはポーズでなく終わるフレーム）ので、プレイヤーのルーチンに来ます（`CtrlKeep.arrive_at`）。そこで `keepA` の 25 バイトは始まりの値です
-  （`CtrlKeep.ctrl_keep`）。`st`、`spring`、`Held` と合わせて `FrameModel.AtCtrl` になります。入力の状態とジャンプのビットは `st(fm t)` から出ます。
-* **フレームからフレームへ.** `after` がフレームの終わりの `ab` と `bits` を出します。1 フレーム全体の歩きと `spare` がエリアのバイトを出します（`CtrlKeep.area_end`）。
+  （`CtrlKeep.ctrl_keep`）。`Real.stSpring` のプレイヤーの状態とジャンプ台のバイト、`Held` と合わせて `FrameModel.AtCtrl` になります。入力の状態とジャンプのビットは `st(fm t)` から出ます。
+* **フレームからフレームへ.** `after` がフレームの終わりの `ab` と `bits` を出します。1 フレーム全体の歩きと `cleanK` がエリアのバイトを出します（`SurfaceFrames.area_endF`）。
   数えないフレームはこれらのバイトと `hs`、`P` を変えません（`lags_keepI`: `LagFrames` の歩きが 9 バイト多く追います）。なので、操作のときからの帰納法で、どの数えるフレームでも
   `Held` が成り立ちます。
 * **空中.** `air(t) = 0` は `ground(t)` のときだけです。空中では定義から `air(t + 1) = air(t) − 1` です。地面で跳び始めなければ、`flat` から `air(t + 1) = 0` です。
@@ -125,18 +128,18 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/PipeFram
 
 ## 前提（Lean では証明していない）
 
-* `Real` のフィールド: `cleanK`、`spare`、`st`、`spring`、`after`、`flat`、`jump`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
+* `Real` のフィールド: `cleanK`、`map`、`after`、`flat`、`jump`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
   その始まりの状態ごとの条件です。`after` は、スクロールの処理からあと何も彼を動かさず、当たりのルーチンが何も見つけないこと（壁も画面の端もない）です。項目 1-1-a-5-6 の横の半分です。
   `flat` はその縦の半分です（地面から落ちない）。`jump` は項目 1-1-a-5-7 です。
 * この回から仮定しないこと: `longer`、数えるフレーム 1 から `N` の始まりでの `page`。
-* `st` と `spring` は地図しだいです。ジャンプ台のバイトはジャンプ台のタイルに着地すると、状態 3（よじ登り）はよじ登るタイルに触ると書かれます。どちらのバイトを追う
-  フレームの歩きも、ブロックのバッファのルーチンが読むタイルを知りません。ジャンプ台のバイトをフレームの終わりまで追う探索（`ctrl-after-check spring`）は終わりませんでした。
-  4 分でメモリが 21.7 GB になったので止めました。
+* もう仮定でないもの（この回）: `st` と `spring`。[最初のフレームのブロックバッファ、ジャンプ台、プレイヤーの状態](a-5-4-3-3-3-OpenMap-ja.md) の歩きと、各命令の
+  新しいフィールド `map` から定理になりました（`Real.stSpring`）。`spare` は `cleanK` の一部になりました（そのバイトは `cleanK` のガード `FrameKeep.guardF` が
+  守ります。パート f と同じです）。
 * もう仮定しないこと: 各フレームがモデルの 1 歩であること（`hstep`、`16·v` の移動、モデルの入力、`valid`）、列 `air`。各数えるフレームがポーズでなく終わることは
   定理です（`PipeFrames.Lags.unpaused`）。数えるフレームはポーズでなく終わるフレームで、`dP` フレームの中で見つかります（`lags.resume`）。
 * **証明していないこと:** フレーム 368 で入れること（前と同じ）。
 
-**ファイル.** `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の
+**ファイル.** `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`、`Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の
 `Proof/OpenFrames.lean`、`Proof/LagPause.lean`、`Proof/Opening.lean`。
 
 **再現.**

@@ -14,8 +14,8 @@ less, if it is a frame in control as the walk needs it (`HurryFrame.Start`, `Run
 in control that ends with control and without the music ends at the start of a frame in control (`HurryFrame.frame_startC`), so by induction every frame from `Run.b` on
 begins so. That such a frame ends with control is a theorem too: the walk with the stores of the routine, the mode and the task cut (`HurryFrame.frame_ctl`), when no
 instruction of the frame writes these bytes by their address (`Run.noStore`). Frame `Run.b` is frame 1, whose start comes from the press of Start on the title
-(`Begin.start₁`), or the last frame of a change of area, whose start comes from the last rows of the change (`HurryStart`, `Run.startB`). The run's machines are those of
-`Route.Base`, and the conditions of the changes those of `Route.ChangesK`, as in `Route.Run`. The timer and the music when frame 0 begins come from the press of Start on
+(`Begin.start₁`), or the last frame of a change of area, whose start comes from the last rows with tables of the change (`HurryStart`, `Run.startB`). The run's machines are
+those of `Route.Base`, and the conditions of the changes those of `Route.ChangesK`, as in `Route.Run` (for the first change alone, its fields of `Route.ChangesK`). The timer and the music when frame 0 begins come from the press of Start on
 the title (`TitleStart.Begin`). Page: `1-1/0-6-4-HurryMusic.md`.
 
 No value of the game appears here: the names are read from the disassembly, and `q`, `t0`, `u` are parameters.
@@ -170,8 +170,9 @@ structure Run (sy : Syms) (m0 : Machine) (tc : TitleStart.Ctx) (q t0 u E : Nat) 
   on : hurryOn tc.nm (base.seq k) = true
   /-- the frame from which the frames before the music are in control -/
   b : Nat
-  /-- frame `b` is frame 1 (its start is `Begin.start₁`); or the last frame of the first change, `b₁ − 1`, with the conditions of the first change (`HurryStart.Chg₁`); or the last
-  frame of the second change, `b₂ − 1`, with the conditions of both changes as `Route.Run` asks them (`Route.ChangesK`). Its start comes from the rows of the change (`Run.startB`). -/
+  /-- frame `b` is frame 1 (its start is `Begin.start₁`); or the last frame of the first change, `b₁ − 1`, with the conditions of the first change (`HurryStart.Chg₁`: the
+  fields of `Route.ChangesK` on it, `HurryStart.chg₁_of_changes`); or the last frame of the second change, `b₂ − 1`, with the conditions of both changes as `Route.Run` asks
+  them (`Route.ChangesK`). Its start comes from the rows with tables of the change (`Run.startB`). -/
   start : b = 1 ∨ (b + 1 = base.b₁ sy ∧ HurryStart.Chg₁ sy m0 nm₁ d₁ base clock.kind) ∨
     (b + 1 = base.b₂ sy nmS m0 ∧ Route.ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS base clock.kind S.e₁ S.c₂ S.e₂ S.c₃)
   /-- the first frame that starts the hurry-up music is not before `b` -/
@@ -191,8 +192,8 @@ structure Run (sy : Syms) (m0 : Machine) (tc : TitleStart.Ctx) (q t0 u E : Nat) 
 
 /-- **The checks on the ROM** that the theorem takes: the start from the title (`title`, `near`), the walk of the music's frame (`music`), the walk of a frame in control with the
 stores of the routine, the mode and the task cut (`ctl`), the frames from control to the vertical pipe (`entry`), the two changes (`side`, `sideEnd`: the rows of
-`SideChangeSound`, with the sound routine at `rt`, as `route_1_1` takes them; `room`, which holds the check of the first change), and the last rows of the two changes
-(`rows₁`, `rows₂`) -/
+`SideChangeSound`, with the sound routine at `rt`, as `route_1_1` takes them; `room`, which holds the check of the first change), and the last rows with tables of the two
+changes (`rows₁`, `rows₂`) -/
 structure Checks (sy : Syms) (m0 : Machine) (tc : TitleStart.Ctx) (t0 u : Nat) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (nm₂ nx₂ nmS : Names) (rt : StepWrites.Rt) : Prop where
   title : TitleStart.check sy tc t0 = true
   music : HurryFrame.checkOf sy tc.nm m0 u = true

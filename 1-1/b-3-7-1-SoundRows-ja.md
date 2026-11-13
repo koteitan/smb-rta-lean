@@ -85,7 +85,7 @@ Lean: `Theorems/SoundRows.lean`（`SRow`、`scan`、`rowsFromS`、`incl`、`finS
 
 ## 仮定（Lean では証明していない）
 
-* 出口での `QuietP ∧ SongAt(shape)`（`chg.quiet₁`）。鳴っていない場合の曲の行と、画面のバッファの形はまだ求めます。ポーズの音の種類を証明するには、土管のフレームにも表が要ります。そこでは Start を押せるからです。
+* 出口でルートはいま `QuietRest ∧ SongAt(shape)` だけを求めます（`chg.quiet₁`）。`QuietP` のポーズの部分は、入るときの条件 `PauseV`（`chg.pause₁`）から、ポーズをクラスに入れた土管のフレームで出ます。[縦の土管のフレームを通るポーズ](b-3-7-2-PipePause-ja.md)を見てください。ポーズの音のキュー、鳴っていない場合の曲の行と 2 つの効果音、画面のバッファの形はまだ求めます。
 * 出口での `TimerOK`（`chg.time₁`）。
 * 土管のあとのゲームコアのフレームで Start を押さないこと（`chg.noStart₁`、1-1-b-3-6）。操作の前の最後の 18 フレームです。ポーズしたフレームは `left` を減らさず、段は `left` の値ごとに 1 つです。していません。
 

@@ -21,14 +21,14 @@ no_call_of_paused  :  同じ前提,  bit₀(frame(m, i)) = 1                    
 
 ix(0) = 0,   ix(t + 1) = first(ix t + 1, dP)                 （PipeFrames.ixP: 数えるフレームはポーズでなく終わる）
 Lags.paused   :  t < E,  ix t < n < ix(t + 1)   →   bit₀(seq(n + 1)) = 1          （定義から。フレーム 1 から ix(1) − 1 も）
-Lags.keeps    :  数えないフレーム  t < E,  ix t < n < ix(t + 1)  で:   ∀ k,  KeepsPause(tr(seq n, sin n, k))
+Lags.keepsP   :  数えないフレーム  t < E,  ix t < n < ix(t + 1)  で:   ∀ k,  KeepsPause(tr(seq n, sin n, k))      （ポーズのバイトを守る lags.clean から）
 Lags.no_call  :  pauseCheck,  Lags,  FrameStart(seq n)   →   フレーム n は c を呼ばない
 ```
 
 `pauseCheck` は ROM での確認で、非公開の `pause_check`（`Proof/LagPause.lean`）が `native_decide` で示します。ネイティブで約 6 秒かかります。
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean` の `ixP`、`ixP_paused`、`Lags.paused`、`Lags.keeps`、`Lags.no_call`、非公開の `Proof/LagPause.lean`。
+Lean: `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean` の `ixP`、`ixP_paused`、`Lags.paused`、`Lags.keepsP`、`Lags.no_call`、非公開の `Proof/LagPause.lean`。
 
 ## しくみ
 
@@ -61,7 +61,7 @@ Lean: `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean` の `ixP`、`ixP_pau
 | スーパーの状態の大きいマリオ、自分の入力（60 回） | 18,076 | 19,157 | 19,157 | 0 | 0 | 18,076 のうち 0 |
 | 操作できない数えるフレームのあとも続けた走り（60 回、確認には入れない） | 19,980 | 22,020 | 21,187 | 0 | 831 | 20,811 のうち 0 |
 
-* 定理の中の走りでは、数えないフレームはどれもポーズで終わります。添字やポインタを通ってポーズのバイトを書く命令はありません。`keeps` は成り立ちます。
+* 定理の中の走りでは、数えないフレームはどれもポーズで終わります。添字やポインタを通ってポーズのバイトを書く命令はありません。`Lags.keepsP` は成り立ちます。
 * なので、フレームが数えられる（インターバルタイマーの段が動く）のは、ポーズでなく終わるときだけです。`open-real-check` はその走りの、操作できない状態で終わる最初のフレームまでの全部の
   フレームでこれを確かめます。81,931 フレームで例外はありません（[本物のフレームでの出だし](a-5-4-OpenFrames-ja.md)）。なので `ixP` は数えるフレームをポーズのバイトから読みます。
 * `c` を呼んでポーズで終わるフレームはありません。けがや死のあと（最後の行）もです。`ends_unpaused` の言うとおりです。
@@ -70,14 +70,15 @@ Lean: `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean` の `ixP`、`ixP_pau
 
 ## 前提（Lean では証明していない）
 
-* **`lags.game` はもう仮定しません.** 数えないフレームはモードのルーチンを呼びません。これは `Lags.paused` と `keeps` からの定理になりました。
+* **`lags.game` はもう仮定しません.** 数えないフレームはモードのルーチンを呼びません。これは `Lags.paused` と `Lags.keepsP` からの定理になりました。
 * **`lags.paused` はもう仮定しません.** どのフレームを数えるかはポーズのバイトから読む（`ixP`）ので、数えないフレームは定義からポーズで終わります。この数えるフレームを
   タイマーの動くフレームとつなぐのは、`chg.ha₁` の数です（パート 0、前と同じ）。数えるフレーム 1 は、フレーム 1 から先でポーズでなく終わる最初のフレームです。
   操作できる最初のフレームでポーズする走りも、いまは扱えます（前は数えるフレーム 1 がフレーム 1 でした）。
 * **`lags.resume`**（新しい）: 入るまでの各数えるフレームは、前の数えるフレームから `dP` フレームの中に来る。つまり、フレーム 1 から入るまでのどのポーズも `dP` フレーム続かない。
   `dP` は走りが選ぶ `Lags` のフィールドなので、入る前にポーズが終わる走りは、大きい `dP` でこれを満たします。これがあると、数えるフレームはポーズでなく終わります
   （`Lags.unpaused`）。[本物のフレームでの出だし](a-5-4-OpenFrames-ja.md) がこれを使います。
-* **`lags.keeps`**: 数えないフレームのどの命令も、添字やポインタを通ってポーズのバイトを書かない。`Clean` と同じ種類の条件で、バイトが 1 つ増えたものです。
+* **`lags.keeps` はもうフィールドではありません**（この回）。数えないフレームのどの命令も添字やポインタを通ってポーズのバイトを書かないことは、操作から入るまでの
+  どのフレームでもポーズのバイトを守る `lags.clean` の一部になりました（`Lags.keepsP`）。
 * **証明していないこと: タイマーの制御が 0 のままであること.** いまは要りません。
 
 **ファイル.** `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/LagPause.lean`。

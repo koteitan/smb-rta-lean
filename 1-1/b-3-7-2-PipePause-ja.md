@@ -1,0 +1,121 @@
+[← Back](README-ja.md) | [English](b-3-7-2-PipePause.md) | [Japanese](b-3-7-2-PipePause-ja.md)
+
+# 縦の土管のフレームを通るポーズ
+
+**主張.** 縦の土管に入るとき、ポーズの音が鳴っていないか、解く音が鳴っていてポーズのタイマーがその数より 1 大きいか、そのフレームで解くボタンが押されたとします（`PauseV`）。すると土管のフレームでは、Start を含むどの入力でも、ポーズの 6 バイトは 88 のクラスのどれかにとどまり、出口でポーズは `QuietV` のとおりです。これは ROM の確認つきで証明しました。ですからルートは出口で求めることが減ります。`chg.quiet₁`（項目 1-1-b-3-7）はもうポーズの音のバッファ、フラグ、数を求めません。求めるのは、ポーズの音のキューが基準と同じこと、そしてポーズの音が鳴っていないときは 2 つの矩形波の効果音と曲です（`QuietRest`）。`chg.pause₁`（入るときの条件 `PauseV`）が新しく加わりました。Start を乱数で押す本物の走りで、`PauseV` は 334 の入るときのすべてで成り立ち、土管のフレーム 90,963 はどれもクラスにあり、`QuietV` は 1,002 の出口のすべてで成り立ちました。
+
+`m[i]` は `m` の RAM のバイト `i` です。`frame(m, i)` は `m` から入力 `i` で進む 1 フレームです。`trace(m, i, j)` はそのフレームの `j` 歩あとの機械です。`x = run(E, 0^48)` は出口の基準の機械です。`During`、`ExitAt`、`Places`、`left` は[`fall` なしの部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)と同じです。`QuietP`、`SongAt`、`song`、`shape`、`TimerOK`、`InRowsK` は[音のバイトを表で運ぶ、部屋への切り替え](b-3-7-1-SoundRows-ja.md)と同じです。`SIn(t, m)` は、`m` のバイトが表の状態 `t` に含まれることです。
+
+## ポーズの 6 バイト
+
+`q`、`b`、`f`、`c` はポーズの音のキュー、バッファ、フラグ、数です（`PauseSoundQueue`、`PauseSoundBuffer`、`PauseModeFlag`、`Squ1_SfxLenCounter`）。`t` はポーズのタイマー（`GamePauseTimer`）、`g` はポーズのバイト（`GamePauseStatus`）です。`s₁`、`s₂` は 2 つの矩形波の効果音のバッファです。`U` は解く音の値、`P` はポーズの音の値、`L` は音の長さです。シンボルを通して ROM から読みます。ゲームが 6 バイトをどう使うかは[横の土管のフレームを通るポーズ](d-3-4-3-SidePause-ja.md)にあります。ポーズの音が鳴っている間は `t = c + 1` で、Start は何もしません。
+
+## クラス
+
+| クラス | `g` | `q` | `b` | `f` | `c` | `t` | 数 |
+|---|---|---|---|---|---|---|---|
+| 鳴っていない | 0 かビット 7 | 0 | 0 | 0 | 何でも | 何でも | 1 |
+| 解く音 | ビット 7 | 0 | `U` | `U` | `k` | `k + 1` | `k` = 1 … `L − 1`: 41 |
+| 解くボタンが押された | ビット 7 | `U` | 0 | `P` | 何でも | `L + 1` | 1 |
+| ポーズのボタンが押された（ポーズ中） | ビット 0 と 7 | `P` | 0 | 何でも | 何でも | `L + 1` | 1 |
+| ポーズの音（ポーズ中） | ビット 0 と 7 | 0 | `P` | `P` | `k` | `k + 1` | `k` = 1 … `L − 1`: 41 |
+| ポーズの音が終わった（ポーズ中） | ビット 0 と 7 | 0 | 0 | `P` | 0 | 1 | 1 |
+| | ビット 0、ビット 7 はあってもなくても | 0 | 0 | `P` | 0 | 0 | 2 |
+
+`g` の名前のないビットは 0 です。横の土管のクラスと 3 つ違います。鳴っていないときフラグは 0、鳴っていない 2 つのクラスを 1 つにした（`g` のビット 7 を知らない）、解く音の数は `L − 1` まで、です。音は数を `L` にして同じフレームで 1 減らすので、フレームの終わりに `L` は見えません。
+
+```
+PauseV(m)     :=  ( m[g] ∈ {0, 0x80}  ∧  m[q] = 0  ∧  m[b] = 0  ∧  m[f] = 0 )
+               ∨  ( m[g] = 0x80  ∧  m[q] = 0  ∧  m[b] = U  ∧  m[f] = U  ∧  1 ≤ m[c] < L  ∧  m[t] = m[c] + 1 )
+               ∨  ( m[g] = 0x80  ∧  m[q] = U  ∧  m[b] = 0  ∧  m[f] = P  ∧  m[t] = L + 1 )
+
+QuietV(m)     :=  ( m[q] = 0  ∧  m[b] = 0  ∧  m[f] = 0 )
+               ∨  ( m[q] = 0  ∧  m[b] = U  ∧  m[f] = U  ∧  1 ≤ m[c] < L )
+               ∨  ( m[q] = U  ∧  m[b] = 0  ∧  m[f] = P )
+
+QuietRest(m)  :=  m[q] = x[q]  ∧  ( m[b] = x[b]  →  m[s₁] = x[s₁]  ∧  m[s₂] = x[s₂]  ∧  SongAt(song, m) )
+```
+
+`PauseV` は、`m` が表の最初の 3 行のどれかにあることです。出口のフレームはポーズで終わらないので、機械はこの 3 行のどれかにあります。それが `QuietV` です。確認は `x[q] = 0`、`x[b] = 0`、`U ≠ 0` を求めます（`exitVOK`）。すると
+
+```
+QuietV(m)  ∧  QuietRest(m)   →   QuietP(m)                     (quietP_of_V)
+```
+
+`QuietRest` は `QuietV` の 3 つ目の場合を除きます。そのキューは `U` で、`x[q]` ではありません。
+
+## 命題
+
+`DuringV(m) := During(m) ∧ ∃ t ∈ classesV, SIn(t, m)` です。`EndStatement` に新しいフィールドが 2 つあります。確認 `endCheck` はいま `pipeCheckV` と `exitVOK` も走らせます（`endStatement_of_check`）。下の 1 行目は ROM を使いません。
+
+```
+class_of_pauseV :  PauseV(M)  →  ∃ t ∈ classesV, SIn(t, M)
+pauseStep       :  ∀ m, DuringV(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
+                     DuringV(frame(m, i))
+                   ∨ ( ExitAt(frame(m, i))  ∧  QuietV(frame(m, i))  ∧  ( QuietP ∧ SongAt(shape) ∧ TimerOK at frame(m, i)  →  InRowsK(frame(m, i)) ) )
+pauseExit       :  ∀ m,  QuietV(m) ∧ QuietRest(m)  →  QuietP(m)
+```
+
+**走り.** `PipeRunK` に新しいフィールド `pause : PauseV(seq a)` があり、フィールド `quiet` は出口で `QuietP ∧ SongAt(shape)` の代わりに `QuietRest ∧ SongAt(shape)` を求めます。定理は前と同じで、引数も同じです。帰納法では、入ってからの各機械は `DuringV` か、表を持つ段にあります（`PipeRunK.stepD`、`PipeRunK.atEntry`）。
+
+```
+PipeRunK.bound   :  cnt(a) + 91 ≤ cnt(b)
+PipeRunK.first   :  hc  →  ∀ n, a ≤ n < b,  left(seq n) ≠ 0
+PipeRunK.inRowsT :  hc  →  InRowsT(seq b)
+```
+
+`Route` は 1 つ目の切り替えを `ChangesK.run₁` から取ります。いま `pause := chg.pause₁` を取ります。
+
+```
+chg.pause₁ :  PauseV(seq a₁)                                                          (新しい)
+chg.quiet₁ :  a₁ ≤ n ≤ b₁ ∧ ExitAt(seq n)  →  QuietRest(seq n) ∧ SongAt(shape, seq n)    (前は QuietP ∧ SongAt(shape))
+```
+
+`QuietP ∧ SongAt(shape) → QuietRest ∧ SongAt(shape)` なので、新しい `quiet₁` は前のものより弱いです。
+
+Lean: `Theorems/PipeChangeEnd.lean`（`PR`、`retOf`、`inR`、`low7`、`forgetP`、`pret`、`pout`、`psuccs`、`Ph`、`pcover`、`pwalk`、`mem_low7`、`forgetP_k`、`sim_forgetP`、`s_psuccs`、`PLive`、`cover_plive`、`plive_step`、`pframe_run`、`pframe_of_walk`、`ploop`、`pcfgOf`、`POK`、`pcheck`、`p_step`、`pauseTI`、`classesV`、`PauseV`、`QuietV`、`QuietRest`、`prOf`、`cfgRq`、`cfgOq`、`pipeCheckV`、`exitVOK`、`class_of_pauseV`、`quietV_of_class`、`quietP_of_V`、`EndStatement.pauseStep`、`EndStatement.pauseExit`、`DuringV`、`PipeRunK.pause`、`PipeRunK.atEntry`）、`Theorems/Route.lean`（`ChangesK.pause₁`、`ChangesK.quiet₁`、`ChangesK.run₁`）。非公開の確認はこれまでどおり `Proof/PipeChangeEnd.lean` の `pipe_end_checks` です。これらのファイルにゲームのデータはありません。
+
+## しくみ
+
+**クラスを歩きの横に運ぶ理由.** 土管のフレームの歩き（[b-2-2](b-2-2-PipeChangeBound-ja.md)、[b-3-2](b-3-2-PipeChangeEnd-ja.md)）は、抽象状態のビット `rk` で土管のタイマーを追います。ビット `spent` は、このフレームでタイマーが減ったかを表します。[`StepWrites`](d-3-4-1-StepWrites-ja.md) の表は `spent` を別の目的に使うので、ここでは 6 バイトをその表で運べません。横の土管のように歩きの状態の知っているバイトにすると、約 60,000 状態の歩きがクラスの数だけ増えます。
+
+**ルーチン.** フレームの割り込みは、音のルーチン、パッドの読み取り、ポーズのルーチンを順に呼びます。6 バイトを読み書きするのはこれらだけです。音のルーチンの呼び出しは [b-3-7-1](b-3-7-1-SoundRows-ja.md) と同じに見つけます（`rtOf`）。ポーズのルーチンのあとに戻る場所は、その 9 バイトあとです。状態が 2 つ目か 3 つ目の呼び出しにあるか、割り込みの本体のスタックポインタ（待ちの繰り返しのものより 3 小さい）のところに 3 つの戻り先のどれかがあれば、状態はルーチンの中です（`inR`）。
+
+**1 歩（`psuccs`）.** 1 つ目の呼び出しで、状態は合うクラスごとに 1 つずつに分かれます。歩きはそれから 6 バイトを知っています。ポーズのルーチンの呼び出しで、状態は `g` のビット 7 で分かれます。そのルーチンが `g` に 1 を足すからです。戻るところで 6 バイトはクラスのどれかになければならず、そして忘れます。ただし `g` のビット 0 から 6 は残します。フレームの残りがビット 0 を読むからです。ルーチンの外では、どの歩も 6 バイトを書いてはいけません（`keepOK`）。ですから機械 `m` を含む歩きの各状態 `A` で `Ph(A, m) := inR(A) ∨ ∃ t ∈ classesV, SIn(t, m)` が成り立ちます（`s_psuccs`）。表の状態が歩きの状態を含むのは、両方がルーチンの中か、両方が外のときだけです（`pcover`）。フレームの終わりはルーチンの外です。ビット `rk` と `spent` は [b-3-2](b-3-2-PipeChangeEnd-ja.md) の 1 歩が決めるとおりなので、土管のタイマーはこれまでどおり追えます。
+
+**鳴っていないクラスを 1 つにする理由.** 鳴っていないクラスを 2 つ（`g` = 0 と `g` = `0x80`）にすると、それぞれが音のルーチンで曲を歩きます。表の 97,062 状態のうち 81,021 が音のルーチンにありました。1 つにして、ポーズのルーチンの呼び出しでビット 7 を分けると、40,781 です。
+
+**探索** は同じ 1 歩で歩きの表を作り、6 バイトを分けておきます（`ploop`、`pcfgOf`）。確認は探索によりません。
+
+**確認の大きさ.** クラスは 88 です。表は 56,816 状態（タイマーが 2 以上）と 43,120 状態（タイマーが 1）です。前の歩きの表は 36,062 と 23,135 でした。プログラムで新しい歩きは約 25 秒（探索 12 秒、確認 11 から 13 秒）、前の歩きは 13 秒です。前の歩きは残ります。クラスのない `EndStatement.step` を `HurryStart` が使うからです。`Proof/PipeChangeEnd.lean` の非公開のビルドは 232 秒です（前は約 200 秒）。数秒より長いです。
+
+## 正しくない事実
+
+* **出口のフレームで解くボタンを押すこと** は `QuietV` では許されますが、`QuietRest` では許されません。キューが `U` だからです。下では 1,002 の出口のうち 41 でこれが起きました。TAS でフレーム 416 に 60 フレームのポーズを入れたときも起きます（`changes-check FM2 pause 416 60`）。[b-3-7-1](b-3-7-1-SoundRows-ja.md) のとおり、こういう走りでは新しい曲が始まっていないので、操作のときに部屋の条件が成り立ちません。ですから `chg.quiet₁` は、土管でポーズして出口のフレームで解く走りをまだ除きます。
+
+## 測った。定理ではない
+
+プログラム: `pipe-pause-real FM2 3 7`。入るとき 334 個: 基準、動画のもの、土管の上に立って下を押す本物の 26 個、基準の道で最後のフレームの 0 から 59 フレーム前に 44、45、60 フレームのポーズを入れた 180 個、立って Start を乱数で押したあとの本物の 78 個です。それぞれから、入力は乱数で、Start はおよそ 3、9、40 フレームに 1 回で、土管のフレームを進めます。
+
+| 入るとき | `Entry` | `PauseV` | 鳴っていない / 解く音 / 解くボタン | 土管のフレーム | クラスにある | 見たクラス | 出口 | `QuietV`（鳴っていない / 解く音 / 解くボタン） | `QuietRest` と画面のバッファ | `QuietP` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 334 | 334 | 334 | 113 / 134 / 87 | 90,963 | 90,963 | 88 のうち 88 | 1,002 | 1,002（448 / 513 / 41） | 961 | 961 |
+
+`changes-check FM2`: TAS で `pause₁` と新しい `quiet₁` は成り立ちます。380 に 60 フレームのポーズを入れても成り立ちます（前の `quiet₁` はそこで成り立ちませんでした）。416 では上のとおり新しい `quiet₁` が成り立ちません。545 では成り立ちます。
+
+**入るときのポーズは、証明したことからは出ません.** `pipe-pause-check` は[タイトルからの、縦の土管に入るときの状態](b-3-4-EntryKeep-ja.md)の歩きについて報告します。6 バイトのどれも、操作から保つ 69 バイトに入っていません。入るときに証明した 72 バイトにも入っていません。その歩きのフレームの始めの状態はどれも知りません。ポーズのタイマーが 0 でないとき、ポーズのルーチンは `t` も `g` も書かないので、その歩きは入るときにこれらを知ることができません。ですから `chg.pause₁` は 1 つの状態についての新しい条件です。
+
+## 前提（Lean で証明していない）
+
+* 入るときの `PauseV`（`chg.pause₁`）。新しいもの。証明するには、操作から入るまでのフレームの歩きの横にもクラスが要ります（そこでもポーズできます）。タイトルからのフレーム 0 にも要ります。
+* 出口での `QuietRest ∧ SongAt(shape)`（`chg.quiet₁`、項目 1-1-b-3-7）。ポーズの音のキューが基準と同じこと、鳴っていないときは 2 つの効果音と曲の行です。前はポーズの音のバッファ、フラグ、数も求めました。
+* 土管のあとのゲームコアのフレームの `NoStart`（`chg.noStart₁`、項目 1-1-b-3-6）。ここではしていません。[d-3-4-3](d-3-4-3-SidePause-ja.md) のポーズ中の段は測って、終わりませんでした。
+
+**ファイル.** `Theorems/PipeChangeEnd.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/PipeChangeEnd.lean` の `pipe_end_checks` です。
+
+**再現.**
+```
+.lake/build/bin/smbrta pipe-pause-check              # クラスを横に運ぶ歩きをプログラムで、約 50 秒。"old" は前の歩きも走らせる
+.lake/build/bin/smbrta pipe-pause-real FM2 3 7       # 本物の走りでのクラス、約 2 分
+.lake/build/bin/smbrta changes-check FM2 pause 416 60   # 416 に 60 フレームのポーズを入れた TAS でのフィールド
+```

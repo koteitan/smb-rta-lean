@@ -7,7 +7,7 @@
 * `longer`: the frame does not end in the 728 instructions after it comes to the player's routine. Now it comes from the frame's time: `SiteOK` (already assumed, `chg.roomSites`) puts every instruction away from the idle loop 6000 dots before the frame's end, and the walks of the movement show that each of their steps keeps the frame then.
 * `far`, the upper half: `P + 2048 < 2²⁴`. Before `t₀` he is left of the goal (`first`), and the goal is left of the mouth (`slow_mouth`, `air_pos`), on page 0.
 
-The lower half of `far` stays, as a new field of `RoomRun` on one machine: `2048 ≤ P` at the start of each frame up to `t₀`.
+The lower half of `far` stayed, as a field of `RoomRun` on one machine: `2048 ≤ P` at the start of each frame up to `t₀`. It is now a theorem from a weaker field, `farNear` ([The position stays at 8 px or more](c-7-1-3-RoomFar.md), item 1-1-c-7-1-3). The state at the player's routine in `CleanR` and `ReadR` is now proved too, but the values that decide which ([The room's frames at the player's routine](c-7-1-2-RoomCut.md), item 1-1-c-7-1-2).
 
 `R` is the player's routine, `tr(j)` the machine `j` instructions into the frame from `M`, `idle` the room's idle loop (a `JMP` to itself), `dot` the dot in the frame.
 
@@ -26,7 +26,7 @@ inTime_of    :  C ≤ n < t₀,  pc(tr(arr(n))) = R  →  InTime(fm(n), arr(n))
 
 `CleanR` and `ReadR` are `Clean` and `ReadFrame` without `before`, `longer` and `far`.
 
-Lean: `Theorems/FrameTime.lean` (`InTime`, `CleanR`, `ReadR`, `clean_frameR`, `fric_readI`, `frame_pathI`, `frame_readR`), `Theorems/RoomJoin.lean` (`RoomRun.clean`, `RoomRun.far`, `InRoom.le`, `InRoom.time`, `InRoom.arrive`, `InRoom.before`, `goal_mouth`, `before_of`, `goal_small`, `t0_le_E`, `far_of`, `inTime_of`, `follow_of_clean`, `move_top_of`), `Theorems/RoomVert.lean` (`vKeepA`, `finR`, `before_R`, `hbytes_at_R`, `air_frame`, `air_arc`), `Theorems/VertAir.lean` (`vert_air`), `Theorems/Route.lean` (`late_of`, `Run.roomTime`, `Run.roomArrive`, `Run.roomBefore`, `Run.roomVert`, `Run.inRoom`); private `Proof/RoomVert.lean` (`room_vert_idle`).
+Lean: `Theorems/FrameTime.lean` (`InTime`, `CleanR`, `ReadR`, `clean_frameR`, `fric_readI`, `frame_pathI`, `frame_readR`), `Theorems/RoomJoin.lean` (`RoomRun.clean`, `InRoom.le`, `InRoom.time`, `InRoom.arrive`, `InRoom.before`, `goal_mouth`, `before_of`, `goal_small`, `t0_le_E`, `far_of`, `inTime_of`, `follow_of_clean`, `move_top_of`), `Theorems/RoomVert.lean` (`vKeepA`, `finR`, `finA`, `before_R`, `hbytes_at_R`, `air_frame`, `air_arc`), `Theorems/VertAir.lean` (`vert_air`), `Theorems/Route.lean` (`late_of`, `Run.roomTime`, `Run.roomArrive`, `Run.roomBefore`, `Run.roomVert`, `Run.inRoom`); private `Proof/RoomVert.lean` (`room_vert_idle`).
 
 ## How
 
@@ -44,9 +44,9 @@ Lean: `Theorems/FrameTime.lean` (`InTime`, `CleanR`, `ReadR`, `clean_frameR`, `f
 
 ## Assumptions (not proved in Lean)
 
-* `far` (one machine, new): `2048 ≤ P` at the start of each frame up to `t₀`. The left wall keeps him right of it, but the collision routine is not modelled.
+* `far` is no longer a field: it is proved from `farNear`, a condition only on the frames that start within 3.5 px right of 8 px ([The position stays at 8 px or more](c-7-1-3-RoomFar.md)).
 * `SiteOK` on each instruction of the room's frames (`chg.roomSites`, item 1-1-d-2-4-2), as before.
-* The rest of `CleanR` and `ReadR`: the state at the player's routine (`at_ctrl`, `at_frame`), and what the frame does from the scroll handler on (`after`, `collide`).
+* The rest of `CleanR` and `ReadR`: the values at the player's routine that decide whether the frame follows the model (the stored speed, the mask, the collision bits), and what the frame does from the scroll handler on (`after`, `collide`). The rest of the state there and the arrival are proved now, from the new field `unpaused` ([The room's frames at the player's routine](c-7-1-2-RoomCut.md)).
 
 **Files.** `Theorems/FrameTime.lean`, and the files above.
 

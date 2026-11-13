@@ -390,6 +390,47 @@ theorem frame_readR {m0 : Machine} {S : UInt8} {M : Machine} {i : UInt8} {n₀ :
       have e3 : sbyte (B.ram.get! (I sy.Player_X_Speed)) ≤ 0 := e2
       omega
 
+/-- **A real frame under `ReadR` moves `P` left by at most `16·top + 256`**: the move is `16·v₂` with `|v₂| ≤ top`, and the collision routine and the rest of the frame
+take off at most 256 (`Collide.P`). With the same conditions as `frame_readR`. -/
+theorem frame_readR_low {m0 : Machine} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} {idle : UInt16} (hOK : modelOK sy m0 S = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
+    (h : ReadR sy (Rom.of m0) S M i n₀) (hbef : ∀ a ∈ hBytes sy, peek (trace M i n₀) a = peek M a) (hT : InTime (Rom.of m0) idle M i n₀)
+    (hfar : 2048 ≤ posP sy M ∧ posP sy M + 2048 < 0x1000000) :
+    posP sy M - 16 * (TopSpeed.top sy : Int) - 256 ≤ posP sy (frame M i) := by
+  have hF := facts_of hOK
+  have hb := base_good hF.base
+  obtain ⟨k1, v₁, f₁, b1, A1, an, G1, S1, I1⟩ := frame_pathI hb hfr hF h.at_frame
+  obtain ⟨t, ht, hte⟩ := hF.anyT _ (caseOf_memF h.at_frame)
+  have e4 : t = (planOf sy m0 S (caseOf sy (trace M i n₀))).c4 := cutSame_eq hte
+  have htl := hF.tails t ht
+  rw [e4] at htl
+  obtain ⟨k2, b2, g2, p2, v2, ff2, d2, r2, m2, q2, I2⟩ := tail_spec htl hF.digits A1
+  have e0 := (trace_inFrame hT.loop hT.start (InFrameN.add' I1 rfl I2) hT.time (k1 + k2) (Nat.le_refl _)).1
+  rw [stepN_add] at e0
+  generalize hB : stepN k2 (stepN k1 (trace M i n₀)) = B at e0 v2 ff2 q2 p2
+  have hco := h.collide (n₀ + (k1 + k2)) (by omega) (by rw [e0]; exact p2)
+  rw [e0] at hco
+  have eP : posP sy (trace M i n₀) = posP sy M := posP_congr hbef
+  obtain ⟨g1, _⟩ := G1
+  have ePk : posP sy (stepN k1 (trace M i n₀)) = posP sy (trace M i n₀) := by
+    rw [posP_eq, posP_eq]
+    obtain ⟨s1, s2, s3⟩ := S1
+    show posOf ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_PageLoc)) ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_Position)) ((stepN k1 (trace M i n₀)).ram.get! (I sy.SprObject_X_MoveForce)) =
+      posOf ((trace M i n₀).ram.get! (I sy.Player_PageLoc)) ((trace M i n₀).ram.get! (I sy.Player_X_Position)) ((trace M i n₀).ram.get! (I sy.SprObject_X_MoveForce))
+    rw [s1, s2, s3]
+  have hv2 : B.ram.get! (I sy.Player_X_Speed) = (stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_Speed) := v2
+  have hr1 := speed_int g1
+  have hmove : posP sy B = posP sy M + 16 * sbyte (B.ram.get! (I sy.Player_X_Speed)) := by
+    rw [hv2]
+    obtain ⟨a1, a2⟩ := posOf_range (peek B sy.Player_PageLoc) (peek B sy.Player_X_Position) (peek B sy.SprObject_X_MoveForce)
+    rw [← posP_eq] at a1 a2
+    have a3 := sbyte_range ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_Speed))
+    have a4 := hfar
+    rw [ePk, eP] at q2
+    omega
+  rw [hv2] at hmove
+  have e := hco.P
+  rcases e with e | e | ⟨e, _⟩ <;> omega
+
 end framesI
 
 end Smbrta.FrameModel

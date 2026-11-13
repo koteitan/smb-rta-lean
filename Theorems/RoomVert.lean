@@ -230,25 +230,12 @@ def vKeep (sy : Syms) : List Nat :=
   [I sy.Player_Y_Position, I sy.Player_Y_MoveForce, I sy.Player_Y_Speed, I sy.Player_YMF_Dummy, I sy.VerticalForce, I sy.VerticalForceDown,
    I sy.JumpOrigin_Y_Position, I sy.Player_State, I sy.A_B_Buttons]
 
-/-- with A and B of the frame before, and the jump's halt value: what the movement routine reads besides; and the horizontal bytes (`FrameModel.hBytes`) -/
-def vKeepA (sy : Syms) : List Nat := vKeep sy ++ ([I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump] ++ (FrameModel.hBytes sy).map I)
+/-- with A and B of the frame before, and the jump's halt value: what the movement routine reads besides; the change of size and the collision bits, which the
+player's routine reads; and the horizontal bytes (`FrameModel.hBytes`) -/
+def vKeepA (sy : Syms) : List Nat :=
+  vKeep sy ++ ([I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump, I sy.PlayerChangeSizeFlag, I sy.Player_CollisionBits] ++ (FrameModel.hBytes sy).map I)
 
-/-! ## The walk to the player's routine -/
-
-/-- the bit says that the frame has come to the player's routine `R`. The walk asks that it comes there once, and that before it no step writes the bytes of `vKeepA` -/
-def phA (sy : Syms) (E : Env) : Ph where
-  zone := fun A => if A.pc == sy.PlayerCtrlRoutine && !A.spent then [{ A with spent := true }] else [A]
-  pre := fun A => !(A.pc == sy.PlayerCtrlRoutine && A.spent)
-  ok := fun A => A.spent || StepWrites.keepOK E (fun i => (vKeepA sy).contains i) A
-
-/-- at the frame's end the state is not at the player's routine: the frame does not end there -/
-def finR (sy : Syms) (B : AS) : Bool := B.pc != sy.PlayerCtrlRoutine
-
-theorem finR_spec {sy : Syms} {B : AS} (h : finR sy B = true) : B.pc ≠ sy.PlayerCtrlRoutine := by
-  simpa [finR] using h
-
-/-! ## The walk from the scroll handler -/
-
+/-! ## Bits of a byte -/
 /-- the byte, with the bit `b` known to be `v` -/
 def withBit (x : AB) (b : UInt8) (v : Bool) : AB := if v then x.or (AB.known b) else x.and (AB.known (~~~b))
 
@@ -257,6 +244,119 @@ def canBe (x : AB) (c : UInt8) : Bool := c &&& x.k == x.v &&& x.k
 
 /-- the byte can have the bit `b` -/
 def canBit (x : AB) (b : UInt8) (v : Bool) : Bool := x.bit b != some (!v)
+
+theorem getK_setK_self {A : AS} {i : Nat} {b : AB} (h1 : i < A.ram.size) (h2 : i < A.kn.size) : (A.setK i b).getK i = b := by
+  show (⟨(A.ram.set! i b.v).get! i, (A.kn.set! i b.k).get! i⟩ : AB) = b
+  rw [PipeTransitionAll.ba_get_set_self _ _ _ h1, PipeTransitionAll.ba_get_set_self _ _ _ h2]
+
+theorem getK_setK_ne {A : AS} {i j : Nat} {b : AB} (h : i ≠ j) : (A.setK i b).getK j = A.getK j := by
+  show (⟨(A.ram.set! i b.v).get! j, (A.kn.set! i b.k).get! j⟩ : AB) = ⟨A.ram.get! j, A.kn.get! j⟩
+  rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ h, PipeTransitionAll.ba_get_set_ne _ _ _ _ h]
+
+theorem setK_ram_size {A : AS} {i : Nat} {b : AB} : (A.setK i b).ram.size = A.ram.size := PipeTransitionAll.ba_size_set _ _ _
+theorem setK_kn_size {A : AS} {i : Nat} {b : AB} : (A.setK i b).kn.size = A.kn.size := PipeTransitionAll.ba_size_set _ _ _
+
+theorem u8_all {P : UInt8 → Prop} [DecidablePred P] (h : ∀ n : Fin 256, P (UInt8.ofNat n.val)) : ∀ x, P x := fun x => by
+  have := h ⟨x.toNat, x.toNat_lt⟩
+  simpa using this
+
+/-- the bits used: one bit `c` set by `withBit` is known and set -/
+theorem or_bit_k : ∀ n : Fin 256, ∀ c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8),
+    ((UInt8.ofNat n.val ||| (0xFF &&& c)) &&& c = c) ∧ ((UInt8.ofNat n.val ||| c) &&& c = c) := by decide +kernel
+
+theorem and7f_k : ∀ n : Fin 256, ((UInt8.ofNat n.val ||| (0xFF &&& ~~~(~~~(0x80 : UInt8)))) &&& 0x80 = 0x80) ∧ ((UInt8.ofNat n.val &&& ~~~(0x80 : UInt8)) &&& 0x80 = 0) := by decide +kernel
+
+theorem withBit_true_mem {x : AB} {y c : UInt8} (hc : c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8)) (h : (withBit x c true).mem y) : y &&& c = c := by
+  simp only [withBit, if_true] at h
+  have hk : (x.or (AB.known c)).k &&& c = c := by
+    show ((x.k &&& 0xFF) ||| (x.k &&& x.v) ||| (0xFF &&& c)) &&& c = c
+    exact (u8_all (P := fun t => (t ||| (0xFF &&& c)) &&& c = c) (fun n => (or_bit_k n c hc).1)) _
+  rw [bit_eq h hk]
+  show (x.v ||| c) &&& c = c
+  exact (u8_all (P := fun t => (t ||| c) &&& c = c) (fun n => (or_bit_k n c hc).2)) _
+
+theorem withBit_false_mem {x : AB} {y : UInt8} (h : (withBit x 0x80 false).mem y) : y &&& 0x80 = 0 := by
+  simp only [withBit, Bool.false_eq_true, if_false] at h
+  have hk : (x.and (AB.known (~~~0x80))).k &&& 0x80 = 0x80 := by
+    show ((x.k &&& 0xFF) ||| (x.k &&& ~~~x.v) ||| (0xFF &&& ~~~(~~~(0x80 : UInt8)))) &&& 0x80 = 0x80
+    exact (u8_all (P := fun t => (t ||| (0xFF &&& ~~~(~~~(0x80 : UInt8)))) &&& 0x80 = 0x80) (fun n => (and7f_k n).1)) _
+  rw [bit_eq h hk]
+  show (x.v &&& ~~~0x80) &&& 0x80 = 0
+  exact (u8_all (P := fun t => (t &&& ~~~(0x80 : UInt8)) &&& 0x80 = 0) (fun n => (and7f_k n).2)) _
+
+theorem or_self_bit : ∀ n : Fin 256, ∀ c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8), UInt8.ofNat n.val &&& c = c → (UInt8.ofNat n.val ||| c) = UInt8.ofNat n.val := by decide +kernel
+
+theorem and7f_self : ∀ n : Fin 256, UInt8.ofNat n.val &&& 0x80 = 0 → (UInt8.ofNat n.val &&& ~~~(0x80 : UInt8)) = UInt8.ofNat n.val := by decide +kernel
+
+theorem withBit_true_of {x : AB} {y c : UInt8} (hc : c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8)) (hm : x.mem y) (hy : y &&& c = c) : (withBit x c true).mem y := by
+  simp only [withBit, if_true]
+  have := mem_or hm (mem_known_self c)
+  rwa [(u8_all (P := fun t => t &&& c = c → (t ||| c) = t) (fun n => or_self_bit n c hc)) y hy] at this
+
+theorem withBit_false_of {x : AB} {y : UInt8} (hm : x.mem y) (hy : y &&& 0x80 = 0) : (withBit x 0x80 false).mem y := by
+  simp only [withBit, Bool.false_eq_true, if_false]
+  have := mem_and hm (mem_known_self (~~~(0x80 : UInt8)))
+  rwa [(u8_all (P := fun t => t &&& 0x80 = 0 → (t &&& ~~~(0x80 : UInt8)) = t) and7f_self) y hy] at this
+
+theorem canBe_of {x : AB} {y : UInt8} (h : x.mem y) : canBe x y = true := by
+  simp only [canBe, beq_iff_eq]
+  exact h
+
+theorem canBit_of {x : AB} {y c : UInt8} (h : x.mem y) (b : Bool) (hy : (y &&& c != 0) = b) : canBit x c b = true := by
+  simp only [canBit, AB.bit, bne_iff_ne, ne_eq]
+  split
+  · rename_i hk
+    simp only [beq_iff_eq] at hk
+    rw [← bit_eq h hk, hy]
+    cases b <;> simp
+  · simp
+
+theorem mem_known {c y : UInt8} (h : (AB.known c).mem y) : y = c := known_eq h
+
+/-! ## The walk to the player's routine -/
+
+/-- the byte is known, with the value `v` -/
+def knIs (b : AB) (v : UInt8) : Bool := b.isK && b.v == v
+
+/-- **What the walk asks at the player's routine**: the stack pointer `S` of the player's routine, no NMI pending and the NMI off, the routine byte of control, the
+area's type 1, 2 or 3, the jumpspring and the swimming flag 0, all known -/
+def cutOK (sy : Syms) (S : UInt8) (A : AS) : Bool :=
+  A.s == S && !A.nmi && A.ppuCtrl.bit 0x80 == some false && knIs (A.getK (I sy.GameEngineSubroutine)) sy.Eng_PlayerCtrl.toUInt8 &&
+    (A.getK (I sy.AreaType)).isK && [(1 : UInt8), 2, 3].contains (A.getK (I sy.AreaType)).v &&
+    knIs (A.getK (I sy.JumpspringAnimCtrl)) 0 && knIs (A.getK (I sy.SwimmingFlag)) 0
+
+/-- the load of the pause byte just before the NMI's call of the mode's routine (`lda` of the byte, `lsr`, `bcs` over the call: `CtrlKeep.pauseA`) -/
+def pzLd (sy : Syms) : UInt16 := LagFrames.modeCall sy - 6
+
+/-- the pieces at the load of the pause byte `pz`: its low bit known, marked `[1]` (set) or `[0]` (clear) so that the search keeps them apart -/
+def pzPieces (pz : Nat) (A : AS) : List AS :=
+  (if canBit (A.getK pz) 1 true then [{ A.setK pz (withBit (A.getK pz) 1 true) with log := [1] }] else []) ++
+    (if canBit (A.getK pz) 1 false then [{ A.setK pz (withBit (A.getK pz) 1 false) with log := [0] }] else [])
+
+/-- the bit says that the frame has come to the player's routine `R`. The walk asks that it comes there once, that before it no step writes the bytes of `vKeepA`,
+and that the state there meets `cutOK`. At the load of the pause byte `pz` before the call of the mode's routine the state is split on the byte's low bit; at `R` the mark
+is cleared -/
+def phA (sy : Syms) (E : Env) (S : UInt8) (pz : Nat) : Ph where
+  zone := fun A =>
+    if A.pc == sy.PlayerCtrlRoutine && !A.spent then [{ A with spent := true, log := [] }]
+    else if A.pc == pzLd sy && !A.spent && A.log.isEmpty then pzPieces pz A else [A]
+  pre := fun A => !(A.pc == sy.PlayerCtrlRoutine && A.spent) && (A.pc != sy.PlayerCtrlRoutine || cutOK sy S A)
+  ok := fun A => A.spent || StepWrites.keepOK E (fun i => (vKeepA sy).contains i) A
+
+/-- at the frame's end the state is not at the player's routine: the frame does not end there -/
+def finR (sy : Syms) (B : AS) : Bool := B.pc != sy.PlayerCtrlRoutine
+
+theorem finR_spec {sy : Syms} {B : AS} (h : finR sy B = true) : B.pc ≠ sy.PlayerCtrlRoutine := by
+  simpa [finR] using h
+
+/-- at the frame's end: not at the player's routine; and the frame has come there, or the low bit of the pause byte `pz` is known to be 1 (the game is paused) -/
+def finA (sy : Syms) (pz : Nat) (B : AS) : Bool := finR sy B && (B.spent || (B.getK pz).bit 0x01 == some true)
+
+theorem finA_pc {sy : Syms} {pz : Nat} {B : AS} (h : finA sy pz B = true) : B.pc ≠ sy.PlayerCtrlRoutine := by
+  simp only [finA, Bool.and_eq_true] at h
+  exact finR_spec h.1
+
+/-! ## The walk from the scroll handler -/
 
 /-- a piece in the air with the state `c` and rising, with the bit set -/
 def upP (sy : Syms) (A : AS) (c : UInt8) : List AS :=
@@ -434,47 +534,111 @@ theorem start_of_room {Z : Ph} {E : Env} {P : Places} {r : Machine} {K : List (N
   obtain ⟨b1, b2, b3⟩ := starts_bits hS
   exact ⟨S, h.starts S hS, by rw [h.env]; exact hs, b1, b2, b3⟩
 
+/-! ## The zone of the walk to the player's routine -/
+
+theorem low_self1 : ∀ n : Fin 256, UInt8.ofNat n.val &&& 1 = 1 → (UInt8.ofNat n.val ||| 1) = UInt8.ofNat n.val := by decide +kernel
+theorem low_self0 : ∀ n : Fin 256, UInt8.ofNat n.val &&& 1 = 0 → (UInt8.ofNat n.val &&& ~~~(1 : UInt8)) = UInt8.ofNat n.val := by decide +kernel
+theorem low_cases : ∀ n : Fin 256, UInt8.ofNat n.val &&& 1 = 0 ∨ UInt8.ofNat n.val &&& 1 = 1 := by decide +kernel
+
+theorem withLow_true {x : AB} {y : UInt8} (hm : x.mem y) (hy : y &&& 1 = 1) : (withBit x 1 true).mem y := by
+  simp only [withBit, if_true]
+  have := mem_or hm (mem_known_self 1)
+  rwa [(u8_all (P := fun t => t &&& 1 = 1 → (t ||| 1) = t) low_self1) y hy] at this
+
+theorem withLow_false {x : AB} {y : UInt8} (hm : x.mem y) (hy : y &&& 1 = 0) : (withBit x 1 false).mem y := by
+  simp only [withBit, Bool.false_eq_true, if_false]
+  have := mem_and hm (mem_known_self (~~~(1 : UInt8)))
+  rwa [(u8_all (P := fun t => t &&& 1 = 0 → (t &&& ~~~(1 : UInt8)) = t) low_self0) y hy] at this
+
+/-- the pieces at the load of the pause byte cover the state, with its bit `spent` and its counter -/
+theorem pzPieces_cover {E : Env} {F : Nat × UInt8} {pz : Nat} (hpz : pz < 2048) {A : AS} {m : Machine} (hr : A.rk = false) (hs : Sim E F A m) :
+    ∃ A₁ ∈ pzPieces pz A, Sim E F A₁ m := by
+  have hm := hs.ram pz hpz
+  rcases (u8_all (P := fun t => t &&& 1 = 0 ∨ t &&& 1 = 1) low_cases) (m.ram.get! pz) with e | e
+  · have hc : canBit (A.getK pz) 1 false = true := canBit_of hm false (by rw [e]; rfl)
+    refine ⟨{ A.setK pz (withBit (A.getK pz) 1 false) with log := [0] }, ?_, ?_⟩
+    · unfold pzPieces
+      rw [if_pos hc]
+      exact List.mem_append_right _ (List.mem_singleton.2 rfl)
+    · exact sim_bits (PipeEntryRule.sim_setK' hs (withLow_false hm e)) hr _ [0]
+  · have hc : canBit (A.getK pz) 1 true = true := canBit_of hm true (by rw [e]; rfl)
+    refine ⟨{ A.setK pz (withBit (A.getK pz) 1 true) with log := [1] }, ?_, ?_⟩
+    · unfold pzPieces
+      rw [if_pos hc]
+      exact List.mem_append_left _ (List.mem_singleton.2 rfl)
+    · exact sim_bits (PipeEntryRule.sim_setK' hs (withLow_true hm e)) hr _ [1]
+
+theorem pzPieces_keep {pz : Nat} {A A₁ : AS} (h : A₁ ∈ pzPieces pz A) : A₁.spent = A.spent ∧ A₁.pc = A.pc ∧ A₁.rk = A.rk := by
+  unfold pzPieces at h
+  rcases List.mem_append.1 h with h | h <;> split at h <;> simp only [List.mem_singleton, List.not_mem_nil] at h <;> subst h <;> exact ⟨rfl, rfl, rfl⟩
+
+/-- the zone's pieces cover the state -/
+theorem zoneA_cover {sy : Syms} {E E' : Env} {S : UInt8} {pz : Nat} (hpz : pz < 2048) {F : Nat × UInt8} {A' : AS} {x : Machine} (hr : A'.rk = false)
+    (hs : Sim E' F A' x) : ∃ A₁ ∈ (phA sy E S pz).zone A', Sim E' F A₁ x := by
+  show ∃ A₁ ∈ (if A'.pc == sy.PlayerCtrlRoutine && !A'.spent then [{ A' with spent := true, log := [] }]
+    else if A'.pc == pzLd sy && !A'.spent && A'.log.isEmpty then pzPieces pz A' else [A']), _
+  split
+  · exact ⟨_, List.mem_singleton.2 rfl, sim_bits hs hr true []⟩
+  · split
+    · exact pzPieces_cover hpz hr hs
+    · exact ⟨A', List.mem_singleton.2 rfl, hs⟩
+
+/-- a piece of the zone away from the first arrival at `R` keeps the bit, the place and the counter -/
+theorem zoneA_other {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {A' A₁ : AS} (hA : A₁ ∈ (phA sy E S pz).zone A')
+    (hc : ¬ ((A'.pc == sy.PlayerCtrlRoutine && !A'.spent) = true)) : A₁.spent = A'.spent ∧ A₁.pc = A'.pc ∧ A₁.rk = A'.rk := by
+  change A₁ ∈ (if A'.pc == sy.PlayerCtrlRoutine && !A'.spent then [{ A' with spent := true, log := [] }]
+    else if A'.pc == pzLd sy && !A'.spent && A'.log.isEmpty then pzPieces pz A' else [A']) at hA
+  rw [if_neg hc] at hA
+  split at hA
+  · exact pzPieces_keep hA
+  · rw [List.mem_singleton.1 hA]
+    exact ⟨rfl, rfl, rfl⟩
+
+/-- the piece of the zone at the first arrival at `R` -/
+theorem zoneA_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {A' A₁ : AS} (hA : A₁ ∈ (phA sy E S pz).zone A')
+    (hc : (A'.pc == sy.PlayerCtrlRoutine && !A'.spent) = true) : A₁ = { A' with spent := true, log := [] } := by
+  change A₁ ∈ (if A'.pc == sy.PlayerCtrlRoutine && !A'.spent then [{ A' with spent := true, log := [] }]
+    else if A'.pc == pzLd sy && !A'.spent && A'.log.isEmpty then pzPieces pz A' else [A']) at hA
+  rw [if_pos hc] at hA
+  exact List.mem_singleton.1 hA
+
 /-! ## The frame up to the player's routine -/
 
 /-- **The frame comes to the player's routine at most once, and before it no step writes the bytes of `vKeepA`.** The frame starts in the room's condition, and each
 instruction meets `SiteOK`. -/
-theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phA sy E) E P r K C Fu)
+theorem before_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu)
     (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
     (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j, (trace m i j).frame = m.frame → (∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x) ∧
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
     (∀ j d, ((trace m i (j + d)).frame ≥ m.frame + 1 || (trace m i (j + d)).halted) = false → (trace m i j).frame = m.frame) ∧
     (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame) := by
-  obtain ⟨S, hw, hs, s1, s2, s3⟩ := start_of_room h hm
+  obtain ⟨S0, hw, hs, s1, s2, s3⟩ := start_of_room h hm
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
   let Φ : Nat → Bool → List Nat → Prop := fun j b _ =>
     (b = true ↔ ∃ j', j' < j ∧ (trace m i j').pc = sy.PlayerCtrlRoutine) ∧ (b = false → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x)
-  have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phA sy E).zone A', Sim C.E (m.frame, 2) A₁ x := by
-    intro A' x hr hsx
-    show ∃ A₁ ∈ (if A'.pc == sy.PlayerCtrlRoutine && !A'.spent then [{ A' with spent := true }] else [A']), _
-    split
-    · exact ⟨_, List.mem_singleton.2 rfl, sim_bits hsx hr true A'.log⟩
-    · exact ⟨A', List.mem_singleton.2 rfl, hsx⟩
+  have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phA sy E S pz).zone A', Sim C.E (m.frame, 2) A₁ x :=
+    fun _ _ hr hsx => zoneA_cover hpz hr hsx
   have hstep : ∀ j (A' A₁ : AS), Φ j A'.spent A'.log → Sim C.E (m.frame, 2) A' (trace m i j) → (trace m i j).frame = m.frame → A'.rk = false →
-      A₁ ∈ (phA sy E).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phA sy E).ok A₁ = true → Φ (j + 1) A₁.spent A₁.log := by
+      A₁ ∈ (phA sy E S pz).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phA sy E S pz).ok A₁ = true → Φ (j + 1) A₁.spent A₁.log := by
     intro j A' A₁ ⟨p1, p2⟩ hs' hf hr hA₁ hs₁ hok
     have hpc : (trace m i j).pc = A'.pc := hs'.pc
-    change A₁ ∈ (if A'.pc == sy.PlayerCtrlRoutine && !A'.spent then [{ A' with spent := true }] else [A']) at hA₁
-    split at hA₁
-    · rename_i hc
+    by_cases hc : (A'.pc == sy.PlayerCtrlRoutine && !A'.spent) = true
+    · rw [zoneA_R hA₁ hc]
       simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
-      rw [List.mem_singleton.1 hA₁]
       exact ⟨by simp only [true_iff]; exact ⟨j, by omega, by rw [hpc, hc.1]⟩, fun h => by simp at h⟩
-    · rename_i hc
-      obtain rfl := List.mem_singleton.1 hA₁
+    · obtain ⟨e1, _, _⟩ := zoneA_other hA₁ hc
       cases hb : A₁.spent with
       | true =>
+        rw [e1] at hb
         rw [hb] at p1
         obtain ⟨j', a1, a2⟩ := p1.1 rfl
         exact ⟨by simp only [true_iff]; exact ⟨j', by omega, a2⟩, fun h => by simp at h⟩
       | false =>
-        rw [hb] at p1 p2 hc
+        have hb' : A'.spent = false := by rw [← e1]; exact hb
+        rw [hb'] at p1 p2 hc
         have hnr : (trace m i j).pc ≠ sy.PlayerCtrlRoutine := by
           rw [hpc]
           intro h2
@@ -492,7 +656,7 @@ theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
           have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
           rw [StepWrites.keep_step hs₂ hok' x (List.contains_iff_mem.2 hx)]
           exact p2 rfl x hx
-  obtain ⟨hall, J, hJ1, hJ2, _, B, hB, hsB, _⟩ := frame_of_walkV (Z := phA sy E) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz
+  obtain ⟨hall, J, hJ1, hJ2, _, B, hB, hsB, _⟩ := frame_of_walkV (Z := phA sy E S pz) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz
     hw hs hk' ⟨by rw [s1]; simp, fun _ x _ => rfl⟩ hstep
   refine ⟨fun j hj hb x hx => ?_, fun j j' hlt hR hj' hR' => ?_, fun j d hl => ?_, fun j hR => ?_⟩
   rotate_left 3
@@ -524,22 +688,136 @@ theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
       exact q2 rfl x hx
   · obtain ⟨A, hsA, hpre, q1, _⟩ := hall j' hj'
     have hApc : A.pc = sy.PlayerCtrlRoutine := by rw [← hsA.pc]; exact hR'
-    simp only [phA, hApc, beq_self_eq_true, Bool.true_and, Bool.not_eq_true'] at hpre
-    rw [hpre] at q1
+    have hsp : A.spent = false := by
+      simp only [phA, hApc, beq_self_eq_true, Bool.true_and, Bool.and_eq_true, Bool.not_eq_true'] at hpre
+      exact hpre.1
+    rw [hsp] at q1
     exact absurd (q1.2 ⟨j, hlt, hR⟩) (by simp)
 
 
 /-- **At the player's routine the horizontal bytes are those of the frame's start**: the frame comes there once and before its end, and no step before it writes
 `vKeepA` (`before_R`). This is `Clean.before` on the room's frames. -/
-theorem hbytes_at_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phA sy E) E P r K C Fu)
+theorem hbytes_at_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu)
     (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
     (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) {j : Nat} (hR : (trace m i j).pc = sy.PlayerCtrlRoutine) :
     ∀ a ∈ FrameModel.hBytes sy, peek (trace m i j) a = peek m a := by
-  obtain ⟨a1, a2, _, a4⟩ := before_R h hfin hm hk
+  obtain ⟨a1, a2, _, a4⟩ := before_R hpz h hfin hm hk
   have hf := a4 j hR
   have hfirst : ∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine := fun j' hj' hR' => a2 j' j hj' hR' hf hR
   intro a ha
   exact a1 j hf hfirst (I a) (List.mem_append_right _ (List.mem_append_right _ (List.mem_map.2 ⟨a, ha, rfl⟩)))
+
+/-- **The machine at the player's routine**, as the walk gives it (`cutOK`): the program, no NMI pending and the NMI off, the stack pointer `S`, the routine byte of
+control, the area's type 1, 2 or 3, the jumpspring and the swimming flag 0 -/
+structure CutAt (sy : Syms) (E : Env) (S : UInt8) (m : Machine) : Prop where
+  prg : m.prg = E.prg
+  mask : m.prgMask = E.mask
+  nmi : m.nmiPending = false
+  halted : m.halted = false
+  trk : m.trk = false
+  size : m.ram.size = 2048
+  ctl : m.ppuCtrl &&& 0x80 = 0
+  s : m.s = S
+  eng : peek m sy.GameEngineSubroutine = sy.Eng_PlayerCtrl.toUInt8
+  area : peek m sy.AreaType ∈ [(1 : UInt8), 2, 3]
+  spring : peek m sy.JumpspringAnimCtrl = 0
+  swim : peek m sy.SwimmingFlag = 0
+
+theorem knIs_spec {b : AB} {v x : UInt8} (h : knIs b v = true) (hm : b.mem x) : x = v := by
+  simp only [knIs, Bool.and_eq_true, beq_iff_eq] at h
+  rw [isK_eq h.1 hm, h.2]
+
+theorem bit80_off : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0x80 != 0) = false → UInt8.ofNat n.val &&& 0x80 = 0 := by decide +kernel
+
+/-- a known bit 7 that is 0 -/
+theorem off_of_bit {b : AB} {x : UInt8} (h : (b.bit 0x80 == some false) = true) (hm : b.mem x) : x &&& 0x80 = 0 := by
+  unfold AB.bit at h
+  split at h
+  · rename_i hk
+    simp only [beq_iff_eq, Option.some.injEq] at h hk
+    have e : (x &&& b.k) &&& 0x80 = (b.v &&& b.k) &&& 0x80 := by rw [show x &&& b.k = b.v &&& b.k from hm]
+    rw [UInt8.and_assoc, UInt8.and_assoc, hk] at e
+    rw [e]
+    have h1 := bit80_off ⟨b.v.toNat, b.v.toNat_lt⟩
+    simp only [UInt8.ofNat_toNat] at h1
+    exact h1 h
+  · simp at h
+
+/-- **At the player's routine the machine is as `CutAt` says.** The frame starts in the room's condition, and each instruction meets `SiteOK`; at any instruction of the
+frame at the player's routine the walk's state meets `cutOK`. -/
+theorem cut_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu)
+    {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) {j : Nat}
+    (hR : (trace m i j).pc = sy.PlayerCtrlRoutine) (hf : (trace m i j).frame = m.frame) : CutAt sy E S (trace m i j) := by
+  obtain ⟨S0, hw, hs, _, _, _⟩ := start_of_room h hm
+  have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
+  have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
+  have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phA sy E S pz).zone A', Sim C.E (m.frame, 2) A₁ x :=
+    fun _ _ hr hsx => zoneA_cover hpz hr hsx
+  obtain ⟨hall, _⟩ := frame_of_walkV (Z := phA sy E S pz) (fun _ _ _ => True) hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz
+    hw hs hk' trivial (fun _ _ _ _ _ _ _ _ _ _ => trivial)
+  obtain ⟨A, hsA, hpre, _⟩ := hall j hf
+  rw [h.env] at hsA
+  have hApc : A.pc = sy.PlayerCtrlRoutine := by rw [← hsA.pc]; exact hR
+  have hc : cutOK sy S A = true := by
+    simp only [phA, hApc, beq_self_eq_true, Bool.true_and, Bool.and_eq_true, bne_self_eq_false, Bool.false_or] at hpre
+    exact hpre.2
+  simp only [cutOK, Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+  obtain ⟨⟨⟨⟨⟨⟨⟨hS, hn⟩, hctl⟩, heng⟩, hak⟩, hav⟩, hsp⟩, hsw⟩ := hc
+  have hlt : ∀ a : UInt16, (a &&& 0x7FF).toNat < 2048 := fun a => PipeTransitionAll.mask_lt _
+  refine ⟨hsA.prg, hsA.mask, by rw [hsA.nmi]; exact hn, hsA.halted, hsA.trk, hsA.size, off_of_bit (by rw [hctl]; rfl) hsA.ppuCtrl, by rw [hsA.s]; exact hS,
+    knIs_spec heng (hsA.ram _ (hlt _)), ?_, knIs_spec hsp (hsA.ram _ (hlt _)), knIs_spec hsw (hsA.ram _ (hlt _))⟩
+  have e := isK_eq hak (hsA.ram _ (hlt sy.AreaType))
+  show (trace m i j).ram.get! (sy.AreaType &&& 0x7FF).toNat ∈ _
+  rw [e]
+  simpa using hav
+
+/-- **A frame of the room that ends not paused comes to the player's routine**, a first time at an instruction `j` up to `fuelPerFrame`, before its end. The frame starts in
+the room's condition, and each instruction meets `SiteOK`. The walk's states at the frame's end that have not come to the player's routine know the pause byte's low bit to
+be 1 (`finA`). -/
+theorem arrive_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu) (hfin : C.fin = finA sy pz) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j))
+    (hu : (frame m i).ram.get! pz &&& 1 = 0) :
+    ∃ j, (trace m i j).pc = sy.PlayerCtrlRoutine ∧ (trace m i j).frame = m.frame ∧ j ≤ fuelPerFrame ∧ ∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine := by
+  obtain ⟨S0, hw, hs, s1, _, _⟩ := start_of_room h hm
+  have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
+  have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
+  have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phA sy E S pz).zone A', Sim C.E (m.frame, 2) A₁ x :=
+    fun _ _ hr hsx => zoneA_cover hpz hr hsx
+  let Φ : Nat → Bool → List Nat → Prop := fun j b _ => b = true → ∃ j', j' < j ∧ (trace m i j').pc = sy.PlayerCtrlRoutine
+  have hstep : ∀ j (A' A₁ : AS), Φ j A'.spent A'.log → Sim C.E (m.frame, 2) A' (trace m i j) → (trace m i j).frame = m.frame → A'.rk = false →
+      A₁ ∈ (phA sy E S pz).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phA sy E S pz).ok A₁ = true → Φ (j + 1) A₁.spent A₁.log := by
+    intro j A' A₁ p1 hs' _ _ hA₁ _ _ hb
+    by_cases hc : (A'.pc == sy.PlayerCtrlRoutine && !A'.spent) = true
+    · simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      exact ⟨j, by omega, by rw [hs'.pc, hc.1]⟩
+    · obtain ⟨e1, _, _⟩ := zoneA_other hA₁ hc
+      rw [e1] at hb
+      obtain ⟨j', a1, a2⟩ := p1 hb
+      exact ⟨j', by omega, a2⟩
+  obtain ⟨_, J, hJ1, hJ2, hJ3, B, hB, hsB, hΦB⟩ := frame_of_walkV (Z := phA sy E S pz) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide)
+    (by rw [h.env]; exact h.pad) hz hw hs hk' (fun hb => by rw [s1] at hb; cases hb) hstep
+  rw [hfin] at hB
+  simp only [finA, Bool.and_eq_true, Bool.or_eq_true] at hB
+  have hsp : B.spent = true := by
+    rcases hB.2 with e | e
+    · exact e
+    · exfalso
+      have h1 : (trace m i J).ram.get! pz &&& 1 = 1 := CtrlKeep.low_of_bit (by simpa using e) (hsB.ram pz hpz)
+      rw [← hJ3, hu] at h1
+      cases h1
+  obtain ⟨j, hj, hR⟩ := hΦB hsp
+  have hJf : J ≤ fuelPerFrame := by
+    rcases Nat.lt_or_ge fuelPerFrame J with h1 | h1
+    · exfalso
+      have e1 := hJ2 fuelPerFrame h1
+      have e2 : frame m i = trace m i fuelPerFrame := PipeEntryRule.frame_trace m i
+      rw [← e2, hJ3, hJ1] at e1
+      omega
+    · exact h1
+  obtain ⟨_, a2, _, _⟩ := before_R hpz h (fun B' hB' => by rw [hfin] at hB'; exact finA_pc hB') hm hk
+  refine ⟨j, hR, hJ2 j hj, by omega, fun j' hj' hR' => a2 j' j hj' hR' (hJ2 j hj) hR⟩
 
 /-! ## The frame from the scroll handler -/
 
@@ -580,73 +858,6 @@ theorem erase_keep {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {m : Machi
 section
 variable {E : Env} {F : Nat × UInt8}
 
-theorem getK_setK_self {A : AS} {i : Nat} {b : AB} (h1 : i < A.ram.size) (h2 : i < A.kn.size) : (A.setK i b).getK i = b := by
-  show (⟨(A.ram.set! i b.v).get! i, (A.kn.set! i b.k).get! i⟩ : AB) = b
-  rw [PipeTransitionAll.ba_get_set_self _ _ _ h1, PipeTransitionAll.ba_get_set_self _ _ _ h2]
-
-theorem getK_setK_ne {A : AS} {i j : Nat} {b : AB} (h : i ≠ j) : (A.setK i b).getK j = A.getK j := by
-  show (⟨(A.ram.set! i b.v).get! j, (A.kn.set! i b.k).get! j⟩ : AB) = ⟨A.ram.get! j, A.kn.get! j⟩
-  rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ h, PipeTransitionAll.ba_get_set_ne _ _ _ _ h]
-
-theorem setK_ram_size {A : AS} {i : Nat} {b : AB} : (A.setK i b).ram.size = A.ram.size := PipeTransitionAll.ba_size_set _ _ _
-theorem setK_kn_size {A : AS} {i : Nat} {b : AB} : (A.setK i b).kn.size = A.kn.size := PipeTransitionAll.ba_size_set _ _ _
-
-theorem u8_all {P : UInt8 → Prop} [DecidablePred P] (h : ∀ n : Fin 256, P (UInt8.ofNat n.val)) : ∀ x, P x := fun x => by
-  have := h ⟨x.toNat, x.toNat_lt⟩
-  simpa using this
-
-/-- the bits used: one bit `c` set by `withBit` is known and set -/
-theorem or_bit_k : ∀ n : Fin 256, ∀ c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8),
-    ((UInt8.ofNat n.val ||| (0xFF &&& c)) &&& c = c) ∧ ((UInt8.ofNat n.val ||| c) &&& c = c) := by decide +kernel
-
-theorem and7f_k : ∀ n : Fin 256, ((UInt8.ofNat n.val ||| (0xFF &&& ~~~(~~~(0x80 : UInt8)))) &&& 0x80 = 0x80) ∧ ((UInt8.ofNat n.val &&& ~~~(0x80 : UInt8)) &&& 0x80 = 0) := by decide +kernel
-
-theorem withBit_true_mem {x : AB} {y c : UInt8} (hc : c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8)) (h : (withBit x c true).mem y) : y &&& c = c := by
-  simp only [withBit, if_true] at h
-  have hk : (x.or (AB.known c)).k &&& c = c := by
-    show ((x.k &&& 0xFF) ||| (x.k &&& x.v) ||| (0xFF &&& c)) &&& c = c
-    exact (u8_all (P := fun t => (t ||| (0xFF &&& c)) &&& c = c) (fun n => (or_bit_k n c hc).1)) _
-  rw [bit_eq h hk]
-  show (x.v ||| c) &&& c = c
-  exact (u8_all (P := fun t => (t ||| c) &&& c = c) (fun n => (or_bit_k n c hc).2)) _
-
-theorem withBit_false_mem {x : AB} {y : UInt8} (h : (withBit x 0x80 false).mem y) : y &&& 0x80 = 0 := by
-  simp only [withBit, Bool.false_eq_true, if_false] at h
-  have hk : (x.and (AB.known (~~~0x80))).k &&& 0x80 = 0x80 := by
-    show ((x.k &&& 0xFF) ||| (x.k &&& ~~~x.v) ||| (0xFF &&& ~~~(~~~(0x80 : UInt8)))) &&& 0x80 = 0x80
-    exact (u8_all (P := fun t => (t ||| (0xFF &&& ~~~(~~~(0x80 : UInt8)))) &&& 0x80 = 0x80) (fun n => (and7f_k n).1)) _
-  rw [bit_eq h hk]
-  show (x.v &&& ~~~0x80) &&& 0x80 = 0
-  exact (u8_all (P := fun t => (t &&& ~~~(0x80 : UInt8)) &&& 0x80 = 0) (fun n => (and7f_k n).2)) _
-
-theorem or_self_bit : ∀ n : Fin 256, ∀ c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8), UInt8.ofNat n.val &&& c = c → (UInt8.ofNat n.val ||| c) = UInt8.ofNat n.val := by decide +kernel
-
-theorem and7f_self : ∀ n : Fin 256, UInt8.ofNat n.val &&& 0x80 = 0 → (UInt8.ofNat n.val &&& ~~~(0x80 : UInt8)) = UInt8.ofNat n.val := by decide +kernel
-
-theorem withBit_true_of {x : AB} {y c : UInt8} (hc : c ∈ ([4, 8, 16, 32, 64, 128] : List UInt8)) (hm : x.mem y) (hy : y &&& c = c) : (withBit x c true).mem y := by
-  simp only [withBit, if_true]
-  have := mem_or hm (mem_known_self c)
-  rwa [(u8_all (P := fun t => t &&& c = c → (t ||| c) = t) (fun n => or_self_bit n c hc)) y hy] at this
-
-theorem withBit_false_of {x : AB} {y : UInt8} (hm : x.mem y) (hy : y &&& 0x80 = 0) : (withBit x 0x80 false).mem y := by
-  simp only [withBit, Bool.false_eq_true, if_false]
-  have := mem_and hm (mem_known_self (~~~(0x80 : UInt8)))
-  rwa [(u8_all (P := fun t => t &&& 0x80 = 0 → (t &&& ~~~(0x80 : UInt8)) = t) and7f_self) y hy] at this
-
-theorem canBe_of {x : AB} {y : UInt8} (h : x.mem y) : canBe x y = true := by
-  simp only [canBe, beq_iff_eq]
-  exact h
-
-theorem canBit_of {x : AB} {y c : UInt8} (h : x.mem y) (b : Bool) (hy : (y &&& c != 0) = b) : canBit x c b = true := by
-  simp only [canBit, AB.bit, bne_iff_ne, ne_eq]
-  split
-  · rename_i hk
-    simp only [beq_iff_eq] at hk
-    rw [← bit_eq h hk, hy]
-    cases b <;> simp
-  · simp
-
-theorem mem_known {c y : UInt8} (h : (AB.known c).mem y) : y = c := known_eq h
 
 theorem vy_cases : ∀ n : Fin 256, UInt8.ofNat n.val &&& 0x80 = 0 ∨ UInt8.ofNat n.val &&& 0x80 = 0x80 := by decide +kernel
 
@@ -936,9 +1147,9 @@ theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat 
 section
 open ScreenPage (placesR envR refR aidsOf)
 
-/-- the walk to the player's routine, on the room: a state at the frame's end is not at the player's routine -/
+/-- the walk to the player's routine, on the room: a state at the frame's end is not at the player's routine, and has come there or knows the game paused -/
 abbrev cfgA (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
-  cfgOfV sy (phA sy (envR sy nm m0)) (finR sy) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
+  cfgOfV sy (phA sy (envR sy nm m0) (FrameModel.ctrlStack sy m0) (CtrlKeep.pauseI sy m0)) (finA sy (CtrlKeep.pauseI sy m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
 
 /-- the walk from the scroll handler, on the room -/
 abbrev cfgB (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
@@ -946,7 +1157,7 @@ abbrev cfgB (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
 
 /-- the check of the walk to the player's routine -/
 def checkA (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
-  walkCheckV sy (phA sy (envR sy nm m0)) (finR sy) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
+  walkCheckV sy (phA sy (envR sy nm m0) (FrameModel.ctrlStack sy m0) (CtrlKeep.pauseI sy m0)) (finA sy (CtrlKeep.pauseI sy m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
 
 /-- the check of the walk from the scroll handler -/
 def checkB (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
@@ -971,8 +1182,8 @@ instruction meets `SiteOK`, the frame comes to the player's routine at instructi
 start the jump's halt value is 1 if the state is 1, and A of the frame before is A. If `vstep` on `vmach` with the stored speed 0 leaves him in the air and rising, and the
 frame ends in the player's routine, the vertical bytes at the frame's end are `vstep`'s. The checks: the two walks of the room, `apartB`, `vertAirOK`. Each instruction of the frame
 that is not at the idle loop `idle` runs at least 64 dots before the frame's end (`ht`): so the frame does not end during the movement (`FrameModel.trace_inFrame`). -/
-theorem air_frame {sy : Syms} {m0 : Machine} {S : UInt8} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {CA CB : CfgS} {Fa Fb : Nat}
-    (hA : OKV (phA sy E) E P r K CA Fa) (hfA : ∀ B, CA.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) (hB : OKV (phB sy E P) E P r K CB Fb) (hfin : CB.fin = finB P r)
+theorem air_frame {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {CA CB : CfgS} {Fa Fb : Nat}
+    (hpz : pz < 2048) (hA : OKV (phA sy E S' pz) E P r K CA Fa) (hfA : ∀ B, CA.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) (hB : OKV (phB sy E P) E P r K CB Fb) (hfin : CB.fin = finB P r)
     (hap : apartB sy P = true) (hV : vertAirOK sy m0 S = true) {idle : UInt16} (hidle : FrameModel.idleAt (Rom.of m0) idle = true) {M : Machine} {i : UInt8} {k : Nat}
     (hm : RoomCond E r K M) (hk : ∀ j, SiteOK P (trace M i j)) (hR : AtV sy (Rom.of m0) S (trace M i k))
     (ht : ∀ n, (trace M i n).pc ≠ idle → (trace M i n).fdot ≤ dotsPerFrame - 64)
@@ -984,7 +1195,7 @@ theorem air_frame {sy : Syms} {m0 : Machine} {S : UInt8} {E : Env} {P : Places} 
       (VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).vy &&& 0x80 = 0x80)
     (hrt : (frame M i).ram.get! P.rtI = r.ram.get! P.rtI) :
     VertModel.vsOf sy (frame M i) = VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0 := by
-  obtain ⟨a1, a2, _, a4⟩ := before_R hA hfA hm hk
+  obtain ⟨a1, a2, _, a4⟩ := before_R hpz hA hfA hm hk
   have hfk : (trace M i k).frame = M.frame := a4 k hR.pc
   have hfirst : ∀ j, j < k → (trace M i j).pc ≠ sy.PlayerCtrlRoutine := fun j hj hR' => a2 j k hj hR' hfk hR.pc
   have hkeep := a1 k hfk hfirst
@@ -1045,7 +1256,7 @@ theorem air_arc {sy : Syms} {nm : Names} {m0 : Machine} {h kk : Nat} (hV : VChec
   have hbr := b2 (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0)
   rw [hu2] at hbr
   rw [← hbr]
-  refine air_frame (okV_of_check hV.a) (fun B hB => finR_spec hB) (okV_of_check hV.b) rfl hV.apart hV.air hidle hm hs hR htm hst hd hp ⟨?_, ?_⟩ hrt
+  refine air_frame (CtrlKeep.pauseI_lt sy m0) (okV_of_check hV.a) (fun B hB => finA_pc hB) (okV_of_check hV.b) rfl hV.apart hV.air hidle hm hs hR htm hst hd hp ⟨?_, ?_⟩ hrt
   · rw [hbr, ← ht2]
     exact c1
   · rw [hbr]

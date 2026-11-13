@@ -9,16 +9,16 @@ import Theorems.SidePause
 six bytes of `DigitModifier` 0 (`Run.start`). When the music comes after a change of area, that frame is the last frame of the change: it begins in the routine of the
 entrance and ends with control. Here it comes from the rows of the change.
 
-The rows of the two changes (`PipeChangeEnd` for the first, `SideChangeSound` for the second) hold every machine from the exit of the pipe to the first control. A frame goes
-from a row to the next, and the number `left` of the row falls by at most one. On a run of the change `left` is not 0 before control, and it is 0 at control. So the machine of the
-last frame before control is in a row with `left` 1 (`PipeRun.startLast`, `SideChangeSound.EndRunK.last`). In every state of these rows the frame starts in the idle loop, in the
-routine of the entrance, and the bytes of `DigitModifier` are known 0 (`rowsCheck₁`, `rowsCheck₂`, checks on the ROM): the change clears them when it loads the area. So that
-machine is as `HurryFrame.Start` asks.
+The rows of the two changes hold every machine from the exit of the pipe to the first control. They are the rows with the sound's bytes in tables that `route_1_1` uses:
+`PipeChangeEnd.rowsKc` for the first change, the rows of `SideChangeSound` for the second. A frame goes from a row to the next, and the number `left` of the row falls by at most
+one. On a run of the change `left` is not 0 before control, and it is 0 at control. So the machine of the last frame before control is in a row with `left` 1
+(`PipeRunK.last`, `SideChangeSound.EndRunK.last`). In every state of these rows the frame starts in the idle loop, in the routine of the entrance, and the bytes of
+`DigitModifier` are known 0 (`rowsCheck₁`, `rowsCheck₂`, checks on the ROM): the change clears them when it loads the area. So that machine is as `HurryFrame.Start` asks.
 
 On a run as `Route.Base` numbers it, the last frame of the first change is frame `b₁ − 1` (`Chg₁.startLast`), and that of the second change frame `b₂ − 1` (`changes_startLast`).
-The conditions of the second change are those of `Route.ChangesK`, as `Route.Run` asks them: at the side pipe's exit the pause sound is one of the kinds of
-`SideChangeSound.QuietK`. The conditions of the first change are those of `Route.ChangesBase` on it (`Chg₁`): a run whose music starts in the room fails a condition of the second
-change (`entry₂`, the music's bytes), so the first change has its own structure. No game data. Page: `1-1/0-6-4-2-2-2-1-HurryStart.md`.
+The conditions of the changes are those of `Route.ChangesK`, as `Route.Run` asks them: at the vertical pipe's exit `PipeChangeEnd.QuietP` and the game timer not 000, at the side
+pipe's entry `SidePause.PauseE`. `Chg₁` holds the fields of `Route.ChangesK` on the first change (`chg₁_of_changes`): a run whose music starts in the room fails a condition of the
+second change (`entry₂`, the music's bytes), so the first change has its own structure. No game data. Page: `1-1/0-6-4-2-2-2-1-HurryStart.md`.
 -/
 
 namespace Smbrta.HurryStart
@@ -50,12 +50,12 @@ def envSame (E : Env) (m0 : Machine) : Bool := decide (E.prg.data = (PipeEntryRu
 /-- the reference machine at the exit is not in the game core: a machine with its bytes at the exit has no control -/
 def exitOff (sy : Syms) (x : Machine) : Bool := (peek x sy.OperMode_Task).toUInt16 != sy.Task_GameCore
 
-/-- **The check of the first change** (into the room): its rows `rowsA` and `rowsB` (`PipeChangeEnd.InRows`) -/
+/-- **The check of the first change** (into the room): its rows with the sound's bytes in tables (`PipeChangeEnd.rowsKc`, those of `route_1_1`), in the context of
+these rows (`PipeChangeEnd.ctxK`) -/
 def rowsCheck₁ (sy : Syms) (nm : Names) (m0 : Machine) (nm₁ : Names) (d : PipeChangeEnd.Data) (e : Machine) : Bool :=
-  let G := HurryFrame.guardOf sy nm m0
-  let P := HurryFrame.placesOf sy nm m0
-  let c := PipeChangeEnd.ctxOf sy nm₁ d e
-  envSame c.E m0 && exitOff sy (PipeChangeEnd.refX e) && rowsE sy G P c (PipeChangeEnd.rowsA c d e) && rowsE sy G P c (PipeChangeEnd.rowsB c d e)
+  let c := PipeChangeEnd.timeCtx sy nm₁ d e
+  envSame c.E m0 && exitOff sy (PipeChangeEnd.refX e) &&
+    rowsE sy (HurryFrame.guardOf sy nm m0) (HurryFrame.placesOf sy nm m0) (PipeChangeEnd.ctxK c d e) ((PipeChangeEnd.rowsKc c d e).map (·.row))
 
 /-- **The check of the second change** (out of the side pipe): the rows of `SideChangeSound` (`SideChangeSound.InRowsK`), which carry the sound's bytes in tables. `rt` is
 the place of the sound routine. -/
@@ -144,71 +144,52 @@ end
 /-! ## The first change: the last frame before control -/
 
 section
-open PipeChangeEnd (EndStatement PipeRun During InRows leftP during_left)
+open PipeChangeEnd (EndStatement PipeRunK leftP during_left)
 variable {sy : Syms} {nm₁ : Names} {d : PipeChangeEnd.Data} {e : Machine} {es : List Machine}
 
-/-- on a run of the change into the room, each machine up to control is in the pipe or in the rows, when `left` is not 0 before control -/
-theorem PipeRun.way (T : EndStatement sy nm₁ d e es) (R : PipeRun sy nm₁ d e) (hf : ∀ n, R.a ≤ n → n < R.b → leftP sy nm₁ e (R.seq n) ≠ 0) :
-    ∀ k, R.a + k ≤ R.b → During d e (R.seq (R.a + k)) ∨ InRows sy nm₁ d e (R.seq (R.a + k)) := by
-  intro k
-  induction k with
-  | zero => exact fun _ => Or.inl (T.during _ R.entry)
-  | succ k ih =>
-    intro hk
-    have e1 : R.a + (k + 1) = R.a + k + 1 := rfl
-    rw [e1, R.next (R.a + k)]
-    have hgap : R.a ≤ R.a + k := by omega
-    have hlt : R.a + k < R.b := by omega
-    rcases ih (by omega) with h1 | h1
-    · have hP := R.places _ hgap hlt (T.inRoutine _ h1)
-      rcases (T.step _ h1 (R.inp (R.a + k)) hP).2 with g | ⟨g1, g2⟩
-      · exact Or.inl g
-      · right
-        rw [← R.next (R.a + k)] at g1 g2 ⊢
-        obtain ⟨q1, q2, q3⟩ := R.quiet _ (by omega) (by omega) g1
-        exact g2 q1 q2 q3
-    · rcases T.rows _ h1 (R.inp (R.a + k)) (R.noStart _ hgap hlt) with g | ⟨g1, _⟩
-      · exact absurd g (hf _ hgap hlt)
-      · exact Or.inr g1
-
-/-- **The last frame of the change into the room begins as `HurryFrame.Start` asks**, with the routine of the entrance: frame `b − 1`, after the entry. `hf`: `left` is not 0
-before control (`PipeChangeEnd.PipeRun.first`). `hH` is the check on the ROM. -/
-theorem PipeRun.startLast {nm : Names} {m0 : Machine} (T : EndStatement sy nm₁ d e es) (R : PipeRun sy nm₁ d e)
-    (hf : ∀ n, R.a ≤ n → n < R.b → leftP sy nm₁ e (R.seq n) ≠ 0) (hH : rowsCheck₁ sy nm m0 nm₁ d e = true) :
-    R.a + 1 ≤ R.b ∧ HurryFrame.Start sy nm m0 (R.seq (R.b - 1)) := by
-  simp only [rowsCheck₁, Bool.and_eq_true] at hH
-  obtain ⟨⟨⟨hE, hX⟩, hA⟩, hB⟩ := hH
+/-- **The last frame before control is in the rows with tables, with `left` 1**, if `b` is the first control after the entry: as `SideChangeSound.EndRunK.last` for the
+second change. `hX`: the reference machine at the exit is not in the game core. -/
+theorem PipeRunK.last (T : EndStatement sy nm₁ d e es) (R : PipeRunK sy nm₁ d e) (hX : exitOff sy (PipeChangeEnd.refX e) = true)
+    (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
+    R.a + 1 ≤ R.b ∧
+      InvL (PipeChangeEnd.ctxK (PipeChangeEnd.timeCtx sy nm₁ d e) d e) ((PipeChangeEnd.rowsKc (PipeChangeEnd.timeCtx sy nm₁ d e) d e).map (·.row)) (R.seq (R.b - 1)) ∧
+      leftP sy nm₁ e (R.seq (R.b - 1)) = 1 := by
   have h0 := T.atControl _ R.atCtl
   have hab : R.a + 1 ≤ R.b := by
-    have := R.order
-    refine Nat.lt_of_le_of_ne this fun heq => ?_
+    refine Nat.lt_of_le_of_ne R.order fun heq => ?_
     have hd := during_left T (T.during _ R.entry)
     rw [heq] at hd
     exact hd h0
-  refine ⟨hab, ?_⟩
   have e1 : R.a + (R.b - 1 - R.a) = R.b - 1 := by omega
-  have hw := PipeRun.way T R hf (R.b - 1 - R.a) (by omega)
+  have hw := PipeChangeEnd.PipeRunK.way T R hc (R.b - 1 - R.a) (by omega)
   rw [e1] at hw
   have hn := R.next (R.b - 1)
   rw [show R.b - 1 + 1 = R.b by omega] at hn
-  have hf1 := hf (R.b - 1) (by omega) (by omega)
+  have hf1 := PipeChangeEnd.PipeRunK.first T R hc (R.b - 1) (by omega) (by omega)
   rcases hw with h | h
   · exfalso
-    have hP := R.places _ (by omega) (by omega) (T.inRoutine _ h)
-    rcases (T.step _ h (R.inp (R.b - 1)) hP).2 with g | ⟨g1, _⟩
+    have hP := R.places _ (by omega) (by omega) (T.inRoutine _ h.1)
+    rcases T.stepK _ h.1 (R.inp (R.b - 1)) hP with g | ⟨g1, _⟩
     · rw [← hn] at g
       exact during_left T g h0
     · rw [← hn] at g1
       have := ctl_of_exitOff hX g1
       rw [R.atCtl] at this
       cases this
-  · rcases T.rows _ h (R.inp (R.b - 1)) (R.noStart _ (by omega) (by omega)) with g | ⟨g1, g2⟩
+  · rcases T.rowsK _ h (R.inp (R.b - 1)) (R.noStart _ (by omega) (by omega)) with g | ⟨_, g2⟩
     · exact absurd g hf1
     · rw [← hn, h0] at g2
-      have hl : leftP sy nm₁ e (R.seq (R.b - 1)) = 1 := by omega
-      rcases h with h | h
-      · exact start_of_left hA hE h hl
-      · exact start_of_left hB hE h hl
+      exact ⟨hab, SoundRows.invL_of_invS h, by omega⟩
+
+/-- **The last frame of the change into the room begins as `HurryFrame.Start` asks**, with the routine of the entrance: frame `b − 1`, after the entry. The machine there is in
+the rows with tables with `left` 1 (`PipeRunK.last`). `hc`: `b` is the first control after the entry. `hH` is the check on the ROM. -/
+theorem PipeRunK.startLast {nm : Names} {m0 : Machine} (T : EndStatement sy nm₁ d e es) (R : PipeRunK sy nm₁ d e)
+    (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) (hH : rowsCheck₁ sy nm m0 nm₁ d e = true) :
+    R.a + 1 ≤ R.b ∧ HurryFrame.Start sy nm m0 (R.seq (R.b - 1)) := by
+  simp only [rowsCheck₁, Bool.and_eq_true] at hH
+  obtain ⟨⟨hE, hX⟩, hA⟩ := hH
+  obtain ⟨h1, h2, h3⟩ := PipeRunK.last T R hX hc
+  exact ⟨h1, start_of_left hA hE h2 h3⟩
 
 end
 
@@ -241,8 +222,9 @@ end
 
 /-! ## On the frames of a run -/
 
-/-- **The conditions of the first change** on the frames of a run, those of `Route.Changes` before round 9 on the first change (the old `Quiet` and `TimeOK`, stronger than `Route.ChangesK`'s): a run whose hurry-up music starts in the room fails a
-condition of the second change (`Route.ChangesBase.entry₂`), so the first change has its own structure here. -/
+/-- **The conditions of the first change** on the frames of a run: each field is the field of the same name of `Route.ChangesK` (`chg₁_of_changes`), so the conditions that
+`route_1_1` asks. A run whose hurry-up music starts in the room fails a condition of the second change (`Route.ChangesBase.entry₂`), so the first change has its own
+structure here. -/
 structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (B : Route.Base) (kind : Nat → Kind) : Prop where
   /-- the part of the condition at the entry that the press of Start and the frames from control do not give -/
   entryRest₁ : EntryKeep.Rest d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))
@@ -255,13 +237,20 @@ structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEn
   /-- on a frame of the pipe's routine, each instruction meets the condition at the places -/
   places₁ : ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → PipeChangeBound.inPipe sy sy.EngVerticalPipe (B.seq n) = true →
     ∀ j, PipeChangeEnd.PlaceOK d₁.places (PipeEntryRule.trace (B.seq n) (B.inp n) j)
-  /-- at the exit, the sound's bytes, the song and the screen buffer are as the condition says -/
-  quiet₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) →
-    SideChangeEnd.Quiet (PipeChangeEnd.quietQ d₁ (PipeTransition.entry m0)) (B.seq n) ∧ PipeChangeEnd.SongAt d₁.song (B.seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (B.seq n)
   /-- no Start on the frames of the game core after the pipe -/
   noStart₁ : ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → SideChangeEnd.coreFrame sy sy.EngVerticalPipe (B.seq n) = true → SideChangeEnd.noStart (B.inp n) = true
-  /-- at the exit, the sound's pause flag is 0 and the game timer is not 000 -/
-  time₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) → SideChangeEnd.TimeOK d₁.nx (B.seq n)
+  /-- at the exit, the pause sound's queue is the reference's, with the effects and the song's row when silent (`PipeChangeEnd.QuietRest`), and the screen buffer has a form of the table -/
+  quiet₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) →
+    PipeChangeEnd.QuietRest d₁ (PipeChangeEnd.refX (PipeTransition.entry m0)) (B.seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (B.seq n)
+  /-- at the exit, the game timer is not 000 -/
+  time₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) → SideChangeEnd.TimerOK d₁.nx (B.seq n)
+  /-- at the vertical pipe's entry the pause is not paused (`PipeChangeEnd.PauseV`) -/
+  pause₁ : PipeChangeEnd.PauseV sy d₁ (B.seq (B.a₁ sy))
+
+/-- **The conditions of the two changes that `route_1_1` asks give those of the first change here** -/
+theorem chg₁_of_changes {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
+    (C : Route.ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) : Chg₁ sy m0 nm₁ d₁ B kind :=
+  ⟨C.entryRest₁, C.upClean₁, C.ctlBy₁, C.paused₁, C.places₁, C.noStart₁, C.quiet₁, C.time₁, C.pause₁⟩
 
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
@@ -278,9 +267,9 @@ theorem Chg₁.entry {tc : TitleStart.Ctx} {t0 : Nat} (hB : TitleStart.check sy 
     simpa using h
   exact EntryKeep.entry_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
 
-/-- the first change as `PipeChangeEnd.PipeRun`, as `Route.ChangesBase.run₁` -/
+/-- the first change as `PipeChangeEnd.PipeRunK`, as `Route.ChangesK.run₁` -/
 def Chg₁.run₁ (C : Chg₁ sy m0 nm₁ d₁ B kind) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
-    PipeChangeEnd.PipeRun sy nm₁ d₁ (PipeTransition.entry m0) where
+    PipeChangeEnd.PipeRunK sy nm₁ d₁ (PipeTransition.entry m0) where
   seq := B.seq
   inp := B.inp
   next := B.next
@@ -297,6 +286,8 @@ def Chg₁.run₁ (C : Chg₁ sy m0 nm₁ d₁ B kind) (he : PipeChangeEnd.Entry
   places := C.places₁
   quiet := C.quiet₁
   noStart := C.noStart₁
+  pause := C.pause₁
+  time := C.time₁
 
 /-- **The last frame of the first change, frame `b₁ − 1`, begins as `HurryFrame.Start` asks**, on the frames of a run. `hT` is the check of the change, `hB` and `hK`
 those of the start from the title, `hH` that of the rows. -/
@@ -304,7 +295,7 @@ theorem Chg₁.startLast {nm : Names} {es₁ : List Machine} {tc : TitleStart.Ct
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (hH : rowsCheck₁ sy nm m0 nm₁ d₁ (PipeTransition.entry m0) = true)
     (T : TitleStart.Begin sy tc B.seq B.inp) (C : Chg₁ sy m0 nm₁ d₁ B kind) :
     B.a₁ sy + 1 ≤ B.b₁ sy ∧ HurryFrame.Start sy nm m0 (B.seq (B.b₁ sy - 1)) :=
-  PipeRun.startLast hT (C.run₁ (C.entry hB hK T)) ((C.run₁ (C.entry hB hK T)).first hT C.time₁ C.ctlFirst) hH
+  PipeRunK.startLast hT (C.run₁ (C.entry hB hK T)) C.ctlFirst hH
 
 /-- **The last frame of the second change, frame `b₂ − 1`, begins as `HurryFrame.Start` asks**, on the frames of a run with the conditions of both changes as `Route.Run`
 asks them (`Route.ChangesK`). `hS`, `hT`, `hR` are the checks of the changes, `hB` and `hK` those of the start from the title, `hH` that of the rows. -/

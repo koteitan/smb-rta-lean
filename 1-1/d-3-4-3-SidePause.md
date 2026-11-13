@@ -2,7 +2,7 @@
 
 # The pause through the side pipe's frames
 
-**Claim.** Suppose that at the side pipe's entry the pause is silent, or the unpause sound plays with the pause timer one more than its counter, or the unpause was pressed on that frame (`PauseE`). Then on the frames of the pipe, for any input, Start included, the six bytes of the pause stay in one of 90 classes, and at the exit the pause sound is as `QuietK` says. This is proved, with a check on the ROM. So the route no longer assumes `QuietK` at the exit: `chg.quiet₂` is gone, and `chg.pause₂` (the condition `PauseE` at the entry) is new (1-1-d-3-4). On real runs with Start at random, `PauseE` held at all 636 entries, every one of 205,016 frames of the pipe was in a class (89 of the 90 classes were seen), and `QuietK` held at all 636 exits.
+**Claim.** Suppose that at the side pipe's entry the pause is silent, or the unpause sound plays with the pause timer one more than its counter, or the unpause was pressed on that frame (`PauseE`). Then on the frames of the pipe, for any input, Start included, the six bytes of the pause stay in one of 90 classes, and at the exit the pause sound is as `QuietK` says. This is proved, with a check on the ROM. So the route no longer assumes `QuietK` at the exit: `chg.quiet₂` is gone, and `chg.pause₂` (the condition `PauseE` at the entry) is new (1-1-d-3-4). On real runs with Start at random, `PauseE` held at all 636 entries, every one of 205,016 frames of the pipe was in a class (89 of the 90 classes were seen), and `QuietK` held at all 636 exits. `PauseE` at the entry is now proved from the room's first control ([The pause through the room's frames](d-3-4-4-RoomPause.md)): `chg.pause₂` is a theorem, and the route asks only that bits 1 to 6 of the pause byte are 0 there (`chg.pauseBits₂`).
 
 `m[i]` is the RAM byte `i` of `m`. `frame(m, i)` is one frame of `m` with the input `i`. `Entry2`, `During2`, `Exit` and `TimerOK` are those of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). `QuietK`, `InRowsK`, `EndStatementK` and `EndRunK` are those of [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md).
 
@@ -94,7 +94,7 @@ On the movie (`changes-check FM2`, and with a pause of 60 frames at 380, 416, 45
 
 ## Assumptions (not proved in Lean)
 
-* `PauseE` at the entry (`chg.pause₂`, 1-1-d-3-4). New. It replaces `QuietK` at the exit.
+* `PauseE` at the entry is no longer assumed. [The pause through the room's frames](d-3-4-4-RoomPause.md) proves it from the room's first control, where the route asks that bits 1 to 6 of the pause byte are 0 (`chg.pauseBits₂`, 1-1-d-3-4-4).
 * The others are as on [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md): `Entry2`, `lagPaused`, `NoStart` after the pipe, `TimerOK`.
 
 **Files.** `Theorems/SidePause.lean`; the private check is in `Proof/SidePause.lean` (`genSidePause` in `Main.lean`), and `side_pause` in `Proof/Route.lean`. The name `GamePauseTimer` was added to `SideChangeEnd.namesOf`.

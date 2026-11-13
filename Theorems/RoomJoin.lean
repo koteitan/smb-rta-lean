@@ -350,32 +350,60 @@ structure StartAt (sy : Syms) (N : Nums) (m : Machine) : Prop where
   v : (SurfaceFrames.vsOf sy m).st = 2 ∧ VY (SurfaceFrames.vsOf sy m) ≤ N.startY ∧ VW (SurfaceFrames.vsOf sy m) ≤ N.startW ∧ (SurfaceFrames.vsOf sy m).vfd.toNat = N.fallF
   ab : peek m sy.Player_XSpeedAbsolute = 0
 
+/-- **What a frame that follows the model still asks**, at the player's routine (instruction `n₀`): the stored speed is `|v|`, and the side he presses is not masked;
+and from the scroll handler on nothing writes the horizontal bytes. `FrameModel.CleanR` without what the room's walks give at the player's routine (`VertAir.AtV`:
+`RoomVert.cut_R`, `RoomPair.quad_run`) -/
+structure CleanW (sy : Syms) (M : Machine) (i : UInt8) (n₀ : Nat) : Prop where
+  abs : peek (PipeEntryRule.trace M i n₀) sy.Player_XSpeedAbsolute = TopSpeed.absB (peek (PipeEntryRule.trace M i n₀) sy.Player_X_Speed)
+  coll : peek (PipeEntryRule.trace M i n₀) sy.Player_CollisionBits &&& FrameModel.lrOf (Potential.norm (FrameModel.readIn sy (PipeEntryRule.trace M i n₀))) =
+    FrameModel.lrOf (Potential.norm (FrameModel.readIn sy (PipeEntryRule.trace M i n₀)))
+  after : ∀ j, n₀ ≤ j → (PipeEntryRule.trace M i j).pc = sy.PlayerSubs → ∀ a ∈ FrameModel.hBytes sy,
+    peek (PipeTransition.frame M i) a = peek (PipeEntryRule.trace M i j) a
+
+/-- **What a frame that stops him still asks**: at the player's routine the collision bits are a value of `TopSpeed.collBits`, and what the collision routine and the rest
+of the frame do (`FrameModel.Collide`). `FrameModel.ReadR` without `AtV` and without the speed's range, which the frames before give (`RoomRun.far_inD`) -/
+structure ReadW (sy : Syms) (M : Machine) (i : UInt8) (n₀ : Nat) : Prop where
+  coll : peek (PipeEntryRule.trace M i n₀) sy.Player_CollisionBits ∈ TopSpeed.collBits sy
+  collide : ∀ j, n₀ ≤ j → (PipeEntryRule.trace M i j).pc = sy.PlayerSubs → FrameModel.Collide sy (PipeEntryRule.trace M i j) (PipeTransition.frame M i)
+
+theorem CleanW.toR {E : FrameModel.Rom} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} (h : CleanW sy M i n₀)
+    (hv : VertAir.AtV sy E S (PipeEntryRule.trace M i n₀)) : FrameModel.CleanR sy E S M i n₀ :=
+  ⟨⟨hv.good, hv.pc, hv.s, hv.eng, hv.area, hv.st, hv.spring, hv.swim, hv.size, h.abs, h.coll⟩, h.after⟩
+
+theorem ReadW.toR {E : FrameModel.Rom} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadW sy M i n₀)
+    (hv : VertAir.AtV sy E S (PipeEntryRule.trace M i n₀)) (hs : TopSpeed.inSpeed sy (peek (PipeEntryRule.trace M i n₀) sy.Player_X_Speed) = true) :
+    FrameModel.ReadR sy E S M i n₀ :=
+  ⟨⟨hv.good, hv.pc, hv.s, hv.eng, hv.area, hv.st, hv.spring, hv.swim, hv.size, h.coll, hs⟩, h.collide⟩
+
 /-- what a real run in the room gives, on real machines. The machines are those of the real run `S`: the room's frame `n` ends at `S.seq (b + (n − C))` (`RoomRun.fm`),
 so the machine at first control is `S.seq b`, and frame `n + 1` is frame `b + (n − C)` of the run, with its input (`RoomRun.pad`, `RoomRun.inAt`). These are definitions; that each frame is the real
 frame of the one before is `RoomRun.next`. So no frame of the room is a frame not counted. -/
 structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (b : Nat) extends RoomFields sy m N where
-  /-- the instruction at which frame `n + 1` comes to the player's routine -/
-  arr : Nat → Nat
   /-- the state and the position are those of the machine -/
   read_hs : ∀ n, C ≤ n → n ≤ t0 → fr.hs n = FrameModel.readHS sy (S.seq (b + (n - C)))
   read_P : ∀ n, C ≤ n → n ≤ t0 → fr.P n = posP sy (S.seq (b + (n - C)))
   /-- the vertical state is that of the machine -/
   read_vs : ∀ n, C ≤ n → n ≤ t0 → fr.vs n = SurfaceFrames.vsOf sy (S.seq (b + (n - C)))
   /-- the stored speed of frame `n` is what frame `n + 1` reads when it comes to the player's routine -/
-  read_ab : ∀ n, C ≤ n → n < t0 → fr.ab n = (peek (PipeEntryRule.trace (S.seq (b + (n - C))) (S.inp (b + (n - C))) (arr n)) sy.Player_XSpeedAbsolute).toNat
+  read_ab : ∀ n, C ≤ n → n < t0 → fr.ab n = (peek (PipeEntryRule.trace (S.seq (b + (n - C))) (S.inp (b + (n - C))) (CtrlKeep.arrAt sy (S.seq (b + (n - C))) (S.inp (b + (n - C))))) sy.Player_XSpeedAbsolute).toNat
   /-- a frame that follows the model has the input read from the machine -/
-  read_in : ∀ n, C ≤ n → n < t0 → FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (S.seq (b + (n - C))) (S.inp (b + (n - C))) (arr n) →
-    fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (S.seq (b + (n - C))) (S.inp (b + (n - C))) (arr n))
-  /-- each frame up to `t0` is one that follows the model; or it leaves him stopped, and it is a `TopSpeed.Frame`. That the frame does not end during the movement
-  (the old part `longer`) comes from the frame's time (`InRoom.time`, `InRoom.arrive`) -/
-  clean : ∀ n, C ≤ n → n < t0 → FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (S.seq (b + (n - C))) (S.inp (b + (n - C))) (arr n) ∨
-    (Stop sy m N fr (n + 1) ∧ FrameModel.ReadR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (S.seq (b + (n - C))) (S.inp (b + (n - C))) (arr n))
-  /-- at the start of each frame up to `t0` the position is at least 8 px right of the start of its range (one machine). The other end comes from `first` (`RoomRun.far_of`).
-  The old part `far` of `clean` -/
-  far : ∀ n, C ≤ n → n < t0 → 2048 ≤ posP sy (S.seq (b + (n - C)))
+  read_in : ∀ n, C ≤ n → n < t0 → FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (S.seq (b + (n - C))) (S.inp (b + (n - C))) (CtrlKeep.arrAt sy (S.seq (b + (n - C))) (S.inp (b + (n - C)))) →
+    fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (S.seq (b + (n - C))) (S.inp (b + (n - C))) (CtrlKeep.arrAt sy (S.seq (b + (n - C))) (S.inp (b + (n - C)))))
+  /-- each frame up to `t0` ends with the game not paused (the low bit of the pause byte 0, one machine). So it comes to the player's routine (`InRoom.reach`), a first
+  time at `arr n` (`CtrlKeep.arrAt`). The old part `pc` of `clean`'s `at_ctrl` and `at_frame`, and the field `arr` -/
+  unpaused : ∀ n, C ≤ n → n < t0 → CtrlKeep.Unpaused sy m (S.seq (b + (n + 1 - C)))
+  /-- each frame up to `t0` is one that follows the model; or it leaves him stopped, and it is a `TopSpeed.Frame`. What they ask at the player's routine but the values
+  that decide which (the stored speed, the mask, the collision bits) comes from the room's walks (`InRoom.cut`); that the frame does not end during the movement (the old
+  part `longer`) from the frame's time (`InRoom.time`, `InRoom.arrive`) -/
+  clean : ∀ n, C ≤ n → n < t0 → CleanW sy (S.seq (b + (n - C))) (S.inp (b + (n - C))) (CtrlKeep.arrAt sy (S.seq (b + (n - C))) (S.inp (b + (n - C)))) ∨
+    (Stop sy m N fr (n + 1) ∧ ReadW sy (S.seq (b + (n - C))) (S.inp (b + (n - C))) (CtrlKeep.arrAt sy (S.seq (b + (n - C))) (S.inp (b + (n - C)))))
+  /-- a frame up to `t0` that starts at most `16·top + 256` right of 8 px (and at 8 px or more) ends at 8 px or more: the left wall keeps him there. The frames that start
+  further right end there by the bound on one frame's move (`RoomRun.far_inD`). The old field `far` (every frame starts at 8 px or more) -/
+  farNear : ∀ n, C ≤ n → n + 1 < t0 → 2048 ≤ posP sy (S.seq (b + (n - C))) → posP sy (S.seq (b + (n - C))) < 2048 + 16 * (top sy : Int) + 256 →
+    2048 ≤ posP sy (S.seq (b + (n + 1 - C)))
   /-- a frame before `hitF` that does not follow the model reads a stored speed below the air threshold -/
   ab_early : ∀ n, C ≤ n → n + 1 < C + N.hitF → n < t0 →
-    ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (S.seq (b + (n - C))) (S.inp (b + (n - C))) (arr n) → fr.ab n < sy.AirFastSpeed.toNat
+    ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (S.seq (b + (n - C))) (S.inp (b + (n - C))) (CtrlKeep.arrAt sy (S.seq (b + (n - C))) (S.inp (b + (n - C)))) → fr.ab n < sy.AirFastSpeed.toNat
   /-- frame `E` enters the side pipe: an instruction of it, from the machine at the end of frame `E − 1` with the input of frame `E`, writes the side pipe's routine -/
   enters : SideEntryRule.Enters sy (S.seq (b + (E - 1 - C))) (S.inp (b + (E - 1 - C)))
   /-- with no wall, the heights of the frames after the fall that start on the floor and before the entry, if the frame does not come to the head's collision with a
@@ -395,6 +423,9 @@ abbrev RoomRun.pad {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} 
 
 /-- the input of the frame that begins with `fm n`: for `C ≤ n` the room's frame `n + 1` (`pad (n + 1)`), frame `b + (n − C)` of the run -/
 abbrev RoomRun.inAt {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} {b : Nat} (r : RoomRun sy m N S b) (n : Nat) : UInt8 := S.inp (b + (n - r.C))
+
+/-- the instruction at which the frame that begins with `fm n` first comes to the player's routine (`CtrlKeep.arrAt`). The old field `arr` -/
+abbrev RoomRun.arr {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} {b : Nat} (r : RoomRun sy m N S b) (n : Nat) : Nat := CtrlKeep.arrAt sy (r.fm n) (r.inAt n)
 
 /-- **Each frame of the room is the real frame of the one before**: the old field `next`, now from the real run -/
 theorem RoomRun.next {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} {b : Nat} (r : RoomRun sy m N S b) (n : Nat) (hC : r.C ≤ n) :
@@ -529,6 +560,8 @@ structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   corner_goal : cornerP sy ≤ goalP sy
   last_le : N.lastG ≤ N.rise
   hit_run : N.hitF ≤ N.runF
+  /-- the room's start is at least 8 px right of the start of the position's range -/
+  start_far : 2048 ≤ 256 * (sy.RoomStartX.toNat : Int)
   run_ge : N.fall + 1 ≤ N.runF
   goal_ge : N.runF + 1 ≤ N.goalF
   fall_wall : N.wallF + 1 + N.wallK ≤ N.fall
@@ -2869,6 +2902,15 @@ structure InRoom (r : RoomRun sy m N S b) : Prop where
   /-- each frame of the room before the entry comes to the player's routine before its end (`RoomVert.before_R`: the walk's states at the frame's end are not there) -/
   arrive : ∀ n, r.C ≤ n → n < r.E → ∀ j, (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerCtrlRoutine →
     (PipeEntryRule.trace (r.fm n) (r.inAt n) j).frame = (r.fm n).frame
+  /-- each frame of the room before the entry that ends with the game not paused comes to the player's routine, a first time at `arr n` (`RoomVert.arrive_R`: the walk to
+  the player's routine splits the pause byte's low bit where the NMI loads it; its states at the frame's end that have not come there know the game paused) -/
+  reach : ∀ n, r.C ≤ n → n < r.E → CtrlKeep.Unpaused sy m (PipeTransition.frame (r.fm n) (r.inAt n)) →
+    (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)).pc = sy.PlayerCtrlRoutine
+  /-- in each frame of the room before the entry, at the player's routine the machine is in the state `VertAir.AtV` (`RoomVert.cut_R`: the walk to the player's routine
+  knows the stack, the NMI, the routine byte, the area's type, the jumpspring and the swimming flag there; `RoomPair.quad_run`: the player's state is 0, 1 or 2 and the
+  change of size is 0 at the frame's start, and the walk keeps them). The old part of `clean`'s `at_ctrl` and `at_frame` but the values -/
+  cut : ∀ n, r.C ≤ n → n < r.E → ∀ j, (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerCtrlRoutine →
+    VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) j)
   /-- in each frame of the room before the entry, at the player's routine the horizontal bytes are those of the frame's start (`RoomVert.hbytes_at_R`). The old part
   `before` of `clean` -/
   before : ∀ n, r.C ≤ n → n < r.E → ∀ j, (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerCtrlRoutine →
@@ -2905,15 +2947,6 @@ theorem t0_le_E (H : Checks sy m N) (hr : r.InRoom) : r.t0 ≤ r.E := by
     omega
   · exact h
 
-/-- **The position at the start of each frame before `t0` is away from both ends of its range**: the field `far` below, and the goal above (`first`) -/
-theorem far_of (H : Checks sy m N) {n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) : 2048 ≤ posP sy (r.fm n) ∧ posP sy (r.fm n) + 2048 < 0x1000000 := by
-  refine ⟨r.far n hC ht, ?_⟩
-  have h1 := r.first n hC ht
-  rw [r.read_P n hC (by omega)] at h1
-  have h2 := goal_small H
-  show posP sy (S.seq (b + (n - r.C))) + 2048 < 0x1000000
-  omega
-
 /-- `InRoom.before` for each frame before `t0` -/
 theorem before_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0)
     (hpc : (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)).pc = sy.PlayerCtrlRoutine) :
@@ -2928,11 +2961,62 @@ theorem inTime_of (H : Checks sy m N) (hr : r.InRoom) : ∃ idle, ∀ n, r.C ≤
   have hE := r.t0_le_E H hr
   exact ⟨idle, fun n hC h2 hpc => ⟨hidle, hr.arrive n hC (by omega) _ hpc, ht n hC (by omega)⟩⟩
 
-/-- a frame that follows the model follows `hstep`: `FrameModel.clean_frameR`, with the frame's time and the position's range -/
-theorem follow_of_clean (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0)
+/-- the state at first control, as numbers -/
+theorem start_hs (st : StartAt sy N (r.fm r.C)) : r.fr.hs r.C = (room sy N).s0 := by
+  rw [r.read_hs r.C (Nat.le_refl _) r.t0_ge]
+  exact st.hs
+
+theorem start_P (st : StartAt sy N (r.fm r.C)) : (room sy N).P0 ≤ r.fr.P r.C ∧ r.fr.P r.C ≤ (room sy N).P1 := by
+  rw [r.read_P r.C (Nat.le_refl _) r.t0_ge]
+  exact ⟨st.P0, st.P1⟩
+
+/-- **Each frame before `t0` comes to the player's routine at `arr n`**: `unpaused` and `InRoom.reach` -/
+theorem arrive (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0) :
+    (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)).pc = sy.PlayerCtrlRoutine := by
+  have hE := r.t0_le_E H hr
+  refine hr.reach n hC (by omega) ?_
+  rw [← r.next n hC]
+  exact r.unpaused n hC h2
+
+/-- **`AtV` at the arrival** of each frame before `t0`: `arrive` and `InRoom.cut` -/
+theorem atV_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0) :
+    VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) := by
+  have hE := r.t0_le_E H hr
+  exact hr.cut n hC (by omega) _ (r.arrive H hr hC h2)
+
+/-- a frame before `t0` that `clean` says follows the model is `FrameModel.CleanR` -/
+theorem cleanR_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0)
+    (hc : CleanW sy (r.fm n) (r.inAt n) (r.arr n)) : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n) :=
+  hc.toR (r.atV_of H hr hC h2)
+
+/-- the speed at the start of a frame is in the domain's range: so it is at the player's routine (`InRoom.before`) -/
+theorem speed_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0) (hd : inD sy (r.fr.hs n) = true) :
+    TopSpeed.inSpeed sy (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) sy.Player_X_Speed) = true := by
+  rw [r.before_of H hr hC h2 (r.arrive H hr hC h2) sy.Player_X_Speed (by simp [FrameModel.hBytes])]
+  rw [r.read_hs n hC (by omega)] at hd
+  simp only [inD, Bool.and_eq_true] at hd
+  exact hd.1.1.1
+
+/-- a frame before `t0` that `clean` says stops him is `FrameModel.ReadR`, when the speed at its start is in the domain -/
+theorem readR_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0) (hd : inD sy (r.fr.hs n) = true)
+    (hc : ReadW sy (r.fm n) (r.inAt n) (r.arr n)) : FrameModel.ReadR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n) :=
+  hc.toR (r.atV_of H hr hC h2) (r.speed_of H hr hC h2 hd)
+
+/-- the position's range, from 8 px at the start of the frame: the other end from `first` -/
+theorem far_up (H : Checks sy m N) {n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) (h : 2048 ≤ posP sy (r.fm n)) :
+    2048 ≤ posP sy (r.fm n) ∧ posP sy (r.fm n) + 2048 < 0x1000000 := by
+  refine ⟨h, ?_⟩
+  have h1 := r.first n hC ht
+  rw [r.read_P n hC (by omega)] at h1
+  have h2 := goal_small H
+  show posP sy (S.seq (b + (n - r.C))) + 2048 < 0x1000000
+  omega
+
+/-- a frame that follows the model follows `hstep`, given the position at its start at 8 px or more -/
+theorem follow_of_far (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0) (hf : 2048 ≤ posP sy (r.fm n))
     (hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)) : Follow sy m r.fr n := by
   obtain ⟨idle, hT⟩ := r.inTime_of H hr
-  obtain ⟨h1, h3⟩ := FrameModel.clean_frameR H.model hc (r.before_of H hr hC h2 hc.at_ctrl.pc) (hT n hC h2 hc.at_ctrl.pc) (r.far_of H hC h2)
+  obtain ⟨h1, h3⟩ := FrameModel.clean_frameR H.model hc (r.before_of H hr hC h2 hc.at_ctrl.pc) (hT n hC h2 hc.at_ctrl.pc) (r.far_up H hC h2 hf)
   rw [← r.next n hC] at h1 h3
   have e0 := r.read_hs n hC (by omega)
   have e1 := r.read_hs (n + 1) (by omega) (by omega)
@@ -2945,21 +3029,72 @@ theorem follow_of_clean (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C 
   · rw [e1, h1, e0, e2]
   · rw [p1, h3, p0, e1]
 
+/-- **One frame before `t0`**, from the position at 8 px or more and the state in the domain at its start: it follows `hstep` or leaves him stopped, it moves him left by
+at most `16·top + 256`, and the state at its end is in the domain -/
+theorem step_far (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0) (hf : 2048 ≤ posP sy (r.fm n)) (hd : inD sy (r.fr.hs n) = true) :
+    (Follow sy m r.fr n ∨ Stop sy m N r.fr (n + 1)) ∧ posP sy (r.fm n) - 16 * (top sy : Int) - 256 ≤ posP sy (r.fm (n + 1)) ∧ inD sy (r.fr.hs (n + 1)) = true := by
+  have p0 := r.read_P n hC (by omega)
+  have p1 := r.read_P (n + 1) (by omega) (by omega)
+  rcases r.clean n hC h2 with hc | ⟨hs, hc⟩
+  · have hF := r.follow_of_far H hr hC h2 hf (r.cleanR_of H hr hC h2 hc)
+    have hd1 := (FastTakeoff.step_facts H.air.pot hd hF.1).1
+    rw [← hF.2.1] at hd1
+    refine ⟨Or.inl hF, ?_, hd1⟩
+    have hd2 := hd1
+    simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at hd2
+    have h4 := hd2.1.1.1
+    have h5 := hF.2.2
+    show posP sy (S.seq (b + (n - r.C))) - 16 * (top sy : Int) - 256 ≤ posP sy (S.seq (b + (n + 1 - r.C)))
+    rw [← p0, ← p1]
+    omega
+  · obtain ⟨idle, hT⟩ := r.inTime_of H hr
+    have hR := r.readR_of H hr hC h2 hd hc
+    have hl := FrameModel.frame_readR_low H.model H.fric hR (r.before_of H hr hC h2 hR.at_frame.pc) (hT n hC h2 hR.at_frame.pc) (r.far_up H hC h2 hf)
+    rw [← r.next n hC] at hl
+    exact ⟨Or.inr hs, hl, hs.1⟩
+
+/-- **At the start of each frame before `t0` he is at 8 px or more, and the state is in the domain**: at first control from the room's start (`start_far`) and the
+domain's check; then each frame keeps both, by `step_far`, and by `farNear` near the left end -/
+theorem far_inD (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)) :
+    ∀ d, r.C + d < r.t0 → 2048 ≤ posP sy (r.fm (r.C + d)) ∧ inD sy (r.fr.hs (r.C + d)) = true
+  | 0, _ => by
+    refine ⟨?_, ?_⟩
+    · have h1 := st.P0
+      have h2 := H.nums.start_far
+      show 2048 ≤ posP sy (r.fm r.C)
+      unfold room bonusRoom at h1
+      exact Int.le_trans h2 h1
+    · have h := H.roomOk
+      simp only [roomCheck, Bool.and_eq_true] at h
+      rw [show r.C + 0 = r.C from rfl, r.start_hs st]
+      exact h.1.1
+  | d + 1, hd => by
+    obtain ⟨h1, h2⟩ := far_inD H hr st d (by omega)
+    obtain ⟨_, h4, h5⟩ := r.step_far H hr (n := r.C + d) (by omega) (by omega) h1 h2
+    rw [show r.C + (d + 1) = r.C + d + 1 by omega]
+    refine ⟨?_, h5⟩
+    by_cases hn : posP sy (r.fm (r.C + d)) < 2048 + 16 * (top sy : Int) + 256
+    · exact r.farNear (r.C + d) (by omega) (by omega) h1 hn
+    · omega
+
+/-- **The position at the start of each frame before `t0` is away from both ends of its range** -/
+theorem far_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)) {n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) :
+    2048 ≤ posP sy (r.fm n) ∧ posP sy (r.fm n) + 2048 < 0x1000000 := by
+  have h := (r.far_inD H hr st (n - r.C) (by omega)).1
+  rw [show r.C + (n - r.C) = n by omega] at h
+  exact r.far_up H hC ht h
+
+/-- a frame that follows the model follows `hstep`: `FrameModel.clean_frameR`, with the frame's time and the position's range -/
+theorem follow_of_clean (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)) {n : Nat} (hC : r.C ≤ n) (h2 : n < r.t0)
+    (hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)) : Follow sy m r.fr n :=
+  r.follow_of_far H hr hC h2 (r.far_of H hr st hC h2).1 hc
+
 /-- each frame follows `hstep` or leaves him stopped -/
-theorem frames_of (H : Checks sy m N) (hr : r.InRoom) : ∀ n, r.C ≤ n → n < r.t0 → Follow sy m r.fr n ∨ Stop sy m N r.fr (n + 1) := by
+theorem frames_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)) : ∀ n, r.C ≤ n → n < r.t0 → Follow sy m r.fr n ∨ Stop sy m N r.fr (n + 1) := by
   intro n h1 h2
   rcases r.clean n h1 h2 with h3 | h3
-  · exact Or.inl (r.follow_of_clean H hr h1 h2 h3)
+  · exact Or.inl (r.follow_of_clean H hr st h1 h2 (r.cleanR_of H hr h1 h2 h3))
   · exact Or.inr h3.1
-
-/-- the state at first control, as numbers -/
-theorem start_hs (st : StartAt sy N (r.fm r.C)) : r.fr.hs r.C = (room sy N).s0 := by
-  rw [r.read_hs r.C (Nat.le_refl _) r.t0_ge]
-  exact st.hs
-
-theorem start_P (st : StartAt sy N (r.fm r.C)) : (room sy N).P0 ≤ r.fr.P r.C ∧ r.fr.P r.C ≤ (room sy N).P1 := by
-  rw [r.read_P r.C (Nat.le_refl _) r.t0_ge]
-  exact ⟨st.P0, st.P1⟩
 
 /-- every frame up to `t0` is in the domain -/
 theorem inD_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)) : ∀ d, r.C + d ≤ r.t0 → inD sy (r.fr.hs (r.C + d)) = true
@@ -2969,18 +3104,18 @@ theorem inD_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)
     rw [show r.C + 0 = r.C from rfl, r.start_hs st]
     exact h.1.1
   | d + 1, h => by
-    have ih := inD_of H hr st d (by omega)
-    rcases r.frames_of H hr (r.C + d) (by omega) (by omega) with h1 | h1
-    · rw [show r.C + (d + 1) = r.C + d + 1 by omega, h1.2.1]
-      exact (FastTakeoff.step_facts H.air.pot ih h1.1).1
-    · exact h1.1
+    obtain ⟨h1, h2⟩ := r.far_inD H hr st d (by omega)
+    rw [show r.C + (d + 1) = r.C + d + 1 by omega]
+    exact (r.step_far H hr (n := r.C + d) (by omega) (by omega) h1 h2).2.2
 
 /-- every frame moves him at most the top speed: a frame that follows `hstep` by the bound on its domain -/
 theorem move_top_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm r.C)) : ∀ n, r.C ≤ n → n < r.t0 → r.fr.P (n + 1) ≤ r.fr.P n + 16 * (top sy : Int) := by
   intro n h1 h2
   obtain ⟨idle, hT⟩ := r.inTime_of H hr
+  have hdn := r.inD_of H hr st (n - r.C) (by omega)
+  rw [show r.C + (n - r.C) = n by omega] at hdn
   rcases r.clean n h1 h2 with h3 | h3
-  · have hf := r.follow_of_clean H hr h1 h2 h3
+  · have hf := r.follow_of_clean H hr st h1 h2 (r.cleanR_of H hr h1 h2 h3)
     have hd := r.inD_of H hr st (n + 1 - r.C) (by omega)
     rw [show r.C + (n + 1 - r.C) = n + 1 by omega] at hd
     simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at hd
@@ -2988,11 +3123,12 @@ theorem move_top_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fm
     rw [hf.2.2]
     omega
   · -- a `TopSpeed.Frame`: `Frame.bound`, from the domain
-    obtain ⟨f, e1, _, e3, _, _, e6⟩ := FrameModel.frame_readR H.model H.fric h3.2 (r.before_of H hr h1 h2 h3.2.at_frame.pc) (hT n h1 h2 h3.2.at_frame.pc) (r.far_of H h1 h2)
-    have hd := r.inD_of H hr st (n - r.C) (by omega)
-    rw [show r.C + (n - r.C) = n by omega, r.read_hs n h1 (by omega)] at hd
+    have hR := r.readR_of H hr h1 h2 hdn h3.2
+    obtain ⟨f, e1, _, e3, _, _, e6⟩ := FrameModel.frame_readR H.model H.fric hR (r.before_of H hr h1 h2 hR.at_frame.pc) (hT n h1 h2 hR.at_frame.pc) (r.far_of H hr st h1 h2)
+    have hd := hdn
+    rw [r.read_hs n h1 (by omega)] at hd
     simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at hd
-    have h4 : (sbyte (peek (S.seq (b + (n - r.C))) sy.Player_X_Speed)).natAbs ≤ top sy := hd.1.1.1
+    have h4 : (sbyte (peek (r.fm n) sy.Player_X_Speed)).natAbs ≤ top sy := hd.1.1.1
     have h16 : (16 : Int) ≤ (top sy : Int) := by
       have := (FrameModel.facts_of H.model).top16
       show (16 : Int) ≤ (TopSpeed.top sy : Int)
@@ -3022,7 +3158,9 @@ theorem ab_of_run (H : Checks sy m N) (hr : r.InRoom) : ∀ n, r.C ≤ n → n <
   intro n h1 h2
   by_cases hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)
   · exact Or.inl (r.ab_clean H hr h1 h2 hc)
-  · exact Or.inr ⟨((r.clean n h1 h2).resolve_left hc).1, fun h3 => r.ab_early n h1 h3 h2 hc⟩
+  · rcases r.clean n h1 h2 with h3 | h3
+    · exact absurd (r.cleanR_of H hr h1 h2 h3) hc
+    · exact Or.inr ⟨h3.1, fun h4 => r.ab_early n h1 h4 h2 hc⟩
 
 /-- at each read of the block buffer routine before the write in frame `E`, the side pipe's tiles are only in the pipe's column. No longer a field of `RoomRun`: `RoomMap.map_of_rows` proves it
 on the frames of the room, and `Route.Run.roomTiles` joins frame `E` to them. -/
@@ -3057,11 +3195,7 @@ theorem vy_of_falling {s : VS} (h : falling s = false) : s.vy &&& 0x80 = 0x80 :=
 theorem varc_of (H : Checks sy m N) (hr : r.InRoom) {T n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) (hE : n + 1 < r.E) (ha : OnArc sy m N r.fr T n)
     (hk : n + 1 - (T + 1) ≤ N.rise) : r.fr.vs (n + 1) = vstep sy m (r.fr.vs n) (r.fr.a (n + 1)) 0 := by
   -- the frame at the player's routine
-  have hcl : VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) := by
-    rcases r.clean n hC ht with hc | ⟨_, hc⟩
-    · exact ⟨hc.at_ctrl.good, hc.at_ctrl.pc, hc.at_ctrl.s, hc.at_ctrl.eng, hc.at_ctrl.area, hc.at_ctrl.st, hc.at_ctrl.spring, hc.at_ctrl.swim, hc.at_ctrl.size⟩
-    · exact ⟨hc.at_frame.good, hc.at_frame.pc, hc.at_frame.s, hc.at_frame.eng, hc.at_frame.area, hc.at_frame.st, hc.at_frame.spring, hc.at_frame.swim,
-        hc.at_frame.size⟩
+  have hcl : VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) := r.atV_of H hr hC ht
   have hv0 : r.fr.vs n = VertModel.vsOf sy (r.fm n) := r.read_vs n hC (by omega)
   have hv1 : r.fr.vs (n + 1) = VertModel.vsOf sy (r.fm (n + 1)) := r.read_vs (n + 1) (by omega) (by omega)
   have hT := ha.1
@@ -3102,7 +3236,7 @@ def toCore (H : Checks sy m N) (st : StartAt sy N (r.fm r.C)) (hr : r.InRoom) : 
     vfloor := fun hw n h1 h2 hE hfl => r.vfloor hw n h1 h2 hE (hr.bump n (by omega) hE) hfl
     varc := fun _ _ hC ht hE ha hk => r.varc_of H hr hC ht hE ha hk
     start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
-    frames := r.frames_of H hr, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr }
+    frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr }
 
 /-- **The entry comes at least `goalF + aboveF` frames after first control.** `st` is the state at first control on the machine, `hr` what the room's frames give about frame
 `E`. -/

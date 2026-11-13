@@ -7,7 +7,7 @@
 * `longer`: プレイヤーのルーチンに来てから 728 命令の間にフレームが終わらない。今はフレームの時間から出ます。`SiteOK`（すでに仮定、`chg.roomSites`）は、アイドルループ以外のすべての命令をフレームの終わりの 6000 ドット前に置きます。移動の歩きは、そのときそれぞれのステップがフレームを保つことを示します。
 * `far` の上の半分: `P + 2048 < 2²⁴`。`t₀` より前はゴールより左にいて（`first`）、ゴールは口より左で（`slow_mouth`、`air_pos`）、ページ 0 にあります。
 
-`far` の下の半分は、`RoomRun` の新しい 1 つの機械のフィールドとして残ります。`t₀` までの各フレームの始まりで `2048 ≤ P` です。
+`far` の下の半分は、`RoomRun` の 1 つの機械のフィールドとして残っていました。`t₀` までの各フレームの始まりで `2048 ≤ P` です。今はもっと弱いフィールド `farNear` からの定理です（[部屋のフレーム: 位置は 8 px 以上のまま](c-7-1-3-RoomFar-ja.md)、項目 1-1-c-7-1-3）。`CleanR` と `ReadR` のプレイヤーのルーチンでの状態も、どちらかを決める値のほかは今は証明しています（[部屋のフレーム: プレイヤーのルーチンでの状態](c-7-1-2-RoomCut-ja.md)、項目 1-1-c-7-1-2）。
 
 `R` はプレイヤーのルーチン、`tr(j)` は `M` からフレームの `j` 命令目の機械、`idle` は部屋のアイドルループ（自分への `JMP`）、`dot` はフレームの中のドットです。
 
@@ -26,7 +26,7 @@ inTime_of    :  C ≤ n < t₀,  pc(tr(arr(n))) = R  →  InTime(fm(n), arr(n))
 
 `CleanR` と `ReadR` は、`Clean` と `ReadFrame` から `before`、`longer`、`far` を除いたものです。
 
-Lean: `Theorems/FrameTime.lean`（`InTime`、`CleanR`、`ReadR`、`clean_frameR`、`fric_readI`、`frame_pathI`、`frame_readR`）、`Theorems/RoomJoin.lean`（`RoomRun.clean`、`RoomRun.far`、`InRoom.le`、`InRoom.time`、`InRoom.arrive`、`InRoom.before`、`goal_mouth`、`before_of`、`goal_small`、`t0_le_E`、`far_of`、`inTime_of`、`follow_of_clean`、`move_top_of`）、`Theorems/RoomVert.lean`（`vKeepA`、`finR`、`before_R`、`hbytes_at_R`、`air_frame`、`air_arc`）、`Theorems/VertAir.lean`（`vert_air`）、`Theorems/Route.lean`（`late_of`、`Run.roomTime`、`Run.roomArrive`、`Run.roomBefore`、`Run.roomVert`、`Run.inRoom`）。非公開の `Proof/RoomVert.lean`（`room_vert_idle`）。
+Lean: `Theorems/FrameTime.lean`（`InTime`、`CleanR`、`ReadR`、`clean_frameR`、`fric_readI`、`frame_pathI`、`frame_readR`）、`Theorems/RoomJoin.lean`（`RoomRun.clean`、`InRoom.le`、`InRoom.time`、`InRoom.arrive`、`InRoom.before`、`goal_mouth`、`before_of`、`goal_small`、`t0_le_E`、`far_of`、`inTime_of`、`follow_of_clean`、`move_top_of`）、`Theorems/RoomVert.lean`（`vKeepA`、`finR`、`finA`、`before_R`、`hbytes_at_R`、`air_frame`、`air_arc`）、`Theorems/VertAir.lean`（`vert_air`）、`Theorems/Route.lean`（`late_of`、`Run.roomTime`、`Run.roomArrive`、`Run.roomBefore`、`Run.roomVert`、`Run.inRoom`）。非公開の `Proof/RoomVert.lean`（`room_vert_idle`）。
 
 ## 方法
 
@@ -44,9 +44,9 @@ Lean: `Theorems/FrameTime.lean`（`InTime`、`CleanR`、`ReadR`、`clean_frameR`
 
 ## 仮定（Lean で証明していないこと）
 
-* `far`（1 つの機械、新しい）: `t₀` までの各フレームの始まりで `2048 ≤ P`。左の壁がそれより右に保ちますが、当たり判定のルーチンはモデルにしていません。
+* `far` はもうフィールドではありません。8 px から右に 3.5 px 以内で始まるフレームだけの条件 `farNear` から証明します（[部屋のフレーム: 位置は 8 px 以上のまま](c-7-1-3-RoomFar-ja.md)）。
 * 部屋のフレームの各命令の `SiteOK`（`chg.roomSites`、項目 1-1-d-2-4-2）。前と同じです。
-* `CleanR` と `ReadR` の残り: プレイヤーのルーチンでの状態（`at_ctrl`、`at_frame`）、スクロールの処理からあとのフレームのすること（`after`、`collide`）。
+* `CleanR` と `ReadR` の残り: プレイヤーのルーチンで、フレームがモデルに従うかを決める値（覚えている速さ、塞ぎ、当たりのビット）、スクロールの処理からあとのフレームのすること（`after`、`collide`）。そこでのほかの状態と、そこに来ることは今は証明しています。新しいフィールド `unpaused` からです（[部屋のフレーム: プレイヤーのルーチンでの状態](c-7-1-2-RoomCut-ja.md)）。
 
 **ファイル.** `Theorems/FrameTime.lean` と上のファイル。
 

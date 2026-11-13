@@ -877,6 +877,448 @@ theorem z_step (hc : ZOK Cr Co E g starts base qs xb) (hp : E.pad = TaintRun.AB.
 
 end
 
+/-! ## The pause's class beside the walk
+
+Start may be pressed on the pipe's frames. The six bytes of the pause (the queue, the buffer, the flag and the counter of the pause sound, the pause timer, the pause
+byte) are then in one of a few classes at each frame's end. The walk above follows the pipe's timer with the bit `rk`, so these bytes cannot be carried in tables as
+`StepWrites` does, and as known bytes of the walk's states they would multiply the walk. So the class is carried beside the walk (`Ph`). The frame's interrupt calls the
+sound routine, the reading of the pads and the pause routine, one after the other; only these read or write the six bytes. From the first call to the return after the last
+(`inR`) the walk knows them: at the first call a state is split into one piece for each class that agrees with it, and at the return the six bytes must be in a class and
+are forgotten, but for the bits 0 to 6 of the pause byte, which the rest of the frame reads. Outside, no step may write them (`StepWrites.keepOK`). The bits `rk` and
+`spent` are left as the step sets them, so the pipe's timer is still followed. There is no game data here. -/
+
+open StepWrites (SState SIn soundLe)
+
+/-- **The routine of the pause**: from the call of the sound routine in the frame's interrupt (`call`) to the return after the pause routine (`call + 9`). Inside the
+three routines the body's return address is on the stack, at the body's stack pointer `sb`. `SB` are the six bytes, `g` the pause byte. -/
+structure PR where
+  call : UInt16
+  sb : UInt8
+  SB : List Nat
+  g : Nat
+
+/-- the return address that a call of the body left on the stack, if the state knows it -/
+def retOf (R : PR) (A : AS) : Option UInt16 :=
+  let hi := A.getK (0x100 + R.sb.toNat)
+  let lo := A.getK (0x100 + R.sb.toNat - 1)
+  if hi.isK && lo.isK then some (hi.v.toUInt16 * 256 + lo.v.toUInt16) else none
+
+/-- **The state is in the routine**: at the second or the third call of the body, or below the body's stack with the return address of one of the three calls -/
+def inR (R : PR) (A : AS) : Bool :=
+  A.pc == R.call + 3 || A.pc == R.call + 6 ||
+  (decide (A.s.toNat + 2 ≤ R.sb.toNat) && match retOf R A with
+    | some r => r == R.call + 2 || r == R.call + 5 || r == R.call + 8
+    | none => false)
+
+/-- a byte with bit 7 forgotten -/
+def low7 (b : TaintRun.AB) : TaintRun.AB := ⟨b.v &&& 0x7F, b.k &&& 0x7F⟩
+
+/-- the state after the return: the six bytes forgotten, but for the bits 0 to 6 of the pause byte -/
+def forgetP (R : PR) (B : AS) : AS := (StepWrites.forgetAll (R.SB.filter (· != R.g)) B).setK R.g (low7 (B.getK R.g))
+
+/-- a step in the routine: at the return the six bytes must be in a class, and are forgotten; elsewhere the step must stay in the routine -/
+def pret (R : PR) (T : List SState) (A B : AS) : Option AS :=
+  if B.pc == R.call + 9 && B.s == R.sb && B.k == A.k then (if T.any (soundLe B) then some (forgetP R B) else none)
+  else if inR R B then some B else none
+
+/-- a step outside the routine: it must not write the six bytes -/
+def pout (E : Env) (R : PR) (A B : AS) : Option AS :=
+  if StepWrites.keepOK E (fun i => R.SB.contains i) A then some B else none
+
+/-- **The step with the class beside the walk.** In the routine: the step `zsuccs`, and at the return the check and the forgetting; at the call of the pause routine
+the state is split by bit 7 of the pause byte, which that routine adds to. At the first call: the pieces of the classes. Elsewhere: the step `zsuccs`, which must not
+write the six bytes. -/
+def psuccs (P : List Place) (jump : UInt16) (E : Env) (ops : Array (AM Unit)) (R : PR) (T : List SState) (A : AS) : List (Option AS) :=
+  if inR R A then
+    (if A.pc == R.call + 6 then TaintRun.splitBit R.g 0x80 A else [A]).flatMap fun A' => (zsuccs P jump E ops A').map fun o => o.bind (pret R T A)
+  else if A.pc == R.call then
+    if StepWrites.keepOK E (fun i => R.SB.contains i) A then
+      T.flatMap fun t => if StepWrites.agrees t A then zsuccs P jump E ops (StepWrites.refineAll t A) else []
+    else [none]
+  else (zsuccs P jump E ops A).map fun o => o.bind (pout E R A)
+
+/-- **The class beside the walk**: in the routine nothing is asked; elsewhere the machine's six bytes are in a class -/
+def Ph (R : PR) (T : List SState) (A : AS) (m : Machine) : Prop := inR R A = true ∨ ∃ t ∈ T, SIn t m
+
+/-- the table has a state that covers `B`, both in the routine or both outside -/
+def pcover (C : ZCfg) (R : PR) (B : AS) : Bool :=
+  (C.idx.getD (zskey C.E C.jump C.keep C.kb (hintNorm C.hints B)) []).any fun i =>
+    match C.t[i]? with
+    | some D => B.le D && inR R B == inR R D
+    | none => false
+
+/-- `zwalk` with `psuccs`; the frame's end is outside the routine -/
+def pwalk (C : ZCfg) (R : PR) (T : List SState) (fin : AS → Bool) : Nat → AS → Bool
+  | 0, _ => false
+  | n + 1, A => (psuccs C.places C.jump C.E C.ops R T A).all fun r =>
+    match r with
+    | none => false
+    | some B =>
+      if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && pcover C R B) || pwalk C R T fin n B
+      else B.k == A.k + 1 && fin B && !inR R B
+
+section
+variable {E : Env} {F : Nat × UInt8}
+
+theorem mem_low7 {b : TaintRun.AB} {x : UInt8} (h : b.mem x) : (low7 b).mem x := by
+  refine TaintRun.mem_iff.2 fun i hi => ?_
+  have a1 := TaintRun.mem_iff.1 h i hi
+  show (TaintRun.bt x i && TaintRun.bt (b.k &&& 0x7F) i) = (TaintRun.bt (b.v &&& 0x7F) i && TaintRun.bt (b.k &&& 0x7F) i)
+  rw [TaintRun.bt_and, TaintRun.bt_and]
+  revert a1
+  generalize TaintRun.bt x i = p, TaintRun.bt b.v i = r, TaintRun.bt b.k i = s, TaintRun.bt 0x7F i = u
+  revert p r s u
+  decide
+
+theorem forgetP_k (R : PR) (B : AS) : (forgetP R B).k = B.k := StepWrites.forgetAll_k _ _
+
+theorem sim_forgetP (R : PR) (hg : R.g < 2048) {B : AS} {m : Machine} (hs : Sim E F B m) : Sim E F (forgetP R B) m :=
+  SideChangeEnd.sim_refine (StepWrites.sim_forgetAll _ hs) (mem_low7 (hs.ram R.g hg))
+
+variable {ops : Array (AM Unit)} {R : PR} {T : List SState} {P : List Place} {jump : UInt16}
+
+/-- **One step**: `psuccs` follows the machine, when it meets the condition at the places, and the class beside the walk goes on -/
+theorem s_psuccs (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) (hg : R.g < 2048) (h0 : StepWrites.tabOK R.SB T = true)
+    {A : AS} {m : Machine} (hs : Sim E F A m) (hph : Ph R T A m) (hp : PlaceOK P m) :
+    ∃ r ∈ psuccs P jump E ops R T A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 ∧ Ph R T B (go step m).2 := by
+  have tab : ∀ t ∈ T, ∀ p ∈ t, R.SB.contains p.1 = true ∧ p.1 < 2048 := by
+    intro t ht p hp
+    simp only [StepWrites.tabOK, List.all_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h0
+    exact h0 t ht p hp
+  unfold psuccs
+  by_cases hin : inR R A = true
+  · rw [if_pos hin]
+    obtain ⟨A', hA', s', k'⟩ : ∃ A' ∈ (if A.pc == R.call + 6 then TaintRun.splitBit R.g 0x80 A else [A]), Sim E F A' m ∧ A'.k = A.k := by
+      split
+      · exact TaintRun.cov_bit hg (by decide) A m hs
+      · exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+    obtain ⟨r, hr, hB⟩ := s_zsuccs (P := P) (jump := jump) hops hT s' hp
+    refine ⟨r.bind (pret R T A), List.mem_flatMap.2 ⟨A', hA', List.mem_map.2 ⟨r, hr, rfl⟩⟩, fun B hB' => ?_⟩
+    cases r with
+    | none => cases hB'
+    | some B0 =>
+      obtain ⟨g1, g2⟩ := hB B0 rfl
+      have g2' : StepRel A B0 m (go step m).2 := StepWrites.stepRel_k k'.symm rfl g2
+      have hB2 : pret R T A B0 = some B := hB'
+      unfold pret at hB2
+      split at hB2
+      · split at hB2
+        · rename_i _ hT1
+          simp only [Option.some.injEq] at hB2
+          subst hB2
+          obtain ⟨t, ht, hle⟩ := List.any_eq_true.1 hT1
+          exact ⟨sim_forgetP R hg g1, StepWrites.stepRel_k rfl (forgetP_k R B0) g2', Or.inr ⟨t, ht, StepWrites.sIn_of_le g1 hle⟩⟩
+        · cases hB2
+      · split at hB2
+        · rename_i _ hin2
+          simp only [Option.some.injEq] at hB2
+          subst hB2
+          exact ⟨g1, g2', Or.inl hin2⟩
+        · cases hB2
+  · rw [if_neg hin]
+    have hgh : ∃ t ∈ T, SIn t m := by
+      rcases hph with h | h
+      · exact absurd h hin
+      · exact h
+    by_cases hc : (A.pc == R.call) = true
+    · rw [if_pos hc]
+      by_cases hk : StepWrites.keepOK E (fun i => R.SB.contains i) A = true
+      · rw [if_pos hk]
+        obtain ⟨t, ht, htm⟩ := hgh
+        have hag : StepWrites.agrees t A = true := StepWrites.agrees_of hs (fun p hp => (tab t ht p hp).2) htm
+        obtain ⟨r, hr, hB⟩ := s_zsuccs (P := P) (jump := jump) hops hT (StepWrites.sim_refineAll t hs htm) hp
+        refine ⟨r, List.mem_flatMap.2 ⟨t, ht, by rw [if_pos hag]; exact hr⟩, fun B hB' => ?_⟩
+        obtain ⟨g1, g2⟩ := hB B hB'
+        exact ⟨g1, StepWrites.stepRel_k (StepWrites.refineAll_k t A).symm rfl g2,
+          Or.inr ⟨t, ht, StepWrites.sIn_keep (fun p hp => (tab t ht p hp).1) htm (StepWrites.keep_step hs hk)⟩⟩
+      · rw [if_neg hk]
+        exact ⟨none, List.mem_singleton.2 rfl, fun B hB => by cases hB⟩
+    · rw [if_neg hc]
+      obtain ⟨r, hr, hB⟩ := s_zsuccs (P := P) (jump := jump) hops hT hs hp
+      refine ⟨r.bind (pout E R A), List.mem_map.2 ⟨r, hr, rfl⟩, fun B hB' => ?_⟩
+      cases r with
+      | none => cases hB'
+      | some B0 =>
+        obtain ⟨g1, g2⟩ := hB B0 rfl
+        have hB2 : pout E R A B0 = some B := hB'
+        unfold pout at hB2
+        split at hB2
+        · rename_i hk
+          simp only [Option.some.injEq] at hB2
+          subst hB2
+          obtain ⟨t, ht, htm⟩ := hgh
+          exact ⟨g1, g2, Or.inr ⟨t, ht, StepWrites.sIn_keep (fun p hp => (tab t ht p hp).1) htm (StepWrites.keep_step hs hk)⟩⟩
+        · cases hB2
+
+end
+
+section
+variable {C : ZCfg} {Fu : Nat} {F : Nat × UInt8} {fin : AS → Bool} {R : PR} {T : List SState}
+
+open PipeEntryRule (trace trace_stop frame_trace nxt)
+
+/-- a state of the walk: it covers the machine, the class beside it holds, and the walk from it succeeds -/
+def PLive (C : ZCfg) (R : PR) (T : List SState) (fin : AS → Bool) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
+  Sim C.E F A m ∧ Ph R T A m ∧ ∃ n, pwalk C R T fin n A = true
+
+theorem cover_plive (ht : C.t.all (pwalk C R T fin Fu) = true) {B : AS} {m : Machine} (hs : Sim C.E F B m) (hp : Ph R T B m) (h : pcover C R B = true) :
+    ∃ D, PLive C R T fin F D m ∧ D.k = B.k := by
+  unfold pcover at h
+  obtain ⟨i, _, h2⟩ := List.any_eq_true.1 h
+  split at h2
+  · rename_i D e
+    have h3 : B.le D = true ∧ inR R B = inR R D := by simpa only [Bool.and_eq_true, beq_iff_eq] using h2
+    have hle : B.le D = true := h3.1
+    have hk : D.k = B.k := by
+      simp only [AS.le, Bool.and_eq_true, beq_iff_eq] at hle
+      exact hle.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2.symm
+    have hp' : Ph R T D m := by
+      rcases hp with h4 | h4
+      · exact Or.inl (h3.2 ▸ h4)
+      · exact Or.inr h4
+    obtain ⟨hi, he⟩ := Array.getElem?_eq_some_iff.1 e
+    have hall := (Array.all_eq_true.1 ht) i hi
+    rw [he] at hall
+    exact ⟨D, ⟨sim_le hle hs, hp', Fu, hall⟩, hk⟩
+  · cases h2
+
+theorem plive_step (ht : C.t.all (pwalk C R T fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hg : R.g < 2048)
+    (h0 : StepWrites.tabOK R.SB T = true) {A : AS} {m : Machine} (hl : PLive C R T fin F A m) (hp : PlaceOK C.places m) :
+    (∃ A', PLive C R T fin F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
+    ((go step m).2.frame = m.frame + 1 ∧ ∃ B, fin B = true ∧ inR R B = false ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2 ∧ Ph R T B (go step m).2) := by
+  obtain ⟨hs, hph, n, hw⟩ := hl
+  cases n with
+  | zero => simp [pwalk] at hw
+  | succ n =>
+    obtain ⟨r, hr, hB⟩ := s_psuccs (P := C.places) (jump := C.jump) hops hT hg h0 hs hph hp
+    simp only [pwalk, List.all_eq_true] at hw
+    have hw2 := hw r hr
+    cases r with
+    | none => simp at hw2
+    | some B =>
+      obtain ⟨h1, h2, h3⟩ := hB B rfl
+      dsimp only at hw2
+      rcases h2 with ⟨k1, k2, k3⟩ | ⟨k1, k2⟩
+      · left
+        rw [if_pos (by simp [k1])] at hw2
+        simp only [Bool.or_eq_true, Bool.and_eq_true] at hw2
+        rcases hw2 with ⟨_, h4⟩ | h4
+        · obtain ⟨D, hD, hk⟩ := cover_plive ht h1 h3 h4
+          exact ⟨D, hD, hk.trans k1, k2, k3⟩
+        · exact ⟨B, ⟨h1, h3, n, h4⟩, k1, k2, k3⟩
+      · right
+        rw [if_neg (by simp [k1])] at hw2
+        simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hw2
+        exact ⟨k2, B, hw2.1.2, hw2.2, k1, h1, h3⟩
+
+theorem pframe_run (ht : C.t.all (pwalk C R T fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hg : R.g < 2048)
+    (h0 : StepWrites.tabOK R.SB T = true) {m : Machine} {i : UInt8} (hP : ∀ j, PlaceOK C.places (trace m i j)) :
+    ∀ (n j : Nat) (A : AS), PLive C R T fin F A (trace m i j) → (trace m i j).frame = m.frame → dotsPerFrame ≤ (trace m i j).fdot + 3 * n →
+      (trace m i (j + n)).frame = m.frame + 1 ∧
+        ∃ B, fin B = true ∧ inR R B = false ∧ B.k = A.k + 1 ∧ Sim C.E F B (trace m i (j + n)) ∧ Ph R T B (trace m i (j + n)) := by
+  intro n
+  induction n with
+  | zero =>
+    intro j A hl _ hd
+    have h1 := hl.1.hi
+    have h2 := hl.1.lim
+    omega
+  | succ n ih =>
+    intro j A hl hf hd
+    have hh := hl.1.halted
+    have hnx : trace m i (j + 1) = (go step (trace m i j)).2 := by
+      show nxt (m.frame + 1) (trace m i j) = _
+      simp only [nxt]
+      rw [if_neg]
+      simp [hf, hh]
+    have e : j + (n + 1) = (j + 1) + n := by omega
+    rw [e]
+    rcases plive_step ht hops hT hg h0 hl (hP j) with ⟨A', h1, h2, h3, h4⟩ | ⟨h1, B, h2, h2', h3, h4, h5⟩
+    · rw [← hnx] at h1 h3 h4
+      have := ih (j + 1) A' h1 (h3.trans hf) (by omega)
+      rw [h2] at this
+      exact this
+    · rw [← hnx] at h1 h4 h5
+      have hstop : ((trace m i (j + 1)).frame ≥ m.frame + 1 || (trace m i (j + 1)).halted) = true := by
+        simp [h1, hf]
+      rw [trace_stop hstop n]
+      exact ⟨by rw [h1, hf], B, h2, h2', h3, h4, h5⟩
+
+/-- **One frame, with the class beside the walk.** A walk from `S` that succeeds covers the frame of a machine of `S` whose six bytes are in a class, when every
+instruction of the frame meets the condition at the places; at the frame's end the six bytes are in a class again. -/
+theorem pframe_of_walk (ht : C.t.all (pwalk C R T fin Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hg : R.g < 2048)
+    (h0 : StepWrites.tabOK R.SB T = true) (hE : C.E.pad = TaintRun.AB.top)
+    {S : AS} {m : Machine} (hw : pwalk C R T fin Fu S = true) (hs : Sim C.E F S m) (hph : Ph R T S m) (i : UInt8) (hP : ∀ j, PlaceOK C.places (trace m i j)) :
+    (frame m i).frame = m.frame + 1 ∧ ∃ B, fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) ∧ ∃ t ∈ T, SIn t (frame m i) := by
+  rw [frame_trace]
+  have hs0 : Sim C.E F S (trace m i 0) := { hs with pad := by rw [hE]; exact TaintRun.mem_top _ }
+  have hph0 : Ph R T S (trace m i 0) := hph
+  have hf : dotsPerFrame ≤ (trace m i 0).fdot + 3 * fuelPerFrame := by
+    have : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
+    show dotsPerFrame ≤ m.fdot + 3 * fuelPerFrame
+    omega
+  obtain ⟨g1, B, g2, g3, g4, g5, g6⟩ := pframe_run ht hops hT hg h0 hP fuelPerFrame 0 S ⟨hs0, hph0, Fu, hw⟩ rfl hf
+  rw [Nat.zero_add] at g1 g5 g6
+  refine ⟨g1, B, g2, g4, g5, ?_⟩
+  rcases g6 with h | h
+  · rw [g3] at h
+    cases h
+  · exact h
+
+end
+
+/-! ### The search for a table with the class beside the walk: no part of the proof -/
+
+/-- the search of `zloop` with `psuccs` -/
+partial def ploop (P : List Place) (jump : UInt16) (E : Env) (ops : Array (AM Unit)) (R : PR) (T : List SState) (keep : List Nat) (kb : List (Nat × UInt8))
+    (H : List Hint) (limit : Nat) (X0 : ZS) : ZS := Id.run do
+  let mut X := X0
+  let mut c := 0
+  while true do
+    if X.steps > limit then
+      X := { X with fails := X.fails + 1 }
+      break
+    match X.pending.minEntry? with
+    | none =>
+      match X.held.minEntry? with
+      | none => break
+      | some (k0, _) =>
+        let st := k0 / (2 ^ 128)
+        for (K2, A) in X.held.toList do
+          if K2 / (2 ^ 128) == st then
+            let K := K2 % (2 ^ 128)
+            X := { X with pending := X.pending.insert K A, inN := X.inN.insert K 2, held := X.held.erase K2 }
+    | some (key, A) =>
+      let n := X.inN.getD key 1
+      X := { X with pending := X.pending.erase key, inN := X.inN.erase key }
+      c := c + 1
+      if n ≥ 2 || c % 256 == 0 then X := { X with out := X.out.push A, outK := X.outK.push key }
+      let rs := psuccs P jump E ops R T A
+      X := { X with steps := X.steps + rs.length }
+      if rs.any (·.isNone) then X := { X with fails := X.fails + 1, failed := if X.failed.size < 40 then X.failed.push A else X.failed }
+      for b in rs.filterMap id do
+        if b.k != A.k then X := { X with ends := X.ends.push b }
+        else X := zroute E jump keep kb H X b
+  return X
+
+/-- the configuration from the table found, with the six bytes kept apart -/
+def pcfgOf (P : List Place) (jump : UInt16) (E : Env) (R : PR) (T : List SState) (ckeys keep : List Nat) (kb : List (Nat × UInt8)) (H : List Hint) (starts : List AS) :
+    ZCfg :=
+  let ops := (aRows E).toArray
+  let keep := keep ++ R.SB
+  let X := ploop P jump E ops R T keep kb H 12000000 (starts.foldl (zroute E jump keep kb H) {})
+  let I := X.out.foldl (fun (acc : Std.HashMap Nat (List Nat) × ByteArray × Nat) A =>
+      let k := X.outK.getD acc.2.2 0
+      (acc.1.insert k (acc.2.2 :: acc.1.getD k []), acc.2.1.set! A.pc.toNat 1, acc.2.2 + 1))
+    (({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0), 0)
+  { E, ops, places := P, jump, ckeys, keep, kb, hints := H, t := X.out, idx := I.1, cut := I.2.1 }
+
+/-! ### The check of the pipe's frames with the class beside the walk -/
+
+/-- what the check of the pipe's frames with the class beside the walk says. As `ZOK`, with the routine `R` and the classes `T`. -/
+structure POK (Cr Co : ZCfg) (R : PR) (T : List SState) (E : Env) (g : Nat) (starts base : List AS) (qs xb : List (Nat × UInt8)) : Prop where
+  ti : E.rkI < 2048
+  tg : R.g < 2048
+  tab : StepWrites.tabOK R.SB T = true
+  er : Cr.E = E
+  eo : Co.E = E
+  or : Cr.ops = (aRows E).toArray
+  oo : Co.ops = (aRows E).toArray
+  pr : Cr.places = Co.places
+  rkStarts : ∀ S ∈ starts, S.k = 0 ∧ S.rk = true ∧ S.spent = false ∧ inR R S = false ∧ inR R (toOne E S) = false
+  tr : Cr.t.all (pwalk Cr R T (finRkP g starts) TaintRun.walkFuel) = true
+  sr : ∀ S ∈ starts, pwalk Cr R T (finRkP g starts) TaintRun.walkFuel S = true
+  to : Co.t.all (pwalk Co R T (finXP g (starts.map (toOne E)) base qs xb) TaintRun.walkFuel) = true
+  so : ∀ S ∈ starts, pwalk Co R T (finXP g (starts.map (toOne E)) base qs xb) TaintRun.walkFuel (toOne E S) = true
+
+/-- **the check of the pipe's frames with the class beside the walk** -/
+def pcheck (Cr Co : ZCfg) (R : PR) (T : List SState) (E : Env) (g : Nat) (starts base : List AS) (qs xb : List (Nat × UInt8)) : Bool :=
+  let ones := starts.map (toOne E)
+  let fr := finRkP g starts
+  let fo := finXP g ones base qs xb
+  decide (E.rkI < 2048) && decide (R.g < 2048) && StepWrites.tabOK R.SB T && starts.all (fun S => S.k == 0 && S.rk && !S.spent && !inR R S && !inR R (toOne E S)) &&
+    Cr.t.all (pwalk Cr R T fr TaintRun.walkFuel) && starts.all (pwalk Cr R T fr TaintRun.walkFuel) &&
+    Co.t.all (pwalk Co R T fo TaintRun.walkFuel) && starts.all (fun S => pwalk Co R T fo TaintRun.walkFuel (toOne E S))
+
+section
+variable {E : Env} {g : Nat} {Cr Co : ZCfg} {R : PR} {T : List SState} {starts base : List AS} {qs xb : List (Nat × UInt8)}
+
+open PipeEntryRule (trace)
+
+/-- **One frame of the pipe's routine with the class beside the walk, for any input**, when every instruction of the frame meets the condition at the places: the frame
+stays in the state during the pipe and the six bytes in a class; or it leaves the routine, the bytes `xb` have their values, with the bytes `qs` the state is in `base`,
+the game is not paused, and the six bytes are in a class. -/
+theorem p_step (hc : POK Cr Co R T E g starts base qs xb) (hp : E.pad = TaintRun.AB.top) {m : Machine} (h : InvAt E starts m) (hg : ∃ t ∈ T, SIn t m) (i : UInt8)
+    (hP : ∀ j, PlaceOK Cr.places (trace m i j)) :
+    (InvAt E starts (frame m i) ∧ ∃ t ∈ T, SIn t (frame m i)) ∨
+      (ExitAt xb (frame m i) ∧ (Quiet qs (frame m i) → ∃ D ∈ base, Sim E ((frame m i).frame, 2) D (frame m i)) ∧ (frame m i).ram.get! g &&& 1 ≠ 1 ∧
+        ∃ t ∈ T, SIn t (frame m i)) := by
+  have hE1 := hc.er
+  have hE2 := hc.eo
+  obtain ⟨S, hS, (⟨h2, hs⟩ | ⟨h1, hs⟩)⟩ := h
+  · obtain ⟨_, _, _, hn1, _⟩ := hc.rkStarts S hS
+    have hsr : Sim Cr.E (m.frame, tm E m) S m := by rw [hE1]; exact hs
+    obtain ⟨_, B, g2, _, g4, hgh⟩ := pframe_of_walk (C := Cr) (F := (m.frame, tm E m)) hc.tr (by rw [hE1]; exact hc.or) h2 hc.tg hc.tab
+      (by rw [hE1]; exact hp) (hc.sr S hS) hsr (Or.inr hg) i hP
+    rw [hE1] at g4
+    simp only [finRkP, finRk, Bool.and_eq_true, List.any_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at g2
+    obtain ⟨⟨hr, S', hS', hle⟩, _⟩ := g2
+    have hv : (frame m i).ram.get! E.rkI = if B.spent then tm E m - 1 else tm E m := g4.rkv hr
+    have hbase : Sim E ((frame m i).frame, tm E (frame m i)) ({ B with k := 0, spent := false } : AS) (frame m i) := by
+      refine { g4 with fr := ?_, rkv := ?_ }
+      · show (frame m i).frame = (frame m i).frame + 0
+        rfl
+      · intro _
+        rfl
+    have hs' := sim_le hle hbase
+    have hge : 1 ≤ (tm E (frame m i)).toNat := by
+      show 1 ≤ ((frame m i).ram.get! E.rkI).toNat
+      rw [hv]
+      split
+      · rw [u8_sub_one h2]
+        omega
+      · omega
+    left
+    refine ⟨⟨S', hS', ?_⟩, hgh⟩
+    by_cases h3 : 2 ≤ (tm E (frame m i)).toNat
+    · exact Or.inl ⟨h3, hs'⟩
+    · have he : tm E (frame m i) = 1 := by
+        apply UInt8.toNat_inj.1
+        have : (1 : UInt8).toNat = 1 := rfl
+        omega
+      exact Or.inr ⟨he, sim_toOne hc.ti hs' he _ rfl⟩
+  · have hsr : Sim Co.E (m.frame, 2) (toOne E S) m := by rw [hE2]; exact hs
+    have hP' : ∀ j, PlaceOK Co.places (trace m i j) := by
+      rw [← hc.pr]
+      exact hP
+    obtain ⟨_, B, g2, _, g5, hgh⟩ := pframe_of_walk (C := Co) (F := (m.frame, 2)) hc.to (by rw [hE2]; exact hc.oo) (Nat.le_refl _) hc.tg hc.tab
+      (by rw [hE2]; exact hp) (hc.so S hS) hsr (Or.inr hg) i hP'
+    rw [hE2] at g5
+    have g4 : Sim E (m.frame, 2) B (frame m i) := g5
+    simp only [finXP, finX, Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true, List.any_eq_true, List.all_eq_true] at g2
+    obtain ⟨⟨hr, hx0⟩, hq0⟩ := g2
+    have hbase : Sim E ((frame m i).frame, 2) ({ B with k := 0 } : AS) (frame m i) := by
+      refine { g4 with fr := ?_, rkv := ?_ }
+      · show (frame m i).frame = (frame m i).frame + 0
+        rfl
+      · intro hr2
+        have : B.rk = true := hr2
+        rw [hr] at this
+        cases this
+    have stay : ∀ S', S' ∈ starts.map (toOne E) → ({ B with k := 0 } : AS).le S' = true → InvAt E starts (frame m i) := by
+      intro S' hS' hle
+      obtain ⟨S2, hS2, rfl⟩ := List.mem_map.1 hS'
+      have hs' := sim_le hle hbase
+      exact ⟨S2, hS2, Or.inr ⟨one_of_sim hc.ti hs', hs'⟩⟩
+    rcases hq0 with ⟨S', hS', hle⟩ | hnp
+    · exact Or.inl ⟨stay S' hS' hle, hgh⟩
+    · rcases hx0 with ⟨S', hS', hle⟩ | ⟨hx, D, hD, hle⟩
+      · exact Or.inl ⟨stay S' hS' hle, hgh⟩
+      · right
+        exact ⟨fun p hq => sim_known g4 (hx p hq), fun hq => ⟨D, hD, sim_le hle (sim_refines hq hbase)⟩, not_paused_of g4 hnp, hgh⟩
+
+end
+
 /-! ## The statement -/
 
 /-- the bytes that the state at the exit knows. The values come from the reference machine when the timer has run out. -/
@@ -1156,6 +1598,200 @@ def soundCheckC (c : Ctx) (d : Data) (e : Machine) : Bool :=
 /-- the check of the rows with tables -/
 def soundCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Bool := soundCheckC (timeCtx sy nm d e) d e
 
+/-! ## The pause through the pipe's frames
+
+The six bytes of the pause are in one of 88 classes at each frame's end of the pipe, for any input (`classesV`). At the entry this is a condition on one state (`PauseV`);
+the walk carries it beside the pipe's frames (`pcheck`), and at the exit, which is not paused, it gives the pause part of `QuietP` (`QuietV`), but for the case where the
+unpause was pressed on the frame of the exit. -/
+
+/-- the pause timer -/
+abbrev pauseTI (d : Data) : Nat := adI d.nx "GamePauseTimer"
+
+/-- **The classes of the pause at a frame's end of the pipe.** Not paused: silent (the queue, the buffer and the flag 0; the counter and the timer any; the pause byte 0
+or `0x80`, bit 7 not known); the sound of the unpause with the counter `c` from 1 to one less than the length and the timer `c + 1`; the unpause pressed on this frame
+(the timer one more than the length). Paused: the pause pressed on this frame; the pause sound with the counter `c` and the timer `c + 1`; the pause sound over (the
+timer 1, then 0). Bit 7 of the pause byte is set by a press and cleared when the timer is 0 and Start is not pressed; its bits 1 to 6 are 0. -/
+def classesV (sy : Syms) (d : Data) : List SState :=
+  let ix := pauseIx d.nx
+  let t := pauseTI d
+  let g := pauseI d
+  let U := TaintRun.AB.known sy.UnpauseSfxValue.toUInt8
+  let P := TaintRun.AB.known sy.PauseSfxValue.toUInt8
+  let L := sy.PauseSfxLength.toNat
+  let z := TaintRun.AB.known 0
+  let gv := fun (v : UInt8) => (g, TaintRun.AB.known v)
+  [[(ix.q, z), (ix.b, z), (ix.f, z), (g, ⟨0, 0x7F⟩)]] ++
+    ((List.range (L - 1)).map fun j => [(ix.q, z), (ix.b, U), (ix.f, U), (ix.c, TaintRun.AB.known (j + 1).toUInt8), (t, TaintRun.AB.known (j + 2).toUInt8), gv 0x80]) ++
+    [[(ix.q, U), (ix.b, z), (ix.f, P), (t, TaintRun.AB.known (L + 1).toUInt8), gv 0x80]] ++
+    [[(ix.q, P), (ix.b, z), (t, TaintRun.AB.known (L + 1).toUInt8), gv 0x81]] ++
+    ((List.range (L - 1)).map fun j => [(ix.q, z), (ix.b, P), (ix.f, P), (ix.c, TaintRun.AB.known (j + 1).toUInt8), (t, TaintRun.AB.known (j + 2).toUInt8), gv 0x81]) ++
+    [[(ix.q, z), (ix.b, z), (ix.f, P), (ix.c, z), (t, TaintRun.AB.known 1), gv 0x81], [(ix.q, z), (ix.b, z), (ix.f, P), (ix.c, z), (t, z), gv 0x81],
+     [(ix.q, z), (ix.b, z), (ix.f, P), (ix.c, z), (t, z), gv 1]]
+
+/-- **The condition on the pause at the entry**: one of the classes that are not paused. Silent: the queue, the buffer and the flag 0, the pause byte 0 or `0x80`. Or the
+sound of the unpause plays: the buffer and the flag hold the unpause sound's value, the counter is from 1 to one less than the length, the timer is one more than the
+counter, the pause byte is `0x80`. Or the unpause was pressed on this frame: the queue holds the unpause sound's value, the buffer 0, the flag the pause sound's value,
+the timer one more than the length, the pause byte `0x80`. -/
+def PauseV (sy : Syms) (d : Data) (m : Machine) : Prop :=
+  ((m.ram.get! (pauseI d) = 0 ∨ m.ram.get! (pauseI d) = 0x80) ∧ m.ram.get! (pauseIx d.nx).q = 0 ∧ m.ram.get! (pauseIx d.nx).b = 0 ∧ m.ram.get! (pauseIx d.nx).f = 0) ∨
+  (m.ram.get! (pauseI d) = 0x80 ∧ m.ram.get! (pauseIx d.nx).q = 0 ∧ m.ram.get! (pauseIx d.nx).b = sy.UnpauseSfxValue.toUInt8 ∧
+    m.ram.get! (pauseIx d.nx).f = sy.UnpauseSfxValue.toUInt8 ∧ 1 ≤ (m.ram.get! (pauseIx d.nx).c).toNat ∧ (m.ram.get! (pauseIx d.nx).c).toNat < sy.PauseSfxLength.toNat ∧
+    (m.ram.get! (pauseTI d)).toNat = (m.ram.get! (pauseIx d.nx).c).toNat + 1) ∨
+  (m.ram.get! (pauseI d) = 0x80 ∧ m.ram.get! (pauseIx d.nx).q = sy.UnpauseSfxValue.toUInt8 ∧ m.ram.get! (pauseIx d.nx).b = 0 ∧
+    m.ram.get! (pauseIx d.nx).f = sy.PauseSfxValue.toUInt8 ∧ (m.ram.get! (pauseTI d)).toNat = sy.PauseSfxLength.toNat + 1)
+
+/-- `PauseV`, for a program -/
+def pauseVB (sy : Syms) (d : Data) (m : Machine) : Bool :=
+  let ix := pauseIx d.nx
+  let L := sy.PauseSfxLength.toNat
+  let U := sy.UnpauseSfxValue.toUInt8
+  let g := m.ram.get! (pauseI d)
+  let c := (m.ram.get! ix.c).toNat
+  let t := (m.ram.get! (pauseTI d)).toNat
+  ((g == 0 || g == 0x80) && m.ram.get! ix.q == 0 && m.ram.get! ix.b == 0 && m.ram.get! ix.f == 0) ||
+  (g == 0x80 && m.ram.get! ix.q == 0 && m.ram.get! ix.b == U && m.ram.get! ix.f == U && decide (1 ≤ c) && decide (c < L) && t == c + 1) ||
+  (g == 0x80 && m.ram.get! ix.q == U && m.ram.get! ix.b == 0 && m.ram.get! ix.f == sy.PauseSfxValue.toUInt8 && t == L + 1)
+
+/-- **The pause at the exit**: silent with the flag 0; or the unpause sound with the counter from 1 to one less than the length; or the unpause pressed on this frame -/
+def QuietV (sy : Syms) (d : Data) (m : Machine) : Prop :=
+  (m.ram.get! (pauseIx d.nx).q = 0 ∧ m.ram.get! (pauseIx d.nx).b = 0 ∧ m.ram.get! (pauseIx d.nx).f = 0) ∨
+  (m.ram.get! (pauseIx d.nx).q = 0 ∧ m.ram.get! (pauseIx d.nx).b = sy.UnpauseSfxValue.toUInt8 ∧ m.ram.get! (pauseIx d.nx).f = sy.UnpauseSfxValue.toUInt8 ∧
+    1 ≤ (m.ram.get! (pauseIx d.nx).c).toNat ∧ (m.ram.get! (pauseIx d.nx).c).toNat < sy.PauseSfxLength.toNat) ∨
+  (m.ram.get! (pauseIx d.nx).q = sy.UnpauseSfxValue.toUInt8 ∧ m.ram.get! (pauseIx d.nx).b = 0 ∧ m.ram.get! (pauseIx d.nx).f = sy.PauseSfxValue.toUInt8)
+
+/-- **What the exit still asks**: the queue of the pause sound as at the reference `x` (so the unpause was not pressed on the frame of the exit), and when the buffer of
+the pause sound is as at `x` (silent), the two squares' effects as at `x` and the song's bytes a row of the song. With `QuietV` this gives `QuietP` (`quietP_of_V`). -/
+def QuietRest (d : Data) (x m : Machine) : Prop :=
+  m.ram.get! (pauseIx d.nx).q = x.ram.get! (pauseIx d.nx).q ∧
+  (m.ram.get! (pauseIx d.nx).b = x.ram.get! (pauseIx d.nx).b →
+    m.ram.get! (pauseIx d.nx).s1 = x.ram.get! (pauseIx d.nx).s1 ∧ m.ram.get! (pauseIx d.nx).s2 = x.ram.get! (pauseIx d.nx).s2 ∧ SongAt d.song m)
+
+/-- `QuietRest`, for a program -/
+def quietRestB (d : Data) (x m : Machine) : Bool :=
+  let ix := pauseIx d.nx
+  m.ram.get! ix.q == x.ram.get! ix.q && (m.ram.get! ix.b != x.ram.get! ix.b ||
+    (m.ram.get! ix.s1 == x.ram.get! ix.s1 && m.ram.get! ix.s2 == x.ram.get! ix.s2 && d.song.any fun q => q.all fun p => m.ram.get! p.1 == p.2))
+
+/-- the routine of the pause from the reference entry: the first call of the sound routine in the interrupt, and the body's stack pointer three below the idle loop's -/
+def prOf (sy : Syms) (d : Data) (e : Machine) : PR :=
+  let ix := pauseIx d.nx
+  { call := jsrAt e sy.NonMaskableInterrupt sy.SoundEngine 512, sb := e.s - 3, SB := [ix.q, ix.b, ix.f, ix.c, pauseTI d, pauseI d], g := pauseI d }
+
+/-- the two tables of the pipe's frames with the class beside the walk: the counter followed, and the counter at 1 -/
+def cfgRq (sy : Syms) (d : Data) (e : Machine) : ZCfg :=
+  pcfgOf d.places d.jump (envOf d e) (prOf sy d e) (classesV sy d) d.ckeys d.keep [(pauseI d, 1)] d.hints (startsP d e)
+def cfgOq (sy : Syms) (d : Data) (e : Machine) : ZCfg :=
+  pcfgOf d.places d.jump (envOf d e) (prOf sy d e) (classesV sy d) d.ckeys (pauseI d :: d.keep) [(pauseI d, 1)] d.hints ((startsP d e).map (toOne (envOf d e)))
+
+/-- **the check of the pipe's frames with the pause in a class** -/
+def pipeCheckV (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Bool :=
+  pcheck (cfgRq sy d e) (cfgOq sy d e) (prOf sy d e) (classesV sy d) (envOf d e) (pauseI d) (startsP d e) (baseK d e) [] (exitBytes sy nm (refX e))
+
+/-- the reference at the exit is silent, the unpause sound's value is not 0, and the length of the pause sound is below 256 -/
+def exitVOK (sy : Syms) (d : Data) (e : Machine) : Bool :=
+  (refX e).ram.get! (pauseIx d.nx).q == 0 && (refX e).ram.get! (pauseIx d.nx).b == 0 && sy.UnpauseSfxValue.toUInt8 != 0 && decide (sy.PauseSfxLength.toNat < 256)
+
+section
+variable {sy : Syms} {d : Data} {e m : Machine}
+
+theorem and_ffV (x : UInt8) : x &&& 0xFF = x := by
+  apply UInt8.toNat_inj.1
+  rw [UInt8.toNat_and]
+  have : (0xFF : UInt8).toNat = 2 ^ 8 - 1 := rfl
+  rw [this, Nat.and_two_pow_sub_one_eq_mod]
+  exact Nat.mod_eq_of_lt x.toNat_lt
+
+theorem eq_of_knownV {v x : UInt8} (h : (TaintRun.AB.known v).mem x) : x = v := by
+  have h' : x &&& 0xFF = v &&& 0xFF := h
+  rwa [and_ffV, and_ffV] at h'
+
+theorem known_of_eqV {v x : UInt8} (h : x = v) : (TaintRun.AB.known v).mem x := by
+  rw [h]
+  exact TaintRun.mem_known_self v
+
+theorem toUInt8_of_toNatV {x : UInt8} {n : Nat} (h : x.toNat = n) : x = n.toUInt8 := by
+  rw [← h]
+  exact (UInt8.ofNat_toNat).symm
+
+theorem toNat_of_toUInt8V {x : UInt8} {n : Nat} (h : x = n.toUInt8) (hn : n < 256) : x.toNat = n := by
+  rw [h]
+  exact Nat.mod_eq_of_lt hn
+
+/-- **A machine with the condition at the entry has the bytes of one of the classes** -/
+theorem class_of_pauseV (h : PauseV sy d m) : ∃ t ∈ classesV sy d, SIn t m := by
+  rcases h with ⟨hg, hq, hb, hf⟩ | ⟨hg, hq, hb, hf, hc1, hc2, ht⟩ | ⟨hg, hq, hb, hf, ht⟩
+  · refine ⟨[((pauseIx d.nx).q, TaintRun.AB.known 0), ((pauseIx d.nx).b, TaintRun.AB.known 0), ((pauseIx d.nx).f, TaintRun.AB.known 0), (pauseI d, ⟨0, 0x7F⟩)],
+      by simp [classesV], ?_⟩
+    intro p hp
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl
+    · exact known_of_eqV hq
+    · exact known_of_eqV hb
+    · exact known_of_eqV hf
+    · show m.ram.get! (pauseI d) &&& 0x7F = 0 &&& 0x7F
+      rcases hg with hg | hg <;> rw [hg] <;> decide
+  · have hj : (m.ram.get! (pauseIx d.nx).c).toNat - 1 < sy.PauseSfxLength.toNat - 1 := by omega
+    refine ⟨_, List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr
+      (List.mem_map.2 ⟨(m.ram.get! (pauseIx d.nx).c).toNat - 1, List.mem_range.2 hj, rfl⟩)))))))))), ?_⟩
+    intro p hp
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl | rfl | rfl
+    · exact known_of_eqV hq
+    · exact known_of_eqV hb
+    · exact known_of_eqV hf
+    · exact known_of_eqV (x := m.ram.get! (pauseIx d.nx).c) (toUInt8_of_toNatV (by omega))
+    · exact known_of_eqV (x := m.ram.get! (pauseTI d)) (toUInt8_of_toNatV (by omega))
+    · exact known_of_eqV hg
+  · refine ⟨_, List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr List.mem_cons_self))))))), ?_⟩
+    intro p hp
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl | rfl
+    · exact known_of_eqV hq
+    · exact known_of_eqV hb
+    · exact known_of_eqV hf
+    · exact known_of_eqV (x := m.ram.get! (pauseTI d)) (toUInt8_of_toNatV ht)
+    · exact known_of_eqV hg
+
+/-- **A machine that is not paused, with the bytes of a class, has the pause as `QuietV` says** (the length of the sound is below 256) -/
+theorem quietV_of_class (hL : sy.PauseSfxLength.toNat < 256) {t : SState} (ht : t ∈ classesV sy d) (hm : SIn t m) (hnp : m.ram.get! (pauseI d) &&& 1 ≠ 1) :
+    QuietV sy d m := by
+  have paused : ∀ v : UInt8, v &&& 1 = 1 → (pauseI d, TaintRun.AB.known v) ∈ t → False := fun v hv hin => by
+    have := eq_of_knownV (hm _ hin)
+    rw [this] at hnp
+    exact hnp hv
+  unfold classesV at ht
+  simp only [List.mem_append, List.mem_cons, List.mem_nil_iff, or_false, List.mem_map, List.mem_range] at ht
+  rcases ht with (((((rfl | ⟨j, hj, rfl⟩) | rfl) | rfl) | ⟨j, hj, rfl⟩) | (rfl | rfl | rfl))
+  · exact Or.inl ⟨eq_of_knownV (hm ((pauseIx d.nx).q, TaintRun.AB.known 0) (by simp)), eq_of_knownV (hm ((pauseIx d.nx).b, TaintRun.AB.known 0) (by simp)),
+      eq_of_knownV (hm ((pauseIx d.nx).f, TaintRun.AB.known 0) (by simp))⟩
+  · have hc : m.ram.get! (pauseIx d.nx).c = (j + 1).toUInt8 := eq_of_knownV (hm ((pauseIx d.nx).c, TaintRun.AB.known (j + 1).toUInt8) (by simp))
+    have hc' := toNat_of_toUInt8V hc (by omega)
+    exact Or.inr (Or.inl ⟨eq_of_knownV (hm ((pauseIx d.nx).q, TaintRun.AB.known 0) (by simp)),
+      eq_of_knownV (hm ((pauseIx d.nx).b, TaintRun.AB.known sy.UnpauseSfxValue.toUInt8) (by simp)),
+      eq_of_knownV (hm ((pauseIx d.nx).f, TaintRun.AB.known sy.UnpauseSfxValue.toUInt8) (by simp)), by omega, by omega⟩)
+  · exact Or.inr (Or.inr ⟨eq_of_knownV (hm ((pauseIx d.nx).q, TaintRun.AB.known sy.UnpauseSfxValue.toUInt8) (by simp)),
+      eq_of_knownV (hm ((pauseIx d.nx).b, TaintRun.AB.known 0) (by simp)), eq_of_knownV (hm ((pauseIx d.nx).f, TaintRun.AB.known sy.PauseSfxValue.toUInt8) (by simp))⟩)
+  · exact (paused 0x81 (by decide) (by simp)).elim
+  · exact (paused 0x81 (by decide) (by simp)).elim
+  · exact (paused 0x81 (by decide) (by simp)).elim
+  · exact (paused 0x81 (by decide) (by simp)).elim
+  · exact (paused 1 (by decide) (by simp)).elim
+
+/-- **The pause at the exit and what the exit still asks give `QuietP`** -/
+theorem quietP_of_V (hx : exitVOK sy d e = true) (hq : QuietV sy d m) (hr : QuietRest d (refX e) m) : QuietP sy d (refX e) m := by
+  simp only [exitVOK, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq, decide_eq_true_eq] at hx
+  obtain ⟨⟨⟨hxq, hxb⟩, hU⟩, _⟩ := hx
+  rcases hq with ⟨hq0, hb0, hf0⟩ | ⟨hq0, hb0, hf0, hc1, hc2⟩ | ⟨hq0, _, _⟩
+  · have hb : m.ram.get! (pauseIx d.nx).b = (refX e).ram.get! (pauseIx d.nx).b := by rw [hb0, hxb]
+    obtain ⟨h1, h2, h3⟩ := hr.2 hb
+    exact Or.inl ⟨hr.1, hb, hf0, h1, h2, h3⟩
+  · exact Or.inr ⟨hr.1, hb0, hf0, hc1, hc2⟩
+  · have := hr.1
+    rw [hq0, hxq] at this
+    exact absurd this hU
+
+end
+
 /-- the two tables of the pipe's frames: the counter followed, and the counter at 1. The low bit of the pause byte is in the key. -/
 def cfgRp (d : Data) (e : Machine) : ZCfg := zcfgOf d.places d.jump (envOf d e) d.ckeys d.keep [(pauseI d, 1)] d.hints (startsP d e)
 def cfgOp (d : Data) (e : Machine) : ZCfg :=
@@ -1178,7 +1814,7 @@ def endCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : List Machin
     zcheck (cfgRp d e) (cfgOp d e) E (pauseI d) st (baseK d e) [] (exitBytes sy nm x) &&
     es.all (fun m => entryOK E (refsP d e) timerF m) &&
     (rowsA c d e ++ rowsB c d e).all (fun r => r.R.all (notPausedK (pauseI d))) && timeCheck sy nm d e &&
-    baseIncl d e && soundCheck sy nm d e
+    baseIncl d e && soundCheck sy nm d e && pipeCheckV sy nm d e && exitVOK sy d e
 
 /-- **The condition on the state at the entry.** The frame has ended in the idle loop, the listed bytes are those of the reference, the timer is at least its first value, and some bytes have the reference's bits. All other bytes are free. -/
 abbrev Entry (d : Data) (e : Machine) (m : Machine) : Prop :=
@@ -1248,6 +1884,15 @@ structure EndStatement (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : L
   goK : ∀ m, InRowsK sy nm d e m → ¬ Paused d m
   /-- a machine in the rows with tables where `left` is 0 is in the rows that the room's checks read -/
   ctlK : ∀ m, InRowsK sy nm d e m → leftP sy nm e m = 0 → InRowsT sy nm d e m
+  /-- **one frame of the pipe with the pause in a class**, for any input, when every instruction of the frame meets the condition at the places: the machine stays in the
+  pipe with the pause in a class, or it leaves the routine with the pause as `QuietV` says, and then with `QuietP`, a form of the screen buffer and the game timer not 000
+  it is in the rows with tables -/
+  pauseStep : ∀ m, During d e m → (∃ t ∈ classesV sy d, SIn t m) → ∀ i, (∀ j, PlaceOK d.places (PipeEntryRule.trace m i j)) →
+    (During d e (frame m i) ∧ ∃ t ∈ classesV sy d, SIn t (frame m i)) ∨
+    (ExitAt (exitQ sy nm e) (frame m i) ∧ QuietV sy d (frame m i) ∧
+      (QuietP sy d (refX e) (frame m i) → SongAt d.xshape (frame m i) → TimerOK d.nx (frame m i) → InRowsK sy nm d e (frame m i)))
+  /-- the pause at the exit and what the exit still asks give `QuietP` -/
+  pauseExit : ∀ m, QuietV sy d m → QuietRest d (refX e) m → QuietP sy d (refX e) m
 
 /-- a machine in rows whose states know that the game is not paused is not paused -/
 theorem not_paused_rows {c : Ctx} {g : Nat} : ∀ (l : List Row), (∀ r ∈ l, ∀ S ∈ r.R, notPausedK g S = true) → ∀ {m : Machine}, InvL c l m → m.ram.get! g &&& 1 ≠ 1
@@ -1404,7 +2049,17 @@ theorem inRowsK_of_exit {sy : Syms} {nm : Names} {d : Data} {e m : Machine} (hc 
 
 theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} {es : List Machine} (h : endCheck sy nm d e es = true) : EndStatement sy nm d e es := by
   simp only [endCheck, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, hI⟩, hK⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, hI⟩, hK⟩, hV⟩, hX⟩ := h
+  have hLen : sy.PauseSfxLength.toNat < 256 := by
+    have hX' := hX
+    simp only [exitVOK, Bool.and_eq_true, decide_eq_true_eq] at hX'
+    exact hX'.2
+  have hZq : POK (cfgRq sy d e) (cfgOq sy d e) (prOf sy d e) (classesV sy d) (envOf d e) (pauseI d) (startsP d e) (baseK d e) [] (exitBytes sy nm (refX e)) := by
+    simp only [pipeCheckV, pcheck, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq, Bool.not_eq_true'] at hV
+    obtain ⟨⟨⟨⟨⟨⟨⟨z1, z1'⟩, z1''⟩, z2⟩, z3⟩, z4⟩, z5⟩, z6⟩ := hV
+    refine ⟨z1, z1', z1'', rfl, rfl, rfl, rfl, rfl, fun S hS => ?_, z3, z4, z5, z6⟩
+    have := z2 S hS
+    exact ⟨this.1.1.1.1, this.1.1.1.2, this.1.1.2, this.1.2, this.2⟩
   simp only [timeCheck, Bool.and_eq_true] at h12
   obtain ⟨hTc, hTz⟩ := h12
   have hK' := hK
@@ -1435,7 +2090,7 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
       exact absurd a1 (by decide)
   have hctl : ∀ m, controllable sy m = true → leftP sy nm e m = 0 := fun m hc => PipeChangeBound.left_zero_of_ctl hL.keys hc
   refine ⟨fun m hm => entryCond_of_ok (h10 m hm), hdur, ?_, fun m hm => inPipe_of_inv hL hm, ?_, fun m hm => in_rows hm.2.1 hm.2.2.1 (exit_base h1 hm), ?_, ?_, hctl, ?_, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, fun m hq hr => quietP_of_V hX hq hr⟩
   · intro M hM
     have a1 : leftP sy nm e M = (tm (envOf d e) M).toNat + afterF := left_of_inv hL (hdur M hM)
     rw [a1]
@@ -1515,6 +2170,12 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
   · intro m hm h0
     unfold InRowsT timeRows
     exact invL_congr (c := ctxK (timeCtx sy nm d e) d e) (c' := timeCtx sy nm d e) rfl (SoundRows.invL_zero hKc hm h0)
+  · intro m hm hg i hP
+    rcases p_step hZq hEp hm hg i hP with ⟨g1, g2⟩ | ⟨g1, g2, g3, ⟨t, ht, htm⟩⟩
+    · exact Or.inl ⟨g1, g2⟩
+    · refine Or.inr ⟨g1, quietV_of_class hLen ht htm g3, fun hq hr ht' => inRowsK_of_exit hK ?_ hq hr ht'⟩
+      obtain ⟨D, hD, hs2⟩ := g2 (fun _ h => by cases h)
+      exact ⟨D, hD, hs2⟩
 
 /-! ## A run -/
 
@@ -1715,10 +2376,15 @@ end
 
 /-! ## A run, with the rows with tables
 
-The condition at the exit is weaker: the pause sound may be silent with the flag 0 and the song in a row, or the unpause sound may play (`QuietP`). The screen buffer has a
-form of the table, and the game timer is not 000 (`TimerOK`). -/
+The condition at the exit is weaker: the pause sound may be silent with the flag 0 and the song in a row, or the unpause sound may play (`QuietP`). The pause part of it
+comes from the condition on the pause at the entry (`PauseV`), by the pipe's frames with the pause in a class (`EndStatement.pauseStep`); the exit still asks `QuietRest`.
+The screen buffer has a form of the table, and the game timer is not 000 (`TimerOK`). -/
 
-/-- **The change of a run, with the conditions of the rows with tables.** As `PipeRun`, with `QuietP` and the screen buffer at the exit, and the game timer not 000 there. -/
+/-- the state during the pipe, with the pause in a class -/
+abbrev DuringV (sy : Syms) (d : Data) (e : Machine) (m : Machine) : Prop := During d e m ∧ ∃ t ∈ classesV sy d, SIn t m
+
+/-- **The change of a run, with the conditions of the rows with tables.** As `PipeRun`, with the condition on the pause at the entry, `QuietRest` and the screen buffer
+at the exit, and the game timer not 000 there. -/
 structure PipeRunK (sy : Syms) (nm : Names) (d : Data) (e : Machine) where
   seq : Nat → Machine
   inp : Nat → UInt8
@@ -1738,8 +2404,11 @@ structure PipeRunK (sy : Syms) (nm : Names) (d : Data) (e : Machine) where
   lagPaused : ∀ n, a ≤ n → n < b → lag n → Paused d (seq (n + 1))
   /-- on a frame of the pipe's routine, each instruction meets the condition at the places -/
   places : ∀ n, a ≤ n → n < b → inPipe sy sy.EngVerticalPipe (seq n) = true → ∀ j, PlaceOK d.places (PipeEntryRule.trace (seq n) (inp n) j)
-  /-- at the exit, the pause sound is as `QuietP` says, and the screen buffer has a form of the table -/
-  quiet : ∀ n, a ≤ n → n ≤ b → ExitAt (exitQ sy nm e) (seq n) → QuietP sy d (refX e) (seq n) ∧ SongAt d.xshape (seq n)
+  /-- the condition on the pause at the entry: one of the classes that are not paused -/
+  pause : PauseV sy d (seq a)
+  /-- at the exit, the queue of the pause sound as at the reference, and when the pause sound is silent the two squares' effects and the song (`QuietRest`); the screen
+  buffer has a form of the table -/
+  quiet : ∀ n, a ≤ n → n ≤ b → ExitAt (exitQ sy nm e) (seq n) → QuietRest d (refX e) (seq n) ∧ SongAt d.xshape (seq n)
   /-- no Start on the frames of the game core after the pipe -/
   noStart : ∀ n, a ≤ n → n < b → coreFrame sy sy.EngVerticalPipe (seq n) = true → SideChangeEnd.noStart (inp n) = true
   /-- at the exit, the game timer is not 000 -/
@@ -1752,29 +2421,33 @@ theorem PipeRunK.cnt_mono (R : PipeRunK sy nm d e) (n : Nat) : R.cnt n ≤ R.cnt
   rw [R.hcnt n]
   split <;> omega
 
-/-- the frame after `n` from a state of the pipe: in the pipe, or at the exit in the rows with tables -/
-theorem PipeRunK.stepD (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) {n : Nat} (h1 : R.a ≤ n) (h2 : n < R.b) (h : During d e (R.seq n)) :
-    During d e (R.seq (n + 1)) ∨ InRowsK sy nm d e (R.seq (n + 1)) := by
-  have hP := R.places _ h1 h2 (T.inRoutine _ h)
+/-- the frame after `n` from a state of the pipe with the pause in a class: in the pipe with the pause in a class, or at the exit in the rows with tables -/
+theorem PipeRunK.stepD (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) {n : Nat} (h1 : R.a ≤ n) (h2 : n < R.b) (h : DuringV sy d e (R.seq n)) :
+    DuringV sy d e (R.seq (n + 1)) ∨ InRowsK sy nm d e (R.seq (n + 1)) := by
+  have hP := R.places _ h1 h2 (T.inRoutine _ h.1)
   rw [R.next n]
-  rcases T.stepK _ h (R.inp n) hP with g | ⟨g1, g2⟩
+  rcases T.pauseStep _ h.1 h.2 (R.inp n) hP with g | ⟨g1, g2, g3⟩
   · exact Or.inl g
   · right
-    rw [← R.next n] at g1 g2 ⊢
+    rw [← R.next n] at g1 g2 g3 ⊢
     obtain ⟨q1, q2⟩ := R.quiet _ (by omega) (by omega) g1
-    exact g2 q1 q2 (R.time _ (by omega) (by omega) g1)
+    exact g3 (T.pauseExit _ g2 q1) q2 (R.time _ (by omega) (by omega) g1)
+
+/-- the machine at the entry is in the pipe with the pause in a class -/
+theorem PipeRunK.atEntry (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) : DuringV sy d e (R.seq R.a) :=
+  ⟨T.during _ R.entry, class_of_pauseV R.pause⟩
 
 /-- **The bound on the change**, with the rows with tables -/
 theorem PipeRunK.bound (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) : R.cnt R.a + (timerF + afterF) ≤ R.cnt R.b := by
   have key : ∀ k, R.a + k ≤ R.b → R.cnt R.a + (timerF + afterF) ≤ R.cnt (R.a + k) ∨
-      ((During d e (R.seq (R.a + k)) ∨ InRowsK sy nm d e (R.seq (R.a + k))) ∧
+      ((DuringV sy d e (R.seq (R.a + k)) ∨ InRowsK sy nm d e (R.seq (R.a + k))) ∧
         R.cnt R.a + (timerF + afterF) ≤ R.cnt (R.a + k) + leftP sy nm e (R.seq (R.a + k))) := by
     intro k
     induction k with
     | zero =>
       intro _
       right
-      refine ⟨Or.inl (T.during _ R.entry), ?_⟩
+      refine ⟨Or.inl (R.atEntry T), ?_⟩
       have := T.atEntry _ R.entry
       simp only [Nat.add_zero]
       omega
@@ -1792,15 +2465,15 @@ theorem PipeRunK.bound (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) 
         have hlt : R.a + k < R.b := by omega
         rcases h1 with h1 | h1
         · right
-          have hP := R.places _ hgap hlt (T.inRoutine _ h1)
-          obtain ⟨g1, _⟩ := T.step _ h1 (R.inp (R.a + k)) hP
+          have hP := R.places _ hgap hlt (T.inRoutine _ h1.1)
+          obtain ⟨g1, _⟩ := T.step _ h1.1 (R.inp (R.a + k)) hP
           refine ⟨R.stepD T hgap hlt h1, ?_⟩
           rw [← hn] at g1
           by_cases hl : R.lag (R.a + k)
           · rw [@if_pos _ (R.dec _) hl] at hc
             have hz := R.lagPaused _ hgap hlt hl
             rw [hn] at hz
-            have hk3 := T.paused _ h1 (R.inp (R.a + k)) hP hz
+            have hk3 := T.paused _ h1.1 (R.inp (R.a + k)) hP hz
             rw [← hn] at hk3
             omega
           · rw [@if_neg _ (R.dec _) hl] at hc
@@ -1830,10 +2503,10 @@ theorem PipeRunK.bound (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) 
 
 /-- on a run of the change, the machine is in the pipe or in the rows with tables, up to `b`, if `b` is the first control after the entry -/
 theorem PipeRunK.way (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
-    ∀ k, R.a + k ≤ R.b → During d e (R.seq (R.a + k)) ∨ InRowsK sy nm d e (R.seq (R.a + k)) := by
+    ∀ k, R.a + k ≤ R.b → DuringV sy d e (R.seq (R.a + k)) ∨ InRowsK sy nm d e (R.seq (R.a + k)) := by
   intro k
   induction k with
-  | zero => exact fun _ => Or.inl (T.during _ R.entry)
+  | zero => exact fun _ => Or.inl (R.atEntry T)
   | succ k ih =>
     intro hk
     have e1 : R.a + (k + 1) = R.a + k + 1 := rfl
@@ -1855,7 +2528,7 @@ theorem PipeRunK.first (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) 
   intro n h1 h2 h0
   obtain ⟨k, rfl⟩ : ∃ k, n = R.a + k := ⟨n - R.a, by omega⟩
   rcases PipeRunK.way T R hc k (by omega) with h | h
-  · exact during_left T h h0
+  · exact during_left T h.1 h0
   · have := T.zeroK _ h h0
     rw [hc _ h1 h2] at this
     cases this
@@ -1869,7 +2542,7 @@ theorem PipeRunK.inRowsT (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e
   rw [e2] at h
   have h0 := T.atControl _ R.atCtl
   rcases h with h | h
-  · exact absurd h0 (during_left T h)
+  · exact absurd h0 (during_left T h.1)
   · exact T.ctlK _ h h0
 
 end

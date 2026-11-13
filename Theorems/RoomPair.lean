@@ -303,6 +303,101 @@ theorem pair_step (hW : WalkChecks sy nm m0) {m : Machine} {i : UInt8} (hm : Roo
 
 end
 
+/-! ## Two bytes, each on its own
+
+The player's routine needs two more facts of the machine at its start: the player's state is 0, 1 or 2, and the change of size is 0. Each is a relation of one byte
+(`x = y` in `pair_frame`), with its own walk. -/
+
+/-- the player's state is known to be 0, 1 or 2: the bits above the low two are known 0, and one of the low two is known 0 -/
+def knSt (b _ : AB) : Bool :=
+  b.k &&& 0xFC == 0xFC && b.v &&& 0xFC == 0 && ((b.k &&& 1 == 1 && b.v &&& 1 == 0) || (b.k &&& 2 == 2 && b.v &&& 2 == 0))
+
+/-- the byte is known to be 0 -/
+def knZero (b _ : AB) : Bool := b.isK && b.v == 0
+
+theorem st_low : ∀ n : Fin 256, UInt8.ofNat n.val &&& 0xFC = 0 → (UInt8.ofNat n.val &&& 1 = 0 ∨ UInt8.ofNat n.val &&& 2 = 0) →
+    UInt8.ofNat n.val = 0 ∨ UInt8.ofNat n.val = 1 ∨ UInt8.ofNat n.val = 2 := by decide +kernel
+
+theorem knSt_spec {b b' : AB} {s : UInt8} (h : knSt b b' = true) (hs : b.mem s) : s = 0 ∨ s = 1 ∨ s = 2 := by
+  simp only [knSt, Bool.and_eq_true, Bool.or_eq_true, beq_iff_eq] at h
+  obtain ⟨⟨h1, h2⟩, h3⟩ := h
+  have e1 : s &&& 0xFC = 0 := by rw [bit_eq hs h1, h2]
+  have e2 : s &&& 1 = 0 ∨ s &&& 2 = 0 := by
+    rcases h3 with ⟨a, b2⟩ | ⟨a, b2⟩
+    · exact Or.inl (by rw [bit_eq hs a, b2])
+    · exact Or.inr (by rw [bit_eq hs a, b2])
+  have := RoomVert.u8_all (P := fun t => t &&& 0xFC = 0 → (t &&& 1 = 0 ∨ t &&& 2 = 0) → t = 0 ∨ t = 1 ∨ t = 2) st_low s
+  exact this e1 e2
+
+theorem knZero_spec {b b' : AB} {s : UInt8} (h : knZero b b' = true) (hs : b.mem s) : s = 0 := by
+  simp only [knZero, Bool.and_eq_true, beq_iff_eq] at h
+  rw [isK_eq h.1 hs, h.2]
+
+section
+open ScreenPage (placesR envR refR aidsOf)
+
+/-- the walk of the player's state -/
+def phSt (sy : Syms) (E : Env) (P : Places) (ops : Array (AM Unit)) : Ph := phP E P ops knSt (I sy.Player_State) (I sy.Player_State) (fun A => [A])
+/-- the walk of the change of size -/
+def phSz (sy : Syms) (E : Env) (P : Places) (ops : Array (AM Unit)) : Ph :=
+  phP E P ops knZero (I sy.PlayerChangeSizeFlag) (I sy.PlayerChangeSizeFlag) (fun A => [A])
+
+/-- **The check on the ROM** of a walk with the pieces `Z` -/
+def checkOf (sy : Syms) (nm : Names) (m0 : Machine) (Z : Env → Places → Array (AM Unit) → Ph) : Bool :=
+  let E := envR sy nm m0
+  let P := placesR sy nm m0
+  RoomVert.walkCheckV sy (Z E P (aRows E).toArray) (finP P (refR m0)) P (aidsOf sy nm m0) E (refR m0) (RoomMap.knownT sy nm m0)
+
+def checkSt (sy : Syms) (nm : Names) (m0 : Machine) : Bool := checkOf sy nm m0 (phSt sy)
+def checkSz (sy : Syms) (nm : Names) (m0 : Machine) : Bool := checkOf sy nm m0 (phSz sy)
+
+/-- the two bytes are out of the block buffers -/
+def apartQ (sy : Syms) (P : Places) : Bool :=
+  [I sy.Player_State, I sy.PlayerChangeSizeFlag].all fun x => decide (x < P.bufLo) || decide (P.bufLo + P.bufN ≤ x)
+
+end
+
+/-- the two facts on a machine -/
+structure Quad (sy : Syms) (m : Machine) : Prop where
+  st : peek m sy.Player_State = 0 ∨ peek m sy.Player_State = 1 ∨ peek m sy.Player_State = 2
+  size : peek m sy.PlayerChangeSizeFlag = 0
+
+/-- the checks of the two walks -/
+structure QuadWalks (sy : Syms) (nm : Names) (m0 : Machine) : Prop where
+  st : checkSt sy nm m0 = true
+  size : checkSz sy nm m0 = true
+  apart : apartQ sy (ScreenPage.placesR sy nm m0) = true
+
+section
+open ScreenPage (placesR envR refR)
+variable {sy : Syms} {nm : Names} {m0 : Machine}
+
+/-- **One frame of the room keeps both facts.** The frame starts in the room's condition with them, each instruction meets `SiteOK`, and it ends in the player's
+routine. -/
+theorem quad_step (hW : QuadWalks sy nm m0) {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0) m)
+    (hk : ∀ j, SiteOK (placesR sy nm m0) (trace m i j)) (h0 : Quad sy m)
+    (hrt : (frame m i).ram.get! (placesR sy nm m0).rtI = (refR m0).ram.get! (placesR sy nm m0).rtI) : Quad sy (frame m i) := by
+  have ha : ∀ x ∈ [I sy.Player_State, I sy.PlayerChangeSizeFlag], x < (placesR sy nm m0).bufLo ∨ (placesR sy nm m0).bufLo + (placesR sy nm m0).bufN ≤ x := by
+    intro x hx
+    have h := hW.apart
+    simp only [apartQ, List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at h
+    exact h x hx
+  have l1 : I sy.Player_State < 2048 := PipeTransitionAll.mask_lt _
+  have l2 : I sy.PlayerChangeSizeFlag < 2048 := PipeTransitionAll.mask_lt _
+  refine ⟨?_, ?_⟩
+  · exact pair_frame (R := fun s _ => s = 0 ∨ s = 1 ∨ s = 2) (RoomVert.okV_of_check hW.st) rfl rfl
+      (fun _ _ _ _ hh a _ => knSt_spec hh a)
+      (fun _ A _ _ hs => ⟨A, List.mem_singleton.2 rfl, hs⟩)
+      (fun _ _ hA => by rw [List.mem_singleton.1 hA]; exact ⟨rfl, rfl⟩)
+      l1 l1 (ha _ (by simp)) (ha _ (by simp)) hm hk h0.st hrt
+  · exact pair_frame (R := fun z _ => z = 0) (RoomVert.okV_of_check hW.size) rfl rfl
+      (fun _ _ _ _ hh a _ => knZero_spec hh a)
+      (fun _ A _ _ hs => ⟨A, List.mem_singleton.2 rfl, hs⟩)
+      (fun _ _ hA => by rw [List.mem_singleton.1 hA]; exact ⟨rfl, rfl⟩)
+      l2 l2 (ha _ (by simp)) (ha _ (by simp)) hm hk h0.size hrt
+
+end
+
 /-! ## At the first control: from the rows of the change -/
 
 section
@@ -315,9 +410,14 @@ def rowP (sy : Syms) (S : AS) : Bool :=
     (!controllable sy (mOf S) || (knHalt (S.getK (I sy.Player_State)) (S.getK (I sy.DiffToHaltJump)) &&
       knPrev (S.getK (I sy.PreviousA_B_Buttons)) (S.getK (I sy.A_B_Buttons))))
 
-/-- **The check on the ROM**: in the rows of the time of the change into the room, a machine with control has both relations -/
+/-- a state of a row: it says whether it has control, and if it has, it knows the player's state and the change of size enough to show `Quad` -/
+def rowQ (sy : Syms) (S : AS) : Bool :=
+  (SurfaceFrames.ctlBytes sy).all (knowsAd S) &&
+    (!controllable sy (mOf S) || (knSt (S.getK (I sy.Player_State)) AB.top && knZero (S.getK (I sy.PlayerChangeSizeFlag)) AB.top))
+
+/-- **The check on the ROM**: in the rows of the time of the change into the room, a machine with control has both relations, and the two facts of `Quad` -/
 def rowsCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Bool :=
-  (timeRows (timeCtx sy nm d e) d e).all fun w => w.R.all (rowP sy)
+  (timeRows (timeCtx sy nm d e) d e).all fun w => w.R.all fun S => rowP sy S && rowQ sy S
 
 variable {sy : Syms}
 
@@ -331,18 +431,42 @@ theorem pair_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : 
   · exact ⟨knHalt_spec h1 (hs.ram _ (PipeTransitionAll.mask_lt _)) (hs.ram _ (PipeTransitionAll.mask_lt _)),
       knPrev_spec h2 (hs.ram _ (PipeTransitionAll.mask_lt _)) (hs.ram _ (PipeTransitionAll.mask_lt _))⟩
 
-theorem pair_of_invL {C : Ctx} : ∀ {l : List Row}, (l.all fun w => w.R.all (rowP sy)) = true → ∀ {m : Machine}, InvL C l m → controllable sy m = true → Pair sy m
+theorem pair_of_invL {C : Ctx} : ∀ {l : List Row}, (l.all fun w => w.R.all fun S => rowP sy S && rowQ sy S) = true → ∀ {m : Machine}, InvL C l m →
+    controllable sy m = true → Pair sy m
   | [], _, _, h, _ => by cases h
   | w :: t, hl, _, h, hc => by
     simp only [List.all_cons, Bool.and_eq_true] at hl
     rcases h with ⟨S, hS, hs⟩ | h
-    · exact pair_of_state hs (List.all_eq_true.1 hl.1 S hS) hc
+    · exact pair_of_state hs (Bool.and_eq_true _ _ ▸ List.all_eq_true.1 hl.1 S hS).1 hc
     · exact pair_of_invL hl.2 h hc
 
 /-- **Both relations at the first control in the room**, for a machine with control in the rows of the time -/
 theorem pair_of_rows {nm : Names} {d : Data} {e : Machine} (hc : rowsCheck sy nm d e = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) :
     Pair sy m :=
   pair_of_invL hc h hm
+
+theorem quad_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : Sim E F S m) (hr : rowQ sy S = true) (h : controllable sy m = true) : Quad sy m := by
+  simp only [rowQ, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true] at hr
+  obtain ⟨hk, hr⟩ := hr
+  rcases hr with h1 | ⟨h1, h2⟩
+  · have := SurfaceFrames.controllable_of_known hs hk h
+    rw [this] at h1
+    cases h1
+  · exact ⟨knSt_spec h1 (hs.ram _ (PipeTransitionAll.mask_lt _)), knZero_spec h2 (hs.ram _ (PipeTransitionAll.mask_lt _))⟩
+
+theorem quad_of_invL {C : Ctx} : ∀ {l : List Row}, (l.all fun w => w.R.all fun S => rowP sy S && rowQ sy S) = true → ∀ {m : Machine}, InvL C l m →
+    controllable sy m = true → Quad sy m
+  | [], _, _, h, _ => by cases h
+  | w :: t, hl, _, h, hc => by
+    simp only [List.all_cons, Bool.and_eq_true] at hl
+    rcases h with ⟨S, hS, hs⟩ | h
+    · exact quad_of_state hs (Bool.and_eq_true _ _ ▸ List.all_eq_true.1 hl.1 S hS).2 hc
+    · exact quad_of_invL hl.2 h hc
+
+/-- **Both facts at the first control in the room**, for a machine with control in the rows of the time -/
+theorem quad_of_rows {nm : Names} {d : Data} {e : Machine} (hc : rowsCheck sy nm d e = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) :
+    Quad sy m :=
+  quad_of_invL hc h hm
 
 end
 
@@ -384,10 +508,35 @@ theorem pair_run (hP : Checks sy nmS m0 nm d) (hF : RoomMap.MapFacts sy nmS m0) 
   obtain ⟨k, rfl⟩ : ∃ k, n = b + k := ⟨n - b, by omega⟩
   exact key k h2
 
+/-- **The player's state is 0, 1 or 2 and the change of size is 0 at the start of every frame of the room before the entry**, under the conditions of `pair_run`.
+`hQ` are the two walks, `hP` gives the rows -/
+theorem quad_run (hQ : QuadWalks sy nmS m0) (hP : Checks sy nmS m0 nm d) (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true)
+    {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat}
+    (hin : InRowsT sy nm d (PipeTransition.entry m0) (seq b)) (hctl : controllable sy (seq b) = true)
+    (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
+    (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
+    ∀ n, b ≤ n → n < a → Quad sy (seq n) := by
+  have hcond := RoomMap.cond_of_rows hF hc next hin hctl sites stay
+  have key : ∀ k, b + k < a → Quad sy (seq (b + k)) := by
+    intro k
+    induction k with
+    | zero => exact fun _ => quad_of_rows hP.rows hin hctl
+    | succ k ih =>
+      intro hk
+      have h1 := ih (by omega)
+      have hst := stay (b + k + 1) (by omega) hk
+      rw [next] at hst
+      rw [show b + (k + 1) = b + k + 1 by omega, next]
+      exact quad_step hQ (hcond (b + k) (by omega) (by omega)) (sites (b + k) (by omega) (by omega)) h1 hst
+  intro n h1 h2
+  obtain ⟨k, rfl⟩ : ∃ k, n = b + k := ⟨n - b, by omega⟩
+  exact key k h2
+
 /-- the checks of the room's walks: those of `RoomVert` and those of this file, and that the room's idle loop is a `JMP` to itself -/
 structure RoomWalks (sy : Syms) (nmS : Names) (m0 : Machine) (h k : Nat) (nm : Names) (d : Data) : Prop where
   vert : RoomVert.VChecks sy nmS m0 h k
   pair : Checks sy nmS m0 nm d
+  quad : QuadWalks sy nmS m0
   idle : FrameModel.idleAt (FrameModel.Rom.of m0) (placesR sy nmS m0).idle = true
 
 end

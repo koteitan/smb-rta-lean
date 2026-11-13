@@ -29,8 +29,9 @@ frames before the touch end in control (`Frames.noStore`, `Frames.ctlAll`).
 
 A frame of `Frames` is counted when it ends with the game not paused (the low bit of the pause byte 0, `upAt`): the counted frame `j` is the `j`-th such frame (`ixOf`, by
 a count `upTo` and a search `firstLe`). So the counted frames come in order (`Frames.order`), each ends not paused (`Frames.up`), and the frames between them end paused
-(`Frames.down`); these are theorems from the definition. The condition on each instruction of the frames of a run is `CleanK` of `guardF`: `guardK` with four more bytes
-protected (`spareK`: the pause byte, the area's type, the swimming flag, the change of size). The walks of this file use `guardK`; `CleanK` of `guardF` gives `CleanK` of
+(`Frames.down`); these are theorems from the definition. The condition on each instruction of the frames of a run is `CleanK` of `guardE`: `guardK` with nine more bytes
+protected (`spareK`: the pause byte, the area's type, the swimming flag, the change of size; `spareE`: A and B, A and B of the frame before, the moving direction, the
+running speed, the stored speed). The walks of this file use `guardK`; `CleanK` of `guardE` gives `CleanK` of `guardF` (`cleanK_of_E`), and that gives `CleanK` of
 `guardK` (`cleanK_of_F`).
 There is no game data in this file. Page: `1-1/f-6-19-FrameKeep.md`.
 -/
@@ -1339,8 +1340,9 @@ size (as `CtrlKeep.spareI`) -/
 def spareK (sy : Syms) (m0 : Machine) : List Nat :=
   [pauseI sy m0, (sy.AreaType &&& 0x7FF).toNat, (sy.SwimmingFlag &&& 0x7FF).toNat, (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat]
 
-/-- **The guard of the frames of a run**: `guardK`, with the bytes of `spareK` protected too (as `CtrlKeep.guardP` with `CtrlKeep.spareI`). The walks use `guardK`;
-this guard is only in the condition on each instruction (`Frames.cleanF`). -/
+/-- **A guard of the frames of a run**: `guardK`, with the bytes of `spareK` protected too (as `CtrlKeep.guardP` with `CtrlKeep.spareI`). The walks of this file use
+`guardK`; the walks of `PrevKeep` and `AfterKeep` use this guard with a few more bytes. The condition on each instruction of the frames of a run is `CleanK` of
+`guardE`, which gives `CleanK` of this guard (`Frames.cleanF`). -/
 def guardF (sy : Syms) (m0 : Machine) : Guard := { guardK sy m0 with prot := spareK sy m0 ++ (guardK sy m0).prot }
 
 /-- `CleanK` with more bytes protected gives `CleanK` -/
@@ -1352,6 +1354,27 @@ theorem cleanK_weak {G : Guard} {l : List Nat} {q : UInt16} {m : Machine} (h : C
 
 /-- `CleanK` of `guardF` gives `CleanK` of `guardK` -/
 theorem cleanK_of_F {sy : Syms} {m0 : Machine} {q : UInt16} {m : Machine} (h : CleanK (guardF sy m0) q m) : CleanK (guardK sy m0) q m := cleanK_weak h
+
+/-- **Five bytes of the player's routine that no frame of a run writes through an index or a pointer**: A and B, A and B of the frame before, the moving direction,
+the running speed, the stored speed (the bytes of `AfterKeep.eI`, of the old field `spareE` of the frames above ground) -/
+def spareE (sy : Syms) : List Nat :=
+  [(sy.A_B_Buttons &&& 0x7FF).toNat, (sy.PreviousA_B_Buttons &&& 0x7FF).toNat, (sy.Player_MovingDir &&& 0x7FF).toNat, (sy.RunningSpeed &&& 0x7FF).toNat,
+    (sy.Player_XSpeedAbsolute &&& 0x7FF).toNat]
+
+/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the bytes of `spareE` protected too. No walk uses it:
+the walks use `guardK` or `guardF`, and `CleanK` of `guardE` gives both (`cleanK_of_E`, `cleanK_sub`). -/
+def guardE (sy : Syms) (m0 : Machine) : Guard := { guardF sy m0 with prot := spareE sy ++ (guardF sy m0).prot }
+
+/-- `CleanK` of `guardE` gives `CleanK` of `guardF` -/
+theorem cleanK_of_E {sy : Syms} {m0 : Machine} {q : UInt16} {m : Machine} (h : CleanK (guardE sy m0) q m) : CleanK (guardF sy m0) q m := cleanK_weak h
+
+/-- **`CleanK` with fewer protected bytes**: a guard that differs only in its protected bytes, each of them protected by `G` -/
+theorem cleanK_sub {G G' : Guard} {q : UInt16} {m : Machine} (h : CleanK G q m) (hp : ∀ x ∈ G'.prot, x ∈ G.prot) (hi : G'.idle = G.idle) (hl : G'.late = G.late)
+    (hj : G'.je = G.je) (hjs : G'.jumps = G.jumps) : CleanK G' q m := by
+  refine ⟨fun t ht hq => ?_, h.read, fun hpc n hn => h.jump (hj ▸ hpc) n (hjs ▸ hn), fun hpc => hl ▸ h.time (hi ▸ hpc)⟩
+  rcases h.store t ht hq with ⟨h1, h2⟩ | h1
+  · exact Or.inl ⟨h1, fun h3 => h2 (hp _ h3)⟩
+  · exact Or.inr h1
 
 /-- **The frames of a run, as the walk needs them.** They are the frames of the real run `S` from frame `a` on: `all n = S.seq (a + n)` is the machine when frame `n` begins,
 counted or not, from the machine at control (`all 0`) on, and `inp n` its input. These are definitions, so `all 0` is `S.seq a`, and each frame is the real frame of
@@ -1369,9 +1392,10 @@ structure Frames (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) (s
   seqAt : ∀ j, j ≤ g → seq j = S.seq (a + ixOf sy m0 S a top j)
   /-- no instruction of a frame before the touch's frame, counted or not, writes the routine, the mode or the task byte by its address -/
   noStore : ∀ n, n + 1 < ixOf sy m0 S a top g → ∀ k, CtlStore sy (trace (S.seq (a + n)) (S.inp (a + n)) k) = false
-  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardF`: no store through an index or a pointer writes the bytes of
-  `guardK` (but the player's own store of the fraction), the pause byte, the area's type, the swimming flag or the change of size -/
-  cleanF : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardF sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
+  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardE`: no store through an index or a pointer writes the bytes of
+  `guardK` (but the player's own store of the fraction), the pause byte, the area's type, the swimming flag, the change of size, A and B, A and B of the frame before,
+  the moving direction, the running speed or the stored speed -/
+  cleanE : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardE sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section
 variable {sy : Syms} {m0 : Machine} {S : RealRun} {a : Nat} {g : Nat} {seq : Nat → Machine}
@@ -1415,7 +1439,11 @@ theorem Frames.down (K : Frames sy m0 S a g seq) {j : Nat} (h1 : 1 ≤ j) (h2 : 
   rw [e] at h
   cases h
 
-/-- **Each instruction meets `CleanK`** of `guardK`, on each frame up to the touch's frame: from `cleanF` -/
+/-- **Each instruction meets `CleanK`** of `guardF`, on each frame up to the touch's frame: from `cleanE` (it was the field `cleanF`) -/
+theorem Frames.cleanF (K : Frames sy m0 S a g seq) : ∀ n, n < K.ix g → ∀ k, CleanK (guardF sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k) :=
+  fun n hn k => cleanK_of_E (K.cleanE n hn k)
+
+/-- **Each instruction meets `CleanK`** of `guardK`, on each frame up to the touch's frame: from `cleanE` -/
 theorem Frames.clean (K : Frames sy m0 S a g seq) : ∀ n, n < K.ix g → ∀ k, CleanK (guardK sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k) :=
   fun n hn k => cleanK_of_F (K.cleanF n hn k)
 
@@ -1551,8 +1579,8 @@ structure Keep (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) wher
   many : g ≤ upTo (upAt sy m0 S a) top
   /-- no instruction of a frame before the touch's frame, counted or not, writes the routine, the mode or the task byte by its address -/
   noStore : ∀ n, n + 1 < ixOf sy m0 S a top g → ∀ k, CtlStore sy (trace (S.seq (a + n)) (S.inp (a + n)) k) = false
-  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardF` -/
-  cleanF : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardF sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
+  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardE` -/
+  cleanE : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardE sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section
 variable {sy : Syms} {m0 : Machine} {S : RealRun} {a : Nat} {g : Nat}
@@ -1562,7 +1590,7 @@ variable {sy : Syms} {m0 : Machine} {S : RealRun} {a : Nat} {g : Nat}
 abbrev Keep.seq (K : Keep sy m0 S a g) (j : Nat) : Machine := S.seq (a + ixOf sy m0 S a K.top j)
 
 /-- **The same frames as `Frames`**: the field `seqAt` holds by the definition of `Keep.seq` -/
-def Keep.toFrames (K : Keep sy m0 S a g) : Frames sy m0 S a g K.seq := ⟨K.top, K.many, fun _ _ => rfl, K.noStore, K.cleanF⟩
+def Keep.toFrames (K : Keep sy m0 S a g) : Frames sy m0 S a g K.seq := ⟨K.top, K.many, fun _ _ => rfl, K.noStore, K.cleanE⟩
 
 /-- where the counted frame `j` begins: as `Frames.fm` -/
 abbrev Keep.fm (K : Keep sy m0 S a g) (j : Nat) : Machine := K.toFrames.fm j

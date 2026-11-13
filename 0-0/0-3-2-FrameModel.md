@@ -2,7 +2,7 @@
 
 # A real frame and the horizontal and vertical models
 
-**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). With the pressed side masked, the frame follows `hstep` or leaves the speed 0 (`move_masked`). Each of the three also says that each step on the way stays in the frame if the frame has 64 dots left (`InFrameN`, [below](#the-time-of-a-walked-step)): so the frame does not end during the movement if no instruction runs late in the frame (`trace_inFrame`). The parts before the player's routine and after the scroll handler are assumptions on one frame.
+**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). With the pressed side masked, the frame follows `hstep` or leaves the speed 0 (`move_masked`). Each of the three also says that each step on the way stays in the frame if the frame has 64 dots left (`InFrameN`, [below](#the-time-of-a-walked-step)): so the frame does not end during the movement if no instruction runs late in the frame (`trace_inFrame`). At the scroll handler the stored speed is `|v'|` if it is `|v|` at the player's routine (`stored_path`, [below](#the-stored-speed-at-the-scroll-handler)). The parts before the player's routine and after the scroll handler are assumptions on one frame.
 
 `tr(n)` is the machine `n` instructions into `frame(M, i)`. `HS(m)` is the horizontal state read from machine `m` (speed, subspeed, facing, moving direction, whether `RunningSpeed` is 0). `P(m)` is the position. `In(m)` is the input read from the machine at the player's routine. `v'` is the speed of `HS(frame(M, i))`.
 
@@ -102,13 +102,24 @@ move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr �
 
 `maskOK` is these checks, about 0.1 s natively. It is a part of `SurfaceFrames.numbersCheck`. A detour may now give the second machine its own start (`Detour.c₂`): at `ImposeFriction` the two machines differ in the collision bits, and the bits decide the way.
 
+## The stored speed at the scroll handler
+
+`hstep` has no stored speed, but `Pre` of [the frames above ground](../1-1/e-2-SurfaceFrames.md) asks that it is `|v'|` at the frame's end. `ImposeFriction` stores `|v|` there before it returns. On the ground it runs on every frame; in the air only with Left or Right, and without them neither the speed nor the stored speed changes.
+
+```
+stored_path :  modelOK,  frictionCheck,  storedOK,  AtFrame(R),  abs(R) = |v(R)|
+               →  ∃ k,  stepN(k, R).pc = PlayerSubs  ∧  abs(stepN(k, R)) = |v(stepN(k, R))|  ∧  InFrameN(R, k)
+```
+
+`abs` is `Player_XSpeedAbsolute`. The walks: those of `frame_path` up to `ImposeFriction`; the routine next to the machine of `TopSpeed.frictionCheck` with the speed and the stored speed out (`storedFricOK`, `fric_abs`: that check says that the stored speed is `|v'|`); from its return to the mover the piece of `fricOK`, which now watches the stored speed too (`watchM`); from the mover to the scroll handler a walk of one machine that writes neither byte (`storedTailOK`). `storedOK` is these checks: 4608 cases, 0 failures, 0.4 s in a program. It is a part of `SurfaceFrames.numbersCheck`.
+
 ## The pieces
 
 | piece | result |
 |---|---|
 | (1) from the start of the frame to the player's routine | above ground: proved from the frame's start in control (`SurfaceFrames.Moves.toAt`, the walk of `CtrlKeep`); in the room: assumption (`at_ctrl`, `before`) |
 | (2) from the player's routine to the scroll handler | proved: `move_model` |
-| (3) from the scroll handler to the frame's end | above ground: the moving direction, the running speed and the stored speed proved (`AfterKeep.keepH`), the rest assumption (`SurfaceFrames.After`); in the room: assumption (`after` or `collide`) |
+| (3) from the scroll handler to the frame's end | above ground: the moving direction, the running speed and the stored speed proved (`AfterKeep.keepH`; the stored speed at the scroll handler by `stored_path`), the rest assumption (`SurfaceFrames.After`); in the room: assumption (`after` or `collide`) |
 
 Inside (2), for each of 4608 cases (3 values of `Player_State`, 256 of the buttons, 2 of the previous A, 3 of `AreaType`) these walks go through:
 
@@ -177,16 +188,17 @@ The writers of the horizontal bytes after the scroll handler, seen on the 3442 f
 
 * `before`, in the room: from the pad's read to the player's routine the walk closes, as the table shows; this is not a theorem there. Above ground it is a theorem: with the condition `FrameKeep.CleanK` on each instruction (no store through a pointer or an index touches the kept bytes, a pointer read does not read a register), the walk of `CtrlKeep` closes from the frame's start, the screen update and the sound included, to the player's routine ([Above ground: the frames from control](../1-1/e-2-SurfaceFrames.md)).
 * For `vert_model`: that the vertical bytes stay after the scroll handler (`SurfaceFrames.OnFrames.vAfter`). Up to the player's routine they are those of the frame before, with the two conditions there: a theorem above ground (`SurfaceFrames.vBefore`), from the frames not counted (a theorem, `OnFrames.lagKeep`) and bit 7 of A of the frame before (a theorem, `OnFrames.prevAll`).
-* `after`, `collide`: the collision routine and the game engine do not close. `after` says that there was no hit. Above ground a part is proved: the walks of `AfterKeep` follow the moving direction, the running speed and the stored speed from the scroll handler to the frame's end; what stays assumed there is `SurfaceFrames.After` (the subspeed, the facing, the stored speed at the scroll handler, the collision).
+* `after`, `collide`: the collision routine and the game engine do not close. `after` says that there was no hit. Above ground a part is proved: the walks of `AfterKeep` follow the moving direction, the running speed and the stored speed from the scroll handler to the frame's end; what stays assumed there is `SurfaceFrames.After` (the subspeed, the facing, the collision). The stored speed at the scroll handler is proved there (`stored_path`).
 * The stack pointer, no NMI, `AreaType` and so on in `at_ctrl`: in the room not derived from the state at the frame's start. Above ground the stack pointer, no NMI and the routine come from the walk, `AreaType`, no swimming and no change of size from the walk of the whole frame, by induction from control (`SurfaceFrames.OnFrames.areaAll`), and `Player_State` and the jumpspring from their values at the end of the frame before (`SurfaceFrames.CtlState`).
 * Runs with a frame that runs over. `clean` does not hold on such a frame. None was seen in the room. Even the shortest frame had 1469 instructions after the arrival.
 * That the emulator is the same as the real machine.
 
-**Files.** `Theorems/FrameWalk.lean`, `Theorems/FrameModel.lean`, `Theorems/VertModel.lean`, private `Proof/FrameModel.lean`.
+**Files.** `Theorems/FrameWalk.lean`, `Theorems/FrameModel.lean` (`stored_path` too), `Theorems/VertModel.lean`, private `Proof/FrameModel.lean`.
 
 **Reproduce.**
 ```
 .lake/build/bin/smbrta frame-model-check FM2 300
 .lake/build/bin/smbrta vert-model-check          # vertOK and each case, about 0.1 s
 .lake/build/bin/smbrta mask-model-check          # maskOK and its parts, about 0.1 s
+.lake/build/bin/smbrta stored-check              # storedOK and its parts, about 0.4 s
 ```

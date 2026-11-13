@@ -408,13 +408,15 @@ variable {sy : Syms} {m0 : Machine}
 
 /-- **A frame in control keeps the moving direction, the running speed and the stored speed from the scroll handler to its end.** The frame starts in the idle loop in control
 (`FrameKeep.StartK`), each instruction meets `CleanK` of `FrameKeep.guardF` and `SpareH`, and writes neither the routine, nor the mode, nor the task by its address; the
-area's type is `v`, the swimming flag 0, the change of size 0. It comes to the player's routine at `n₀`, the first time. Then each instruction `k ≥ n₀` at the scroll handler
-(`PlayerSubs`) has the three bytes of the frame's end. `hc`, `hh` are the checks on the ROM. -/
-theorem keepH (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
-    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsp : ∀ n, SpareH sy (trace m i n))
+area's type is `v`, the swimming flag 0, the change of size 0. It comes to the player's routine at `n₀`, the first time. Then it comes to the scroll handler
+(`PlayerSubs`) at one instruction `k₁` after `n₀` and at no other (the first walk stops at the first, the second fails at another), and `k₁` has the three bytes of the
+frame's end. `hc`, `hh` are the checks on the ROM. -/
+theorem keepH_onceG (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
+    (hH : ∀ x ∈ hI sy, ∀ j, FrameKeep.CleanK (guardH sy m0 x) (FrameKeep.spotOf sy m0).store (trace m i j))
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
-    ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ x ∈ hI sy, (frame m i).ram.get! x = (trace m i k).ram.get! x := by
+    ∃ k₁, ∀ x ∈ hI sy, (frame m i).ram.get! x = (trace m i k₁).ram.get! x ∧ ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → k = k₁ := by
   simp only [hCheck, Bool.and_eq_true, bne_iff_ne, ne_eq] at hh
   obtain ⟨⟨⟨⟨hne1, hne2⟩, hp1⟩, hp2⟩, hp3⟩ := hh
   generalize CtrlKeep.cutTable sy m0 true = q at hp1 hp2 hp3
@@ -448,19 +450,20 @@ theorem keepH (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy
     have hw : walkQ1 (q1Cfg sy m0 v P) (FrameKeep.ctlI sy) sy.PlayerSubs (atQ sy ((hI sy).map fun b => q2Cfg sy m0 b P.stops.toList)) FrameKeep.fuelK
         (CtrlKeep.toA (CtrlKeep.watchA sy m0 v) (CtrlKeep.valA sy v) B) = true := hB2
     obtain ⟨k₁, hk1, hq1, hf1, hd1, hbt, B₁, hat, hs₁⟩ := q1_run (C := q1Cfg sy m0 v P) hp2 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw hsA h2 h5 hcl hx'
-    intro k hk hpc x hxI
+    refine ⟨k₁, fun x hxI => ?_⟩
     have hmem : q2Cfg sy m0 x P.stops.toList ∈ (hI sy).map fun b => q2Cfg sy m0 b P.stops.toList := List.mem_map.2 ⟨x, hxI, rfl⟩
     have hw2 := List.all_eq_true.1 hat _ hmem
     have ht2 := List.all_eq_true.1 hp3 _ hmem
     have hs2 : Sim (q2Cfg sy m0 x P.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) (rkOn B₁) (trace m i k₁) := sim_rkOn hs₁
-    have hclH : ∀ j, FrameKeep.CleanK (q2Cfg sy m0 x P.stops.toList).G (q2Cfg sy m0 x P.stops.toList).S.store (trace m i j) := by
-      intro j
-      refine CtrlKeep.cleanK_prot (G := FrameKeep.guardF sy m0) (l := [x]) (hcl j) (fun t ht hlt hm => ?_)
-      have e : (t &&& 0x7FF).toNat = x := List.mem_singleton.1 hm
-      exact hsp j t ht hlt (e ▸ hxI)
+    have hclH : ∀ j, FrameKeep.CleanK (q2Cfg sy m0 x P.stops.toList).G (q2Cfg sy m0 x P.stops.toList).S.store (trace m i j) := hH x hxI
     obtain ⟨⟨B₂, hfin, hs₂⟩, hnoQ⟩ := endKR (C := q2Cfg sy m0 x P.stops.toList) ht2 rfl rfl hne2 hw2 hs2 hf1 hd1 hclH hx'
-    have hkk : k = k₁ := by
-      rcases Nat.lt_trichotomy k k₁ with h | h | h
+    refine ⟨?_, fun k hk hpc => ?_⟩
+    · change (B₂.rk && !B₂.spent) = true at hfin
+      simp only [Bool.and_eq_true, Bool.not_eq_true'] at hfin
+      have e := hs₂.rkv hfin.1
+      rw [if_neg (by simp [hfin.2])] at e
+      exact e
+    · rcases Nat.lt_trichotomy k k₁ with h | h | h
       · exfalso
         by_cases e : k = k₀
         · subst e
@@ -472,13 +475,43 @@ theorem keepH (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy
         have := hnoQ (k - k₁) (by omega)
         rw [show k₁ + (k - k₁) = k by omega] at this
         exact this hpc
-    subst hkk
-    change (B₂.rk && !B₂.spent) = true at hfin
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hfin
-    have e := hs₂.rkv hfin.1
-    rw [if_neg (by simp [hfin.2])] at e
-    exact e
   · exact absurd harr (hno n₀ hf0)
+
+/-- `keepH_onceG` with the condition `SpareH` on each instruction: it gives the second walk's guard from `CleanK` of `FrameKeep.guardF` -/
+theorem keepH_once (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsp : ∀ n, SpareH sy (trace m i n))
+    (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
+    (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
+    ∃ k₁, ∀ x ∈ hI sy, (frame m i).ram.get! x = (trace m i k₁).ram.get! x ∧ ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → k = k₁ := by
+  refine keepH_onceG hc hh h0 hcl (fun x hxI j => ?_) hx hv harr hf0 hfirst
+  refine CtrlKeep.cleanK_prot (G := FrameKeep.guardF sy m0) (l := [x]) (hcl j) (fun t ht hlt hm => ?_)
+  have e : (t &&& 0x7FF).toNat = x := List.mem_singleton.1 hm
+  exact hsp j t ht hlt (e ▸ hxI)
+
+/-- **A frame in control keeps the moving direction, the running speed and the stored speed from the scroll handler to its end** (`keepH_once`): each instruction
+`k ≥ n₀` at the scroll handler has the three bytes of the frame's end. -/
+theorem keepH (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsp : ∀ n, SpareH sy (trace m i n))
+    (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
+    (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
+    ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ x ∈ hI sy, (frame m i).ram.get! x = (trace m i k).ram.get! x := by
+  intro k hk hpc x hx'
+  obtain ⟨k₁, H⟩ := keepH_once hc hh h0 hcl hsp hx hv harr hf0 hfirst
+  obtain ⟨e, u⟩ := H x hx'
+  rw [u k hk hpc]
+  exact e
+
+/-- **The frame comes to the scroll handler once after the player's routine** (`keepH_once`, the walks of `hCheck`): two instructions `k, k' ≥ n₀` at the scroll
+handler are the same. -/
+theorem subs_once (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : hCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsp : ∀ n, SpareH sy (trace m i n))
+    (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
+    (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
+    ∀ k k', n₀ ≤ k → n₀ ≤ k' → (trace m i k).pc = sy.PlayerSubs → (trace m i k').pc = sy.PlayerSubs → k = k' := by
+  intro k k' hk hk' hpc hpc'
+  obtain ⟨k₁, H⟩ := keepH_once hc hh h0 hcl hsp hx hv harr hf0 hfirst
+  have u := (H _ (by simp [hI] : (sy.Player_XSpeedAbsolute &&& 0x7FF).toNat ∈ hI sy)).2
+  rw [u k hk hpc, u k' hk' hpc']
 
 end
 

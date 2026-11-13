@@ -336,15 +336,17 @@ structure Statement (sy : Syms) (m0 : Machine) (n : Nat) (X : Int) (N E T J dx d
   page : (peek (CastleWalk.beside m0) sy.Player_PageLoc).toNat = polePage sy m0
   /-- the position at control is away from both ends of its range by more than `T` frames at the top speed, either way -/
   far : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy (above m0 n) ∧ posP sy (above m0 n) + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000
+  /-- the check of `ImposeFriction` (`TopSpeed.frictionCheck`): the frames read the stored speed from it (`FrameModel.stored_path`) -/
+  fric : TopSpeed.frictionCheck sy m0 = true
 
 theorem statement_of_check {sy : Syms} {m0 : Machine} {n : Nat} {X : Int} {N E T J dx dy : Nat} (F : TFacts sy m0)
-    (hN : N ≤ T) (h : allCheck sy m0 n X N E T J dx dy = true) : Statement sy m0 n X N E T J dx dy := by
+    (hN : N ≤ T) (h : allCheck sy m0 n X N E T J dx dy = true) (hfr : TopSpeed.frictionCheck sy m0 = true) : Statement sy m0 n X N E T J dx dy := by
   simp only [allCheck, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, List.contains_iff_mem] at h
   obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, _⟩, _⟩, h3⟩, h4⟩, h5⟩, h6⟩, _⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩ := h
   simp only [farOK, Bool.and_eq_true, decide_eq_true_eq] at h12
   have htop : (0 : Int) ≤ 16 * (top sy : Int) := by omega
   refine ⟨⟨h1, h2⟩, h3, fun is hi hl => within_of_check F h3 hi hl, fun is hi k hl => after_of_check F h3 hi hl,
-    ⟨h6, h5, h4⟩, h8, fun is hi hl => ?_, h9, h10, h11, h7, h12⟩
+    ⟨h6, h5, h4⟩, h8, fun is hi hl => ?_, h9, h10, h11, h7, h12, hfr⟩
   by_cases hlN : is.length ≤ N
   · have h12 := within_of_check F h3 hi hlN
     have h13 : 0 ≤ 16 * (top sy : Int) * ((T - N : Nat) : Int) := Int.mul_nonneg htop (by omega)

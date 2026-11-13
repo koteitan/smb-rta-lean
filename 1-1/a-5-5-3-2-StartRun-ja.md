@@ -39,8 +39,9 @@ Begin.hs₁      :  同じ前提   →   startHS(seq 1) = startHS(m₀)       �
 
 Lags           :  ix t < ix(t + 1),  fm t = seq(ix t),  そして
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                      （数えるフレーム）
-                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr_n(k))
-                    keeps :  数えないフレームは添字やポインタを通ってポーズのバイトを書かない   （LagPause。ポーズで終わることは定義から）
+                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean_P(tr_n(k))      （ポーズのバイトも守る Clean: LagPause.guardP。前の clean と keeps）
+Lags.cleanG    :  Lags   →   ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr_n(k))
+Lags.keepsP    :  Lags   →   数えないフレームは添字やポインタを通ってポーズのバイトを書かない   （LagPause。ポーズで終わることは定義から）
 Lags.known_end :  lagCheck,  pauseCheck,  Lags,  n ∈ [1, ix E),  FrameStart(seq n)   →   ctl(seq(n + 1))
 Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(seq 1)   →   ∀ n ∈ [1, ix E],  FrameStart(seq n)
 Lags.lagStart  :  同じもの   →   数えないフレームで FrameStart(seq n)          （前のフィールド lags.start）
@@ -96,8 +97,12 @@ Lean: `Theorems/StartRun.lean`、`Theorems/PipeFrames.lean` の `Lags`、`Lags.k
 
 * **`lags.ctl`**: 操作から入るまでの数えるフレームは、どれも操作できる状態で終わる。各フレームの 1 つの状態についての条件です。大きくなる、けが、死ぬでは成り立ちません。
   数えないフレームが操作できる状態で終わることは確認から出ます。ポーズで終わる（`ix` の定義から）ので、モードのルーチンを呼ばないからです。
-* **`lags.clean`**: そのフレームの各命令は `Clean`。同じフレームについての `chg.upClean₁`（パート b）と同じ種類の条件で、守るバイトは少ないです。地上の `FrameKeep.Frames.clean` とも同じ種類です。
-* **`lags.game` はもう仮定しません**: かわりに `lags.keeps` と数えるフレームの定義です（[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。
+* **`lags.clean`**: そのフレームの各命令は `Clean` で、ポーズのバイトも守る（添字やポインタを通った書き込みがそれを書かない）。同じフレームについての
+  `chg.upClean₁`（パート b）と同じ種類の条件で、守るバイトは少ないです。地上の `FrameKeep.Frames.cleanF` とも同じ種類です。下と同じ走りでポーズのバイトも守って
+  確かめました（`start-check FM2 240 pause`）。成り立たない命令は 0 です。
+* **`lags.keeps` はもうフィールドではありません**（この回）。数えないフレームでの `Clean` のポーズのバイトの部分だったもので、いまは `lags.clean` に入っています
+  （`Lags.keepsP`）。
+* **`lags.game` はもう仮定しません**: かわりに `lags.clean` で守るポーズのバイトと数えるフレームの定義です（[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。
 * `lags.store` はもう仮定しません。`LagFrames` の確認が証明します。
 * `one_le` はもう仮定ではありません。`Pipe.one_le` が証明します。
 * **`Run.pipeAt` はなくなりました.** `pipe` の数えるフレーム 1 は、もう定義からフレーム 1 ではありません。フレーム 1 から先でポーズでなく終わる最初のフレームです。

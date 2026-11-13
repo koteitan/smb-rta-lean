@@ -2,7 +2,7 @@
 
 # 本物のフレームと横と縦のモデル
 
-**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。押している側がふさがれていると、フレームは `hstep` のとおりか、速さを 0 にします（`move_masked`）。3 つとも、途中の各命令は、フレームに 64 ドット以上残っていればフレームの中にとどまる（`InFrameN`、[下](#歩いた命令の時間)）とも言います。なので、フレームの遅い時刻に動く命令がなければ、移動のあいだにフレームは終わりません（`trace_inFrame`）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
+**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。押している側がふさがれていると、フレームは `hstep` のとおりか、速さを 0 にします（`move_masked`）。3 つとも、途中の各命令は、フレームに 64 ドット以上残っていればフレームの中にとどまる（`InFrameN`、[下](#歩いた命令の時間)）とも言います。なので、フレームの遅い時刻に動く命令がなければ、移動のあいだにフレームは終わりません（`trace_inFrame`）。プレイヤーのルーチンで覚えている速さが `|v|` なら、スクロールの処理でも `|v'|` です（`stored_path`、[下](#スクロールの処理での覚えている速さ)）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
 
 `tr(n)` は `frame(M, i)` の `n` 命令あとの機械です。`HS(m)` は機械 `m` から読んだ横の状態（速さ、subspeed、向き、動く向き、`RunningSpeed` が 0 かどうか）です。`P(m)` は位置です。`In(m)` はプレイヤーのルーチンに来た機械から読んだ入力です。`v'` は `HS(frame(M, i))` の速さです。
 
@@ -102,13 +102,24 @@ move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr �
 
 `maskOK` はこれらのチェックで、ネイティブで約 0.1 秒です。`SurfaceFrames.numbersCheck` の一部です。回り道は、2 台目の機械に別の始まりを持たせられるようになりました（`Detour.c₂`）。`ImposeFriction` では 2 台の当たり判定のビットが違い、ビットが道を決めるからです。
 
+## スクロールの処理での覚えている速さ
+
+`hstep` は覚えている速さを持ちません。でも [地上のフレーム](../1-1/e-2-SurfaceFrames-ja.md) の `Pre` は、フレームの終わりでそれが `|v'|` であることを求めます。`ImposeFriction` は戻る前にそこへ `|v|` を書きます。地上ではどのフレームでも動きます。空中では左か右を押すときだけ動き、押さないときは速さも覚えている速さも変わりません。
+
+```
+stored_path :  modelOK,  frictionCheck,  storedOK,  AtFrame(R),  abs(R) = |v(R)|
+               →  ∃ k,  stepN(k, R).pc = PlayerSubs  ∧  abs(stepN(k, R)) = |v(stepN(k, R))|  ∧  InFrameN(R, k)
+```
+
+`abs` は `Player_XSpeedAbsolute` です。歩きは次のとおりです。`ImposeFriction` までは `frame_path` の歩き。ルーチンは `TopSpeed.frictionCheck` の機械と並べ、出口で速さと覚えている速さを見ます（`storedFricOK`、`fric_abs`: その確認が、覚えている速さは `|v'|` だと言います）。戻ってから移動のルーチンまでは `fricOK` の歩きで、覚えている速さも見るようにしました（`watchM`）。移動のルーチンからスクロールの処理までは、どちらのバイトも書かない 1 つの機械の歩きです（`storedTailOK`）。`storedOK` はこれらの確認です: 4608 の場合、失敗 0、プログラムで 0.4 秒。`SurfaceFrames.numbersCheck` の一部です。
+
 ## 分け方
 
 | 区間 | 結果 |
 |---|---|
 | (1) フレームの最初からプレイヤーのルーチンまで | 地上: 操作中のフレームの始まりから証明（`SurfaceFrames.Moves.toAt`、`CtrlKeep` の歩き）。部屋: 前提（`at_ctrl`、`before`） |
 | (2) プレイヤーのルーチンからスクロールの処理まで | 証明。`move_model` |
-| (3) スクロールの処理からフレームの最後まで | 地上: 動く向き、走りの速さ、覚えている速さは証明（`AfterKeep.keepH`）、残りは前提（`SurfaceFrames.After`）。部屋: 前提（`after` または `collide`） |
+| (3) スクロールの処理からフレームの最後まで | 地上: 動く向き、走りの速さ、覚えている速さは証明（`AfterKeep.keepH`。スクロールの処理での覚えている速さは `stored_path`）、残りは前提（`SurfaceFrames.After`）。部屋: 前提（`after` または `collide`） |
 
 (2) の中身です。`Player_State` 3 通り、ボタン 256 通り、前のフレームの A 2 通り、`AreaType` 3 通りの 4608 の場合ごとに、次の歩きが通ります。
 
@@ -177,16 +188,17 @@ TAS の操作できる 3442 フレームでは、`Clean` は 3404 で、モデ�
 
 * `before`、部屋で: パッドの読み取りからプレイヤーのルーチンまでは、上の表のとおり歩きが閉じます。そこでは定理にはしていません。地上では定理です: 各命令の条件 `FrameKeep.CleanK`（ポインタや添字での書き込みは守るバイトに触れず、ポインタでの読み込みはレジスタを読まない）のもとで、`CtrlKeep` の歩きはフレームの始まりから、画面の更新と音も含めて、プレイヤーのルーチンまで閉じます（[地上: 操作できてからのフレーム](../1-1/e-2-SurfaceFrames-ja.md)）。
 * `vert_model` について: スクロールの処理のあとも縦のバイトが変わらないこと（`SurfaceFrames.OnFrames.vAfter`）。プレイヤーのルーチンまで縦のバイトが前のフレームのものであることと、そこでの 2 つの条件は、地上では定理です（`SurfaceFrames.vBefore`）。数えないフレーム（定理 `OnFrames.lagKeep`）と前のフレームの A の 7 ビット目（定理 `OnFrames.prevAll`）から出ます。
-* `after`、`collide`: 当たり判定とゲームエンジンの中は閉じません。`after` は当たりがなかったことを言います。地上では一部が証明です: `AfterKeep` の歩きは、スクロールの処理からフレームの終わりまで、動く向き、走りの速さ、覚えている速さを追います。そこで前提に残るのは `SurfaceFrames.After`（サブ速さ、向き、スクロールの処理での覚えている速さ、当たり判定）です。
+* `after`、`collide`: 当たり判定とゲームエンジンの中は閉じません。`after` は当たりがなかったことを言います。地上では一部が証明です: `AfterKeep` の歩きは、スクロールの処理からフレームの終わりまで、動く向き、走りの速さ、覚えている速さを追います。そこで前提に残るのは `SurfaceFrames.After`（サブ速さ、向き、当たり判定）です。スクロールの処理での覚えている速さは証明です（`stored_path`）。
 * `at_ctrl` のうちスタックポインタ、NMI なし、`AreaType` など: 部屋ではフレームが始まる状態から導いていません。地上ではスタックポインタ、NMI なし、ルーチンは歩きから、`AreaType`、泳ぎなし、大きさの変化なしは 1 フレーム全体の歩きから操作のときからの帰納法で（`SurfaceFrames.OnFrames.areaAll`）、`Player_State` とジャンプ台は前のフレームの終わりの値（`SurfaceFrames.CtlState`）から出ます。
 * フレームがあふれる走り（1 フレームで処理が終わらない）。`clean` はそのフレームでは成り立ちません。部屋では見ていません。一番短いフレームでも来てから 1469 命令ありました。
 * エミュレータが本物の機械と同じこと。
 
-**ファイル.** `Theorems/FrameWalk.lean`、`Theorems/FrameModel.lean`、`Theorems/VertModel.lean`、非公開の `Proof/FrameModel.lean`。
+**ファイル.** `Theorems/FrameWalk.lean`、`Theorems/FrameModel.lean`（`stored_path` も）、`Theorems/VertModel.lean`、非公開の `Proof/FrameModel.lean`。
 
 **再現.**
 ```
 .lake/build/bin/smbrta frame-model-check FM2 300
 .lake/build/bin/smbrta vert-model-check          # vertOK と各場合、約 0.1 秒
 .lake/build/bin/smbrta mask-model-check          # maskOK とその部分、約 0.1 秒
+.lake/build/bin/smbrta stored-check              # storedOK とその部分、約 0.4 秒
 ```

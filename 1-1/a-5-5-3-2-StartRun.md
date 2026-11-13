@@ -40,8 +40,9 @@ Begin.hs₁      :  the same   →   startHS(seq 1) = startHS(m₀)       (the s
 
 Lags           :  ix t < ix(t + 1),  fm t = seq(ix t),  and
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                      (the counted frames)
-                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr_n(k))
-                    keeps :  a frame not counted does not write the pause byte through an index or a pointer   (LagPause; it ends paused by the definition)
+                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean_P(tr_n(k))      (Clean with the pause byte protected too: LagPause.guardP; the old clean and keeps)
+Lags.cleanG    :  Lags   →   ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr_n(k))
+Lags.keepsP    :  Lags   →   a frame not counted does not write the pause byte through an index or a pointer   (LagPause; it ends paused by the definition)
 Lags.known_end :  lagCheck,  pauseCheck,  Lags,  n ∈ [1, ix E),  FrameStart(seq n)   →   ctl(seq(n + 1))
 Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(seq 1)   →   ∀ n ∈ [1, ix E],  FrameStart(seq n)
 Lags.lagStart  :  the same   →   FrameStart(seq n) for a frame not counted          (the old field lags.start)
@@ -97,9 +98,11 @@ It checks that every frame ends in control, so it covers the new `lags.ctl` (the
 
 * **`lags.ctl`**: each counted frame from control to the entry ends in control. A condition on one state of each frame. It fails on a growth, an injury and a death.
   A frame not counted ends in control by the check: it ends paused (by the definition of `ix`), so it does not call the mode's routine.
-* **`lags.clean`**: each instruction of these frames is `Clean`. It is the same kind of condition as `chg.upClean₁` (part b) on the same frames, with fewer bytes protected,
-  and as `FrameKeep.Frames.clean` above ground.
-* **`lags.game` is no longer assumed**: in its place `lags.keeps` and the definition of the counted frames ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)).
+* **`lags.clean`**: each instruction of these frames is `Clean`, with the pause byte protected too (no store through an index or a pointer writes it). It is the same kind
+  of condition as `chg.upClean₁` (part b) on the same frames, with fewer bytes protected, and as `FrameKeep.Frames.cleanF` above ground. Checked on the same runs as
+  below with the pause byte protected (`start-check FM2 240 pause`): 0 instructions fail.
+* **`lags.keeps` is no longer a field** (this round): it was the pause byte's part of `Clean` on the frames not counted, and it is now in `lags.clean` (`Lags.keepsP`).
+* **`lags.game` is no longer assumed**: in its place the pause byte protected in `lags.clean` and the definition of the counted frames ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)).
 * `lags.store` is no longer assumed: the check of `LagFrames` proves it.
 * `one_le` is no longer assumed: `Pipe.one_le` proves it.
 * **`Run.pipeAt` is gone.** `pipe`'s counted frame 1 is no longer frame 1 by the definition: it is the first frame from frame 1 on that ends not paused. The values at

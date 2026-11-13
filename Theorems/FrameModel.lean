@@ -12,6 +12,8 @@ import Theorems.PipeEntryRule
 * `move_masked`: the same with the side he presses masked by a block of Left (`AtCtrl0`): the run is `hstep`, or it leaves the speed 0. `maskOK` checks it on the ROM.
 * `clean_frame`: a whole frame `frame M i`, under `Clean`, conditions on that one frame: the state at the player's routine; nothing writes the horizontal bytes before it, or after the scroll handler.
 * `frame_read`: a frame is a `TopSpeed.Frame`, under `ReadFrame`, with the same conditions but for the stored speed and the mask, and with `Collide` for the part after the scroll handler.
+* `stored_path`: from the player's routine with the stored speed `|v|`, the frame comes to the scroll handler with the stored speed `|v|`. `storedOK` checks its walks on the ROM,
+  with `TopSpeed.frictionCheck` for `ImposeFriction`.
 
 There is no game data in this file. Page: `0-0/0-3-2-FrameModel.md`.
 -/
@@ -266,9 +268,10 @@ def leafAll (E : Rom) (sp : UInt8) (entry r : UInt16) (a : Tag) (L Lo : List (Na
 /-- bytes the glue from `X_Physics` to the next routine keeps -/
 def watchA (sy : Syms) : List Nat := I sy.SavedJoypadBits :: (watchH sy ++ capsL sy)
 
-/-- the list of bytes after `Friction`'s return -/
+/-- the list of bytes after `Friction`'s return; the stored speed too (`stored_path`) -/
 def watchM (sy : Syms) : List Nat :=
-  [I sy.Player_X_Speed, I sy.Player_X_MoveForce, I sy.PlayerFacingDir, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce]
+  [I sy.Player_X_Speed, I sy.Player_X_MoveForce, I sy.PlayerFacingDir, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce,
+   I sy.Player_XSpeedAbsolute]
 
 /-- what the walks of the ground need -/
 def groundOK (sy : Syms) (m0 : Machine) (c : Case) (P : Plan) : Bool :=
@@ -2508,6 +2511,236 @@ theorem frame_read {m0 : Machine} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : 
       omega
 
 end frames
+
+/-! ## The stored speed at the scroll handler
+
+`ImposeFriction` ends by storing `|v|` in the stored speed (`Player_XSpeedAbsolute`). On the ground it runs on every frame; in the air only with Left or Right, and
+otherwise neither the speed nor the stored speed changes before the scroll handler. So at the scroll handler the stored speed is `|v|` if it is so at the player's
+routine (`stored_path`). The walks: those of `frame_path` up to `ImposeFriction`; the routine next to `frictionCheck`'s machine, whose check says that the stored speed
+is `|v'|` (`storedFricOK`, `fric_abs`); from its return to the mover, the piece of `fricOK`, which keeps the stored speed too (`watchM`); from the mover to the scroll
+handler, a walk of one machine that writes neither the speed nor the stored speed (`storedTailOK`). -/
+
+section stored
+variable {sy : Syms} {E : Rom}
+
+/-- the fuel of the walk from the mover to the scroll handler -/
+def fuelT : Nat := 400
+
+/-- `ImposeFriction` next to `frictionCheck`'s machine, with the speed and the stored speed out, on a case where it runs -/
+def storedFricOK (sy : Syms) (m0 : Machine) (S : UInt8) (c : Case) : Bool :=
+  let P := planOf sy m0 S c
+  let lr := lrOf c.n
+  (stOf c.n != 0 && lr == 0) ||
+    leafAll (Rom.of m0) m0.s sy.ImposeFriction P.r3 (Tag.kn lr lr) (tagsFr sy) [(I sy.Player_X_Speed, .eq), (I sy.Player_XSpeedAbsolute, .eq)] P.c3.ids
+
+/-- from the mover to the scroll handler, at the stack `S` of the player's routine, writing neither the speed nor the stored speed -/
+def storedTailOK (sy : Syms) (E : Rom) (S : UInt8) (c4 : Cut) : Bool :=
+  pieceOK E c4 { pc := sy.PlayerSubs, s := S, K := [] } [I sy.Player_X_Speed, I sy.Player_XSpeedAbsolute] fuelT
+
+/-- **The check on the ROM for the stored speed**: the friction of each case, and the walk from each mover's cut to the scroll handler -/
+def storedOK (sy : Syms) (m0 : Machine) (S : UInt8) : Bool :=
+  allCases.all (storedFricOK sy m0 S) && (tailsOf sy m0 S).all (storedTailOK sy (Rom.of m0) S)
+
+/-- the stage of `ImposeFriction` next to `frictionCheck`, for the stored speed: at the mover the stored speed is `|v|` -/
+theorem fric_abs {m0 : Machine} {c3 c4 : Cut} {r3 : UInt16} {lr : UInt8} {R : Machine} {mr ml lo hi : UInt8}
+    (hb : GoodH (Rom.of m0) m0) (hfr : TopSpeed.frictionCheck sy m0 = true) (hnd : nodupB (fricIdx sy) = true) (hsp : (TopSpeed.speedsB sy).contains (R.ram.get! (I sy.Player_X_Speed)) = true)
+    (h1 : leafAll (Rom.of m0) m0.s sy.ImposeFriction r3 (Tag.kn lr lr) (tagsFr sy) [(I sy.Player_X_Speed, .eq), (I sy.Player_XSpeedAbsolute, .eq)] c3.ids = true)
+    (h2 : pieceOK (Rom.of m0) (afterLeaf c3 r3) c4 (watchM sy) fuelS = true) (hra : c3.ra = some lr) (hpc : c3.pc = sy.ImposeFriction) (hlr : (TopSpeed.upTo 3).contains lr = true)
+    (hA : At (Rom.of m0) c3 R) (hK3 : ∀ p ∈ c3.K, p.1 < 2048)
+    (e1 : R.ram.get! (I sy.MaximumRightSpeed) = mr) (e2 : R.ram.get! (I sy.MaximumLeftSpeed) = ml) (e3 : R.ram.get! (I sy.FrictionAdderLow) = lo) (e4 : R.ram.get! (I sy.FrictionAdderHigh) = hi)
+    (m1 : mr ∈ maxRs sy m0) (m2 : ml ∈ maxLs sy m0) (m3 : (lo, hi) ∈ adders sy m0) (hcb : R.ram.get! (I sy.Player_CollisionBits) ∈ TopSpeed.collBits sy) :
+    ∃ k, At (Rom.of m0) c4 (stepN k R) ∧ (stepN k R).ram.get! (I sy.Player_XSpeedAbsolute) = absB ((stepN k R).ram.get! (I sy.Player_X_Speed)) ∧
+      InFrameN (Rom.of m0) R k := by
+  generalize hv0 : R.ram.get! (I sy.Player_X_Speed) = v at hsp
+  generalize hf0 : R.ram.get! (I sy.Player_X_MoveForce) = f
+  generalize hc0 : R.ram.get! (I sy.Player_CollisionBits) = cb at hcb
+  have hH := pokeL_good (fricL sy v f lo hi mr ml cb) hb
+  have hHs : (pokeL m0 (fricL sy v f lo hi mr ml cb)).s = m0.s := pokeL_s _ _
+  have hget : ∀ q ∈ fricL sy v f lo hi mr ml cb, (pokeL m0 (fricL sy v f lo hi mr ml cb)).ram.get! (I q.1) = q.2 := pokeL_get _ _ hb hnd
+  have hrel : ∀ p ∈ tagsFr sy, p.2.R (R.ram.get! p.1) ((pokeL m0 (fricL sy v f lo hi mr ml cb)).ram.get! p.1) := by
+    intro p hp
+    simp only [tagsFr, fricIdx, List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    · show _ = _
+      rw [hget (sy.Player_X_Speed, v) (by simp [fricL])]
+      exact hv0
+    · show _ = _
+      rw [hget (sy.Player_X_MoveForce, f) (by simp [fricL])]
+      exact hf0
+    · show _ = _
+      rw [hget (sy.FrictionAdderLow, lo) (by simp [fricL])]
+      exact e3
+    · show _ = _
+      rw [hget (sy.FrictionAdderHigh, hi) (by simp [fricL])]
+      exact e4
+    · show _ = _
+      rw [hget (sy.MaximumRightSpeed, mr) (by simp [fricL])]
+      exact e1
+    · show _ = _
+      rw [hget (sy.MaximumLeftSpeed, ml) (by simp [fricL])]
+      exact e2
+    · show _ = _
+      rw [hget (sy.Player_CollisionBits, cb) (by simp [fricL])]
+      exact hc0
+  have hae : R.a = lr := hA.ra lr hra
+  obtain ⟨k1, _, g1, p1, s1, o1, w1, _, _, _, C1⟩ := leaf_app h1 hA.good (by rw [hA.pc, hpc]) (by rw [hae]; exact Tag.R_kn _ _) hH hHs hrel
+  have hAf := at_after (r := r3) hA g1 p1 s1 (fun p hp => w1 _ (List.mem_map.2 ⟨p, hp, rfl⟩) (hK3 p hp))
+  obtain ⟨k2, _, A2, W2, _, C2⟩ := piece_spec h2 hAf
+  have e : stepN (k1 + k2) R = stepN k2 (stepN k1 R) := stepN_add _ _ _
+  have oV : (stepN k1 R).ram.get! (I sy.Player_X_Speed) = (runSub (pokeL m0 (fricL sy v f lo hi mr ml cb)) sy.ImposeFriction lr 0 0).ram.get! (I sy.Player_X_Speed) :=
+    o1 (I sy.Player_X_Speed, .eq) (by simp)
+  have oA : (stepN k1 R).ram.get! (I sy.Player_XSpeedAbsolute) =
+      (runSub (pokeL m0 (fricL sy v f lo hi mr ml cb)) sy.ImposeFriction lr 0 0).ram.get! (I sy.Player_XSpeedAbsolute) :=
+    o1 (I sy.Player_XSpeedAbsolute, .eq) (by simp)
+  -- what `frictionCheck` says
+  have hC := hfr
+  simp only [TopSpeed.frictionCheck, List.all_eq_true] at hC
+  have hq := hC v (List.contains_iff_mem.1 hsp) f (Potential.mem_bytes f) (lo, hi) m3 mr m1 ml m2 lr (List.contains_iff_mem.1 hlr) cb hcb
+  simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hq
+  have hk : pokeL m0 (fricL sy v f lo hi mr ml cb) = poke (poke (poke (poke (poke (poke (poke m0 sy.Player_X_Speed v) sy.Player_X_MoveForce f) sy.FrictionAdderLow lo) sy.FrictionAdderHigh hi) sy.MaximumRightSpeed mr) sy.MaximumLeftSpeed ml) sy.Player_CollisionBits cb := by
+    simp only [fricL, pokeL]
+  rw [← hk] at hq
+  refine ⟨k1 + k2, by rw [e]; exact A2, ?_, InFrameN.add C1 C2⟩
+  rw [e, W2 _ (by simp [watchM]) (I_lt _), W2 _ (by simp [watchM]) (I_lt _), oV, oA]
+  exact hq.1.2
+
+/-- from the player's routine to the mover, for the stored speed: at the mover it is `|v|` -/
+theorem stored_c4 {m0 : Machine} {S : UInt8} {R : Machine} (hb : GoodH (Rom.of m0) m0) (hfr : TopSpeed.frictionCheck sy m0 = true) (hF : ModelFacts sy m0 S)
+    (hso : ∀ c ∈ allCases, storedFricOK sy m0 S c = true) (h : AtFrame sy (Rom.of m0) S R)
+    (habs : R.ram.get! (I sy.Player_XSpeedAbsolute) = absB (R.ram.get! (I sy.Player_X_Speed))) :
+    ∃ k, At (Rom.of m0) (planOf sy m0 S (caseOf sy R)).c4 (stepN k R) ∧
+      (stepN k R).ram.get! (I sy.Player_XSpeedAbsolute) = absB ((stepN k R).ram.get! (I sy.Player_X_Speed)) ∧ InFrameN (Rom.of m0) R k := by
+  have hmem := caseOf_memF h
+  have hA := at_startF h
+  obtain ⟨hc, hc2⟩ := hF.cases _ hmem
+  have hs3 := hso _ hmem
+  generalize hcc : caseOf sy R = c at hmem hA hc hc2 hs3 ⊢
+  simp only [caseOK, Bool.and_eq_true, beq_iff_eq] at hc
+  simp only [frameCaseOK, Bool.and_eq_true, Bool.or_eq_true, bne_iff_ne, beq_iff_eq] at hc2
+  simp only [storedFricOK, Bool.and_eq_true, Bool.or_eq_true, bne_iff_ne, beq_iff_eq] at hs3
+  generalize planOf sy m0 S c = P at hc hc2 hs3 ⊢
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨a1, _⟩, _⟩, _⟩, _⟩, _⟩, _⟩, _⟩, a9⟩, _⟩, _⟩ := hc
+  obtain ⟨⟨⟨hlr, x1⟩, x2⟩, _⟩ := hc2
+  have hzero : TopSpeed.inSpeed sy (0 : UInt8) = true := by
+    simp only [TopSpeed.inSpeed, decide_eq_true_eq]
+    show ((0 : Int)).natAbs ≤ _
+    simp
+  have hsp : TopSpeed.inSpeed sy (R.ram.get! (I sy.Player_X_Speed)) = true := h.speed
+  have hco : R.ram.get! (I sy.Player_CollisionBits) ∈ TopSpeed.collBits sy := h.coll
+  obtain ⟨k1, _, A1, W1, _, C1⟩ := piece_spec a1 hA
+  generalize hR1 : stepN k1 R = R1 at A1 W1
+  have wG : ∀ j ∈ I sy.RunningTimer :: I sy.SavedJoypadBits :: watchH sy, j < 2048 → R1.ram.get! j = R.ram.get! j := W1
+  obtain ⟨k2, Q2, _, A2, W2, _, cg, L2, C2⟩ := piece_specX (c' := afterLeaf P.c1 P.r1) (watch := I sy.SavedJoypadBits :: watchH sy) (extra := capsGood sy m0) x1 A1
+  generalize hR2 : stepN k2 R1 = R2 at A2 W2 L2
+  obtain ⟨mr, ml, lo, hi, c1, c2, c3, c4, m1, m2, m3⟩ := capsGood_spec cg L2
+  have wX : ∀ j ∈ I sy.SavedJoypadBits :: watchH sy, j < 2048 → R2.ram.get! j = R1.ram.get! j := W2
+  have hk : ∀ j ∈ watchH sy, j < 2048 → R2.ram.get! j = R.ram.get! j := fun j hj hl => by
+    rw [wX j (List.mem_cons_of_mem _ hj) hl, wG j (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hj)) hl]
+  have spL := fun {v : UInt8} (e : TopSpeed.inSpeed sy v = true) => speed_list hF.scomp e
+  by_cases h0 : stOf c.n = 0
+  · -- on the ground
+    simp only [if_pos h0, Bool.and_eq_true] at a9
+    obtain ⟨g, fc⟩ := a9
+    simp only [groundOK, Bool.and_eq_true, beq_iff_eq, Bool.or_eq_true] at g
+    obtain ⟨⟨⟨⟨_, b2⟩, _⟩, b4⟩, _⟩ := g
+    simp only [fricOK, Bool.and_eq_true, beq_iff_eq] at fc
+    obtain ⟨⟨⟨d1, d2⟩, _⟩, d4⟩ := fc
+    obtain ⟨k3, _, A3, W3, _, C3⟩ := piece_spec b2 A2
+    generalize hR3 : stepN k3 R2 = R3 at A3 W3
+    have x2' : walkT (Rom.of m0) (fun Q => Q.pc == P.r2) (fun Q => goalC (afterLeaf P.c2 P.r2) ([I sy.PlayerFacingDir, I sy.Player_CollisionBits, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce] ++ capsL sy) Q && animGood sy Q) fuelS (startQ P.c2) = true := by
+      rcases x2 with x2 | x2
+      · exact absurd h0 x2
+      · exact x2
+    obtain ⟨k4, Q4, _, A4, W4, _, ag, L4, C4⟩ := piece_specX (c' := afterLeaf P.c2 P.r2) (extra := animGood sy) x2' A3
+    generalize hR4 : stepN k4 R3 = R4 at A4 W4 L4
+    have an := animGood_spec ag L4
+    obtain ⟨k5, _, A5, W5, B5, C5⟩ := piece_spec b4 A4
+    generalize hR5 : stepN k5 R4 = R5 at A5 W5
+    have wf : ∀ j ∈ [I sy.Player_X_Speed, I sy.Player_X_MoveForce, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_CollisionBits, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce] ++ capsL sy,
+        j < 2048 → R5.ram.get! j = R4.ram.get! j := fun j hj hl => W5 j (List.mem_append_left _ hj) hl
+    have hCaps : ∀ j ∈ capsL sy, R5.ram.get! j = R2.ram.get! j := fun j hj => by
+      have hl : j < 2048 := by
+        simp only [capsL, List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl | rfl <;> exact I_lt _
+      rw [wf j (List.mem_append_right _ hj) hl, W4 j (List.mem_append_right _ hj) hl, W3 j (by
+        exact List.mem_cons_of_mem _ (List.mem_append_right _ hj)) hl]
+    have hcoll5 : R5.ram.get! (I sy.Player_CollisionBits) = R.ram.get! (I sy.Player_CollisionBits) := by
+      rw [wf _ (by simp) (I_lt _), W4 _ (by simp) (I_lt _), W3 _ (by simp [watchA, watchH]) (I_lt _), hk _ (by simp [watchH]) (I_lt _)]
+    have hsp5 : TopSpeed.inSpeed sy (R5.ram.get! (I sy.Player_X_Speed)) = true := by
+      rw [wf _ (by simp) (I_lt _)]
+      rcases an with an | an
+      · rw [an.1, W3 _ (by simp [watchA, watchH]) (I_lt _), hk _ (by simp [watchH]) (I_lt _)]
+        exact hsp
+      · rw [an.1]
+        exact hzero
+    obtain ⟨k6, A6, G6, C6⟩ := fric_abs hb hfr hF.fnd (spL hsp5) (hs3.resolve_left (fun e => e.1 h0)) d4 d1 d2 hlr A5 B5
+      (by rw [hCaps _ (by simp [capsL])]; exact c1) (by rw [hCaps _ (by simp [capsL])]; exact c2) (by rw [hCaps _ (by simp [capsL])]; exact c3) (by rw [hCaps _ (by simp [capsL])]; exact c4)
+      m1 m2 m3 (by rw [hcoll5]; exact hco)
+    have hfin : stepN (k1 + (k2 + (k3 + (k4 + (k5 + k6))))) R = stepN k6 R5 := by
+      rw [stepN_add, hR1, stepN_add, hR2, stepN_add, hR3, stepN_add, hR4, stepN_add, hR5]
+    refine ⟨k1 + (k2 + (k3 + (k4 + (k5 + k6)))), by rw [hfin]; exact A6, by rw [hfin]; exact G6, ?_⟩
+    exact InFrameN.add' C1 hR1 (InFrameN.add' C2 hR2 (InFrameN.add' C3 hR3 (InFrameN.add' C4 hR4 (InFrameN.add' C5 hR5 C6))))
+  · simp only [if_neg h0] at a9
+    by_cases hl : (lrOf c.n != 0) = true
+    · -- in the air, with Left or Right
+      rw [if_pos hl] at a9
+      simp only [Bool.and_eq_true] at a9
+      obtain ⟨g, fc⟩ := a9
+      simp only [fricOK, Bool.and_eq_true, beq_iff_eq] at fc
+      obtain ⟨⟨⟨d1, d2⟩, _⟩, d4⟩ := fc
+      obtain ⟨k3, _, A3, W3, B3, C3⟩ := piece_spec g A2
+      generalize hR3 : stepN k3 R2 = R3 at A3 W3
+      have hCaps : ∀ j ∈ capsL sy, R3.ram.get! j = R2.ram.get! j := fun j hj => by
+        have hl : j < 2048 := by
+          simp only [capsL, List.mem_cons, List.not_mem_nil, or_false] at hj
+          rcases hj with rfl | rfl | rfl | rfl <;> exact I_lt _
+        exact W3 j (List.mem_cons_of_mem _ (List.mem_append_right _ hj)) hl
+      have e1 : R3.ram.get! (I sy.Player_X_Speed) = R.ram.get! (I sy.Player_X_Speed) := by
+        rw [W3 _ (by simp [watchA, watchH]) (I_lt _), hk _ (by simp [watchH]) (I_lt _)]
+      have e3 : R3.ram.get! (I sy.Player_CollisionBits) = R.ram.get! (I sy.Player_CollisionBits) := by
+        rw [W3 _ (by simp [watchA, watchH]) (I_lt _), hk _ (by simp [watchH]) (I_lt _)]
+      have hne : lrOf c.n ≠ 0 := by simpa using hl
+      obtain ⟨k6, A6, G6, C6⟩ := fric_abs hb hfr hF.fnd (spL (by rw [e1]; exact hsp)) (hs3.resolve_left (fun e => hne e.2)) d4 d1 d2 hlr A3 B3
+        (by rw [hCaps _ (by simp [capsL])]; exact c1) (by rw [hCaps _ (by simp [capsL])]; exact c2) (by rw [hCaps _ (by simp [capsL])]; exact c3) (by rw [hCaps _ (by simp [capsL])]; exact c4)
+        m1 m2 m3 (by rw [e3]; exact hco)
+      have hfin : stepN (k1 + (k2 + (k3 + k6))) R = stepN k6 R3 := by
+        rw [stepN_add, hR1, stepN_add, hR2, stepN_add, hR3]
+      refine ⟨k1 + (k2 + (k3 + k6)), by rw [hfin]; exact A6, by rw [hfin]; exact G6, ?_⟩
+      exact InFrameN.add' C1 hR1 (InFrameN.add' C2 hR2 (InFrameN.add' C3 hR3 C6))
+    · -- in the air, with neither: the speed and the stored speed stay
+      rw [if_neg hl] at a9
+      obtain ⟨k3, _, A3, W3, _, C3⟩ := piece_spec a9 A2
+      generalize hR3 : stepN k3 R2 = R3 at A3 W3
+      have hfin : stepN (k1 + (k2 + k3)) R = R3 := by
+        rw [stepN_add, hR1, stepN_add, hR2, hR3]
+      have e1 : R3.ram.get! (I sy.Player_X_Speed) = R.ram.get! (I sy.Player_X_Speed) := by
+        rw [W3 _ (by simp [watchA, watchH]) (I_lt _), hk _ (by simp [watchH]) (I_lt _)]
+      have e2 : R3.ram.get! (I sy.Player_XSpeedAbsolute) = R.ram.get! (I sy.Player_XSpeedAbsolute) := by
+        rw [W3 _ (by simp [watchA, watchH]) (I_lt _), hk _ (by simp [watchH]) (I_lt _)]
+      refine ⟨k1 + (k2 + k3), by rw [hfin]; exact A3, by rw [hfin, e1, e2]; exact habs, ?_⟩
+      exact InFrameN.add' C1 hR1 (InFrameN.add' C2 hR2 C3)
+
+/-- **The stored speed at the scroll handler.** From the player's routine (`AtFrame`) with the stored speed `|v|`, the frame comes to the scroll handler with the stored
+speed `|v|` again. `hso` is the check on the ROM of the stored speed (`storedOK`), `hfr` that of `TopSpeed`'s friction. -/
+theorem stored_path {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m0 S = true) (hfr : TopSpeed.frictionCheck sy m0 = true) (hso : storedOK sy m0 S = true)
+    (h : AtFrame sy (Rom.of m0) S R) (habs : peek R sy.Player_XSpeedAbsolute = absB (peek R sy.Player_X_Speed)) :
+    ∃ k, (stepN k R).pc = sy.PlayerSubs ∧ peek (stepN k R) sy.Player_XSpeedAbsolute = absB (peek (stepN k R) sy.Player_X_Speed) ∧ InFrameN (Rom.of m0) R k := by
+  have hF := facts_of hOK
+  have hb := base_good hF.base
+  simp only [storedOK, Bool.and_eq_true, List.all_eq_true] at hso
+  obtain ⟨k1, A1, G1, C1⟩ := stored_c4 hb hfr hF hso.1 h habs
+  obtain ⟨t, ht, hte⟩ := hF.anyT _ (caseOf_memF h)
+  have e4 : t = (planOf sy m0 S (caseOf sy R)).c4 := cutSame_eq hte
+  have htl := hso.2 t ht
+  rw [e4] at htl
+  obtain ⟨k2, _, A2, W2, _, C2⟩ := piece_spec htl A1
+  have e : stepN (k1 + k2) R = stepN k2 (stepN k1 R) := stepN_add _ _ _
+  refine ⟨k1 + k2, by rw [e]; exact A2.pc, ?_, InFrameN.add C1 C2⟩
+  show (stepN (k1 + k2) R).ram.get! (I sy.Player_XSpeedAbsolute) = absB ((stepN (k1 + k2) R).ram.get! (I sy.Player_X_Speed))
+  rw [e, W2 _ (by simp) (I_lt _), W2 _ (by simp) (I_lt _)]
+  exact G1
+
+end stored
 
 /-! ## On real frames: a program, no part of the proof -/
 

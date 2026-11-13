@@ -21,14 +21,14 @@ no_call_of_paused  :  the same,  bit₀(frame(m, i)) = 1                        
 
 ix(0) = 0,   ix(t + 1) = first(ix t + 1, dP)                 (PipeFrames.ixP: a counted frame ends not paused)
 Lags.paused   :  t < E,  ix t < n < ix(t + 1)   →   bit₀(seq(n + 1)) = 1          (by the definition; frames 1 to ix(1) − 1 too)
-Lags.keeps    :  for a frame not counted,  t < E,  ix t < n < ix(t + 1):   ∀ k,  KeepsPause(tr(seq n, sin n, k))
+Lags.keepsP   :  for a frame not counted,  t < E,  ix t < n < ix(t + 1):   ∀ k,  KeepsPause(tr(seq n, sin n, k))      (from lags.clean, which protects the pause byte)
 Lags.no_call  :  pauseCheck,  Lags,  FrameStart(seq n)   →   frame n does not call c
 ```
 
 `pauseCheck` is a check on the ROM, by `native_decide` in the private `pause_check` (`Proof/LagPause.lean`). It takes about 6 s natively.
 The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
-Lean: `Theorems/LagPause.lean`; `ixP`, `ixP_paused`, `Lags.paused`, `Lags.keeps`, `Lags.no_call` in `Theorems/PipeFrames.lean`; private `Proof/LagPause.lean`.
+Lean: `Theorems/LagPause.lean`; `ixP`, `ixP_paused`, `Lags.paused`, `Lags.keepsP`, `Lags.no_call` in `Theorems/PipeFrames.lean`; private `Proof/LagPause.lean`.
 
 ## How it works
 
@@ -62,7 +62,7 @@ first counted frame that ends out of control.
 | big with the super status, own inputs (60) | 18,076 | 19,157 | 19,157 | 0 | 0 | 0 of 18,076 |
 | followed past a counted frame out of control (60; not part of the check) | 19,980 | 22,020 | 21,187 | 0 | 831 | 0 of 20,811 |
 
-* Every frame not counted of the runs in the theorem ends paused. No instruction writes the pause byte through an index or a pointer: `keeps` holds.
+* Every frame not counted of the runs in the theorem ends paused. No instruction writes the pause byte through an index or a pointer: `Lags.keepsP` holds.
 * So a frame is counted (the interval timers' phase moves) exactly when it ends not paused. `open-real-check` checks this on every frame of its runs up to the first frame out of
   control: 81,931 frames, no exception ([The opening on real frames](a-5-4-OpenFrames.md)). This is why `ixP` reads the counted frames from the pause byte.
 * No frame that calls `c` ends paused, also after an injury or a death (last row): what `ends_unpaused` says.
@@ -71,14 +71,15 @@ first counted frame that ends out of control.
 
 ## Assumed (not proved in Lean)
 
-* **`lags.game` is no longer assumed.** A frame not counted does not call the mode's routine; this is now a theorem from `Lags.paused` and `keeps`.
+* **`lags.game` is no longer assumed.** A frame not counted does not call the mode's routine; this is now a theorem from `Lags.paused` and `Lags.keepsP`.
 * **`lags.paused` is no longer assumed.** Which frames are counted is read from the pause byte (`ixP`), so a frame not counted ends paused by the definition. What ties these
   counted frames to the frames on which the timers run is the count of `chg.ha₁` (part 0, as before). The counted frame 1 is the first frame from frame 1 on that ends not
   paused: a run that pauses on the first frame in control is covered now (before, the counted frame 1 was frame 1).
 * **`lags.resume`** (new): each counted frame up to the entry comes within `dP` frames of the one before, that is, no pause from frame 1 to the entry lasts `dP` frames.
   `dP` is a field of `Lags` that the run chooses, so a run whose pauses end before the entry meets it with a large `dP`. With it a counted frame ends not paused
   (`Lags.unpaused`), which [The opening on real frames](a-5-4-OpenFrames.md) uses.
-* **`lags.keeps`**: no instruction of a frame not counted writes the pause byte through an index or a pointer. It is of the kind of `Clean`, for one more byte.
+* **`lags.keeps` is no longer a field** (this round): that no instruction of a frame not counted writes the pause byte through an index or a pointer is now part of
+  `lags.clean`, which protects the pause byte on every frame from control to the entry (`Lags.keepsP`).
 * **Not proved: that the master timer control stays 0.** It is not needed now.
 
 **Files.** `Theorems/LagPause.lean`, `Theorems/PipeFrames.lean`, `Theorems/Route.lean`, private `Proof/LagPause.lean`.
