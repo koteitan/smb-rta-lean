@@ -2,7 +2,7 @@
 
 # The change out of the side pipe, with the sound's bytes in tables
 
-**Claim.** The rows of the change out of the side pipe can forget the 38 bytes of the sound outside the sound routine. A table of states of these bytes is carried beside the rows. This is proved, with a check on the ROM. With these rows the condition at the exit is weaker: the pause sound may be silent, or the sound of the unpause may play, or the unpause may have been pressed on the frame of the exit (`QuietK`). Before, it had to be silent (`Quiet`). The route now asks `QuietK`: `chg.quiet₂` (1-1-d-3-4) is weaker. `QuietK` held at all 880 measured exits, `Quiet` at 257.
+**Claim.** The rows of the change out of the side pipe can forget the 38 bytes of the sound outside the sound routine. A table of states of these bytes is carried beside the rows. This is proved, with a check on the ROM. With these rows the condition at the exit is weaker: the pause sound may be silent, or the sound of the unpause may play, or the unpause may have been pressed on the frame of the exit (`QuietK`). Before, it had to be silent (`Quiet`). `QuietK` held at all 880 measured exits, `Quiet` at 257. `QuietK` at the exit is now proved from a condition at the entry ([The pause through the side pipe's frames](d-3-4-3-SidePause.md)), and the route asks that one.
 
 `m[i]` is the RAM byte `i` of `m`. `frame(m, i)` is one frame of `m` with the input `i`. `Sim(S, m)` says that the abstract state `S` covers `m`. `left`, `During2`, `Entry2`, `NoStart` and `TimerOK` are those of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). `Ph`, `SIn`, `tsuccs` and `tframe_of_walk` are those of [Where one step of the CPU writes RAM](d-3-4-1-StepWrites.md).
 
@@ -95,14 +95,14 @@ After the exit, on these runs, `left` falls by exactly one on each frame, and co
 
 ## What changed in the route
 
-* `Route.Changes` is split. `ChangesBase` has every field but `quiet₂`. `ChangesK` adds `quiet₂` with `QuietK`, and `Run.chg` is a `ChangesK`. `Changes` adds the old `quiet₂` with `Quiet`; `HurryStart` and `HurryMusic` still read it. `Changes.toK` turns a `Changes` into a `ChangesK`.
+* `Route.Changes` is split. `ChangesBase` has every field but `quiet₂`. `ChangesK` adds the condition of the second change on the pause, and `Run.chg` is a `ChangesK`: in round 8 `quiet₂` with `QuietK`, now `pause₂` at the entry ([The pause through the side pipe's frames](d-3-4-3-SidePause.md); `Changes.toK` is gone with it). `Changes` adds the old `quiet₂` with `Quiet`; `HurryStart` and `HurryMusic` still read it.
 * `Run.change₂`, `Run.start`, `Run.atCtl₀` and `level_ge_of_parts` take `SideChangeSound.EndStatementK` (and `startCheckK`, `ctlCheckK`) in place of `SideChangeEnd.EndStatement` (and `startCheck`, `ctlCheck`).
 * The bound of the change (`Run.change₂`) now also uses `chg.time₂`: the rows are rows of the time. `time₂` was already a field.
 
 ## Assumptions (not proved in Lean)
 
-* `QuietK` at the exit (`chg.quiet₂`, 1-1-d-3-4). To prove it, the pipe's frames need tables too: Start is allowed there, so the state of the pause sound must be carried from the entry.
-* `NoStart` (`chg.noStart₂`, 1-1-d-3-3): no Start on the frames of the game core after the pipe. A paused frame does not take one off `left`, and the rows have one row for each value of `left`. Not done.
+* `QuietK` at the exit is no longer assumed. [The pause through the side pipe's frames](d-3-4-3-SidePause.md) proves it from the condition `PauseE` at the entry (`chg.pause₂`, 1-1-d-3-4).
+* `NoStart` (`chg.noStart₂`, 1-1-d-3-3): no Start on the frames of the game core after the pipe. A paused frame does not take one off `left`, and the rows have one row for each value of `left`. Not done; paused rows were tried and measured on [The pause through the side pipe's frames](d-3-4-3-SidePause.md).
 * The others are as on [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md): `Entry2`, `lagPaused`, `TimerOK`.
 
 **Files.** `Theorems/SideChangeSound.lean`; the private check is in `Proof/Route.lean` and the place of the sound routine in `Proof/SideChangeSound.lean` (`genSideSound` in `Main.lean`). The symbols `PauseSfxValue`, `UnpauseSfxValue`, `PauseSfxLength` are in `tools/smb-symbols.txt`.

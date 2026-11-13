@@ -8,8 +8,8 @@ import Theorems.VertAir
 A frame of the room changes the vertical bytes (the height, the vertical speed and its fractions, the forces, the jump's origin, the state, and A and B) in the movement routine,
 and in the collision routine when he lands or stands. Here two walks of one whole frame of the room (the abstract machine of `RoomMap`, which knows the room's bytes and the target
 of every store) show where:
-* `walkA`: from the frame's start to the player's routine no step writes these bytes, nor the jump's halt value and A and B of the frame before; and the frame comes to the player's
-  routine at most once (`before_R`, `once_R`).
+* `walkA`: from the frame's start to the player's routine no step writes these bytes, nor the jump's halt value and A and B of the frame before, nor the horizontal bytes; the
+  frame comes to the player's routine at most once, and not at its end (`finR`): so it comes there before its end (`before_R`, `hbytes_at_R`).
 * `walkB`: when the frame comes to the scroll handler in the air (the state 1 or 2) and rising (the vertical speed negative), no step from there to the frame's end writes these bytes
   (`after_Q`).
 Each walk carries one bit (`AS.spent`, which nothing reads when the counter is not followed): in `walkA` it says that the frame has come to the player's routine, in `walkB` that it
@@ -230,8 +230,8 @@ def vKeep (sy : Syms) : List Nat :=
   [I sy.Player_Y_Position, I sy.Player_Y_MoveForce, I sy.Player_Y_Speed, I sy.Player_YMF_Dummy, I sy.VerticalForce, I sy.VerticalForceDown,
    I sy.JumpOrigin_Y_Position, I sy.Player_State, I sy.A_B_Buttons]
 
-/-- with A and B of the frame before, and the jump's halt value: what the movement routine reads besides -/
-def vKeepA (sy : Syms) : List Nat := vKeep sy ++ [I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump]
+/-- with A and B of the frame before, and the jump's halt value: what the movement routine reads besides; and the horizontal bytes (`FrameModel.hBytes`) -/
+def vKeepA (sy : Syms) : List Nat := vKeep sy ++ ([I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump] ++ (FrameModel.hBytes sy).map I)
 
 /-! ## The walk to the player's routine -/
 
@@ -240,6 +240,12 @@ def phA (sy : Syms) (E : Env) : Ph where
   zone := fun A => if A.pc == sy.PlayerCtrlRoutine && !A.spent then [{ A with spent := true }] else [A]
   pre := fun A => !(A.pc == sy.PlayerCtrlRoutine && A.spent)
   ok := fun A => A.spent || StepWrites.keepOK E (fun i => (vKeepA sy).contains i) A
+
+/-- at the frame's end the state is not at the player's routine: the frame does not end there -/
+def finR (sy : Syms) (B : AS) : Bool := B.pc != sy.PlayerCtrlRoutine
+
+theorem finR_spec {sy : Syms} {B : AS} (h : finR sy B = true) : B.pc ≠ sy.PlayerCtrlRoutine := by
+  simpa [finR] using h
 
 /-! ## The walk from the scroll handler -/
 
@@ -432,11 +438,13 @@ theorem start_of_room {Z : Ph} {E : Env} {P : Places} {r : Machine} {K : List (N
 
 /-- **The frame comes to the player's routine at most once, and before it no step writes the bytes of `vKeepA`.** The frame starts in the room's condition, and each
 instruction meets `SiteOK`. -/
-theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phA sy E) E P r K C Fu) {m : Machine} {i : UInt8}
+theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phA sy E) E P r K C Fu)
+    (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
     (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j, (trace m i j).frame = m.frame → (∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x) ∧
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
-    (∀ j d, ((trace m i (j + d)).frame ≥ m.frame + 1 || (trace m i (j + d)).halted) = false → (trace m i j).frame = m.frame) := by
+    (∀ j d, ((trace m i (j + d)).frame ≥ m.frame + 1 || (trace m i (j + d)).halted) = false → (trace m i j).frame = m.frame) ∧
+    (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame) := by
   obtain ⟨S, hw, hs, s1, s2, s3⟩ := start_of_room h hm
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
@@ -484,9 +492,19 @@ theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
           have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
           rw [StepWrites.keep_step hs₂ hok' x (List.contains_iff_mem.2 hx)]
           exact p2 rfl x hx
-  obtain ⟨hall, J, hJ1, hJ2, _, _⟩ := frame_of_walkV (Z := phA sy E) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz hw hs hk'
-    ⟨by rw [s1]; simp, fun _ x _ => rfl⟩ hstep
-  refine ⟨fun j hj hb x hx => ?_, fun j j' hlt hR hj' hR' => ?_, fun j d hl => ?_⟩
+  obtain ⟨hall, J, hJ1, hJ2, _, B, hB, hsB, _⟩ := frame_of_walkV (Z := phA sy E) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz
+    hw hs hk' ⟨by rw [s1]; simp, fun _ x _ => rfl⟩ hstep
+  refine ⟨fun j hj hb x hx => ?_, fun j j' hlt hR hj' hR' => ?_, fun j d hl => ?_, fun j hR => ?_⟩
+  rotate_left 3
+  · -- the frame does not end at the player's routine: a state at its end is not there
+    rcases Nat.lt_or_ge j J with h1 | h1
+    · exact hJ2 j h1
+    · exfalso
+      have e := PipeEntryRule.trace_stop (m := m) (i := i) (j := J) (by simp [hJ1]) (j - J)
+      rw [show J + (j - J) = j by omega] at e
+      have e2 : (trace m i J).pc = B.pc := hsB.pc
+      rw [← e, hR] at e2
+      exact hfin B hB e2.symm
   rotate_left 2
   · rcases Nat.lt_or_ge j J with h1 | h1
     · exact hJ2 j h1
@@ -510,6 +528,18 @@ theorem before_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     rw [hpre] at q1
     exact absurd (q1.2 ⟨j, hlt, hR⟩) (by simp)
 
+
+/-- **At the player's routine the horizontal bytes are those of the frame's start**: the frame comes there once and before its end, and no step before it writes
+`vKeepA` (`before_R`). This is `Clean.before` on the room's frames. -/
+theorem hbytes_at_R {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phA sy E) E P r K C Fu)
+    (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
+    (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) {j : Nat} (hR : (trace m i j).pc = sy.PlayerCtrlRoutine) :
+    ∀ a ∈ FrameModel.hBytes sy, peek (trace m i j) a = peek m a := by
+  obtain ⟨a1, a2, _, a4⟩ := before_R h hfin hm hk
+  have hf := a4 j hR
+  have hfirst : ∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine := fun j' hj' hR' => a2 j' j hj' hR' hf hR
+  intro a ha
+  exact a1 j hf hfirst (I a) (List.mem_append_right _ (List.mem_append_right _ (List.mem_map.2 ⟨a, ha, rfl⟩)))
 
 /-! ## The frame from the scroll handler -/
 
@@ -906,9 +936,9 @@ theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat 
 section
 open ScreenPage (placesR envR refR aidsOf)
 
-/-- the walk to the player's routine, on the room -/
+/-- the walk to the player's routine, on the room: a state at the frame's end is not at the player's routine -/
 abbrev cfgA (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
-  cfgOfV sy (phA sy (envR sy nm m0)) (fun _ => true) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
+  cfgOfV sy (phA sy (envR sy nm m0)) (finR sy) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
 
 /-- the walk from the scroll handler, on the room -/
 abbrev cfgB (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
@@ -916,7 +946,7 @@ abbrev cfgB (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
 
 /-- the check of the walk to the player's routine -/
 def checkA (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
-  walkCheckV sy (phA sy (envR sy nm m0)) (fun _ => true) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
+  walkCheckV sy (phA sy (envR sy nm m0)) (finR sy) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
 
 /-- the check of the walk from the scroll handler -/
 def checkB (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
@@ -939,12 +969,13 @@ theorem vsOf_eq_of {sy : Syms} {m m' : Machine} (h : ∀ x ∈ vKeep sy, m.ram.g
 /-- **One frame of the room that is in the air and rising follows `vstep`.** The frame starts in the room's condition `M` in the air (the state 1 or 2), each
 instruction meets `SiteOK`, the frame comes to the player's routine at instruction `k` in the state `AtV` and does not end in the next `moveLen` instructions. At the frame's
 start the jump's halt value is 1 if the state is 1, and A of the frame before is A. If `vstep` on `vmach` with the stored speed 0 leaves him in the air and rising, and the
-frame ends in the player's routine, the vertical bytes at the frame's end are `vstep`'s. The checks: the two walks of the room, `apartB`, `vertAirOK`. -/
+frame ends in the player's routine, the vertical bytes at the frame's end are `vstep`'s. The checks: the two walks of the room, `apartB`, `vertAirOK`. Each instruction of the frame
+that is not at the idle loop `idle` runs at least 64 dots before the frame's end (`ht`): so the frame does not end during the movement (`FrameModel.trace_inFrame`). -/
 theorem air_frame {sy : Syms} {m0 : Machine} {S : UInt8} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {CA CB : CfgS} {Fa Fb : Nat}
-    (hA : OKV (phA sy E) E P r K CA Fa) (hB : OKV (phB sy E P) E P r K CB Fb) (hfin : CB.fin = finB P r) (hap : apartB sy P = true)
-    (hV : vertAirOK sy m0 S = true) {M : Machine} {i : UInt8} {k : Nat}
+    (hA : OKV (phA sy E) E P r K CA Fa) (hfA : ∀ B, CA.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) (hB : OKV (phB sy E P) E P r K CB Fb) (hfin : CB.fin = finB P r)
+    (hap : apartB sy P = true) (hV : vertAirOK sy m0 S = true) {idle : UInt16} (hidle : FrameModel.idleAt (Rom.of m0) idle = true) {M : Machine} {i : UInt8} {k : Nat}
     (hm : RoomCond E r K M) (hk : ∀ j, SiteOK P (trace M i j)) (hR : AtV sy (Rom.of m0) S (trace M i k))
-    (hl : ((trace M i (k + FrameModel.moveLen)).frame ≥ M.frame + 1 || (trace M i (k + FrameModel.moveLen)).halted) = false)
+    (ht : ∀ n, (trace M i n).pc ≠ idle → (trace M i n).fdot ≤ dotsPerFrame - 64)
     (hst : peek M sy.Player_State = 1 ∨ peek M sy.Player_State = 2)
     (hd : peek M sy.Player_State = 1 → peek M sy.DiffToHaltJump = 1)
     (hp : peek M sy.PreviousA_B_Buttons &&& 0x80 = peek M sy.A_B_Buttons &&& 0x80)
@@ -953,21 +984,20 @@ theorem air_frame {sy : Syms} {m0 : Machine} {S : UInt8} {E : Env} {P : Places} 
       (VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).vy &&& 0x80 = 0x80)
     (hrt : (frame M i).ram.get! P.rtI = r.ram.get! P.rtI) :
     VertModel.vsOf sy (frame M i) = VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0 := by
-  obtain ⟨a1, a2, a3⟩ := before_R hA hm hk
-  have hfk : (trace M i k).frame = M.frame := a3 k FrameModel.moveLen hl
+  obtain ⟨a1, a2, _, a4⟩ := before_R hA hfA hm hk
+  have hfk : (trace M i k).frame = M.frame := a4 k hR.pc
   have hfirst : ∀ j, j < k → (trace M i j).pc ≠ sy.PlayerCtrlRoutine := fun j hj hR' => a2 j k hj hR' hfk hR.pc
   have hkeep := a1 k hfk hfirst
   have eq : ∀ a : UInt16, I a ∈ vKeepA sy → peek (trace M i k) a = peek M a := fun a ha => hkeep _ ha
   have hvs : VertModel.vsOf sy (trace M i k) = VertModel.vsOf sy M :=
     vsOf_eq_of (fun x hx => hkeep x (List.mem_append_left _ hx))
   have est : peek (trace M i k) sy.Player_State = peek M sy.Player_State := eq _ (by simp [vKeepA, vKeep])
-  obtain ⟨kk, hkk, _, hpc, _, hv⟩ := vert_air hV hR (by rw [est]; exact hst)
+  obtain ⟨kk, _, _, hpc, _, hv, hIn⟩ := vert_air hV hR (by rw [est]; exact hst)
     (by rw [est, eq sy.DiffToHaltJump (by simp [vKeepA])]; exact hd)
     (by rw [eq sy.PreviousA_B_Buttons (by simp [vKeepA]), eq sy.A_B_Buttons (by simp [vKeepA, vKeep])]; exact hp)
   rw [hvs] at hv
-  have ht := FrameModel.trace_steps hl kk hkk
-  rw [← ht] at hpc hv
-  have hfq : (trace M i (k + kk)).frame = M.frame := a3 (k + kk) (FrameModel.moveLen - kk) (by rw [show k + kk + (FrameModel.moveLen - kk) = k + FrameModel.moveLen by omega]; exact hl)
+  obtain ⟨htr, hfq⟩ := FrameModel.trace_inFrame hidle hfk hIn ht kk (Nat.le_refl kk)
+  rw [← htr] at hpc hv
   obtain ⟨_, b2⟩ := after_Q hB hfin hap hm hk
   have hrs : Rising sy (trace M i (k + kk)) := by
     have e1 : (VertModel.vsOf sy (trace M i (k + kk))).st = (trace M i (k + kk)).ram.get! (I sy.Player_State) := rfl
@@ -992,10 +1022,11 @@ structure VChecks (sy : Syms) (nm : Names) (m0 : Machine) (h k : Nat) : Prop whe
 
 /-- **A frame of the room on a jump's first frames follows `vstep` on `m0`.** The frame starts in the room's condition, on a state of a jump from the floor
 (`arcSet`), and `vstep` on `m0` with its A leaves him on such a state, rising. The other conditions are those of `air_frame`. -/
-theorem air_arc {sy : Syms} {nm : Names} {m0 : Machine} {h kk : Nat} (hV : VChecks sy nm m0 h kk) {M : Machine} {i : UInt8} {k : Nat}
+theorem air_arc {sy : Syms} {nm : Names} {m0 : Machine} {h kk : Nat} (hV : VChecks sy nm m0 h kk) {idle : UInt16} (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) idle = true)
+    {M : Machine} {i : UInt8} {k : Nat}
     (hm : RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) M) (hs : ∀ j, SiteOK (ScreenPage.placesR sy nm m0) (trace M i j))
     (hR : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (trace M i k))
-    (hl : ((trace M i (k + FrameModel.moveLen)).frame ≥ M.frame + 1 || (trace M i (k + FrameModel.moveLen)).halted) = false)
+    (htm : ∀ n, (trace M i n).pc ≠ idle → (trace M i n).fdot ≤ dotsPerFrame - 64)
     (hd : peek M sy.Player_State = 1 → peek M sy.DiffToHaltJump = 1)
     (hp : peek M sy.PreviousA_B_Buttons &&& 0x80 = peek M sy.A_B_Buttons &&& 0x80)
     (hu : VertModel.vsOf sy M ∈ (VertAir.arcSet sy m0 h kk).map (·.s))
@@ -1014,7 +1045,7 @@ theorem air_arc {sy : Syms} {nm : Names} {m0 : Machine} {h kk : Nat} (hV : VChec
   have hbr := b2 (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0)
   rw [hu2] at hbr
   rw [← hbr]
-  refine air_frame (okV_of_check hV.a) (okV_of_check hV.b) rfl hV.apart hV.air hm hs hR hl hst hd hp ⟨?_, ?_⟩ hrt
+  refine air_frame (okV_of_check hV.a) (fun B hB => finR_spec hB) (okV_of_check hV.b) rfl hV.apart hV.air hidle hm hs hR htm hst hd hp ⟨?_, ?_⟩ hrt
   · rw [hbr, ← ht2]
     exact c1
   · rw [hbr]

@@ -82,8 +82,8 @@ The 122 rows close, and `left` falls by one on each. Before, `rows0` and `rows1`
 ## What this gives
 
 * `quiet₂` (1-1-d-3-4). Done in the next round: the rows are proved, and the route now asks the kinds of the pause sound at the exit (`QuietK`). See [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md). There one set of rows of the time serves all 52 kinds, and the tables are made by the check.
-* The kinds are still an assumption on the exit. To prove them, the pipe's frames need the same tables: Start is allowed there, so the pause sound's state must be carried from the entry.
-* `noStart₂` (1-1-d-3-3). The table makes the delay of the song harmless: the 32,325 states with Start after the exit all close. But Start pauses the game, and a paused frame does not take one off `left`. The rows have one row for each value of `left`, so paused states need rows that can stay. Not done.
+* The kinds at the exit are now proved from a condition at the entry: [The pause through the side pipe's frames](d-3-4-3-SidePause.md). The pipe's frames follow the pipe's timer with the bit that the tables use, so there the pause is carried in classes of known bytes, not in tables.
+* `noStart₂` (1-1-d-3-3). The table makes the delay of the song harmless: the 32,325 states with Start after the exit all close. But Start pauses the game, and a paused frame does not take one off `left`. The rows have one row for each value of `left`, so paused states need rows that can stay. Not done; tried and measured on [The pause through the side pipe's frames](d-3-4-3-SidePause.md).
 * `quiet₁`, `noStart₁` (1-1-b-3-7, 1-1-b-3-6). The same holds for the change into the room: `Quiet` fails after Start on the pipe's frames, and the same tables would replace it by kinds of the pause sound. Its rows are read by `ScreenStart` and `RoomMap`. Not done.
 
 ## Assumptions (not proved in Lean)

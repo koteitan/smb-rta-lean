@@ -12,6 +12,10 @@
 * `OpenRun`（どのフレームもモデルの 1 歩）は定理です（`OpenFrames.Real.toRun`、`Run.pipeOpening`）。横の部分（`hstep`、`16·v` の移動）は本物のフレームの移動です
   （`FrameModel.move_model`、2 つの機械の歩きで証明）。プレイヤーのルーチンでの状態は `CtrlKeep` の歩きから出ます。モデルの入力は、プレイヤーのルーチンが読む入力です。
   空中に残るフレーム数はプレイヤーの状態から読みます。仮定に残るものは `Real` にあります。
+* `longer`（移動のあいだにフレームは終わらない）は定理です。どの命令も `CleanK.time` を満たすので、歩きのフレームは移動のあとで終わります
+  （`FrameModel.trace_inFrame`。パート e と同じやり方）。
+* `page` は数えるフレーム 1 から `N + 1` のどの始まりでも求めていました。いまは数えるフレーム `N + 1` の始まりだけで求めます。その前のフレームの終わりでは、
+  モデルの 2 つの探索で位置がちょうどになります。右は [出だし](a-3-Opening-ja.md)、左は [出だしの左への上限](a-5-4-3-3-2-OpenLeft-ja.md) が抑えます。
 
 `N = 32`、`D = 9744`（1/256 px）、`v_top` は走りの最高速（2.5 px/フレーム）です。`fm(t)` は数えるフレーム `t` が始まるときの機械、`inp(t)` はその入力、
 `b(t) = frame(fm t, inp t)` はその終わりの機械、`tr(t, k)` はその `k` 命令あとの機械です。`n₀(t) = arrAt(fm t, inp t)` は、そのフレームが初めてプレイヤーのルーチンに来る命令、
@@ -24,47 +28,64 @@
 OpenRun(air)  :  air(1) = 0,  そして t ∈ [1, N],  t < E  の各 t で  ∃ i ∈ inputsN:
                    valid(air t, i)  ∧  air(t + 1) ∈ modes(lens, hs t, air t, i)
                    ∧  hs(fm(t + 1)) = hstep(hs(fm t), i)  ∧  P(fm(t + 1)) = P(fm t) + 16·v(hs(fm(t + 1)))
+OpenRunM(air) :  OpenRun(air) の移動を  (P(fm(t + 1)) − P(fm t) − 16·v(hs(fm(t + 1)))) mod 2²⁴ = 0  にしたもの
 
 Real  （t ∈ [1, N],  t < E  の各 t で）:
   cleanK    :  ∀ k,  CleanK(tr(t, k))                     （PipeWrites.Clean に城の旗と位置の端数の保護を足したもの。ただし移動のルーチン自身の書き込みは除く）
   spare     :  ∀ k,  Spare(tr(t, k))                      （添字やポインタでの書き込みが、ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化を書かない）
   st        :  st(fm t) ∈ {0, 1, 2}
   spring    :  JumpspringAnimCtrl(fm t) = 0
-  page      :  P(fm t) < 2²³   （t ∈ [1, N + 1],  t ≤ E。ページが 128 より小さい）
-  longer    :  フレームは命令 n₀(t) + moveLen より前に終わらない
   after     :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = PlayerSubs  →  b(t) の hs と P の 8 バイトは tr(t, k) のもの,  ab(b t) = |v(b t)|,  bits(b t) = FF
   flat      :  ground(t)  ∧  ¬jump(in t)   →   ground(t + 1)
   jump      :  ground(t)  ∧  jump(in t)    →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  1 ≤ d < n で ¬ground(t + d),  ground(t + n)
+そして 1 回だけ:
+  page      :  N < E  →  page(fm(N + 1)) ≠ 255
 
 air(t)        :=  j − t   （j は [t, N + Zb) で ground(j) となる最初の数えるフレーム。なければ N + Zb）
 Held(m)       :=  ab(m) = |v(m)|  ∧  bits(m) = FF  ∧  AreaType(m) = v₀  ∧  SwimmingFlag(m) = 0  ∧  PlayerChangeSizeFlag(m) = 0
 
-move_page      :  modelOK,  AtCtrl(tr n₀),  n₀ まで 8 バイトは変わらない,  longer,  PlayerSubs から 8 バイトは変わらない,  P(m) < 2²³,  P(frame m i) < 2²³
-                  →   hs(frame m i) = hstep(hs m, readIn(tr n₀))  ∧  P(frame m i) = P(m) + 16·v(frame m i)
-Real.frame_step:  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm t),  P(b t) < 2²³
-                  →   hs(b t) = hstep(hs(fm t), in t)  ∧  P(b t) = P(fm t) + 16·v(b t)  ∧  Held(b t)  ∧  st(tr(t, n₀)) = st(fm t)
+hopt           :  ∀ k ≤ N,  Reach(start, k, u)  →  dist(u) ≤ D                   （Opening、非公開の opening）
+hlow           :  ∀ k < N,  Reach(start, k, u)  →  −P(m₀) ≤ dist(u)              （OpenLeft、非公開の open_left）
+htop           :  P(m₀) + D < 2²⁴                                                 （非公開の open_left）
+
+move_mod       :  modelOK,  AtCtrl(tr n₀),  n₀ まで 8 バイトは変わらない,  frame(tr n₀) = frame(m),  CleanK.time,  アイドルループ,  PlayerSubs から 8 バイトは変わらない
+                  →   hs(frame m i) = hstep(hs m, readIn(tr n₀))  ∧  (P(frame m i) − P(m) − 16·v(frame m i)) mod 2²⁴ = 0
+Real.frame_step:  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm t)
+                  →   hs(b t) = hstep(hs(fm t), in t)  ∧  (P(b t) − P(fm t) − 16·v(b t)) mod 2²⁴ = 0  ∧  Held(b t)  ∧  st(tr(t, n₀)) = st(fm t)
 lags_keepI     :  数えないフレームは 17 バイトを変えない。その中に hs、P、ab、bits、st、エリアの 3 バイトがある      （LagFrames）
-Real.toRun     :  lagCheck, walkCheck, pauseCheck,  Checks,  FrameStart(seq 1),  Held(fm 1),  ground(1),  Real   →   OpenRun(air)
+Real.toRunM    :  lagCheck, walkCheck, pauseCheck,  Checks,  FrameStart(seq 1),  Held(fm 1),  ground(1),  Real   →   OpenRunM(air)
+OpenRunM.next  :  OpenRunM(air),  P(fm 1) = P(m₀),  hopt,  hlow,  htop,  page,  k < N,  1 + k < E,  Reach(start, k, st(1 + k))
+                  →   P(fm(k + 2)) = P(fm(k + 1)) + 16·v(fm(k + 2))  ∧  Reach(start, k + 1, st(k + 2))
+OpenRunM.toRun :  OpenRunM(air),  hs(fm 1) = hs(m₀),  P(fm 1) = P(m₀),  hopt,  hlow,  htop,  page   →   OpenRun(air)
+Real.toRun     :  Real.toRunM のあと OpenRunM.toRun
 Run.pipeHeld   :  Held(fm 1)  ∧  ground(1)                     （title_check、title_pos_check、m₀ がそれを満たす: open_checks。fm 1 の前のフレームが変えない: Run.pipeKeep₁）
 Run.pipeOpening:  OpenRun(air)                                 （フィールド opening と確認から）
 Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              （Run.pipeOpening と非公開の opening から）
 ```
 
+`st(t)` は数えるフレーム `t` が始まるときのモデルの状態 `((hs(fm t), air(t)), P(fm t) − P(fm 1))` です。
+
 `Checks` は ROM での確認です。`modelOK`（移動）、`ctrlCheck`（プレイヤーのルーチンまでの歩き）、`afterCheck`（1 フレーム全体の歩き。エリアの種類は `m₀` の `v₀`）、
-`normIdem`、`lens` のどの長さも `Zb` より小さいこと、`Held(m₀) ∧ st(m₀) = 0`、NMI が見るポーズのバイトが `g` であることです。非公開の `open_checks` がこれを出します。はじめの 3 つはパート e の確認
-（`pole_numbers`）で、地上のエリアの種類は `m₀` のものと同じです。`title_pos_check` は、操作のときの `ab`、`bits`、`st` とエリアの 3 バイトの 6 バイトも `m₀` の値かを
+`normIdem`、`lens` のどの長さも `Zb` より小さいこと、`Held(m₀) ∧ st(m₀) = 0`、NMI が見るポーズのバイトが `g` であること、アイドルループが自分への `JMP` であることです。
+非公開の `open_checks` がこれを出します。はじめの 3 つとアイドルループはパート e の確認（`pole_numbers`）で、地上のエリアの種類は `m₀` のものと同じです。`title_pos_check` は、操作のときの `ab`、`bits`、`st` とエリアの 3 バイトの 6 バイトも `m₀` の値かを
 確かめるようになりました（ネイティブで約 2.2 秒）。`lag_check` は 17 バイトを追うようになりました（ネイティブで約 6 秒）。ROM のない定理が使う公理は `propext`、
 `Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/OpenFrames.lean`、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
-`titlePosCheck`、`Begin.bytesAll₁`、`Theorems/Route.lean` の `Pipe.opening`、`Run.pipeKeep₁`、`Run.pipeHeld`、`Run.pipeOpening`、`Run.pipeOpenB`、非公開の `Proof/OpenFrames.lean`、
+Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
+`titlePosCheck`、`Begin.bytesAll₁`、`Theorems/Route.lean` の `Pipe.opening`、`Run.pipeKeep₁`、`Run.pipeHeld`、`Run.pipeOpening`、`Run.pipeOpenB`、非公開の `Proof/OpenFrames.lean`（`open_checks`、`open_left`）、
 `Proof/LagPause.lean`、`Proof/Opening.lean`、`Proof/PipeWrites.lean`。
 
 ## しくみ
 
 * **移動.** `FrameModel.move_model`: プレイヤーのルーチンからスクロールの処理まで、横の状態はそこで読んだ入力での `hstep` のとおりで、`P` は `2²⁴` を法として `16·v` だけ
-  動きます。フレームの始まりと終わりで `P < 2²³` なら `|P' − P − 16·v| < 2²³ + 2048 < 2²⁴` なので、移動はちょうどです（`move_page`）。パート e はここで `2048 ≤ P`
-  （`far`）を求めます。これは左へ歩く出だしの本物のフレームで成り立ちません（下を見てください）。ページの条件で足ります。
+  動きます（`move_mod`）。移動のあいだにフレームは終わりません。ルーチンにはそのフレームのうちに来て（`CtrlKeep.arrive_at`）、アイドルループ以外のどの命令も
+  ドット `dotsPerFrame − 64` 以下で動き（`CleanK.time`）、アイドルループは自分への `JMP` です。なので `FrameModel.trace_inFrame` が歩きの各ステップをフレームの中で
+  たどります。これがフィールド `longer` でした。
+* **ちょうどの位置.** パート e はここで `2048 ≤ P`（`far`）を求めます。これは左へ歩く出だしの本物のフレームで成り立ちません（下を見てください）。代わりに数えるフレームの
+  帰納法で、数えるフレーム `1 + k` が始まるときの状態は、モデルが最初から `k` 歩で着く状態です（`OpenRunM.reachAll`）。モデルの次の状態 `u'` には `k + 1` 歩で着き、
+  `P(fm(1 + k)) + 16·v' = P(m₀) + dist(u')` です。`k + 1 < N` なら 2 つの探索がこれを `[0, P(m₀) + D] ⊂ [0, 2²⁴)` に入れるので、移動はちょうどです（`exact_of_mod`）。
+  `k + 1 = N` でも右の上限は成り立ちます。和が 0 より小さければ、終わりの位置は `P + 16·v' + 2²⁴ ≥ 2²⁴ − 2048` でページ 255 になります。これを `page` が除きます
+  （`exact_of_page`）。
 * **プレイヤーのルーチンでの状態.** フレームはアイドルループで操作できる状態で始まります（`Lags.starts`。`CtrlKeep` の歩きのガードは、アイドルループ、スタックポインタ、
   わかっているバイトが同じです）。ポーズでなく終わる（`Lags.unpaused`: 数えるフレームはポーズでなく終わるフレーム）ので、プレイヤーのルーチンに来ます（`CtrlKeep.arrive_at`）。そこで `keepA` の 25 バイトは始まりの値です
   （`CtrlKeep.ctrl_keep`）。`st`、`spring`、`Held` と合わせて `FrameModel.AtCtrl` になります。入力の状態とジャンプのビットは `st(fm t)` から出ます。
@@ -86,11 +107,12 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/PipeFrames.lean` の `lags_keepI`�
 | 走り | 数えるフレーム | そのあいだの数えないフレーム | 跳び始め | `Real` のフィールドが成り立たない | モデルの 1 歩でない |
 |---|---|---|---|---|---|
 | TAS | 32 | 0 | 2 | 0 | 0 |
-| 操作のときからの自分の入力、Start あり（300 回） | 9,600 | 10,229 | 566 | 0 | 0 |
+| 操作のときからの自分の入力、Start あり（300 回） | 9,600 | 9,600 | 528 | 0 | 0 |
 | 操作できる最初の 4 フレームのどれかで 43〜82 フレームのポーズ、そのあと TAS の入力（60 回、ポーズが終わるのは 58 回） | 1,856 | 5,814 | 116 | 0 | 0 |
 
 * TAS では、操作のときの `stI` の 6 バイト、位置、横の状態は `m₀` のものです。
-* **パート e の `far` はここでは成り立ちません**: 自分の走りの 50 フレームで、フレーム 32 より前に `P = 2048`（8 px）より左へ歩きます。ページの条件はどれでも成り立ちます。
+* **パート e の `far` はここでは成り立ちません**: 最初のフレームで A と B と左を押し、そのあと B と左を押し続ける自分の走りは、数えるフレーム 33 を `P = 320`（1.25 px）で
+  始めます。画面の端には触りません。`page` はどれでも成り立ちます。
 * **操作できる最初のフレームで Start**: そのフレームはポーズで終わり、タイマーの段は動かないので、時計はそれを数えません。この回の前は `PipeFrames.Lags` が走りの
   フレーム 1 を数えるフレーム 1 にしていたので、そういう走りでは `t = 1` で `unpaused` が成り立たず、扱えていませんでした。いまは数えるフレームをポーズのバイトから読みます
   （`PipeFrames.ixP`、[LagPause](a-5-5-3-3-LagPause-ja.md)）。数えるフレーム 1 はフレーム 1 から先でポーズでなく終わる最初のフレームで、操作のときの状態はそこまで運ばれます
@@ -103,14 +125,18 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/PipeFrames.lean` の `lags_keepI`�
 
 ## 前提（Lean では証明していない）
 
-* `Real` のフィールド: `cleanK`、`spare`、`st`、`spring`、`page`、`longer`、`after`、`flat`、`jump`。1 フレームごと、その命令ごと、その始まりの状態ごとの
-  条件です。`after` は、スクロールの処理からあと何も彼を動かさず、当たりのルーチンが何も見つけないこと（壁も画面の端もない）です。項目 1-1-a-5-6 の横の半分です。
+* `Real` のフィールド: `cleanK`、`spare`、`st`、`spring`、`after`、`flat`、`jump`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
+  その始まりの状態ごとの条件です。`after` は、スクロールの処理からあと何も彼を動かさず、当たりのルーチンが何も見つけないこと（壁も画面の端もない）です。項目 1-1-a-5-6 の横の半分です。
   `flat` はその縦の半分です（地面から落ちない）。`jump` は項目 1-1-a-5-7 です。
+* この回から仮定しないこと: `longer`、数えるフレーム 1 から `N` の始まりでの `page`。
+* `st` と `spring` は地図しだいです。ジャンプ台のバイトはジャンプ台のタイルに着地すると、状態 3（よじ登り）はよじ登るタイルに触ると書かれます。どちらのバイトを追う
+  フレームの歩きも、ブロックのバッファのルーチンが読むタイルを知りません。ジャンプ台のバイトをフレームの終わりまで追う探索（`ctrl-after-check spring`）は終わりませんでした。
+  4 分でメモリが 21.7 GB になったので止めました。
 * もう仮定しないこと: 各フレームがモデルの 1 歩であること（`hstep`、`16·v` の移動、モデルの入力、`valid`）、列 `air`。各数えるフレームがポーズでなく終わることは
   定理です（`PipeFrames.Lags.unpaused`）。数えるフレームはポーズでなく終わるフレームで、`dP` フレームの中で見つかります（`lags.resume`）。
 * **証明していないこと:** フレーム 368 で入れること（前と同じ）。
 
-**ファイル.** `Theorems/OpenFrames.lean`、`Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の
+**ファイル.** `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の
 `Proof/OpenFrames.lean`、`Proof/LagPause.lean`、`Proof/Opening.lean`。
 
 **再現.**
@@ -118,4 +144,5 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/PipeFrames.lean` の `lags_keepI`�
 .lake/build/bin/smbrta open-real-check FM2 300      # Real のフィールドを TAS と自分の入力で、タイトルの確認、数えないフレームの歩き、約 1 分
 .lake/build/bin/smbrta open-frames-check FM2 300    # 最初の 32 フレームをモデルの 1 歩として
 .lake/build/bin/smbrta open-check 32 9744           # モデルの上限（true）
+.lake/build/bin/smbrta open-left-check 31 10240     # モデルの左への上限（true）
 ```

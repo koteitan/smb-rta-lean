@@ -15,7 +15,7 @@ StartAt(m)       :  hs(m) = s₀  ∧  P₀ ≤ P(m) ≤ P₁
                     ∧  vs(m).st = 2  ∧  VY(vs m) ≤ Y_s  ∧  VW(vs m) ≤ W_s  ∧  vs(m).vfd = f_s
                     ∧  ab(m) = 0
 
-startCheck       :  every state S of the rows of the two cases of the change (rowsA, rowsB)
+startCheck       :  every state S of the rows of the time with the sound's bytes in tables where left is 0 (`timeRows`; the old rows rowsA, rowsB are `startCheckO`)
                     knows the bytes of control (OperMode, OperMode_Task, GameEngineSubroutine),
                     and if it has control, it knows the bytes of the horizontal state, page, x, the vertical state and the stored speed, and
                     hs(S) = s₀  ∧  P₀ ≤ 256·pix(S)  ∧  256·pix(S) + 255 ≤ P₁  ∧  the vertical state and ab as above

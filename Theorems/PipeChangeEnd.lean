@@ -1,5 +1,7 @@
 import Theorems.SideChangeEnd
 import Theorems.PipeEntryRule
+import Theorems.SoundRows
+import Theorems.SoundWalk
 
 /-!
 # The change into the room, from conditions at the entry, at places of the pipe's frames, and at the exit
@@ -8,9 +10,11 @@ import Theorems.PipeEntryRule
 condition on the state at the entry (`Entry`) and conditions on the machine at some places of each of these frames (`PlaceOK`). The 43 frames after the timer come from conditions at the exit: four bytes of the sound
 (`Quiet`), the song's bytes (`SongAt`) and the screen buffer, and no Start on the frames of the game core. The frame after the pipe clears RAM, and the frame ends inside that loop, as in the side pipe, and `SideChangeEnd`
 has what follows such a frame. A frame of the pipe that ends paused takes nothing off `left` (`EndStatement.paused`), and no machine in the rows is paused (`EndStatement.rowsGo`): so a `lag` frame that ends paused
-keeps `left`. Rows of the time (`timeRows`) know that the game timer is not 000, and their last row has control only: so if the time is not up at the exit (`TimeOK`) and `b` is the first
-control, `left` is not 0 before control (`PipeRun.first`) and the machine at control is in these rows (`PipeRun.inRowsT`). There is no game data in this file. Pages: `1-1/b-3-2-PipeChangeEnd.md`,
-`1-1/b-3-3-LagPaused.md`.
+keeps `left`. Rows of the time (`timeRowsO`) know that the game timer is not 000, and their last row has control only: so if the time is not up at the exit (`TimeOK`) and `b` is the first
+control, `left` is not 0 before control (`PipeRun.first`) and the machine at control is in these rows (`PipeRun.inRowsT`). The rows with the sound's bytes in tables
+(`rowsKc`, by the method of `SoundRows`) take a weaker condition at the exit: the pause sound silent or the unpause sound playing (`QuietP`), and the game timer not 000
+(`TimerOK`). Their rows where `left` is 0, with their tables, are the rows `timeRows` that the room's checks read (`PipeRunK`). There is no game data in this file. Pages:
+`1-1/b-3-2-PipeChangeEnd.md`, `1-1/b-3-3-LagPaused.md`, `1-1/b-3-7-1-SoundRows.md`.
 -/
 
 namespace Smbrta.PipeChangeEnd
@@ -918,7 +922,8 @@ def entryBits (nx : Names) : List (Nat × UInt8) := entryMasks.map fun p => (adI
 /-- the names this file needs -/
 def namesOf (text : String) : Names :=
   let ls := text.splitOn "\n"
-  let l := ((exitNames ++ quietP ++ songNames ++ entryNames).map (·.1)) ++ entryMasks.map (·.1) ++ exitMasks.map (·.1) ++ ["PlayerStatus", "Player_X_Scroll", partName, "SprShuffleAmtOffset", "SprDataOffset", "Misc_SprDataOffset", "AreaData", "AreaDataHigh", "VRAM_Buffer2_Offset", "VRAM_Buffer2", "BlockBufferColumnPos", "CurrentPageLoc", "CurrentColumnPos", "TerrainControl", "BackloadingFlag", "AreaObjectPageLoc", "AreaDataOffset", "ForegroundScenery", "BackgroundScenery", "AreaType", "MetatileBuffer", "AreaObjectLength", "AreaObjOffsetBuffer", "AreaStyle", "AreaParserTaskNum", "ScrollThirtyTwo", "VRAM_Buffer_AddrCtrl", "VRAM_Buffer1", "VRAM_Buffer1_Offset", "EnemyDataOffset", "ObjectOffset", "MusicOffset_Square2", "MusicOffset_Noise", "Squ2_NoteLenCounter", "MusicOffset_Triangle"]
+  let l := ((exitNames ++ quietP ++ songNames ++ entryNames).map (·.1)) ++ entryMasks.map (·.1) ++ exitMasks.map (·.1) ++ ["PlayerStatus", "Player_X_Scroll", partName, "SprShuffleAmtOffset", "SprDataOffset", "Misc_SprDataOffset", "AreaData", "AreaDataHigh", "VRAM_Buffer2_Offset", "VRAM_Buffer2", "BlockBufferColumnPos", "CurrentPageLoc", "CurrentColumnPos", "TerrainControl", "BackloadingFlag", "AreaObjectPageLoc", "AreaDataOffset", "ForegroundScenery", "BackgroundScenery", "AreaType", "MetatileBuffer", "AreaObjectLength", "AreaObjOffsetBuffer", "AreaStyle", "AreaParserTaskNum", "ScrollThirtyTwo", "VRAM_Buffer_AddrCtrl", "VRAM_Buffer1", "VRAM_Buffer1_Offset", "EnemyDataOffset", "ObjectOffset", "MusicOffset_Square2", "MusicOffset_Noise", "Squ2_NoteLenCounter", "MusicOffset_Triangle"] ++
+    SoundWalk.soundNames.map (·.1)
   SideChangeEnd.namesOf text ++ (l.eraseDups.filterMap fun n => (asmValue ls n).map (n, ·))
 
 /-- the bytes of the condition at the exit -/
@@ -982,7 +987,7 @@ def rowsB (c : Ctx) (d : Data) (e : Machine) : List Row := rowsAfter c (afterF -
 /-! ## The time at the exit
 
 The last row of `rowsA` holds the states with control and the states where the time is up, because the game timer's digits are free. If at the exit the sound's pause flag is 0 and the
-game timer is not 000 (`SideChangeEnd.TimeOK`), the machine is in the rows `timeRows`, as those of `rowsA` but with `dg` saying that the timer is not 000. Their last row has only states
+game timer is not 000 (`SideChangeEnd.TimeOK`), the machine is in the rows `timeRowsO`, as those of `rowsA` but with `dg` saying that the timer is not 000. Their last row has only states
 with control (`zeroCtl`). The entrance's setup may load the timer, on the flag `FetchNewGameTimerFlag`: the search keeps this flag apart, and the frame's ends keep `dg` apart. -/
 
 /-- the environment of the rows of the time: `dg` says that the timer is not 000 -/
@@ -996,16 +1001,16 @@ def timeCtx (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Ctx :=
 def timeStarts (d : Data) (e : Machine) : List AS := (songStarts d e).map fun S => { S with dg := true }
 
 /-- the rows of the time -/
-def timeRows (c : Ctx) (d : Data) (e : Machine) : List Row := rowsAfterD c (afterF - 2) (rowSongD c d.pl (bytesOfSong d.nx) d.dl d.dh 32 (timeStarts d e))
+def timeRowsO (c : Ctx) (d : Data) (e : Machine) : List Row := rowsAfterD c (afterF - 2) (rowSongD c d.pl (bytesOfSong d.nx) d.dl d.dh 32 (timeStarts d e))
 
 /-- a machine is in the rows of the time -/
-def InRowsT (sy : Syms) (nm : Names) (d : Data) (e : Machine) (m : Machine) : Prop :=
-  InvL (timeCtx sy nm d e) (timeRows (timeCtx sy nm d e) d e) m
+def InRowsTO (sy : Syms) (nm : Names) (d : Data) (e : Machine) (m : Machine) : Prop :=
+  InvL (timeCtx sy nm d e) (timeRowsO (timeCtx sy nm d e) d e) m
 
 /-- the check of the rows of the time: a frame goes from a row to the next, and where `left` is 0 every state has control -/
 def timeCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Bool :=
   let c := timeCtx sy nm d e
-  let l := timeRows c d e
+  let l := timeRowsO c d e
   chainOKD c l && zeroCtl sy l
 
 /-- the bytes that the condition at the exit asks, with the reference's values -/
@@ -1026,10 +1031,138 @@ def Paused (d : Data) (m : Machine) : Prop := m.ram.get! (pauseI d) &&& 1 = 1
 /-- `Paused`, for a program -/
 def pausedB (d : Data) (m : Machine) : Bool := m.ram.get! (pauseI d) &&& 1 == 1
 
+/-! ## The rows with the sound's bytes in tables
+
+The rows of the time know the sound's bytes, so the pause sound at the exit had to be silent (`quietQ`, and the flag 0 in `TimeOK`). Here the rows forget the sound's bytes
+outside the sound routine and carry tables of them (`SoundRows`, the method of `SideChangeSound`). The first table holds the kinds of the pause sound at the exit: silent with the
+flag 0 and the song's bytes a row of the song, or the sound of the unpause at a count from 1 to its length (`QuietP`). The rows of these frames where `left` is 0, each state
+with the bytes of each state of its table, are the rows `timeRows` that the room's checks read. -/
+
+open StepWrites (Rt SState SIn)
+
+/-- the first call to `target` from `a` on, within `n` bytes -/
+def jsrAt (m : Machine) (a target : UInt16) : Nat → UInt16
+  | 0 => a
+  | n + 1 => if romByte m a == 0x20 && romByte m (a + 1) == target.toUInt8 && romByte m (a + 2) == (target >>> 8).toUInt8 then a else jsrAt m (a + 1) target n
+
+/-- **The sound routine**: its bytes, its call in the frame's interrupt and the return, and its code, from `SoundEngine` on -/
+def rtOf (sy : Syms) (nx : Names) (e : Machine) : Rt :=
+  let call := jsrAt e sy.NonMaskableInterrupt sy.SoundEngine 512
+  { SB := SoundWalk.soundBytes nx, call, ret := call + 3, inR := fun pc => decide (sy.SoundEngine ≤ pc) }
+
+/-- the four bytes of the pause sound: the queue, the buffer, the sound's pause flag, the counter of the first square's effect; and the buffers of the two squares' effects -/
+structure PauseIx where
+  q : Nat
+  b : Nat
+  f : Nat
+  c : Nat
+  s1 : Nat
+  s2 : Nat
+
+def pauseIx (nx : Names) : PauseIx :=
+  ⟨adI nx "PauseSoundQueue", adI nx "PauseSoundBuffer", adI nx "PauseModeFlag", adI nx "Squ1_SfxLenCounter", adI nx "Square1SoundBuffer", adI nx "Square2SoundBuffer"⟩
+
+/-- **The pause sound at the exit.** Silent: the queue and the buffer as at the reference machine `x`, the sound's pause flag 0, the two squares' effects as at `x`, and
+the song's bytes one of the rows of the song. Or the sound of the unpause plays: the queue as at `x`, the buffer and the flag hold the unpause sound's value, and the counter
+is from 1 to one less than the sound's length (the sound sets the length and counts one down on the same frame). -/
+def QuietP (sy : Syms) (d : Data) (x m : Machine) : Prop :=
+  (m.ram.get! (pauseIx d.nx).q = x.ram.get! (pauseIx d.nx).q ∧ m.ram.get! (pauseIx d.nx).b = x.ram.get! (pauseIx d.nx).b ∧ m.ram.get! (pauseIx d.nx).f = 0 ∧
+    m.ram.get! (pauseIx d.nx).s1 = x.ram.get! (pauseIx d.nx).s1 ∧ m.ram.get! (pauseIx d.nx).s2 = x.ram.get! (pauseIx d.nx).s2 ∧ SongAt d.song m) ∨
+  (m.ram.get! (pauseIx d.nx).q = x.ram.get! (pauseIx d.nx).q ∧ m.ram.get! (pauseIx d.nx).b = sy.UnpauseSfxValue.toUInt8 ∧
+    m.ram.get! (pauseIx d.nx).f = sy.UnpauseSfxValue.toUInt8 ∧ 1 ≤ (m.ram.get! (pauseIx d.nx).c).toNat ∧ (m.ram.get! (pauseIx d.nx).c).toNat < sy.PauseSfxLength.toNat)
+
+/-- `QuietP` as a check, for a program -/
+def quietPB (sy : Syms) (d : Data) (x m : Machine) : Bool :=
+  let ix := pauseIx d.nx
+  (m.ram.get! ix.q == x.ram.get! ix.q && m.ram.get! ix.b == x.ram.get! ix.b && m.ram.get! ix.f == 0 && m.ram.get! ix.s1 == x.ram.get! ix.s1 &&
+    m.ram.get! ix.s2 == x.ram.get! ix.s2 && d.song.any fun q => q.all fun p => m.ram.get! p.1 == p.2) ||
+  (m.ram.get! ix.q == x.ram.get! ix.q && m.ram.get! ix.b == sy.UnpauseSfxValue.toUInt8 && m.ram.get! ix.f == sy.UnpauseSfxValue.toUInt8 &&
+    decide (1 ≤ (m.ram.get! ix.c).toNat) && decide ((m.ram.get! ix.c).toNat < sy.PauseSfxLength.toNat))
+
+/-- **The kinds of the pause sound at the exit**, as states of a table: silent with the flag 0 and the effects as at `x`, one for each row of the song; the unpause sound at each
+count from 1 to one less than its length -/
+def kindsP (sy : Syms) (d : Data) (x : Machine) : List SState :=
+  let ix := pauseIx d.nx
+  let q0 := (ix.q, TaintRun.AB.known (x.ram.get! ix.q))
+  let b0 := (ix.b, TaintRun.AB.known (x.ram.get! ix.b))
+  let U := TaintRun.AB.known sy.UnpauseSfxValue.toUInt8
+  (d.song.map fun r => [q0, b0, (ix.f, TaintRun.AB.known 0), (ix.s1, TaintRun.AB.known (x.ram.get! ix.s1)), (ix.s2, TaintRun.AB.known (x.ram.get! ix.s2))] ++
+    SoundRows.ofRow r) ++
+    (List.range (sy.PauseSfxLength.toNat - 1)).map fun j => [q0, (ix.b, U), (ix.f, U), (ix.c, TaintRun.AB.known (j + 1).toUInt8)]
+
+/-- the bytes that the states at the exit know (`baseK`): those of the exit's list, the noise effect's buffer and the screen buffer's control. The walk of the pipe's frames gives them. -/
+def exitKnownK (nx : Names) : List Nat := bytesOf nx exitNames ++ bytesOf nx [("NoiseSoundBuffer", 0, 1), ("VRAM_Buffer_AddrCtrl", 0, 1)]
+
+/-- the states at the exit: the bytes of `exitKnownK`, and the bits of the masks of the exit -/
+def baseK (d : Data) (e : Machine) : List AS :=
+  (exitStarts (refX e) (exitKnownK d.nx) (adI d.nx "GamePauseStatus")).map (maskOn (exitBits d.nx) (refX e))
+
+/-- the sound's bytes that the states at the exit know, as a state of a table, with the reference's values and masks -/
+def soundBaseP (R : Rt) (d : Data) (x : Machine) : SState :=
+  let ix := pauseIx d.nx
+  let K := exitKnownK d.nx
+  ((R.SB.filter fun i => K.contains i && i != ix.q && i != ix.b && i != ix.f && i != ix.c && i != ix.s1 && i != ix.s2).map fun i => (i, TaintRun.AB.known (x.ram.get! i))) ++
+    ((exitBits d.nx).filter fun p => R.SB.contains p.1).map fun p => (p.1, (⟨x.ram.get! p.1, p.2⟩ : TaintRun.AB))
+
+/-- **the first table**: the kinds, each with the sound's bytes that the states at the exit know -/
+def tableP (sy : Syms) (R : Rt) (d : Data) (x : Machine) : List SState := (kindsP sy d x).map (soundBaseP R d x ++ ·)
+
+/-- the start states of the rows: the states at the exit with a form of the screen buffer, the sound's bytes forgotten, and the timer not 000 (`dg`) -/
+def startsK (R : Rt) (d : Data) (e : Machine) : List AS :=
+  ((baseK d e).flatMap fun S => d.xshape.map fun r => refine r S).map fun S => StepWrites.retag false ({ StepWrites.forgetAll R.SB S with dg := true } : AS)
+
+/-- what the rows with tables have in common: the rows of the time, and the search keeps the sound's bytes apart -/
+def soundCtx (c : Ctx) (R : Rt) : Ctx := { c with keep := c.keep ++ R.SB }
+
+/-- the sound routine of the rows from `c` -/
+def rtc (c : Ctx) (d : Data) (e : Machine) : Rt := rtOf c.sy d.nx e
+
+/-- the context of the rows with tables -/
+def ctxK (c : Ctx) (d : Data) (e : Machine) : Ctx := soundCtx c (rtc c d e)
+
+/-- the second table of the frame with `k` frames left. On the first frame after the exit the states with the same bytes of the pause sound are joined: that frame and the
+next clear the song's bytes of page 0, and the frames after them do not read the song's other bytes until a new song sets them. On the other frames, as the search finds it. -/
+def grpP (ix : PauseIx) (k : Nat) (l : List SState) : List SState :=
+  if k == afterF then StepWrites.groupJoin (fun u => u.filter fun p => p.1 == ix.q || p.1 == ix.b || p.1 == ix.f || p.1 == ix.c) l else l
+
+/-- **the rows with tables**, from the states at the exit, one for each value of `left` -/
+def rowsKc (c : Ctx) (d : Data) (e : Machine) : List SoundRows.SRow :=
+  SoundRows.rowsFromS (ctxK c d e) (rtc c d e) (grpP (pauseIx d.nx)) afterF (startsK (rtc c d e) d e) (tableP c.sy (rtc c d e) d (refX e))
+
+/-- a machine is in the rows with tables -/
+def InRowsK (sy : Syms) (nm : Names) (d : Data) (e : Machine) (m : Machine) : Prop :=
+  SoundRows.InvS (ctxK (timeCtx sy nm d e) d e) (rtc (timeCtx sy nm d e) d e) (rowsKc (timeCtx sy nm d e) d e) m
+
+/-- **The rows that the room's checks read**: the rows with tables where `left` is 0, each state with the bytes of each state of its table -/
+def timeRows (c : Ctx) (d : Data) (e : Machine) : List Row := SoundRows.zeroRows (rtc c d e) (rowsKc c d e)
+
+/-- a machine with `left` 0 in the rows with tables is in these rows (`EndStatement.ctlK`) -/
+def InRowsT (sy : Syms) (nm : Names) (d : Data) (e : Machine) (m : Machine) : Prop :=
+  InvL (timeCtx sy nm d e) (timeRows (timeCtx sy nm d e) d e) m
+
+/-- the states at the exit: they know the sound's bytes of the first table, as the reference -/
+def baseOK (c : Ctx) (d : Data) (e : Machine) : Bool :=
+  (baseK d e).all fun S => !S.dg && StepWrites.soundLe S (soundBaseP (rtc c d e) d (refX e))
+
+/-- no state of the rows with tables is paused -/
+def goOK (c : Ctx) (d : Data) (e : Machine) : Bool :=
+  (rowsKc c d e).all fun r => r.row.R.all (notPausedK (pauseI d))
+
+/-- the check of the rows with tables from `c`: the states at the exit, the first table, the frames, control where `left` is 0, no paused state -/
+def soundCheckC (c : Ctx) (d : Data) (e : Machine) : Bool :=
+  baseOK c d e && SoundRows.headIncl (rowsKc c d e) (tableP c.sy (rtc c d e) d (refX e)) && SoundRows.chainS (ctxK c d e) (rtc c d e) (rowsKc c d e) &&
+    zeroCtl c.sy ((rowsKc c d e).map (·.row)) && goOK c d e
+
+/-- the check of the rows with tables -/
+def soundCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Bool := soundCheckC (timeCtx sy nm d e) d e
+
 /-- the two tables of the pipe's frames: the counter followed, and the counter at 1. The low bit of the pause byte is in the key. -/
 def cfgRp (d : Data) (e : Machine) : ZCfg := zcfgOf d.places d.jump (envOf d e) d.ckeys d.keep [(pauseI d, 1)] d.hints (startsP d e)
 def cfgOp (d : Data) (e : Machine) : ZCfg :=
   zcfgOf d.places d.jump (envOf d e) d.ckeys (adI d.nx "GamePauseStatus" :: d.keep) [(pauseI d, 1)] d.hints ((startsP d e).map (toOne (envOf d e)))
+
+/-- the states at the exit, with the bytes `quietQ`, are states of the rows of the time: the old condition at the exit still gives them -/
+def baseIncl (d : Data) (e : Machine) : Bool := (baseK d e).all fun D => (baseOf d e).any fun D0 => (refine (quietQ d e) D).le D0
 
 /-- the whole check on the ROM -/
 def endCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : List Machine) : Bool :=
@@ -1042,9 +1175,10 @@ def endCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : List Machin
     chainOK c (rowsA c d e) && chainOK c (rowsB c d e) &&
     startsOK (refsP d e) && decide (2 ≤ timerF) && d.bits.all (fun b => decide (b.1 < 2048)) &&
     leftCheck E sy nm sy.EngVerticalPipe (PipeChangeBound.tableOf sy nm e timerF afterF) afterF st x &&
-    zcheck (cfgRp d e) (cfgOp d e) E (pauseI d) st (baseOf d e) (quietQ d e) (exitBytes sy nm x) &&
+    zcheck (cfgRp d e) (cfgOp d e) E (pauseI d) st (baseK d e) [] (exitBytes sy nm x) &&
     es.all (fun m => entryOK E (refsP d e) timerF m) &&
-    (rowsA c d e ++ rowsB c d e).all (fun r => r.R.all (notPausedK (pauseI d))) && timeCheck sy nm d e
+    (rowsA c d e ++ rowsB c d e).all (fun r => r.R.all (notPausedK (pauseI d))) && timeCheck sy nm d e &&
+    baseIncl d e && soundCheck sy nm d e
 
 /-- **The condition on the state at the entry.** The frame has ended in the idle loop, the listed bytes are those of the reference, the timer is at least its first value, and some bytes have the reference's bits. All other bytes are free. -/
 abbrev Entry (d : Data) (e : Machine) (m : Machine) : Prop :=
@@ -1095,11 +1229,25 @@ structure EndStatement (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : L
   /-- one frame of the pipe: a frame that leaves the pipe, with the conditions at the exit and the time not up, is in the rows of the time -/
   stepT : ∀ m, During d e m → ∀ i, (∀ j, PlaceOK d.places (PipeEntryRule.trace m i j)) →
     During d e (frame m i) ∨ (ExitAt (exitQ sy nm e) (frame m i) ∧
-      (Quiet (quietQ d e) (frame m i) → SongAt d.song (frame m i) → SongAt d.xshape (frame m i) → TimeOK d.nx (frame m i) → InRowsT sy nm d e (frame m i)))
+      (Quiet (quietQ d e) (frame m i) → SongAt d.song (frame m i) → SongAt d.xshape (frame m i) → TimeOK d.nx (frame m i) → InRowsTO sy nm d e (frame m i)))
   /-- a frame in the rows of the time: `left` is 0 already, or the machine stays in these rows -/
-  rowsT : ∀ m, InRowsT sy nm d e m → ∀ i, (coreFrame sy sy.EngVerticalPipe m = true → noStart i = true) → leftP sy nm e m = 0 ∨ InRowsT sy nm d e (frame m i)
+  rowsT : ∀ m, InRowsTO sy nm d e m → ∀ i, (coreFrame sy sy.EngVerticalPipe m = true → noStart i = true) → leftP sy nm e m = 0 ∨ InRowsTO sy nm d e (frame m i)
   /-- in the rows of the time, `left` is 0 only with control -/
-  zeroT : ∀ m, InRowsT sy nm d e m → leftP sy nm e m = 0 → controllable sy m = true
+  zeroT : ∀ m, InRowsTO sy nm d e m → leftP sy nm e m = 0 → controllable sy m = true
+  /-- **one frame of the pipe, with the rows with tables**: a frame that leaves the pipe, with the pause sound of `QuietP`, a form of the screen buffer and the game timer
+  not 000 at the exit, is in the rows with tables -/
+  stepK : ∀ m, During d e m → ∀ i, (∀ j, PlaceOK d.places (PipeEntryRule.trace m i j)) →
+    During d e (frame m i) ∨ (ExitAt (exitQ sy nm e) (frame m i) ∧
+      (QuietP sy d (refX e) (frame m i) → SongAt d.xshape (frame m i) → TimerOK d.nx (frame m i) → InRowsK sy nm d e (frame m i)))
+  /-- **a frame in the rows with tables**: `left` is 0 already, or the machine stays in the rows and `left` falls by at most one -/
+  rowsK : ∀ m, InRowsK sy nm d e m → ∀ i, (coreFrame sy sy.EngVerticalPipe m = true → noStart i = true) →
+    leftP sy nm e m = 0 ∨ (InRowsK sy nm d e (frame m i) ∧ leftP sy nm e m ≤ leftP sy nm e (frame m i) + 1)
+  /-- in the rows with tables, `left` is 0 only with control -/
+  zeroK : ∀ m, InRowsK sy nm d e m → leftP sy nm e m = 0 → controllable sy m = true
+  /-- no machine in the rows with tables is paused -/
+  goK : ∀ m, InRowsK sy nm d e m → ¬ Paused d m
+  /-- a machine in the rows with tables where `left` is 0 is in the rows that the room's checks read -/
+  ctlK : ∀ m, InRowsK sy nm d e m → leftP sy nm e m = 0 → InRowsT sy nm d e m
 
 /-- a machine in rows whose states know that the game is not paused is not paused -/
 theorem not_paused_rows {c : Ctx} {g : Nat} : ∀ (l : List Row), (∀ r ∈ l, ∀ S ∈ r.R, notPausedK g S = true) → ∀ {m : Machine}, InvL c l m → m.ram.get! g &&& 1 ≠ 1
@@ -1111,7 +1259,7 @@ theorem not_paused_rows {c : Ctx} {g : Nat} : ∀ (l : List Row), (∀ r ∈ l, 
 
 /-- the first row of the rows of the time holds the states it is built from -/
 theorem in_rowsT {sy : Syms} {nm : Names} {d : Data} {e : Machine} {m : Machine} (hq : SongAt d.song m) (hr : SongAt d.xshape m) (ht : TimeOK d.nx m)
-    (hb : ∀ D ∈ baseOf d e, D.dg = false) (h : ∃ D ∈ baseOf d e, Sim (envOf d e) (m.frame, 2) D m) : InRowsT sy nm d e m := by
+    (hb : ∀ D ∈ baseOf d e, D.dg = false) (h : ∃ D ∈ baseOf d e, Sim (envOf d e) (m.frame, 2) D m) : InRowsTO sy nm d e m := by
   obtain ⟨D, hD, hs⟩ := h
   obtain ⟨r, hr1, hr2⟩ := hr
   obtain ⟨q, hq1, hq2⟩ := hq
@@ -1163,16 +1311,111 @@ theorem exit_base {d : Data} {e m : Machine} (hV : exitStartsOK (refX e) (exitKn
   obtain ⟨S, hS, hs⟩ := exit_cover hV rfl h.1
   exact ⟨_, List.mem_map.2 ⟨S, hS, rfl⟩, sim_mask h.2.2.2 hs⟩
 
+/-- with the bytes `quietQ`, a state at the exit of `baseK` is under a state of `baseOf` -/
+theorem base_of_K {d : Data} {e m : Machine} (hI : baseIncl d e = true) (hq : Quiet (quietQ d e) m)
+    (h : ∃ D ∈ baseK d e, Sim (envOf d e) (m.frame, 2) D m) : ∃ D ∈ baseOf d e, Sim (envOf d e) (m.frame, 2) D m := by
+  obtain ⟨D, hD, hs⟩ := h
+  obtain ⟨D0, hD0, hle⟩ := List.any_eq_true.1 (List.all_eq_true.1 hI D hD)
+  exact ⟨D0, hD0, TaintRun.sim_le hle (sim_refines hq hs)⟩
+
+/-- **A machine with `QuietP` has the bytes of one of the kinds** -/
+theorem kinds_of_quietP {sy : Syms} {d : Data} {x m : Machine} (h : QuietP sy d x m) : ∃ kd ∈ kindsP sy d x, SIn kd m := by
+  unfold kindsP
+  rcases h with ⟨hq, hb, hf, h1, h2, r, hr, hm⟩ | ⟨hq, hb, hf, hc1, hc2⟩
+  · refine ⟨_, List.mem_append_left _ (List.mem_map.2 ⟨r, hr, rfl⟩), SoundRows.sIn_append ?_ (SoundRows.sIn_ofRow hm)⟩
+    intro p hp
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl | rfl
+    · exact SoundRows.mem_eq hq
+    · exact SoundRows.mem_eq hb
+    · exact SoundRows.mem_eq hf
+    · exact SoundRows.mem_eq h1
+    · exact SoundRows.mem_eq h2
+  · refine ⟨_, List.mem_append_right _ (List.mem_map.2 ⟨(m.ram.get! (pauseIx d.nx).c).toNat - 1, List.mem_range.2 (by omega), rfl⟩), ?_⟩
+    intro p hp
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl
+    · exact SoundRows.mem_eq hq
+    · exact SoundRows.mem_eq hb
+    · exact SoundRows.mem_eq hf
+    · refine SoundRows.mem_eq ?_
+      have e : (m.ram.get! (pauseIx d.nx).c).toNat - 1 + 1 = (m.ram.get! (pauseIx d.nx).c).toNat := by omega
+      rw [e]
+      exact (UInt8.ofNat_toNat).symm
+
+/-- **The old condition at the exit gives the new one**: the bytes `quietQ`, a row of the song and the sound's pause flag 0 (`TimeOK.flag`) give `QuietP` -/
+theorem quietP_of_quiet {sy : Syms} {d : Data} {e m : Machine} (hq : Quiet (quietQ d e) m) (hs : SongAt d.song m)
+    (hf : m.ram.get! (adI d.nx "PauseModeFlag") = 0) : QuietP sy d (refX e) m := by
+  have key : ∀ n, n ∈ ["PauseSoundBuffer", "PauseSoundQueue", "Square1SoundBuffer", "Square2SoundBuffer"] →
+      m.ram.get! (adI d.nx n) = (refX e).ram.get! (adI d.nx n) := by
+    intro n hn
+    refine hq (adI d.nx n, (refX e).ram.get! (adI d.nx n)) (List.mem_map.2 ⟨adI d.nx n, ?_, rfl⟩)
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl <;> simp [bytesOf, quietA, adI, UInt16.toNat_and]
+  exact Or.inl ⟨key _ (by simp), key _ (by simp), hf, key _ (by simp), key _ (by simp), hs⟩
+
+/-- rows read with a context of the same environment -/
+theorem invL_congr {c c' : Ctx} (he : c.E = c'.E) : ∀ {L : List Row} {m : Machine}, InvL c L m → InvL c' L m
+  | [], _, h => h.elim
+  | r :: t, m, h => by
+    rcases h with ⟨S, hS, hs⟩ | h
+    · exact Or.inl ⟨S, hS, by rw [← he]; exact hs⟩
+    · exact Or.inr (invL_congr he h)
+
+/-- a state with the bytes `SB` forgotten and `dg` covers a machine whose game timer is not 000 -/
+theorem sim_start {E : Env} {F : Nat × UInt8} (SB : List Nat) {D : AS} {m : Machine} (hs : Sim E F D m) (hdg : E.D.any (fun j => m.ram.get! j != 0) = true) :
+    Sim E F (StepWrites.retag false ({ StepWrites.forgetAll SB D with dg := true } : AS)) m :=
+  StepWrites.sim_retag false { StepWrites.sim_forgetAll SB hs with dg := fun _ => hdg }
+
+/-- **A machine at the exit is in the rows with tables**: a state of `baseK` covers it, the pause sound is as `QuietP` says, the screen buffer has a form of the table, and the game
+timer is not 000 -/
+theorem inRowsK_of_exit {sy : Syms} {nm : Names} {d : Data} {e m : Machine} (hc : soundCheck sy nm d e = true)
+    (h : ∃ D ∈ baseK d e, Sim (envOf d e) (m.frame, 2) D m) (hq : QuietP sy d (refX e) m) (hr : SongAt d.xshape m) (ht : TimerOK d.nx m) :
+    InRowsK sy nm d e m := by
+  unfold soundCheck soundCheckC at hc
+  simp only [Bool.and_eq_true] at hc
+  obtain ⟨⟨⟨⟨hb, hh⟩, _⟩, _⟩, _⟩ := hc
+  obtain ⟨D, hD, hs⟩ := h
+  obtain ⟨r, hr1, hr2⟩ := hr
+  have hbD : D.dg = false ∧ StepWrites.soundLe D (soundBaseP (rtc (timeCtx sy nm d e) d e) d (refX e)) = true := by
+    have h2 := List.all_eq_true.1 hb D hD
+    rw [Bool.and_eq_true] at h2
+    refine ⟨?_, h2.2⟩
+    cases hdd : D.dg with
+    | false => rfl
+    | true =>
+      rw [hdd] at h2
+      cases h2.1
+  have hs1 : Sim (timeEnv d e) (m.frame, 2) D m := sim_D hs hbD.1
+  have hs2 := sim_refines hr2 hs1
+  have hdg : (timeEnv d e).D.any (fun j => m.ram.get! j != 0) = true := by
+    obtain ⟨j, hj, hne⟩ := ht
+    exact List.any_eq_true.2 ⟨j, hj, by simpa using hne⟩
+  have hs3 := sim_start (rtc (timeCtx sy nm d e) d e).SB hs2 hdg
+  obtain ⟨kd, hkd, hkm⟩ := kinds_of_quietP hq
+  have hS : StepWrites.retag false ({ StepWrites.forgetAll (rtc (timeCtx sy nm d e) d e).SB (refine r D) with dg := true } : AS) ∈
+      startsK (rtc (timeCtx sy nm d e) d e) d e :=
+    List.mem_map.2 ⟨refine r D, List.mem_flatMap.2 ⟨D, hD, List.mem_map.2 ⟨r, hr1, rfl⟩⟩, rfl⟩
+  have hT : soundBaseP (rtc (timeCtx sy nm d e) d e) d (refX e) ++ kd ∈ tableP (timeCtx sy nm d e).sy (rtc (timeCtx sy nm d e) d e) d (refX e) :=
+    List.mem_map.2 ⟨kd, hkd, rfl⟩
+  unfold InRowsK
+  unfold rowsKc at hh ⊢
+  exact SoundRows.inv_headS (grpP (pauseIx d.nx)) afterF _ _ hh hS hs3 rfl hT (SoundRows.sIn_append (StepWrites.sIn_of_le hs hbD.2) hkm)
+
 theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} {es : List Machine} (h : endCheck sy nm d e es = true) : EndStatement sy nm d e es := by
   simp only [endCheck, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, hI⟩, hK⟩ := h
   simp only [timeCheck, Bool.and_eq_true] at h12
   obtain ⟨hTc, hTz⟩ := h12
+  have hK' := hK
+  unfold soundCheck soundCheckC at hK'
+  simp only [Bool.and_eq_true] at hK'
+  obtain ⟨⟨⟨⟨_, _⟩, hKc⟩, hKz⟩, hKn⟩ := hK'
   have hEt : (timeCtx sy nm d e).E.pad = TaintRun.AB.top := rfl
   have hE : (ctxOf sy nm d e).E.pad = TaintRun.AB.top := rfl
   have hEp : (envOf d e).pad = TaintRun.AB.top := rfl
   have hL := leftOK_of_check h8
-  have hZ : ZOK (cfgRp d e) (cfgOp d e) (envOf d e) (pauseI d) (startsP d e) (baseOf d e) (quietQ d e) (exitBytes sy nm (refX e)) := by
+  have hZ : ZOK (cfgRp d e) (cfgOp d e) (envOf d e) (pauseI d) (startsP d e) (baseK d e) [] (exitBytes sy nm (refX e)) := by
     simp only [zcheck, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq, Bool.not_eq_true'] at h9
     obtain ⟨⟨⟨⟨⟨z1, z2⟩, z3⟩, z4⟩, z5⟩, z6⟩ := h9
     refine ⟨z1, rfl, rfl, rfl, rfl, rfl, fun S hS => ?_, z3, z4, z5, z6⟩
@@ -1191,7 +1434,8 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
       rw [c1] at a1
       exact absurd a1 (by decide)
   have hctl : ∀ m, controllable sy m = true → leftP sy nm e m = 0 := fun m hc => PipeChangeBound.left_zero_of_ctl hL.keys hc
-  refine ⟨fun m hm => entryCond_of_ok (h10 m hm), hdur, ?_, fun m hm => inPipe_of_inv hL hm, ?_, fun m hm => in_rows hm.2.1 hm.2.2.1 (exit_base h1 hm), ?_, ?_, hctl, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨fun m hm => entryCond_of_ok (h10 m hm), hdur, ?_, fun m hm => inPipe_of_inv hL hm, ?_, fun m hm => in_rows hm.2.1 hm.2.2.1 (exit_base h1 hm), ?_, ?_, hctl, ?_, ?_, ?_, ?_, ?_,
+    ?_, ?_, ?_, ?_, ?_⟩
   · intro M hM
     have a1 : leftP sy nm e M = (tm (envOf d e) M).toNat + afterF := left_of_inv hL (hdur M hM)
     rw [a1]
@@ -1211,9 +1455,9 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
         rw [a1, a2, g1]
         have : (1 : UInt8).toNat = 1 := rfl
         omega
-      · obtain ⟨D, hD, hs2⟩ := g3 hq
+      · obtain ⟨D, hD, hs2⟩ := g3 (fun _ h => by cases h)
         have : Sim (envOf d e) ((frame m i).frame, 2) D (frame m i) := hs2
-        exact in_rows hs hr ⟨D, hD, this⟩
+        exact in_rows hs hr (base_of_K hI hq ⟨D, hD, this⟩)
   · intro m hm
     obtain ⟨D, hD1, hs⟩ := exit_base h1 hm
     obtain ⟨⟨⟨_, a2⟩, a3⟩, a4⟩ := h2 D hD1
@@ -1245,15 +1489,32 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
     rcases z_step hZ hEp hm i hP with ⟨g1, _, _⟩ | ⟨_, g2, g3, _⟩
     · exact Or.inl g1
     · refine Or.inr ⟨g2, fun hq hs hr ht => in_rowsT hs hr ht (fun D hD => (h2 D hD).1.1.1) ?_⟩
-      obtain ⟨D, hD, hs2⟩ := g3 hq
+      obtain ⟨D, hD, hs2⟩ := g3 (fun _ h => by cases h)
       have : Sim (envOf d e) ((frame m i).frame, 2) D (frame m i) := hs2
-      exact ⟨D, hD, this⟩
+      exact base_of_K hI hq ⟨D, hD, this⟩
   · intro m hm i hi
     rcases chain_stepD hEt _ hTc hm hi with g | ⟨g1, _⟩
     · exact Or.inl g
     · exact Or.inr g1
   · intro m hm h0
     exact ctl_of_zero (states_of_chainD _ hTc) hTz hm h0
+  · intro m hm i hP
+    rcases z_step hZ hEp hm i hP with ⟨g1, _, _⟩ | ⟨_, g2, g3, _⟩
+    · exact Or.inl g1
+    · refine Or.inr ⟨g2, fun hq hr ht => inRowsK_of_exit hK ?_ hq hr ht⟩
+      obtain ⟨D, hD, hs2⟩ := g3 (fun _ h => by cases h)
+      have : Sim (envOf d e) ((frame m i).frame, 2) D (frame m i) := hs2
+      exact ⟨D, hD, this⟩
+  · intro m hm i hi
+    exact SoundRows.chain_stepS rfl _ hKc hm hi
+  · intro m hm h0
+    exact SoundRows.ctl_of_zeroS hKc hKz hm h0
+  · intro m hm hP
+    obtain ⟨r, hr, S, hS, hs, _⟩ := SoundRows.mem_of_invS hm
+    exact not_paused_of hs (List.all_eq_true.1 (List.all_eq_true.1 hKn r hr) S hS) hP
+  · intro m hm h0
+    unfold InRowsT timeRows
+    exact invL_congr (c := ctxK (timeCtx sy nm d e) d e) (c' := timeCtx sy nm d e) rfl (SoundRows.invL_zero hKc hm h0)
 
 /-! ## A run -/
 
@@ -1370,7 +1631,7 @@ theorem during_left (T : EndStatement sy nm d e es) {m : Machine} (h : During d 
 theorem PipeRun.timeWay (T : EndStatement sy nm d e es) (R : PipeRun sy nm d e)
     (ht : ∀ n, R.a ≤ n → n ≤ R.b → ExitAt (exitQ sy nm e) (R.seq n) → TimeOK d.nx (R.seq n))
     (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
-    ∀ k, R.a + k ≤ R.b → During d e (R.seq (R.a + k)) ∨ InRowsT sy nm d e (R.seq (R.a + k)) := by
+    ∀ k, R.a + k ≤ R.b → During d e (R.seq (R.a + k)) ∨ InRowsTO sy nm d e (R.seq (R.a + k)) := by
   intro k
   induction k with
   | zero => exact fun _ => Or.inl (T.during _ R.entry)
@@ -1413,7 +1674,7 @@ theorem PipeRun.first (T : EndStatement sy nm d e es) (R : PipeRun sy nm d e)
 /-- **The machine at control is in the rows of the time**, under the same conditions -/
 theorem PipeRun.inRowsT (T : EndStatement sy nm d e es) (R : PipeRun sy nm d e)
     (ht : ∀ n, R.a ≤ n → n ≤ R.b → ExitAt (exitQ sy nm e) (R.seq n) → TimeOK d.nx (R.seq n))
-    (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) : InRowsT sy nm d e (R.seq R.b) := by
+    (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) : InRowsTO sy nm d e (R.seq R.b) := by
   have hb := R.order
   have e2 : R.a + (R.b - R.a) = R.b := by omega
   have h := PipeRun.timeWay T R ht hc (R.b - R.a) (by omega)
@@ -1449,6 +1710,167 @@ theorem no_control_exit (T : EndStatement sy nm d e es) {seq : Nat → Machine} 
     rcases key j with ⟨h1, _⟩ | h1
     · omega
     · omega
+
+end
+
+/-! ## A run, with the rows with tables
+
+The condition at the exit is weaker: the pause sound may be silent with the flag 0 and the song in a row, or the unpause sound may play (`QuietP`). The screen buffer has a
+form of the table, and the game timer is not 000 (`TimerOK`). -/
+
+/-- **The change of a run, with the conditions of the rows with tables.** As `PipeRun`, with `QuietP` and the screen buffer at the exit, and the game timer not 000 there. -/
+structure PipeRunK (sy : Syms) (nm : Names) (d : Data) (e : Machine) where
+  seq : Nat → Machine
+  inp : Nat → UInt8
+  next : ∀ n, seq (n + 1) = frame (seq n) (inp n)
+  lag : Nat → Prop
+  dec : DecidablePred lag
+  cnt : Nat → Nat
+  hcnt : ∀ n, cnt (n + 1) = cnt n + (@ite _ (lag n) (dec n) 0 1)
+  a : Nat
+  b : Nat
+  order : a ≤ b
+  /-- the condition on the state at the entry -/
+  entry : Entry d e (seq a)
+  /-- control at `b` -/
+  atCtl : controllable sy (seq b) = true
+  /-- a lag frame ends paused -/
+  lagPaused : ∀ n, a ≤ n → n < b → lag n → Paused d (seq (n + 1))
+  /-- on a frame of the pipe's routine, each instruction meets the condition at the places -/
+  places : ∀ n, a ≤ n → n < b → inPipe sy sy.EngVerticalPipe (seq n) = true → ∀ j, PlaceOK d.places (PipeEntryRule.trace (seq n) (inp n) j)
+  /-- at the exit, the pause sound is as `QuietP` says, and the screen buffer has a form of the table -/
+  quiet : ∀ n, a ≤ n → n ≤ b → ExitAt (exitQ sy nm e) (seq n) → QuietP sy d (refX e) (seq n) ∧ SongAt d.xshape (seq n)
+  /-- no Start on the frames of the game core after the pipe -/
+  noStart : ∀ n, a ≤ n → n < b → coreFrame sy sy.EngVerticalPipe (seq n) = true → SideChangeEnd.noStart (inp n) = true
+  /-- at the exit, the game timer is not 000 -/
+  time : ∀ n, a ≤ n → n ≤ b → ExitAt (exitQ sy nm e) (seq n) → TimerOK d.nx (seq n)
+
+section
+variable {sy : Syms} {nm : Names} {d : Data} {e : Machine} {es : List Machine}
+
+theorem PipeRunK.cnt_mono (R : PipeRunK sy nm d e) (n : Nat) : R.cnt n ≤ R.cnt (n + 1) := by
+  rw [R.hcnt n]
+  split <;> omega
+
+/-- the frame after `n` from a state of the pipe: in the pipe, or at the exit in the rows with tables -/
+theorem PipeRunK.stepD (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) {n : Nat} (h1 : R.a ≤ n) (h2 : n < R.b) (h : During d e (R.seq n)) :
+    During d e (R.seq (n + 1)) ∨ InRowsK sy nm d e (R.seq (n + 1)) := by
+  have hP := R.places _ h1 h2 (T.inRoutine _ h)
+  rw [R.next n]
+  rcases T.stepK _ h (R.inp n) hP with g | ⟨g1, g2⟩
+  · exact Or.inl g
+  · right
+    rw [← R.next n] at g1 g2 ⊢
+    obtain ⟨q1, q2⟩ := R.quiet _ (by omega) (by omega) g1
+    exact g2 q1 q2 (R.time _ (by omega) (by omega) g1)
+
+/-- **The bound on the change**, with the rows with tables -/
+theorem PipeRunK.bound (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) : R.cnt R.a + (timerF + afterF) ≤ R.cnt R.b := by
+  have key : ∀ k, R.a + k ≤ R.b → R.cnt R.a + (timerF + afterF) ≤ R.cnt (R.a + k) ∨
+      ((During d e (R.seq (R.a + k)) ∨ InRowsK sy nm d e (R.seq (R.a + k))) ∧
+        R.cnt R.a + (timerF + afterF) ≤ R.cnt (R.a + k) + leftP sy nm e (R.seq (R.a + k))) := by
+    intro k
+    induction k with
+    | zero =>
+      intro _
+      right
+      refine ⟨Or.inl (T.during _ R.entry), ?_⟩
+      have := T.atEntry _ R.entry
+      simp only [Nat.add_zero]
+      omega
+    | succ k ih =>
+      intro hk2
+      have e1 : R.a + (k + 1) = R.a + k + 1 := rfl
+      rw [e1]
+      have hn := R.next (R.a + k)
+      rcases ih (by omega) with h | ⟨h1, h2⟩
+      · left
+        have := R.cnt_mono (R.a + k)
+        omega
+      · have hc := R.hcnt (R.a + k)
+        have hgap : R.a ≤ R.a + k := by omega
+        have hlt : R.a + k < R.b := by omega
+        rcases h1 with h1 | h1
+        · right
+          have hP := R.places _ hgap hlt (T.inRoutine _ h1)
+          obtain ⟨g1, _⟩ := T.step _ h1 (R.inp (R.a + k)) hP
+          refine ⟨R.stepD T hgap hlt h1, ?_⟩
+          rw [← hn] at g1
+          by_cases hl : R.lag (R.a + k)
+          · rw [@if_pos _ (R.dec _) hl] at hc
+            have hz := R.lagPaused _ hgap hlt hl
+            rw [hn] at hz
+            have hk3 := T.paused _ h1 (R.inp (R.a + k)) hP hz
+            rw [← hn] at hk3
+            omega
+          · rw [@if_neg _ (R.dec _) hl] at hc
+            omega
+        · have hi := R.noStart _ hgap hlt
+          rcases T.rowsK _ h1 (R.inp (R.a + k)) hi with g | ⟨g1, g2⟩
+          · left
+            have := R.cnt_mono (R.a + k)
+            omega
+          · right
+            rw [hn]
+            refine ⟨Or.inr g1, ?_⟩
+            by_cases hl : R.lag (R.a + k)
+            · have hz := R.lagPaused _ hgap hlt hl
+              rw [hn] at hz
+              exact absurd hz (T.goK _ g1)
+            · rw [@if_neg _ (R.dec _) hl] at hc
+              omega
+  have hb := R.order
+  have e2 : R.a + (R.b - R.a) = R.b := by omega
+  rcases key (R.b - R.a) (by omega) with h | ⟨_, h⟩
+  · rw [e2] at h
+    exact h
+  · have h0 := T.atControl _ R.atCtl
+    rw [e2, h0] at h
+    omega
+
+/-- on a run of the change, the machine is in the pipe or in the rows with tables, up to `b`, if `b` is the first control after the entry -/
+theorem PipeRunK.way (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
+    ∀ k, R.a + k ≤ R.b → During d e (R.seq (R.a + k)) ∨ InRowsK sy nm d e (R.seq (R.a + k)) := by
+  intro k
+  induction k with
+  | zero => exact fun _ => Or.inl (T.during _ R.entry)
+  | succ k ih =>
+    intro hk
+    have e1 : R.a + (k + 1) = R.a + k + 1 := rfl
+    rw [e1]
+    have hgap : R.a ≤ R.a + k := by omega
+    have hlt : R.a + k < R.b := by omega
+    rcases ih (by omega) with h1 | h1
+    · exact R.stepD T hgap hlt h1
+    · rcases T.rowsK _ h1 (R.inp (R.a + k)) (R.noStart _ hgap hlt) with g | ⟨g, _⟩
+      · have := T.zeroK _ h1 g
+        rw [hc _ hgap hlt] at this
+        cases this
+      · rw [R.next]
+        exact Or.inr g
+
+/-- **`left` is not 0 before control**, on a run of the change, if `b` is the first control after the entry -/
+theorem PipeRunK.first (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
+    ∀ n, R.a ≤ n → n < R.b → leftP sy nm e (R.seq n) ≠ 0 := by
+  intro n h1 h2 h0
+  obtain ⟨k, rfl⟩ : ∃ k, n = R.a + k := ⟨n - R.a, by omega⟩
+  rcases PipeRunK.way T R hc k (by omega) with h | h
+  · exact during_left T h h0
+  · have := T.zeroK _ h h0
+    rw [hc _ h1 h2] at this
+    cases this
+
+/-- **The machine at control is in the rows that the room's checks read**, if `b` is the first control after the entry -/
+theorem PipeRunK.inRowsT (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
+    InRowsT sy nm d e (R.seq R.b) := by
+  have hb := R.order
+  have e2 : R.a + (R.b - R.a) = R.b := by omega
+  have h := PipeRunK.way T R hc (R.b - R.a) (by omega)
+  rw [e2] at h
+  have h0 := T.atControl _ R.atCtl
+  rcases h with h | h
+  · exact absurd h0 (during_left T h)
+  · exact T.ctlK _ h h0
 
 end
 

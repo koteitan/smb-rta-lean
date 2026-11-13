@@ -1215,16 +1215,16 @@ theorem grab_frame (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy
 
 /-! ### The touch and the castle -/
 
-/-- The castle flag of the real run after the touch `g` is the flag of the machine `E` of `CastleWalk`, frame by frame, for `n` frames. -/
-def FollowsTouch (sy : Syms) (flag : Nat → Bool) (g : Nat) (E : Machine) (n : Nat) : Prop :=
-  ∀ k, 1 ≤ k → k ≤ n → flag (g + k) = castle sy (run E (zeros k))
+/-- The castle flag of the real run after the touch `g` is the flag of the machine `E` of `CastleWalk`, frame by frame, for `n` frames, up to the castle entry `c`. -/
+def FollowsTouch (sy : Syms) (flag : Nat → Bool) (g c : Nat) (E : Machine) (n : Nat) : Prop :=
+  ∀ k, 1 ≤ k → k ≤ n → g + k ≤ c → flag (g + k) = castle sy (run E (zeros k))
 
 theorem castle_after {flag : Nat → Bool} {g c n : Nat} {E : Machine}
-    (hE : ∀ k, 1 ≤ k → k ≤ n → castle sy (run E (zeros k)) = false) (H : FollowsTouch sy flag g E n)
+    (hE : ∀ k, 1 ≤ k → k ≤ n → castle sy (run E (zeros k)) = false) (H : FollowsTouch sy flag g c E n)
     (hc : flag c = true) (hgc : g < c) : g + n + 1 ≤ c := by
   by_cases h : c ≤ g + n
   · exfalso
-    have h1 := H (c - g) (by omega) (by omega)
+    have h1 := H (c - g) (by omega) (by omega) (by omega)
     rw [show g + (c - g) = c by omega, hc, hE _ (by omega) (by omega)] at h1
     exact Bool.noConfusion h1
   · omega
@@ -1244,18 +1244,19 @@ theorem fracOf_mem {P : Int} (h : P % 16 = 0) : fracOf P ∈ fracs := by
   have : ∀ i : Fin 16, (16 * i.val).toUInt8 ∈ fracs := by decide
   exact this ⟨k, hk⟩
 
-/-- for `n` frames after the touch, a direct grab behaves as a checked direct grab: with the touch's own fraction `u` (`CastleWalk.Statement.anyFraction`), or `otherStates` -/
-def DirectFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool) (g n : Nat) (u : UInt8) : Prop :=
-  FollowsTouch sy flag g (touchAt sy b (firstX sy) u (vs.headD default)) n ∨
-    ∃ s ∈ vs, ∃ x ∈ grabXs sy, FollowsTouch sy flag g (touchAt sy b x bigFrac s) n
+/-- for `n` frames after the touch, up to the castle entry `c`, a direct grab behaves as a checked direct grab: with the touch's own fraction `u`
+(`CastleWalk.Statement.anyFraction`), or `otherStates` -/
+def DirectFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool) (g c n : Nat) (u : UInt8) : Prop :=
+  FollowsTouch sy flag g c (touchAt sy b (firstX sy) u (vs.headD default)) n ∨
+    ∃ s ∈ vs, ∃ x ∈ grabXs sy, FollowsTouch sy flag g c (touchAt sy b x bigFrac s) n
 
-/-- for `n` frames after the touch, any other touch behaves as a checked touch at another height: `CastleWalk.Statement.otherTouch` -/
-def OtherFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool) (g n : Nat) : Prop :=
-  ∃ y ∈ otherYs sy, FollowsTouch sy flag g
+/-- for `n` frames after the touch, up to the castle entry `c`, any other touch behaves as a checked touch at another height: `CastleWalk.Statement.otherTouch` -/
+def OtherFlag (sy : Syms) (b : Machine) (vs : List Jump.VS) (flag : Nat → Bool) (g c n : Nat) : Prop :=
+  ∃ y ∈ otherYs sy, FollowsTouch sy flag g c
     (touchAt sy b (colX sy - 9).toUInt8 bigFrac { (vs.headD default) with y := y + 3 }) n
 
 theorem castle_of_direct {b : Machine} {vs : List Jump.VS} {Nc lo : Nat} (C : CastleWalk.Statement sy b vs Nc lo)
-    {flag : Nat → Bool} {g c n : Nat} {u : UInt8} (hu : u ∈ fracs) (hn : n + 1 ≤ Nc) (H : DirectFlag sy b vs flag g n u) (hc : flag c = true) (hgc : g < c) :
+    {flag : Nat → Bool} {g c n : Nat} {u : UInt8} (hu : u ∈ fracs) (hn : n + 1 ≤ Nc) (H : DirectFlag sy b vs flag g c n u) (hc : flag c = true) (hgc : g < c) :
     g + n + 1 ≤ c := by
   rcases H with H | ⟨s, hs, x, hx, H⟩
   · exact castle_after (fun k h1 h2 => C.anyFraction u hu k h1 (by omega)) H hc hgc
@@ -1265,7 +1266,7 @@ theorem castle_of_direct {b : Machine} {vs : List Jump.VS} {Nc lo : Nat} (C : Ca
       omega) H hc hgc
 
 theorem castle_of_other {b : Machine} {vs : List Jump.VS} {Nc lo : Nat} (C : CastleWalk.Statement sy b vs Nc lo)
-    {flag : Nat → Bool} {g c n : Nat} (hn : n + 1 ≤ lo) (H : OtherFlag sy b vs flag g n) (hc : flag c = true) (hgc : g < c) :
+    {flag : Nat → Bool} {g c n : Nat} (hn : n + 1 ≤ lo) (H : OtherFlag sy b vs flag g c n) (hc : flag c = true) (hgc : g < c) :
     g + n + 1 ≤ c := by
   obtain ⟨y, hy, H⟩ := H
   exact castle_after (fun k h1 h2 => C.otherTouch y hy k h1 (by omega)) H hc hgc
@@ -1278,23 +1279,24 @@ def IsDirect (sy : Syms) (y : UInt8) (rising : Bool) : Prop :=
 
 /-- What a direct grab on frame `g` gives: the jump, the frames before it, and the castle flag after it. -/
 structure DirectWay (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (rows : Nat) (fr : Nat → Frame tp am) (flag : Nat → Bool)
-    (t Nc : Nat) (F : Int) (g : Nat) (y : UInt8) (rising : Bool) (q L T : Nat) (a : Nat → Jump.Arc) (tk : Track) : Prop where
+    (t Nc : Nat) (F : Int) (g c : Nat) (y : UInt8) (rising : Bool) (q L T : Nat) (a : Nat → Jump.Arc) (tk : Track) : Prop where
   one_le : 1 ≤ q
   path : JumpPath sy m0 T g a
   atY : (a g).s.y = y
   atRising : Jump.falling (a g).s = !rising
   /-- the frames before the grab, needed for a fast jump at any time and for a slow jump up to frame `t + 8` -/
   approach : ((a T).fast = true ∨ g ≤ t + 8) → ApproachCases sy m0 rows fr t q L T g (a T).fast tk
-  /-- a slow jump's grab: no castle before `Nc − 1` frames after it. The checked touch has the fraction of `P₂(g)`. -/
-  flagAny : (a T).fast = false → DirectFlag sy b vs flag g (Nc - 2) (fracOf (fr g).P₂)
+  /-- a slow jump's grab: no castle before `Nc − 1` frames after it. The checked touch has the fraction of `P₂(g)`. Only the frames up to the castle entry `c` are asked. -/
+  flagAny : (a T).fast = false → DirectFlag sy b vs flag g c (Nc - 2) (fracOf (fr g).P₂)
   /-- a slow jump's grab, moving left on the frame before it, with the fraction below `F`: no castle before `Nc` frames after it -/
-  flagTight : (a T).fast = false → (fr (g - 1)).v₂ < 0 → (fr g).P₂ < SurfaceRun.poleP sy m0 + F → DirectFlag sy b vs flag g (Nc - 1) (fracOf (fr g).P₂)
+  flagTight : (a T).fast = false → (fr (g - 1)).v₂ < 0 → (fr g).P₂ < SurfaceRun.poleP sy m0 + F → DirectFlag sy b vs flag g c (Nc - 1) (fracOf (fr g).P₂)
 
 /-- the castle flag of the machines, frame by frame -/
 def flagOf (sy : Syms) (seq : Nat → Machine) (j : Nat) : Bool := castle sy (seq j)
 
 /-- What a real run gives, with frames counted from control above ground: `fr j` is frame `j` after control (`fr 1` the first frame), read from the machines `seq`: `seq j` is the machine at the end
-of the counted frame `j`, so `seq 0` is the machine at control. `g` is the frame he touches the pole, `c` the frame of the castle entry. The castle flag is read from the machines (`flagOf`). On frame `g` only the
+of the counted frame `j`, so `seq 0` is the machine at control. `seq` is not a field: it is the real run `S` at the end of the `j`-th frame from frame `a` on that ends not paused,
+on every frame, before the touch and after it (`Run.seq`, `FrameKeep.Keep.seq`). `g` is the frame he touches the pole, `c` the frame of the castle entry. The castle flag is read from the machines (`flagOf`). On frame `g` only the
 fields of `fr g` up to `P₂` are the real frame's: the touch moves him, and that is not a `Frame`. `B.m` is the machine of the private proof at control. Every field is a hypothesis of the theorem:
 none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `tiles`, `edge`, `moved` and `keep`, by the walk of the whole frame of the touch (`PoleFrame`, `Run.inRange`).
 That the fraction of `P₂(g)` is a multiple of 1/16 px is a theorem from `keep`, the walk of one whole frame in control (`FrameKeep`), and the check on the ROM (`Run.frac`). That no machine up to the touch
@@ -1304,20 +1306,18 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   fr : Nat → Frame (top sy) (amax sy m0)
   g : Nat
   c : Nat
-  /-- the machines -/
-  seq : Nat → Machine
   touchY : UInt8
   touchRising : Bool
   one_le : 1 ≤ g
-  /-- the frames up to the touch on the real machine, counted or not, as the walk of one whole frame in control needs them: each is the real frame of the one before; a frame is
-  counted when it ends with the game not paused, and the counted frame `j` ends at `seq j`; no frame before the touch's frame writes the routine, the mode or the task by its
+  /-- the frames up to the touch on the real machine, counted or not, as the walk of one whole frame in control needs them: the frames of `S` from frame `a` on; a frame is
+  counted when it ends with the game not paused, and the counted frame `j` ends at `keep.seq j`, by definition; no frame before the touch's frame writes the routine, the mode or the task by its
   address; each instruction meets `FrameKeep.CleanK` of `FrameKeep.guardF`. That each frame starts in the idle loop in control, that the frames before the touch's frame end
   in control, and that the `lag` frames keep the castle flag and the fraction's low 4 bits, are theorems (`FrameKeep.Frames.all_start`, `FrameKeep.Frames.ctlAll`,
-  `FrameKeep.Frames.start`). -/
-  keep : FrameKeep.Frames sy m0 S a g seq
+  `FrameKeep.Frames.start`, on `keep.toFrames`). -/
+  keep : FrameKeep.Keep sy m0 S a g
   /-- the frames: read from the machines; each one from a clean state follows `hstep`, up to a hit; the ones before `J` run the collision routine as on the machine at control.
   They are the frames of `keep`. -/
-  frames : SurfaceFrames.OnFrames sy m0 B T J g seq fr keep
+  frames : SurfaceFrames.OnFrames sy m0 B T J g keep.seq fr keep.toFrames
   /-- frame `g` of `keep` is a touch on real machines -/
   touches : PoleEntryRule.Touches sy (keep.fm g) (keep.pad g)
   /-- up to the routine's write, a read of the side check that gives one of the pole's tiles reads the pole's column, with the page at most one before the pole's -/
@@ -1332,13 +1332,21 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   /-- `P₂(g)` is the position at the end of the move (`PlayerSubs`), up to the write -/
   moved : ∀ n j, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → j ≤ n →
     (PipeEntryRule.trace (keep.fm g) (keep.pad g) j).pc = sy.PlayerSubs → (fr g).P₂ = posP sy (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
-  /-- the castle entry: the machine at the end of frame `c` has the castle flag -/
-  atCastle : castle sy (seq c) = true
+  /-- `c` frames end not paused by the end of frame `keep.top`: the frames up to the castle entry are counted frames of the run, so `keep.seq j` is the end of the `j`-th
+  of them for every `j ≤ c` (`FrameKeep.Keep.up_at`, `FrameKeep.Keep.ends_at`) -/
+  toCastle : c ≤ FrameKeep.upTo (FrameKeep.upAt sy m0 S a) keep.top
+  /-- the castle entry: the machine at the end of the counted frame `c` has the castle flag -/
+  atCastle : castle sy (keep.seq c) = true
   /-- a direct grab -/
   direct : IsDirect sy touchY touchRising →
-    ∃ q L T' a tk, DirectWay sy m0 b vs B.rows fr (flagOf sy seq) T Nc F g touchY touchRising q L T' a tk
-  /-- any other touch: no castle for the frames that could matter -/
-  other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs (flagOf sy seq) g (Nc + 5)
+    ∃ q L T' a tk, DirectWay sy m0 b vs B.rows fr (flagOf sy keep.seq) T Nc F g c touchY touchRising q L T' a tk
+  /-- any other touch: no castle for the frames that could matter, up to the castle entry -/
+  other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs (flagOf sy keep.seq) g c (Nc + 5)
+
+/-- **The machine at the end of the counted frame `j`**: the real run `S` at the end of the `j`-th frame from frame `a` on that ends not paused (`FrameKeep.Keep.seq`). A definition;
+it was the field `seq`, tied to the run only up to the touch (`seqAt`). -/
+abbrev Run.seq {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) :
+    Nat → Machine := R.keep.seq
 
 /-- the frames up to the touch follow each other: they are read from the machines -/
 theorem Run.next {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) :
@@ -1376,7 +1384,7 @@ theorem Run.fracP {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F 
   have h0 := R.watched₀ st hq hc0.castle
   intro j h1 h2
   rw [R.frames.reads.P j h1 h2]
-  exact R.keep.frac hk hc0.start h0 (j - 1) (by omega)
+  exact R.keep.toFrames.frac hk hc0.start h0 (j - 1) (by omega)
 
 /-- at the touch, `P₂` too: the move adds `16·v₂` -/
 theorem Run.frac {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
@@ -1397,7 +1405,7 @@ The machine at control (`hc0`: the start of a frame in control, the castle flag 
 theorem Run.noCastle_of {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     ∀ j, j ≤ R.g → castle sy (R.seq j) = false :=
-  R.keep.noCastle hk hc0.start (R.watched₀ st hq hc0.castle)
+  R.keep.toFrames.noCastle hk hc0.start (R.watched₀ st hq hc0.castle)
 
 /-- **The castle entry comes after the touch**: up to the touch no machine has the castle flag (`Run.noCastle_of`). `hc0` is the machine at control, `hk` the walk's check on the ROM. -/
 theorem Run.afterTouch {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
@@ -1413,8 +1421,8 @@ theorem Run.afterTouch {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat
 theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (hc : PoleFrame.poleFrameCheck sy m0 = true) (R : Run sy m0 b vs B T J Nc F Sr ar)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) :
     poleP sy m0 ≤ (R.fr R.g).P₂ :=
-  PoleFrame.inRange_of_frame hc R.touches (R.keep.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _))
-    (R.keep.cleanAt R.g R.one_le (Nat.le_refl _)) (fun n hw j hj => ⟨R.tiles n hw j hj, R.edge n hw j hj⟩) R.moved
+  PoleFrame.inRange_of_frame hc R.touches (R.keep.toFrames.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _))
+    (R.keep.toFrames.cleanAt R.g R.one_le (Nat.le_refl _)) (fun n hw j hj => ⟨R.tiles n hw j hj, R.edge n hw j hj⟩) R.moved
 
 /-- the numbers the join needs -/
 def joinCheck (sy : Syms) (m0 : Machine) (X : Int) (N E T J Nc lo : Nat) (F : Int) : Bool :=
@@ -1469,7 +1477,7 @@ theorem hB_run (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J 
       posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
   have hgap := S.gap
   have hearly := H.hearly
-  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 H.hJT S.far R.frames A.2 (fun n hn => (R.keep.all_start hkc hc0.start (R.watched₀ A.2 hfq hc0.castle) n hn).1)
+  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 H.hJT S.far R.frames A.2 (fun n hn => (R.keep.toFrames.all_start hkc hc0.start (R.watched₀ A.2 hfq hc0.castle) n hn).1)
   exact hB_of_line (PA := posP sy (above m0 n)) Fa S H.h16 H.h255 H.hE H.hJ Rs (first_of_surface S.noHit H.hJT Rs) R.next (R.startV A.1 A.2) (R.startP A.2)
     (by omega) e d he1 heg hd hPf
 

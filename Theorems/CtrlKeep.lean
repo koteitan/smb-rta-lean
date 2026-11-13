@@ -344,7 +344,8 @@ def afterCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
 
 The game engine copies `A_B_Buttons` into `PreviousA_B_Buttons` at its end (`SaveAB`), and the player's routine writes `A_B_Buttons` from `SavedJoypadBits` only. A walk after
 the cut with bit 7 of `SavedJoypadBits` known to be `b`, the three bytes protected, and bit 7 of A and B of this frame and of the frame before watched at the frame's end
-would show `CtlState.prevA`. The program `ctrl-prev-check` runs its search. -/
+would show bit 7 of A of the frame before. The program `ctrl-prev-check` runs its search; it fails at 26 frame ends, on the paths that write the task by its address.
+`PrevKeep` cuts the paths at those stores (`FrameKeep.Frames.noStore`), and there the walk closes (`PrevKeep.prev_end`). -/
 
 /-- A and B of this frame and of the frame before, and the pad's bits -/
 def abI (sy : Syms) : List Nat := [(sy.A_B_Buttons &&& 0x7FF).toNat, (sy.PreviousA_B_Buttons &&& 0x7FF).toNat, (sy.SavedJoypadBits &&& 0x7FF).toNat]

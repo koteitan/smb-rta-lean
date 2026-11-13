@@ -47,9 +47,13 @@ def rowOK (sy : Syms) (rm : Room) (yMax wMax : Int) (vfd : Nat) (S : AS) : Bool 
 /-- every state of the rows -/
 def rowsOK (sy : Syms) (rm : Room) (yMax wMax : Int) (vfd : Nat) (l : List Row) : Bool := l.all fun r => r.R.all (rowOK sy rm yMax wMax vfd)
 
-/-- **The check on the ROM**: in the rows of the two cases of `PipeChangeEnd`, a machine with control has the state of the room's start -/
-def startCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (rm : Room) (yMax wMax : Int) (vfd : Nat) : Bool :=
+/-- the check on the ROM of the old rows: in the rows of the two cases of `PipeChangeEnd`, a machine with control has the state of the room's start -/
+def startCheckO (sy : Syms) (nm : Names) (d : Data) (e : Machine) (rm : Room) (yMax wMax : Int) (vfd : Nat) : Bool :=
   rowsOK sy rm yMax wMax vfd (rowsA (ctxOf sy nm d e) d e) && rowsOK sy rm yMax wMax vfd (rowsB (ctxOf sy nm d e) d e)
+
+/-- **The check on the ROM**: in the rows where `left` is 0 of the rows with tables (`PipeChangeEnd.timeRows`), a machine with control has the state of the room's start -/
+def startCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (rm : Room) (yMax wMax : Int) (vfd : Nat) : Bool :=
+  rowsOK sy rm yMax wMax vfd (timeRows (timeCtx sy nm d e) d e)
 
 /-- what the check gives on a machine -/
 structure StartOf (sy : Syms) (rm : Room) (yMax wMax : Int) (vfd : Nat) (m : Machine) : Prop where
@@ -106,10 +110,10 @@ theorem start_of_invL {C : Ctx} : ∀ {l : List Row}, rowsOK sy rm yMax wMax vfd
     · exact start_of_state hs (List.all_eq_true.1 hl.1 S hS) hc
     · exact start_of_invL hl.2 h hc
 
-/-- **A machine in the rows that has control has the room's start.** -/
-theorem start_of_rows {nm : Names} {d : Data} {e : Machine} (hc : startCheck sy nm d e rm yMax wMax vfd = true) {m : Machine} (h : InRows sy nm d e m)
+/-- **A machine in the old rows that has control has the room's start.** -/
+theorem start_of_rows {nm : Names} {d : Data} {e : Machine} (hc : startCheckO sy nm d e rm yMax wMax vfd = true) {m : Machine} (h : InRows sy nm d e m)
     (hm : controllable sy m = true) : StartOf sy rm yMax wMax vfd m := by
-  simp only [startCheck, Bool.and_eq_true] at hc
+  simp only [startCheckO, Bool.and_eq_true] at hc
   rcases h with h | h
   · exact start_of_invL hc.1 h hm
   · exact start_of_invL hc.2 h hm
@@ -160,8 +164,21 @@ theorem PipeRun.inRows (T : EndStatement sy nm d e es) (R : PipeRun sy nm d e)
   · exact absurd (T.atControl _ R.atCtl) (left_during T h)
   · exact h
 
-/-- **The state at the first control in the room, on a real run**, from the conditions of the change and `left` not 0 before control. -/
-theorem PipeRun.start (T : EndStatement sy nm d e es) (hc : startCheck sy nm d e (RoomJoin.room sy N) N.startY N.startW N.fallF = true) (R : PipeRun sy nm d e)
+/-- **A machine with control in the rows that the room's checks read has the room's start.** -/
+theorem start_of_rowsT {nm : Names} {d : Data} {e : Machine} (hc : startCheck sy nm d e rm yMax wMax vfd = true) {m : Machine} (h : InRowsT sy nm d e m)
+    (hm : controllable sy m = true) : StartOf sy rm yMax wMax vfd m :=
+  start_of_invL hc h hm
+
+/-- **The state at the first control in the room, on a real run**, from the conditions of the change with the rows with tables, if `b` is the first control after the entry -/
+theorem PipeRunK.start (T : EndStatement sy nm d e es) (hc : startCheck sy nm d e (RoomJoin.room sy N) N.startY N.startW N.fallF = true) (R : PipeRunK sy nm d e)
+    (hf : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) : RoomJoin.StartAt sy N (R.seq R.b) := by
+  obtain ⟨h1, h2, h3, h4⟩ := start_of_rowsT hc (PipeRunK.inRowsT T R hf) R.atCtl
+  simp only [vOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h4
+  obtain ⟨⟨⟨⟨g1, g2⟩, g3⟩, g4⟩, g5⟩ := h4
+  exact ⟨h1, h2, h3, ⟨g1, g2, g3, g4⟩, g5⟩
+
+/-- **The state at the first control in the room, on a real run**, from the old conditions of the change and `left` not 0 before control. -/
+theorem PipeRun.start (T : EndStatement sy nm d e es) (hc : startCheckO sy nm d e (RoomJoin.room sy N) N.startY N.startW N.fallF = true) (R : PipeRun sy nm d e)
     (hf : ∀ n, R.a ≤ n → n < R.b → leftP sy nm e (R.seq n) ≠ 0) : RoomJoin.StartAt sy N (R.seq R.b) := by
   obtain ⟨h1, h2, h3, h4⟩ := start_of_rows hc (PipeRun.inRows T R hf) R.atCtl
   simp only [vOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h4

@@ -15,7 +15,7 @@ StartAt(m)       :  hs(m) = s₀  ∧  P₀ ≤ P(m) ≤ P₁
                     ∧  vs(m).st = 2  ∧  VY(vs m) ≤ Y_s  ∧  VW(vs m) ≤ W_s  ∧  vs(m).vfd = f_s
                     ∧  ab(m) = 0
 
-startCheck       :  切り替えの 2 つの場合の段（rowsA、rowsB）のどの状態 S も
+startCheck       :  音のバイトを表で運ぶ時間の段の left が 0 の段（`timeRows`。前の段 rowsA、rowsB は `startCheckO`）のどの状態 S も
                     操作のバイト（OperMode、OperMode_Task、GameEngineSubroutine）を知り、
                     操作できるなら、横の状態、page、x、縦の状態、覚えている速さのバイトを知り、
                     hs(S) = s₀  ∧  P₀ ≤ 256·pix(S)  ∧  256·pix(S) + 255 ≤ P₁  ∧  縦の状態と ab が上のとおり

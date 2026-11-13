@@ -2,7 +2,7 @@
 
 # The change into the room without `fall`
 
-**Claim.** This is a partial result. Take a run that meets a condition on the state at the entry, a condition at some places of the pipe's frames, and a condition at the exit, and that has no Start on the frames of the game core after the pipe. Then it takes at least 91 counted frames from the entry to control. This removes the hypothesis `fall₁` from [the whole route](0-1-Route.md). `Changes` has the fields `places₁`, `quiet₁` and `noStart₁` in its place. The condition at the entry, `Entry`, is now proved in part from the press of Start on the title and the frames from control: see [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md). `keep₁` is gone too: see [A `lag` frame of the change into the room](b-3-3-LagPaused.md). If also the time is not up at the exit (`TimeOK`) and `b` is the first control after the entry, `left` is not 0 before control (`PipeRun.first`), and the machine at control is in the rows of the time (`PipeRun.inRowsT`). This removes `first₁` from the route: `Changes` has `time₁` and `ctlFirst₁` in its place (item 1-1-b-3-9).
+**Claim.** This is a partial result. Take a run that meets a condition on the state at the entry, a condition at some places of the pipe's frames, and a condition at the exit, and that has no Start on the frames of the game core after the pipe. Then it takes at least 91 counted frames from the entry to control. This removes the hypothesis `fall₁` from [the whole route](0-1-Route.md). `Changes` has the fields `places₁`, `quiet₁` and `noStart₁` in its place. The condition at the entry, `Entry`, is now proved in part from the press of Start on the title and the frames from control: see [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md). `keep₁` is gone too: see [A `lag` frame of the change into the room](b-3-3-LagPaused.md). If also the time is not up at the exit (`TimeOK`) and `b` is the first control after the entry, `left` is not 0 before control (`PipeRun.first`), and the machine at control is in the rows of the time (`PipeRun.inRowsT`). This removes `first₁` from the route: `Changes` has `time₁` and `ctlFirst₁` in its place (item 1-1-b-3-9). The route now asks weaker conditions at the exit, with rows that carry the sound's bytes in tables: see [the change into the room, with the sound's bytes in tables](b-3-7-1-SoundRows.md). There the rows of the time of this page are called `InRowsTO`, and `InRowsT` is the rows with tables where `left` is 0.
 
 `m₀`, `run`, `ctl`, `0^k` and `E` are those of [What decides the length of the change](b-2-1-PipeTransitionAll.md). `left` is that of [A bound from single frames](b-2-2-PipeChangeBound.md): `timer + 43` while the pipe's routine runs, then a table of 43 rows. `frame(m, i)` is the frame from `m` with the input `i`. `trace(m, i, j)` is the machine after `j` steps of that frame. `T = run(E, 0^48)` is the reference at the exit. `m[b]` is the byte `b` of `m`. A name with `+k` is the byte `k` after the name. `Paused(m)` says that the low bit of `GamePauseStatus` is set: `m[GamePauseStatus] & 1 = 1`. `TimeOK(m)` says that the time is not up: `m[PauseModeFlag] = 0 ∧ (m[GameTimerDisplay], m[GameTimerDisplay+1], m[GameTimerDisplay+2]) ≠ (0, 0, 0)`.
 
@@ -67,7 +67,7 @@ So on the pipe's frames: no enemy stands on a block that is being bumped, the ne
 
 `NoStart(m, i)` says: if `m` is in the game core with a routine other than the pipe's, the input `i` has no Start.
 
-**The statement.** `During(m)` says that `m` is covered by one of the abstract start states of the pipe's frames. `InRows(m)` says that `m` is covered by the states of one of the rows, below. `InRowsT(m)` says the same of the rows of the time.
+**The statement.** `During(m)` says that `m` is covered by one of the abstract start states of the pipe's frames. `InRows(m)` says that `m` is covered by the states of one of the rows, below. `InRowsTO(m)` says the same of the rows of the time.
 
 ```
 during     :  ∀ M,  Entry(M) → During(M)
@@ -83,16 +83,16 @@ atControl  :  ∀ m,  ctl(m) → left(m) = 0
 paused     :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) → Paused(frame(m, i)) → left(m) ≤ left(frame(m, i))
 rowsGo     :  ∀ m,  InRows(m) → ¬Paused(m)
 stepT      :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
-                During(frame(m, i))  ∨  ( ExitAt(frame(m, i))  ∧  ( Quiet ∧ Song ∧ Shape ∧ TimeOK at frame(m, i)  →  InRowsT(frame(m, i)) ) )
-rowsT      :  ∀ m, InRowsT(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  InRowsT(frame(m, i))
-zeroT      :  ∀ m,  InRowsT(m) → left(m) = 0 → ctl(m)
+                During(frame(m, i))  ∨  ( ExitAt(frame(m, i))  ∧  ( Quiet ∧ Song ∧ Shape ∧ TimeOK at frame(m, i)  →  InRowsTO(frame(m, i)) ) )
+rowsT      :  ∀ m, InRowsTO(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  InRowsTO(frame(m, i))
+zeroT      :  ∀ m,  InRowsTO(m) → left(m) = 0 → ctl(m)
 
 no_control_exit :  Exit(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 43, ¬ctl(sⱼ)
 PipeRun.bound   :  a run with the fields below  →  cnt(a) + 91 ≤ cnt(b)
 Changes.bound₁  :  e₁ + 91 ≤ c₂
 PipeRun.first   :  a run with the fields below  ∧  time  ∧  ctlFirst  →  ∀ n, a ≤ n < b,  left(seq n) ≠ 0
-PipeRun.inRowsT :  the same  →  InRowsT(seq b)
-Changes.first₁  :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        (PipeRun.first with chg.time₁ and Changes.ctlFirst₁)
+PipeRun.inRowsT :  the same  →  InRowsTO(seq b)
+ChangesK.first₁ :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        (PipeRunK.first of b-3-7-1 with Changes.ctlFirst₁)
 ```
 
 The fields of `PipeRun`, and of the first change in `Changes` (there `atCtl` is the theorem `Changes.ctl₁`):
@@ -170,9 +170,9 @@ Entries: `E`, the TAS entry, the 13 real entries, and 422 entries of runs of my 
 * `Places` on every step of the pipe's frames (`chg.places₁`). The rows come from the frames of a few runs. A run where an enemy is loaded, or where the parser has a column not in the rows, is outside. Item 1-1-b-3-5:
   * With all 256 values of `VRAM_Buffer1_Offset` and no bound, the place `ColorRotation` asks nothing of a run. The state splits there by the offset, and the check needs that.
   * `ProcELoop`, `FlagpoleRoutine`, `BlockObjMT_Updater` and `ColorRotation` had a bound of 50,000 on the dot. They are gone. The check holds with any 4 of the 5 bounds dropped (`UpdScrollVar` and these 4), and it fails with all 5 dropped. So one bound stays, at the parser's place. On 14 entries with the three kinds of inputs, the 1,974 frames of the pipe come to the parser's place at dot 37,603 at most.
-* `Quiet ∧ Song ∧ Shape` at the exit (`chg.quiet₁`). It fails after Start on the pipe's frames. `Shape` and `Song` do not follow from the walk of the exit frame: none of the 36 end states of that walk at the exit knows the form of the first screen buffer or the song's bytes. When the exit frame's NMI writes from the second buffer, the first buffer keeps what the frame before wrote, and the walk of one frame does not know it. The step of the CPU writes only where its instruction stores ([Where one step of the CPU writes RAM](d-3-4-1-StepWrites.md)); with it the sound's bytes can be kept outside the rows' states, and `Quiet` could become a list of kinds of the pause sound, as measured for the side pipe. This is not done for the change into the room.
+* The route asks `QuietP ∧ Shape` at the exit (`chg.quiet₁`), weaker than `Quiet ∧ Song ∧ Shape` with the flag 0 of `TimeOK`: see [b-3-7-1](b-3-7-1-SoundRows.md). The old condition fails after Start on the pipe's frames. `Shape` and `Song` do not follow from the walk of the exit frame: none of the 36 end states of that walk at the exit knows the form of the first screen buffer or the song's bytes. When the exit frame's NMI writes from the second buffer, the first buffer keeps what the frame before wrote, and the walk of one frame does not know it. The step of the CPU writes only where its instruction stores ([Where one step of the CPU writes RAM](d-3-4-1-StepWrites.md)); with it the sound's bytes can be kept outside the rows' states, and `Quiet` becomes a list of kinds of the pause sound: this is done in [b-3-7-1](b-3-7-1-SoundRows.md).
 * `NoStart` on the frames of the game core after the pipe (`chg.noStart₁`).
-* `TimeOK` at the exit (`chg.time₁`). Item 1-1-b-3-9. That `b` is the first control after the entry is no longer a field (the field `ctlFirst₁` is gone): `b₁` is the first frame with control from the entry on, within `dB` frames (the definition `Base.b₁`: `b₁ = firstCtl(seq, a₁, dB)`), and `ctlBy₁ : ctl(seq (a₁ + dB))`. Then `Changes.order₁ : a₁ ≤ b₁`, `Changes.ctl₁ : ctl(seq b₁)` and `Changes.ctlFirst₁ : ∀ n, a₁ ≤ n < b₁ → ¬ctl(seq n)` are theorems, as for `b₂`. `TimeOK` fails with a pause in the pipe (`changes-check FM2 pause 380 60` and `pause 416 60`), on the same exit where `Quiet` fails.
+* `TimeOK` at the exit. The route now asks only that the game timer is not 000 (`chg.time₁`, `TimerOK`): the sound's pause flag is in `QuietP`. Item 1-1-b-3-9. That `b` is the first control after the entry is no longer a field (the field `ctlFirst₁` is gone): `b₁` is the first frame with control from the entry on, within `dB` frames (the definition `Base.b₁`: `b₁ = firstCtl(seq, a₁, dB)`), and `ctlBy₁ : ctl(seq (a₁ + dB))`. Then `Changes.order₁ : a₁ ≤ b₁`, `Changes.ctl₁ : ctl(seq b₁)` and `Changes.ctlFirst₁ : ∀ n, a₁ ≤ n < b₁ → ¬ctl(seq n)` are theorems, as for `b₂`. `TimeOK` fails with a pause in the pipe (`changes-check FM2 pause 380 60` and `pause 416 60`), on the same exit where `Quiet` fails.
 * `lagPaused` (`chg.paused₁`): a `lag` frame ends paused. See [b-3-3](b-3-3-LagPaused.md).
 
 **Files.** `Theorems/PipeChangeEnd.lean`, private `Proof/PipeChangeEnd.lean`.

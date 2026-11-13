@@ -74,6 +74,23 @@ A program (`pole-frame-check FM2 1200`, exit 0, bad 0). The runs of [Touching th
 * 1,361 frames in control come to a place of `again`: 1,095 after the edge store (all in the random runs, the largest position there 3050) and 266 after the head's routine. None is in the range there unless it was in the range at the end of the move. The head's routine never changed the position.
 * Near the pole the head's routine came only in the runs with the position overwritten near the pole's column: 264 times, on the pole's page or the one before. 210 of them are in the range, each already in the range at the end of the move. In the movie it came twice, on the page 10. So near the pole the head's routine can be reached from some states, and `edge` does not need to exclude it.
 
+## Why `moved` stays (item 1-1-f-6-18)
+
+Part c removed its `movedE`: it reads `P(E)` at the end of the entering frame, and two walks show that this position is in the mouth ([the side pipe's entering frame](c-7-18-2-SideEntryEnd.md)). The same does not work for the touch. The touch writes the position: `FlagpoleCollision` goes on to `PutPlayerOnVine`, which stores the pole's column plus a step in the pixel (and, on one column of the block buffer, the page), and sets the speed to 0. On the movie's touch (frame 1092) the move ends at px 3158 = 12·256 + 86 with the fraction 80, that is 80/256 px right of the left end `L` of the range. The frame ends at px 12·256 + 89 with the same fraction. So the position at the frame's end does not give `P₂(g)`, and the bound has much less margin than the 3 px of the change.
+
+`moved` is the only link of the model's `P₂(g)` and `v₂(g)` on frame `g` to the machine: the frames read `P`, `v`, `f` at the start of frame `g` (`frames.reads`), and nothing at its end. The movement walk (`FrameModel.move_model`, as `SurfaceFrames.at_subs` uses it) gives the position at the end of the move as the start's position plus `16·v` of the speed there. But `v₂(g)` is a value of the field `fr`, so a reading of it would still be needed: replacing `moved` by a reading of `v₂(g)` gains nothing. Building frame `g` of the model from the machine would need the frame's start in the walk's domain. On real touches (`touch-move-check`, 677 touches: the movie's, 1 from random inputs from control, 675 from random inputs from the movie's frames 1002 to 1091):
+
+| on the touch's frame | touches |
+|---|---|
+| the position at the end of the move is the start's plus `16·v` of the speed there | 677 of 677 |
+| the horizontal state there is `hstep`'s, from the start's state and the input read at the player's routine | 675 of 677 |
+| at the player's routine the stored speed is `|v|` | 677 of 677 |
+| the side he presses is masked | 6 |
+| the frame starts from a state that is not `Clean` (the movie's touch among them) | 18 |
+| the end of the move is passed more than once | 0 |
+
+`OnFrames.moves` (part e) gives the conditions of a frame only for `j < g`, and `Clean` fails before 18 touches. So `moved` stays a hypothesis: a reading of the model at the end of the move.
+
 ## Hypotheses (not proved in Lean)
 
 * **`tiles`**: `TileRead` up to the write. The code that draws the pole's column into the block buffers is not followed.
@@ -89,4 +106,5 @@ Only the left end of the range is used. The height decides the row, but no bound
 ```
 .lake/build/bin/smbrta pole-frame-search          # the search and the check of the walk (about 1 min)
 .lake/build/bin/smbrta pole-frame-check FM2 1200  # the hypotheses on real frames (about 6 min)
+.lake/build/bin/smbrta touch-move-check FM2 300   # the touch's frame: its start state and its move (about 5 min)
 ```

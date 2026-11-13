@@ -11,6 +11,8 @@ numbers (`air`), 0 at control.
 
 * `OpenRun.reach`: frame `t` begins in a state that the model reaches in `t − 1` steps from the start, with the distance `P(t) − P(1)`.
 * `OpenRun.endB`: with the bound of the model (`Opening.opt_of_check`, a check on the ROM), the position at the end of frame `N` is at most `P(1) + D`.
+* `OpenRunM.toRun`: a real frame gives the position at its end only modulo `2²⁴`. The bounds of the model to the right (`Opening`) and to the left (`OpenLeft`) make it
+  exact at the ends of the first `N − 1` frames; at the end of frame `N`, the page of the next counted frame (not 255) does.
 
 There is no game data in this file. Page: `1-1/a-5-4-OpenFrames.md`.
 -/
@@ -80,10 +82,123 @@ theorem OpenRun.openB {top amax : Int} {fr : Nat → TopSpeed.Frame top amax} (O
   rw [R.P' N h1 hN, ← hP]
   exact O.endB hs hopt hN
 
+/-! ### The position modulo `2²⁴`
+
+The movement of a real frame gives the position at its end only modulo `2²⁴` (`FrameModel.move_model`): the page can wrap. `OpenRunM` is `OpenRun` with that. Two searches on
+the model put the model's next position inside `[0, 2²⁴)`: no input gets past `D` in `N` frames (`Opening`, `hopt`), and none gets left of the position at control in fewer
+than `N` frames (`OpenLeft`, `hlow`). So the position at the end of each of the first `N − 1` frames is exact (`OpenRunM.next`). At the end of frame `N` the left search does
+not reach (the model gets a little left of position 0 in `N` frames): there the page of the next counted frame is not 255 (`hlast`). -/
+
+/-- **Each of the first `N` frames is a step of the model, with the position modulo `2²⁴`** -/
+structure OpenRunM (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) (fm : Nat → Machine) where
+  air : Nat → Nat
+  air₁ : air 1 = 0
+  step : ∀ t, 1 ≤ t → t ≤ N → t < E → ∃ i ∈ inputsN, valid (air t) i = true ∧ air (t + 1) ∈ modes lens (startHS sy (fm t)) (air t) i ∧
+    startHS sy (fm (t + 1)) = hstep sy m0 (startHS sy (fm t)) i ∧ (posP sy (fm (t + 1)) - posP sy (fm t) - 16 * sbyte (startHS sy (fm (t + 1))).v) % 0x1000000 = 0
+
+/-- the model's state when the counted frame `t` begins -/
+def stOfM (O : OpenRunM sy m0 lens N E fm) (t : Nat) : Opening.St := ((startHS sy (fm t), O.air t), posP sy (fm t) - posP sy (fm 1))
+
+/-- a page that is not 255 puts the position below `0xFF0000` -/
+theorem posP_lt_of_page {m : Machine} (h : peek m sy.Player_PageLoc ≠ 0xFF) : posP sy m < 0xFF0000 := by
+  have h1 := (peek m sy.Player_PageLoc).toNat_lt
+  have h2 := (peek m sy.Player_X_Position).toNat_lt
+  have h3 := (peek m sy.SprObject_X_MoveForce).toNat_lt
+  have h4 : (peek m sy.Player_PageLoc).toNat ≠ 255 := fun e => h (UInt8.toNat_inj.1 (by rw [e]; rfl))
+  rw [FrameModel.posP_eq]
+  unfold FrameModel.posOf
+  omega
+
+theorem posP_range (m : Machine) : 0 ≤ posP sy m ∧ posP sy m < 0x1000000 := by
+  have := FrameModel.posOf_range (peek m sy.Player_PageLoc) (peek m sy.Player_X_Position) (peek m sy.SprObject_X_MoveForce)
+  rw [← FrameModel.posP_eq] at this
+  exact this
+
+/-- **The position at the frame's end is exact**, from the position modulo `2²⁴` and the next position of the model inside `[0, 2²⁴)` -/
+theorem exact_of_mod {P P' v : Int} (h : (P' - P - 16 * v) % 0x1000000 = 0) (h1 : 0 ≤ P') (h2 : P' < 0x1000000) (h3 : 0 ≤ P + 16 * v) (h4 : P + 16 * v < 0x1000000) :
+    P' = P + 16 * v := by
+  omega
+
+/-- the same with the page at the frame's end not 255 in place of the lower bound -/
+theorem exact_of_page {P P' v : Int} (h : (P' - P - 16 * v) % 0x1000000 = 0) (h1 : 0 ≤ P') (h2 : P' < 0xFF0000) (h3 : 0 ≤ P) (hv : -128 ≤ v)
+    (h4 : P + 16 * v < 0x1000000) : P' = P + 16 * v := by
+  omega
+
+/-- **The next counted frame's position is exact**, and it begins in a state that the model reaches. `hopt` is the bound of `Opening`, `hlow` the bound of `OpenLeft`
+(both checks on the ROM), `htop` keeps them inside `2²⁴`, and `hlast` is the page at the start of the counted frame `N + 1`. -/
+theorem OpenRunM.next (O : OpenRunM sy m0 lens N E fm) (hP : posP sy (fm 1) = posP sy m0) {D : Int}
+    (hopt : ∀ k u, k ≤ N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → u.2 ≤ D)
+    (hlow : ∀ k u, k < N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → -posP sy m0 ≤ u.2) (htop : posP sy m0 + D < 0x1000000)
+    (hlast : N < E → peek (fm (N + 1)) sy.Player_PageLoc ≠ 0xFF) {k : Nat} (hk : k < N) (hE : 1 + k < E)
+    (hr : Cert.Reach (succ sy m0 lens) (start sy m0) k (stOfM O (1 + k))) :
+    posP sy (fm (1 + k + 1)) = posP sy (fm (1 + k)) + 16 * sbyte (startHS sy (fm (1 + k + 1))).v ∧
+      Cert.Reach (succ sy m0 lens) (start sy m0) (k + 1) (stOfM O (1 + k + 1)) := by
+  obtain ⟨i, hi, hv, hm, he, hmod⟩ := O.step (1 + k) (by omega) (by omega) (by omega)
+  have hu : ((hstep sy m0 (startHS sy (fm (1 + k))) i, O.air (1 + k + 1)), (posP sy (fm (1 + k)) - posP sy (fm 1)) + 16 * sbyte (hstep sy m0 (startHS sy (fm (1 + k))) i).v)
+      ∈ succ sy m0 lens (stOfM O (1 + k)) := by
+    unfold succ
+    exact List.mem_flatMap.2 ⟨i, List.mem_filter.2 ⟨hi, hv⟩, List.mem_map.2 ⟨O.air (1 + k + 1), hm, rfl⟩⟩
+  have hr' := reach_snoc hr hu
+  have h1 : (posP sy (fm (1 + k)) - posP sy (fm 1)) + 16 * sbyte (hstep sy m0 (startHS sy (fm (1 + k))) i).v ≤ D := hopt (k + 1) _ (by omega) hr'
+  rw [← he] at h1
+  obtain ⟨a1, a2⟩ := posP_range (sy := sy) (fm (1 + k))
+  obtain ⟨b1, b2⟩ := posP_range (sy := sy) (fm (1 + k + 1))
+  have hpos : posP sy (fm (1 + k + 1)) = posP sy (fm (1 + k)) + 16 * sbyte (startHS sy (fm (1 + k + 1))).v := by
+    by_cases hkN : k + 1 < N
+    · have h2 : -posP sy m0 ≤ (posP sy (fm (1 + k)) - posP sy (fm 1)) + 16 * sbyte (hstep sy m0 (startHS sy (fm (1 + k))) i).v := hlow (k + 1) _ hkN hr'
+      rw [← he] at h2
+      exact exact_of_mod hmod b1 b2 (by omega) (by omega)
+    · have h3 := hlast (by omega)
+      rw [show N + 1 = 1 + k + 1 by omega] at h3
+      have := FrameModel.sbyte_range (startHS sy (fm (1 + k + 1))).v
+      exact exact_of_page hmod b1 (posP_lt_of_page h3) a1 (by omega) (by omega)
+  refine ⟨hpos, ?_⟩
+  have e : stOfM O (1 + k + 1) = ((hstep sy m0 (startHS sy (fm (1 + k))) i, O.air (1 + k + 1)),
+      (posP sy (fm (1 + k)) - posP sy (fm 1)) + 16 * sbyte (hstep sy m0 (startHS sy (fm (1 + k))) i).v) := by
+    have h2 : posP sy (fm (1 + k + 1)) - posP sy (fm 1) = (posP sy (fm (1 + k)) - posP sy (fm 1)) + 16 * sbyte (hstep sy m0 (startHS sy (fm (1 + k))) i).v := by
+      have h3 := hpos
+      rw [he] at h3
+      omega
+    show ((startHS sy (fm (1 + k + 1)), O.air (1 + k + 1)), posP sy (fm (1 + k + 1)) - posP sy (fm 1)) = _
+    rw [h2, he]
+  rw [e]
+  exact hr'
+
+/-- every counted frame up to `N + 1` begins in a state that the model reaches -/
+theorem OpenRunM.reachAll (O : OpenRunM sy m0 lens N E fm) (hs : startHS sy (fm 1) = startHS sy m0) (hP : posP sy (fm 1) = posP sy m0) {D : Int}
+    (hopt : ∀ k u, k ≤ N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → u.2 ≤ D)
+    (hlow : ∀ k u, k < N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → -posP sy m0 ≤ u.2) (htop : posP sy m0 + D < 0x1000000)
+    (hlast : N < E → peek (fm (N + 1)) sy.Player_PageLoc ≠ 0xFF) :
+    ∀ k, k ≤ N → 1 + k ≤ E → Cert.Reach (succ sy m0 lens) (start sy m0) k (stOfM O (1 + k))
+  | 0, _, _ => by
+    have e : stOfM O 1 = start sy m0 := by
+      show ((startHS sy (fm 1), O.air 1), posP sy (fm 1) - posP sy (fm 1)) = ((startHS sy m0, 0), 0)
+      rw [hs, O.air₁, Int.sub_self]
+    rw [Nat.add_zero, e]
+    exact .refl _
+  | k + 1, h1, h2 => by
+    have ih := O.reachAll hs hP hopt hlow htop hlast k (by omega) (by omega)
+    rw [show 1 + (k + 1) = 1 + k + 1 by omega]
+    exact (O.next hP hopt hlow htop hlast (by omega) (by omega) ih).2
+
+/-- **The positions are exact**: `OpenRunM` with the two bounds of the model and the page at the start of the counted frame `N + 1` is `OpenRun` -/
+def OpenRunM.toRun (O : OpenRunM sy m0 lens N E fm) (hs : startHS sy (fm 1) = startHS sy m0) (hP : posP sy (fm 1) = posP sy m0) {D : Int}
+    (hopt : ∀ k u, k ≤ N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → u.2 ≤ D)
+    (hlow : ∀ k u, k < N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → -posP sy m0 ≤ u.2) (htop : posP sy m0 + D < 0x1000000)
+    (hlast : N < E → peek (fm (N + 1)) sy.Player_PageLoc ≠ 0xFF) : OpenRun sy m0 lens N E fm where
+  air := O.air
+  air₁ := O.air₁
+  step := fun t h1 h2 h3 => by
+    obtain ⟨i, hi, hv, hm, he, _⟩ := O.step t h1 h2 h3
+    have hn := (O.next hP hopt hlow htop hlast (k := t - 1) (by omega) (by omega) (O.reachAll hs hP hopt hlow htop hlast (t - 1) (by omega) (by omega))).1
+    rw [show 1 + (t - 1) = t by omega] at hn
+    exact ⟨i, hi, hv, hm, he, hn⟩
+
 /-! ## The frames of the opening on the machines
 
 `OpenRun` asked that each frame is a step of the model. Here this is a theorem from conditions on single frames and states (`Real`): the movement of the frame is
-`FrameModel.move_model` (proved for every value of the bytes, by walks of two machines), the state at the player's routine is the walk of `CtrlKeep` from the frame's start
+`FrameModel.move_model` (proved for every value of the bytes, by walks of two machines; the frame does not end during it, by `FrameModel.trace_inFrame` and the time of
+`CleanK`), the state at the player's routine is the walk of `CtrlKeep` from the frame's start
 in control, and the frames not counted keep the bytes of the walk of `LagFrames`. The model's input is the one the player's routine reads (`inOf`). The frames left in the air
 are read from the machines (`airOf`): 0 when the frame begins on the ground, else the counted frames up to the first that begins on the ground. -/
 
@@ -146,12 +261,9 @@ structure Real (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S
   st : ∀ t, 1 ≤ t → t ≤ N → t < E → peek (L.fm t) sy.Player_State ∈ [(0 : UInt8), 1, 2]
   /-- no jumpspring when the frame begins -/
   spring : ∀ t, 1 ≤ t → t ≤ N → t < E → peek (L.fm t) sy.JumpspringAnimCtrl = 0
-  /-- the page is below 128 when the frame begins, and when the frame after it begins -/
-  page : ∀ t, 1 ≤ t → t ≤ N + 1 → t ≤ E → posP sy (L.fm t) < 0x800000
-  /-- the frame does not end during the movement -/
-  longer : ∀ t, 1 ≤ t → t ≤ N → t < E →
-    ((trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t) + FrameModel.moveLen)).frame ≥ (L.fm t).frame + 1 ||
-      (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t) + FrameModel.moveLen)).halted) = false
+  /-- the page is not 255 when the counted frame `N + 1` begins: at the end of frame `N` he has not gone left of position 0 (at the ends of the frames before it, this is
+  the search of `OpenLeft`) -/
+  page : N < E → peek (L.fm (N + 1)) sy.Player_PageLoc ≠ 0xFF
   /-- from the scroll handler on: `After` -/
   after : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, CtrlKeep.arrAt sy (L.fm t) (L.inp t) ≤ k → (trace (L.fm t) (L.inp t) k).pc = sy.PlayerSubs →
     After sy (trace (L.fm t) (L.inp t) k) (frame (L.fm t) (L.inp t))
@@ -183,6 +295,8 @@ structure Checks (sy : Syms) (m0 : Machine) (lens : Lens) (Zb : Nat) (v : UInt8)
   start : Held sy v m0 ∧ peek m0 sy.Player_State = 0
   /-- the pause byte that the NMI tests (`CtrlKeep.pauseI`, read from the ROM) is `g` -/
   pause : CtrlKeep.pauseI sy m0 = g
+  /-- the idle loop is a `JMP` to itself -/
+  idle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true
 
 /-- every length of `lens` is below `Zb` -/
 theorem Checks.lens_lt {Zb g : Nat} {v : UInt8} (C : Checks sy m0 lens Zb v g) (k : Nat) : (lens[k]!).2 < Zb := by
@@ -202,16 +316,18 @@ theorem keepA_of {x : UInt16} (h : x ∈ FrameModel.hBytes sy ∨ x = sy.Player_
   · rcases h with h | h | h | h | h | h | h | h <;> simp [h]
   all_goals simp [h]
 
-/-- **The movement of a real frame, with the page below 128** at its start and its end: `FrameModel.clean_frame` with the page in place of `far` -/
-theorem move_page {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} (hOK : FrameModel.modelOK sy m0 S = true) (hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m0) S (trace M i n₀))
+/-- **The movement of a real frame**: `FrameModel.clean_frame`, with the position at the frame's end modulo `2²⁴` in place of `far`. The frame does not end during the
+movement (`FrameModel.trace_inFrame`): the player's routine comes in the frame of `M` (`hfr`), each instruction but the idle loop runs at least 64 dots before the frame's
+end (`htime`, the condition `time` of `FrameKeep.CleanK`), and the idle loop is a `JMP` to itself (`hidle`, a check on the ROM). This was the field `longer`. -/
+theorem move_mod {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} (hOK : FrameModel.modelOK sy m0 S = true) (hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m0) S (trace M i n₀))
     (hbef : ∀ a ∈ FrameModel.hBytes sy, peek (trace M i n₀) a = peek M a)
-    (hlong : ((trace M i (n₀ + FrameModel.moveLen)).frame ≥ M.frame + 1 || (trace M i (n₀ + FrameModel.moveLen)).halted) = false)
-    (hafter : ∀ j, n₀ ≤ j → (trace M i j).pc = sy.PlayerSubs → ∀ a ∈ FrameModel.hBytes sy, peek (frame M i) a = peek (trace M i j) a)
-    (hp1 : posP sy M < 0x800000) (hp2 : posP sy (frame M i) < 0x800000) :
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (hfr : (trace M i n₀).frame = M.frame)
+    (htime : ∀ n, (trace M i n).pc ≠ sy.EndlessLoop → (trace M i n).fdot ≤ dotsPerFrame - 64)
+    (hafter : ∀ j, n₀ ≤ j → (trace M i j).pc = sy.PlayerSubs → ∀ a ∈ FrameModel.hBytes sy, peek (frame M i) a = peek (trace M i j) a) :
     FrameModel.readHS sy (frame M i) = hstep sy m0 (FrameModel.readHS sy M) (FrameModel.readIn sy (trace M i n₀)) ∧
-      posP sy (frame M i) = posP sy M + 16 * sbyte (FrameModel.readHS sy (frame M i)).v ∧ ∃ j, n₀ ≤ j ∧ (trace M i j).pc = sy.PlayerSubs := by
-  obtain ⟨k, hk, _, hpc, h1, h2⟩ := FrameModel.move_model hOK hat
-  have e0 := FrameModel.trace_steps hlong k hk
+      (posP sy (frame M i) - posP sy M - 16 * sbyte (FrameModel.readHS sy (frame M i)).v) % 0x1000000 = 0 ∧ ∃ j, n₀ ≤ j ∧ (trace M i j).pc = sy.PlayerSubs := by
+  obtain ⟨k, hk, _, hpc, h1, h2, hC⟩ := FrameModel.move_model hOK hat
+  have e0 := (FrameModel.trace_inFrame hidle hfr hC htime k (Nat.le_refl k)).1
   have e1 := hafter (n₀ + k) (by omega) (by rw [e0]; exact hpc)
   rw [e0] at e1
   have e2 : FrameModel.readHS sy (trace M i n₀) = FrameModel.readHS sy M := FrameModel.readHS_congr hbef
@@ -222,24 +338,18 @@ theorem move_page {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} (hOK : Fram
   rw [e3] at h2
   rw [← e4] at h1 h2
   rw [← e5] at h2
-  refine ⟨h1, ?_, n₀ + k, by omega, by rw [e0]; exact hpc⟩
-  obtain ⟨a1, _⟩ := FrameModel.posOf_range (peek M sy.Player_PageLoc) (peek M sy.Player_X_Position) (peek M sy.SprObject_X_MoveForce)
-  obtain ⟨b1, _⟩ := FrameModel.posOf_range (peek (frame M i) sy.Player_PageLoc) (peek (frame M i) sy.Player_X_Position) (peek (frame M i) sy.SprObject_X_MoveForce)
-  rw [← FrameModel.posP_eq] at a1 b1
-  have a3 := FrameModel.sbyte_range (FrameModel.readHS sy (frame M i)).v
-  omega
+  exact ⟨h1, h2, n₀ + k, by omega, by rw [e0]; exact hpc⟩
 
 /-- **One counted frame of the opening**: from its start in control (`hs`) with what the frames before left (`hh`), the frame follows `hstep` on the input its player's
-routine reads, the position moves by `16·v`, and the frame's end holds again what the next frame needs (`Held`, before the frames not counted). -/
+routine reads, the position moves by `16·v` modulo `2²⁴`, and the frame's end holds again what the next frame needs (`Held`, before the frames not counted). -/
 theorem Real.frame_step {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (C : Checks sy m0 lens Zb v g) (O : Real sy m0 lens N E L)
-    {t : Nat} (h1 : 1 ≤ t) (h2 : t ≤ N) (h3 : t < E) (hs : FrameKeep.StartK sy m0 (L.fm t)) (hh : Held sy v (L.fm t))
-    (hp2 : posP sy (frame (L.fm t) (L.inp t)) < 0x800000) :
+    {t : Nat} (h1 : 1 ≤ t) (h2 : t ≤ N) (h3 : t < E) (hs : FrameKeep.StartK sy m0 (L.fm t)) (hh : Held sy v (L.fm t)) :
     startHS sy (frame (L.fm t) (L.inp t)) = hstep sy m0 (startHS sy (L.fm t)) (inOf sy L.fm L.inp t) ∧
-      posP sy (frame (L.fm t) (L.inp t)) = posP sy (L.fm t) + 16 * sbyte (startHS sy (frame (L.fm t) (L.inp t))).v ∧
+      (posP sy (frame (L.fm t) (L.inp t)) - posP sy (L.fm t) - 16 * sbyte (startHS sy (frame (L.fm t) (L.inp t))).v) % 0x1000000 = 0 ∧
       Held sy v (frame (L.fm t) (L.inp t)) ∧
       peek (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t))) sy.Player_State = peek (L.fm t) sy.Player_State := by
-  generalize hM : L.fm t = M at hs hh hp2 ⊢
-  generalize hi : L.inp t = i at hp2 ⊢
+  generalize hM : L.fm t = M at hs hh ⊢
+  generalize hi : L.inp t = i
   have hcl : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace M i k) := by
     rw [← hM, ← hi]; exact O.cleanK t h1 h2 h3
   have hsp : ∀ k, CtrlKeep.Spare sy m0 (trace M i k) := by
@@ -270,16 +380,13 @@ theorem Real.frame_step {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E}
     · rw [kp _ (keepA_of (by simp)), hsize]
     · rw [kp _ (keepA_of (by simp)), kp _ (keepA_of (by simp [FrameModel.hBytes]))]; exact hab
     · rw [kp _ (keepA_of (by simp)), hbits]; exact SurfaceFrames.ff_and _
-  have hlong := O.longer t h1 h2 h3
-  rw [hM, hi, hn] at hlong
   have haf : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → After sy (trace M i k) (frame M i) := by
     intro k hk hpc
     have := O.after t h1 h2 h3 k (by rw [hM, hi, hn]; exact hk) (by rw [hM, hi]; exact hpc)
     rw [hM, hi] at this
     exact this
-  have hp1 := O.page t h1 (by omega) (by omega)
-  rw [hM] at hp1
-  obtain ⟨r1, r2, j, hj, hpc⟩ := move_page C.model hat (fun a ha => kp a (keepA_of (Or.inl ha))) hlong (fun j hj hpc a ha => (haf j hj hpc).1 a ha) hp1 hp2
+  obtain ⟨r1, r2, j, hj, hpc⟩ := move_mod C.model hat (fun a ha => kp a (keepA_of (Or.inl ha))) C.idle harr.2.1 (fun n hn => (hcl n).time hn)
+    (fun j hj hpc a ha => (haf j hj hpc).1 a ha)
   obtain ⟨_, hab', hbits'⟩ := haf j hj hpc
   have hA := (CtrlKeep.area_end C.ctrl C.after hs hcl hsp ⟨harea, hswim, hsize⟩).1
   refine ⟨?_, r2, ⟨hab', hbits', hA⟩, kp _ (keepA_of (by simp))⟩
@@ -325,21 +432,16 @@ theorem keep_parts {m m' : Machine} {v : UInt8} (h : ∀ b ∈ LagFrames.lagI sy
     · show peek m' sy.PlayerChangeSizeFlag = 0
       rw [peek_keep h (by simp)]; exact h5
 
-/-- **Each of the first `N` counted frames is a step of the opening's model**, from the conditions on single frames (`Real`). The frames left in the air are read from the
-machines (`airOf`, looking up to the counted frame `N + Zb`). At control he is on the ground and the frame's start holds `Held` (`h₁`, from the press of Start on the title). `hc`, `hk`, `hp` and `C` are checks on the
-ROM, `hs₁` the start of frame 1. -/
-def Real.toRun {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
+/-- **Each of the first `N` counted frames is a step of the opening's model, with the position modulo `2²⁴`**, from the conditions on single frames (`Real`). The frames
+left in the air are read from the machines (`airOf`, looking up to the counted frame `N + Zb`). At control he is on the ground and the frame's start holds `Held` (`h₁`, from
+the press of Start on the title). `hc`, `hk`, `hp` and `C` are checks on the ROM, `hs₁` the start of frame 1. -/
+def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
     (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (C : Checks sy m0 lens Zb v g)
     (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (h₁ : Held sy v (L.fm 1)) (hg₁ : peek (L.fm 1) sy.Player_State = 0)
-    (O : Real sy m0 lens N E L) : OpenRun sy m0 lens N E L.fm := by
+    (O : Real sy m0 lens N E L) : OpenRunM sy m0 lens N E L.fm := by
   -- the frames not counted after the counted frame `t`
   have lk : ∀ t, 1 ≤ t → t < E → ∀ b ∈ LagFrames.lagI sy, (L.fm (t + 1)).ram.get! b = (frame (L.fm t) (L.inp t)).ram.get! b :=
     fun t _ h2 => PipeFrames.lags_keepI hc hk hp L hs₁ t h2
-  -- the frame's end is below page 128: it is the start of the next counted frame
-  have pe : ∀ t, 1 ≤ t → t ≤ N → t < E → posP sy (frame (L.fm t) (L.inp t)) < 0x800000 := by
-    intro t h1 h2 h3
-    rw [← (keep_parts (v := v) (lk t h1 h3)).2.1]
-    exact O.page (t + 1) (by omega) (by omega) (by omega)
   -- `Held` at each counted frame, by induction
   have held : ∀ d, d ≤ N → 1 + d ≤ E → Held sy v (L.fm (1 + d)) := by
     intro d
@@ -348,14 +450,14 @@ def Real.toRun {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Na
     | succ d ih =>
       intro hd hE
       have hh := ih (by omega) (by omega)
-      have fs := O.frame_step C (t := 1 + d) (by omega) (by omega) (by omega) (startK_of hc hk hp hs₁ (by omega) (by omega)) hh (pe _ (by omega) (by omega) (by omega))
+      have fs := O.frame_step C (t := 1 + d) (by omega) (by omega) (by omega) (startK_of hc hk hp hs₁ (by omega) (by omega)) hh
       rw [show 1 + (d + 1) = 1 + d + 1 by omega]
       exact (keep_parts (lk (1 + d) (by omega) (by omega))).2.2 fs.2.2.1
   refine ⟨airOf sy L.fm (N + Zb), airOf_ground hg₁, ?_⟩
   intro t h1 h2 h3
   have hh := held (t - 1) (by omega) (by omega)
   rw [show 1 + (t - 1) = t by omega] at hh
-  obtain ⟨s1, s2, _, s4⟩ := O.frame_step C h1 h2 h3 (startK_of hc hk hp hs₁ h1 (by omega)) hh (pe t h1 h2 h3)
+  obtain ⟨s1, s2, _, s4⟩ := O.frame_step C h1 h2 h3 (startK_of hc hk hp hs₁ h1 (by omega)) hh
   obtain ⟨k1, k2, _⟩ := keep_parts (v := v) (lk t h1 h3)
   have hmem : inOf sy L.fm L.inp t ∈ Potential.inputs := FrameModel.readIn_mem (FrameModel.joy_of_model C.model) _
   -- the input as the routine reads it, on the ground or in the air
@@ -370,7 +472,7 @@ def Real.toRun {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Na
   refine ⟨Potential.norm (inOf sy L.fm L.inp t), FastTakeoff.norm_mem hmem, ?_, ?_, ?_, ?_⟩
   rotate_left 2
   · rw [k1, s1, FastTakeoff.hstep_norm C.norm hmem]
-  · rw [k2, k1, s2]
+  · rw [k2, k1]; exact s2
   · by_cases hg : peek (L.fm t) sy.Player_State = 0
     · rw [airOf_ground hg]
       simp [Opening.valid, FastTakeoff.norm_st, est, hg]
@@ -394,6 +496,18 @@ def Real.toRun {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Na
           omega
     · rw [airOf_air hg (by have := C.Zb0; omega)]
       simp [Opening.modes]
+
+/-- **Each of the first `N` counted frames is a step of the opening's model**: `Real.toRunM`, with the positions exact (`OpenRunM.toRun`). The horizontal state and the
+position at control are those of `m0` (`hs`, `hP`); `hopt` (the bound of `Opening`), `hlow` (the bound of `OpenLeft`) and `htop` are checks on the ROM. The page at the start
+of the counted frame `N + 1` is the field `page`. -/
+def Real.toRun {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
+    (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (C : Checks sy m0 lens Zb v g)
+    (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (h₁ : Held sy v (L.fm 1)) (hg₁ : peek (L.fm 1) sy.Player_State = 0)
+    (hs : startHS sy (L.fm 1) = startHS sy m0) (hP : posP sy (L.fm 1) = posP sy m0) {D : Int}
+    (hopt : ∀ k u, k ≤ N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → u.2 ≤ D)
+    (hlow : ∀ k u, k < N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → -posP sy m0 ≤ u.2) (htop : posP sy m0 + D < 0x1000000)
+    (O : Real sy m0 lens N E L) : OpenRun sy m0 lens N E L.fm :=
+  (O.toRunM hc hk hp C hs₁ h₁ hg₁).toRun hs hP hopt hlow htop O.page
 
 instance (sy : Syms) (v : UInt8) (m : Machine) : Decidable (Held sy v m) := by unfold Held CtrlKeep.AreaOK; infer_instance
 
@@ -419,15 +533,15 @@ theorem held_of_bytes {m m' : Machine} {v : UInt8} (h : ∀ i ∈ StartRun.posI 
     rw [hp _ (by simp)]; exact h5
   · rw [hp _ (by simp)]; exact h6
 
-/-- **The checks, from those of part e** (`SurfaceFrames.numbersCheck`, for the machine at control above ground `B.m`): the movement and the two walks are the same checks on
-`m0`; the area's type of `B.m` is that of `m0` (`he`). The rest are small checks on `m0` and `lens`, and the pause byte `g`. -/
+/-- **The checks, from those of part e** (`SurfaceFrames.numbersCheck`, for the machine at control above ground `B.m`): the movement, the two walks and the idle loop are the
+same checks on `m0`; the area's type of `B.m` is that of `m0` (`he`). The rest are small checks on `m0` and `lens`, and the pause byte `g`. -/
 theorem checks_of {B : PoleJoin.Box} {J Zb g : Nat} {lens : Lens} (hn : SurfaceFrames.Numbers sy m0 B J) (he : (peek B.m sy.AreaType == peek m0 sy.AreaType) = true)
     (hnorm : Potential.normIdem = true) (hl : ((lens.toList.all fun p => decide (p.2 < Zb)) && decide (0 < Zb)) = true)
     (hs : decide (Held sy (peek m0 sy.AreaType) m0 ∧ peek m0 sy.Player_State = 0) = true) (hg : (CtrlKeep.pauseI sy m0 == g) = true) :
     Checks sy m0 lens Zb (peek m0 sy.AreaType) g := by
   have e : peek B.m sy.AreaType = peek m0 sy.AreaType := by simpa using he
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hl hs
-  refine ⟨hn.model, hn.ctrl, ?_, ?_, hnorm, hl.1, hl.2, hs, by simpa using hg⟩
+  refine ⟨hn.model, hn.ctrl, ?_, ?_, hnorm, hl.1, hl.2, hs, by simpa using hg, hn.idle⟩
   · rw [← e]; exact hn.after
   · rw [← e]; exact hn.area3
 

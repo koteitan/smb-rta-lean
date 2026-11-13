@@ -13,20 +13,21 @@ title          タイトルで Start を押してからフレーム 0 まで（T
 read₀          s(0).t = timer(seq 0)
 k, hk, on      k ≤ E + 1,  hurryOn(seq k) = true
 b              音楽の前のフレームが操作中になるフレーム
-start          b = 1  ∨  (b + 1 = b₁  ∧  Chg₁)  ∨  (b + 1 = b₂  ∧  Route.Changes)
+start          b = 1  ∨  (b + 1 = b₁  ∧  Chg₁)  ∨  (b + 1 = b₂  ∧  Route.ChangesK)
 音楽を始める最初のフレーム n について:  n < k,  First(n)  ⟹
-  ctl          b ≤ n,   b ≤ j < n  ⟹  ctl(seq (j + 1))  （これらの各フレームは操作できる状態で終わる）
+  bLe          b ≤ n
+  noStore      b ≤ j < n,  ctl(seq j)  ⟹  ∀ i,  ¬ CtlStore(tr_j(i))   （これらのフレームのうち操作中のものの各命令）
   clean        b ≤ j ≤ n  ⟹  ∀ i,  CleanM(tr_j(i))     （これらのフレームの各命令）
   below        s(n + 1).t ≤ timer(seq (n + 1))       （1 フレーム）
 L, after       E < L
 ```
 
-`Start` と `CleanM` は [急ぎの音楽を始めるフレーム](0-6-4-2-1-HurryFrame-ja.md) のものです。`tr_j(i)` はフレーム `j` の `i` 命令あとの機械です。`ctl(m)` は `m` が操作できる状態であることです。
-`b₁` と `b₂` は 2 つの切り替えのあとの最初の操作です（`Route.Base.b₁`、`Route.Base.b₂`）。なので `b₁ − 1` と `b₂ − 1` は切り替えの最後のフレームです。`Chg₁` は `Route.Changes` の 1 つ目の切り替えの条件です（[切り替えの最後のフレーム](0-6-4-2-2-2-1-HurryStart-ja.md)）。
+`Start`、`CleanM`、`CtlStore` は [急ぎの音楽を始めるフレーム](0-6-4-2-1-HurryFrame-ja.md) のものです。`CtlStore` は、その命令がルーチン、モード、タスクをアドレスで書くことです。`tr_j(i)` はフレーム `j` の `i` 命令あとの機械です。`ctl(m)` は `m` が操作できる状態であることです。
+`b₁` と `b₂` は 2 つの切り替えのあとの最初の操作です（`Route.Base.b₁`、`Route.Base.b₂`）。なので `b₁ − 1` と `b₂ − 1` は切り替えの最後のフレームです。`Chg₁` は `Route.ChangesBase` の 1 つ目の切り替えの条件、`Route.ChangesK` は `Route.Run` が求める両方の切り替えの条件です（[切り替えの最後のフレーム](0-6-4-2-2-2-1-HurryStart-ja.md)）。
 
 `start` は今は状態の条件を求めません。フレーム `b` はフレーム 1 か、切り替えの最後のフレームです。フレーム 1 の始まりはタイトルで Start を押したことから出ます（`Begin.start₁`）。切り替えの最後のフレームの始まりは、`Route.Run` と同じ切り替えの条件のもとで、切り替えの段から出ます（`Run.startB`）。部屋で音楽が始まるときは、1 つ目の切り替えの条件だけを求めます。そのような走りは 2 つ目の切り替えの `entry₂` を満たさないからです。
 
-ROM のチェックは `Checks` にまとめてあります。`title_check`、`music_check`、`hurry_near_check`、`entry_checks`、2 つの切り替えと部屋のチェック（`side_bound`、`side_end`、`RoomChecks`）、`hurry_rows₁`、`hurry_rows₂` です。
+ROM のチェックは `Checks` にまとめてあります。`title_check`、`music_check`、`hurry_ctl_check`、`hurry_near_check`、`entry_checks`、2 つの切り替えと部屋のチェック（`side_bound`、`side_sound`、`RoomChecks`。`route_1_1` と同じもの）、`hurry_rows₁`、`hurry_rows₂` です。
 
 定理です。
 
@@ -35,11 +36,13 @@ Frames.late             :  s(0).t = t0,  n ≤ E + 1,  s(n).t ≤ u  ⟹  q · (
 Run.zero                :  timer(seq 0) = t0                （title と確かめ title_check から）
 Run.quiet₀              :  hurryOn(seq 0) = false           （title と確かめ title_check から）
 first_turn              :  hurryOn(seq 0) = false,  hurryOn(seq k) = true  ⟹  ∃ n < k,  First(n)
-Begin.start₁            :  Start(seq 1)  ∧  seq 1 で音楽のビットなし        （title と確かめ title_check、hurry_near_check から）
+Begin.start₁            :  Startᶜ(seq 1)  ∧  seq 1 で音楽のビットなし       （title と確かめ title_check、hurry_near_check から）
 Run.startB              :  Start(seq b)                                      （Begin.start₁、または切り替えの段: HurryStart）
-HurryFrame.frame_start  :  Start(m),  off(m),  ∀ i, CleanM(tr(i)),  ctl(frame(m, i))  ⟹
-                           frame(m, i) で音楽がキューにある  ∨  (Start(frame(m, i))  ∧  off(frame(m, i)))      （確かめ music_check から）
-Run.startAt             :  音楽を始める最初のフレーム n で  Start(seq n)          （前のフィールド start）
+Run.startOrCtl          :  Startᶜ(seq b)  ∨  ctl(seq (b + 1))                （b = 1 なら Begin.start₁。そうでなければ b + 1 は b₁ か b₂、切り替えのあとの最初の操作）
+HurryFrame.frame_ctl    :  Startᶜ(m),  off(m),  ∀ i, CleanM(tr(i)),  ∀ i, ¬ CtlStore(tr(i))  ⟹  ctl(frame(m, i))     （確かめ hurry_ctl_check から）
+HurryFrame.frame_startC :  Start(m),  off(m),  ∀ i, CleanM(tr(i)),  ctl(frame(m, i))  ⟹
+                           frame(m, i) で音楽がキューにある  ∨  (Startᶜ(frame(m, i))  ∧  off(frame(m, i)))     （確かめ music_check から）
+Run.startAt             :  音楽を始める最初のフレーム n で  Start(seq n)          （前のフィールド start と ctl）
 Run.music               :  音楽を始める最初のフレーム n で  timer(seq (n + 1)) ≤ u
 Run.late                :  1 ≤ q  ⟹  q · (t0 − u) ≤ E + 3q
 Run.level_ge            :  1 ≤ q,  1748 + 3q ≤ q · (t0 − u)  ⟹  1748 ≤ L
@@ -51,7 +54,7 @@ hurry_1_1（非公開）      :  Checks,  q = 24,  t0 = 401,  u = 100  ⟹  1748
 証明です。
 
 * `hurryOn` はフレーム 0 で偽、フレーム `k` で真です。なので偽から真になる最初のフレーム `n < k` があります（`first_turn`）。`Run.startAt` から `Start(seq n)`、`Run.music` から `timer(seq (n + 1)) ≤ u`、`below` から `s(n + 1).t ≤ u` です。`n + 1 ≤ k ≤ E + 1` です。
-* `Run.startAt`: `b` から `n` までのフレームの帰納法です。フレーム `b` は `Start` のとおりに始まります（`Run.startB`）。`b = 1` なら `Begin.start₁` から、切り替えの最後のフレームなら `HurryStart.Chg₁.startLast` か `HurryStart.changes_startLast` からです。フレーム `j < n` がそのように音楽なしで始まり、各命令が `CleanM` を満たし、操作できる状態で終わるなら、`HurryFrame.frame_start` から、音楽がキューにある状態で終わるか、音楽なしで `Start` の状態で終わります。フレーム `j + 1 ≤ n` が始まるとき音楽はないので（`First`）、後のほうです。
+* `Run.startAt`: `b` から `n` までのフレームの帰納法です。`Startᶜ` はルーチンが操作の `Start` です。フレーム `b` は `Start` のとおりに始まります（`Run.startB`）。`b = 1` なら `Begin.start₁` から、切り替えの最後のフレームなら `HurryStart.Chg₁.startLast` か `HurryStart.changes_startLast` からです。フレーム `j < n` は操作できる状態で終わります。切り替えの最後のフレーム `b` は、`b + 1` が切り替えの最初の操作なので終わりが操作中です（`Run.startOrCtl`）。`Startᶜ` で始まるフレームは操作できるので（`HurryFrame.ctl_of_start`）、その命令で `noStore` が成り立ち、`HurryFrame.frame_ctl` から操作できる状態で終わります。フレーム `j < n` が `Start` のとおりに音楽なしで始まり、各命令が `CleanM` を満たし、操作できる状態で終わるなら、`HurryFrame.frame_startC` から、音楽がキューにある状態で終わるか、音楽なしで `Startᶜ` の状態で終わります。フレーム `j + 1 ≤ n` が始まるとき音楽はないので（`First`）、後のほうです。
 * `Frames.late`: どのフレームもタイマーの数字を上げません（`t_anti`）。なので `T = s(E + 1).t ≤ u` です。`hT` から `t0 − u ≤ ⌈p₁/q⌉ + ⌈p₂/q⌉ + ⌈p₃/q⌉` です。`p₁`、`p₂`、`p₃` は 3 つのエリアのプレイのフレーム数です。`q · ⌈p/q⌉ ≤ p + q − 1` で、`p₁ + p₂ + p₃ ≤ E` です。
 * `Run.level_ge`: `L > E ≥ q · (t0 − u) − 3q ≥ 1748` です。
 
@@ -88,13 +91,15 @@ CleanM を満たす命令                        521,286 のうち 521,286
 
 108 のフレームはどれも何もしないループで終わります。ルーチンがフレームの中で終わります。なので次のフレームが始まるときの `clock` のカウンタは機械のもので、そこで `below` は等号で成り立ちます。
 
-同じ確認で、各走りの、音楽を始める最初のフレームの前のフレームをたどります。`b` は、操作できない状態で終わる最後のフレームの次のフレーム、または走りの最初のフレーム（タイマーを書き換えたところ）です。これが `ctl` と `clean` のフレームです。
+同じ確認で、各走りの、音楽を始める最初のフレームの前のフレームをたどります。`b` は、操作できない状態で終わる最後のフレームの次のフレーム、または走りの最初のフレーム（タイマーを書き換えたところ）です。これが `noStore` と `clean` のフレームです。
 
 ```
 音楽を始める最初のフレーム                 108
 フレーム b が Start で始まる               108 のうち 108（操作中 50: 走りの最初のフレーム。登場中 58: 切り替えの最後のフレーム）
 b から音楽のフレームまでのフレーム         0 から 305、全部で 7,451。b が音楽のフレームそのものなのは 16
 これらのフレームの各命令の CleanM          35,023,871 のうち 35,023,871
+これらのフレームのうち操作中に始まるもの
+  （音楽のフレームを除く）の命令の CtlStore 0
 ```
 
 タイトルからの走りでは、`b` はフレーム 1 か、切り替えの最後のフレームです。登場のルーチンで始まり、操作できる状態で終わるフレームです。上の走りはタイマーを書き換えたところから始まるので、フレーム 1 を含みません。フレーム 1 の始まりは定理 `Begin.start₁` です。切り替えの最後のフレームの始まりは定理 `Run.startB` です。
@@ -102,18 +107,20 @@ b から音楽のフレームまでのフレーム         0 から 305、全部
 ## 証明していないこと
 
 * `music` はもうフィールドではありません。音楽のフレームの始まりと `clean` から、1 フレーム全体の歩きで証明します（[急ぎの音楽を始めるフレーム](0-6-4-2-1-HurryFrame-ja.md)）。
-* 音楽のフレームの始まりはもうフィールドではありません。フレーム `b` からの帰納法で証明します（`Run.startAt`）。フレーム `b` の始まりももうフィールドではありません（`Run.startB`）。`b = 1` ならタイトルで Start を押したことから出ます。音楽のフレームが切り替えのあとにあるとき、`b` は切り替えの最後のフレームで（上の 108 回のうち 58 回。登場のルーチン）、その始まりは切り替えの段から出ます（[切り替えの最後のフレーム](0-6-4-2-2-2-1-HurryStart-ja.md)）。かわりに `start` は切り替えの条件を求めます。部屋で音楽が始まるときは 1 つ目の切り替えの条件（`Chg₁`）、地上で始まるときは両方の条件（`Route.Changes`）です。`Route.Run` の条件で、1 フレームごとの条件です。
-* `ctl` と `clean` は、`b` から音楽のフレームまでの各フレームが操作できる状態で終わること、その各命令が `CleanM` を満たすことです。1 フレームと 1 命令ごとの条件で、上の 108 回（7,559 フレーム）で確かめましたが、証明はしていません。音楽を始める最初のフレームと、その前の `b` からのフレームにだけ求めます。
+* 音楽のフレームの始まりはもうフィールドではありません。フレーム `b` からの帰納法で証明します（`Run.startAt`）。フレーム `b` の始まりももうフィールドではありません（`Run.startB`）。`b = 1` ならタイトルで Start を押したことから出ます。音楽のフレームが切り替えのあとにあるとき、`b` は切り替えの最後のフレームで（上の 108 回のうち 58 回。登場のルーチン）、その始まりは切り替えの段から出ます（[切り替えの最後のフレーム](0-6-4-2-2-2-1-HurryStart-ja.md)）。かわりに `start` は切り替えの条件を求めます。部屋で音楽が始まるときは 1 つ目の切り替えの条件（`Chg₁`）、地上で始まるときは両方の条件（`Route.ChangesK`）です。`Route.Run` の条件で、1 フレームごとの条件です。横の土管の出口では、ポーズの音が `QuietK` のどれかです（前は古い `Quiet`）。
+* `ctl` はもうフィールドではありません。`b` から音楽のフレームまでの各フレームが操作できる状態で終わることは証明します（`Run.startAt`）。ルーチン、モード、タスクへの書き込みで道を止める歩き（`HurryFrame.frame_ctl`）からです。かわりに `noStore` は、これらのフレームのうち操作中に始まるものの命令が、この 3 バイトをアドレスで書かないことを求めます。`bLe` は `b` が音楽のフレームよりあとでないことを求めます。
+* `noStore` と `clean` は、`b` から音楽のフレームまでのフレームの各命令が、3 バイトをアドレスで書かないこと（操作中に始まるフレーム。音楽のフレームは除く）と、`CleanM` を満たすことです。1 命令ごとの条件で、上の 108 回（7,559 フレーム）で確かめましたが、証明はしていません。音楽を始める最初のフレームと、その前の `b` からのフレームにだけ求めます。`bLe` は `b` の選び方の条件です。`b` は音楽の前の最後の切り替えの最後のフレームか、フレーム 1 です。
 * `below` は 1 フレームでだけ要ります。音楽を始める最初のフレームの次のフレームです。以前は `k` までの全部のフレームで要りました。カウンタと機械のつながりです。はみ出すフレームのない走りでは、`clock` のカウンタは機械から読んだ値なので、等号で成り立ちます。はみ出すフレームでは、境目の数字はルーチンが残す数字より小さくありません。ルーチンは数字を下げるだけだからです。これはコードから読んだものです。上の本物の 108 フレームでは等号で成り立ちます。
 * `read₀` は、`Route.Run` と同じく、フレーム 0 が始まるときのカウンタと機械のつながりです。
 * `title` は [タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md) の仮定です。押したあとの機械の 1 つの条件と、フレーム 0 でゲームコアなら Start を押さないことです。`zero` と `quiet₀` はもうフィールドではありません。ここから証明します（`Run.zero`、`Run.quiet₀`）。これらと `Begin.start₁` は、操作できるまでどの入力でもよく、フレーム 0 の Start もよいです。`hurry_near_check` は `TitleStart` の近い状態と止まった状態からフレーム 0 をどの入力でも歩き、操作できない終わりは `title.ctl` が除きます。
 * `clock` の `step` と `plan` は `Route.Run` と同じ仮定です（[1-1 全体](0-1-Route-ja.md)）。パワーアップのある走りと死ぬ走りは `plan` に従わないので、ここにも入りません。
 
-**ファイル.** `Theorems/HurryMusic.lean`（`First`、`first_turn`、`nearCheck`、`Begin.start₁`、`Run.startB`、`Run.startAt`、`Checks`）、`Theorems/HurryStart.lean`（`Chg₁`、`rowsCheck₁`、`rowsCheck₂`）、`Theorems/HurryFrame.lean`（`frame_start`）、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、`Theorems/TitleStart.lean`、非公開の `Proof/HurryMusic.lean`（`hurry_near_check`、`hurry_rows₁`、`hurry_rows₂`、`hurry_1_1`）、`Proof/HurryFrame.lean`、`Proof/TitleStart.lean`。
+**ファイル.** `Theorems/HurryMusic.lean`（`First`、`first_turn`、`nearCheck`、`Begin.start₁`、`Run.startB`、`Run.startOrCtl`、`Run.startAt`、`Checks`）、`Theorems/HurryStart.lean`（`Chg₁`、`rowsCheck₁`、`rowsCheck₂`）、`Theorems/HurryFrame.lean`（`frame_startC`、`frame_ctl`、`ctlCheckOf`）、`Theorems/CastleToLevel.lean`（`Frames.late`、`playN_drop`）、`Theorems/TitleStart.lean`、非公開の `Proof/HurryMusic.lean`（`hurry_near_check`、`hurry_rows₁`、`hurry_rows₂`、`hurry_1_1`）、`Proof/HurryFrame.lean`（`music_check`、`hurry_ctl_check`）、`Proof/TitleStart.lean`、`Proof/Route.lean`（`side_sound`）。
 
 **再現.**
 ```
 .lake/build/bin/smbrta hurry-check FM2
 .lake/build/bin/smbrta hurry-rows-check FM2
 .lake/build/bin/smbrta music-check
+.lake/build/bin/smbrta hurry-ctl-check
 ```

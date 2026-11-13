@@ -12,6 +12,8 @@
 
 この回、`keep` は数えるフレームを定義で決めます。フレームは、ゲームがポーズでない状態（ポーズのバイトの最下位ビットが 0）で終わるとき数えます。数えるフレーム `j` は `all(ix j)` で終わります。そういう終わりの `j` 番目です。なのでフィールド `ix` とその条件はなくなりました。[地上のフレーム](e-2-SurfaceFrames-ja.md) のフィールド `unpaused` と `lagPaused` もなくなりました。定義から成り立ちます（`Frames.up`、`Frames.down`）。新しいフィールド `many` は、あるフレーム `top` の終わりまでに `g` 個のフレームがポーズでない状態で終わる、というものです。また `clean` は、4 バイト多く守るガード（`guardF`）の `CleanK` を聞くようになりました。ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化です。なので地上のフレームのフィールド `spare` は `clean` の一部です。歩きはいまも `guardK` を使います。
 
+いま `keep` は `seq` も持ちません（項目 1-1-f-6-22）。`Keep sy m0 S a g` です。`Frames` のフィールドから、機械 `seq` とフィールド `seqAt` を除いたものです。数えるフレーム `j` の終わりの機械は定義 `Keep.seq j = S.seq(a + ix j)` です。触る前もあとも、どの `j` でもそうです。`Keep.toFrames` は `seq := Keep.seq` とした前の `Frames` で、その `seqAt` は定義から成り立ちます。ですから `seqAt` はもう仮定ではありません。触ったあと城に入るまでのフレームも走りの本物のフレームです（[操作から城まで](f-5-PoleJoin-ja.md)、フィールド `toCastle`）。[地上のフレーム](e-2-SurfaceFrames-ja.md) はいまも `Frames` を `keep.toFrames` としてとります。
+
 `frame(m, i)` は入力 `i` の本物の 1 フレームです。`tr(n)` はその中で `n` 命令あとの機械です。`all n` は、数えるかどうかによらず、フレーム `n` が始まるときの機械です。`all 0` は地上で操作できるときの機械です。`seq j` は数えるフレーム `j` の終わりの機械で、`seq 0 = all 0` です。
 
 ```
@@ -48,6 +50,11 @@ Frames (keep)     :  all n := S.seq(a + n),  inp n := S.inp(a + n)        フレ
                      seqAt   :  j ≤ g → seq j = all(ix j)                       数えるフレーム j は seq j で終わる
                      noStore :  n + 1 < ix g  →  ∀ k,  ¬CtlStore(tr_n(k))
                      cleanF  :  n < ix g  →  ∀ k,  CleanK_F(tr_n(k))               tr_n:  all n からのフレームの命令
+Keep (keep)       :  top, many, noStore, cleanF は Frames と同じ。seq と seqAt はない
+Keep.seq j        :=  S.seq(a + ix j)                                       どの j でも（定義）
+Keep.toFrames     :  seq := Keep.seq とした Frames。seqAt は定義から
+Keep.up_at        :  1 ≤ j ≤ upTo(top)  →  pause(seq j) & 1 = 0             触る前もあとも
+Keep.ends_at      :  1 ≤ j ≤ upTo(top)  →  seq j = frame(all(ix j − 1), inp(ix j − 1))
 Frames.ix0        :  ix 0 = 0
 Frames.order      :  j < g  →  ix j < ix(j + 1)
 Frames.up         :  1 ≤ j ≤ g  →  pause(seq j) & 1 = 0                      OnFrames の前のフィールド unpaused
@@ -174,9 +181,9 @@ endOK(B)  :=  pc(B) = 待ちのループ  ∧  S(B) = S₀  ∧  ((lo = hi = 0  
 
 * **`keep.cleanF`: 触るまでの各フレーム（数えるかどうかによらず）の各命令の `CleanK_F`.** `PipeWrites` の条件に、3 つのバイトと `spareK` の 4 バイトを守るバイトに足し、プレイヤーの書き込みを聞かないことにしたものです。[地上のフレーム](e-2-SurfaceFrames-ja.md) の前のフィールド `spare` を含み、触るフレームにもそれを聞きます。上の本物のフレームで確かめました。
 * **`keep.noStore`: 触るフレームの前のフレーム（数えるかどうかによらず）のどの命令も、ルーチン、モード、タスクを番地で書かない.** 各命令の条件です。歩きはそういう場所に 8 つ来ます（上）。どれも操作から出る道です。フレームが操作中に終わることは定理です（`Frames.ctlAll`）。`noStore` と歩きから前の `ctl` が出るので、`noStore` は `ctl` より弱くはありません。終わりのバイトの代わりに、コードの場所を名指しします。
-* **`keep.top`、`keep.many`、`keep.seqAt`: フレーム `top` の終わりまでに `g` 個のフレームがポーズでない状態で終わり、数えるフレーム `j` は `seq j` で終わる.** 走りがどの機械でできているかを言うものです。どのフレームを数えるかは定義です。ポーズでない状態で終わるフレームです。フレームそのものはもうフィールドではありません。`Frames` は走り全体の本物のフレーム（`RealRun`）と操作のフレーム `a` をとり、`all n = S.seq (a + n)`、`inp n = S.inp (a + n)` は定義です。`next` と `seq 0 = S.seq a` は定理です（`Frames.next`、`Frames.seq0`）。なので地上で操作できるときの機械は、走りの 2 つ目の切り替えの終わりの機械です（`Route.Run.atCtl`、項目 1-1-0-4）。
+* **`keep.top`、`keep.many`: フレーム `top` の終わりまでに `g` 個のフレームがポーズでない状態で終わる.** 数えるフレーム `j` は `seq j = S.seq(a + ix j)` で終わります。これは定義です（フィールド `seqAt` はなくなりました）。走りがどの機械でできているかを言うものです。どのフレームを数えるかは定義です。ポーズでない状態で終わるフレームです。フレームそのものはもうフィールドではありません。`Frames` は走り全体の本物のフレーム（`RealRun`）と操作のフレーム `a` をとり、`all n = S.seq (a + n)`、`inp n = S.inp (a + n)` は定義です。`next` と `seq 0 = S.seq a` は定理です（`Frames.next`、`Frames.seq0`）。なので地上で操作できるときの機械は、走りの 2 つ目の切り替えの終わりの機械です（`Route.Run.atCtl`、項目 1-1-0-4）。
 
-仮定でなくなったもの: `fracStep`（各フレームは位置を 1/16 ピクセルの倍数だけ動かす）、そのあと `noCastle` と `keep.start`、そのあと `keep.ends`（`Frames.ends`）、`keep.lag` と `keep.lagStart`（`Frames.all_start`）。`CleanK` と `FrameStart_K` はもうジャンプ台の制御を名指ししません。新しいもの: `keep`（`all`、`inp`、`next`、`ix`、`ctl`、`clean`）と ROM のチェック `keepCheck`、`ControlStart.ctlCheck`。そのあと、モードが `ctl` からなくなり、`keepCheckOf` は `endCtl` を聞く歩きになりました。そのあと、`all`、`inp`、`next` はフィールドでなくなりました（`RealRun` からの定義）。そのあと、`ctl` がフィールドでなくなり、`noStore` が入りました。`keepCheckOf` は 2 つ目の歩き `ctlKeepCheck` を持ちます。この回、`ix`（`ix0`、`order` も）がフィールドでなくなり、`top`、`many`、`seqAt` が入りました。地上のフレームのフィールド `unpaused`、`lagPaused`、`spare` はなくなりました。`clean` は `cleanF` になりました。
+仮定でなくなったもの: `fracStep`（各フレームは位置を 1/16 ピクセルの倍数だけ動かす）、そのあと `noCastle` と `keep.start`、そのあと `keep.ends`（`Frames.ends`）、`keep.lag` と `keep.lagStart`（`Frames.all_start`）。`CleanK` と `FrameStart_K` はもうジャンプ台の制御を名指ししません。新しいもの: `keep`（`all`、`inp`、`next`、`ix`、`ctl`、`clean`）と ROM のチェック `keepCheck`、`ControlStart.ctlCheck`。そのあと、モードが `ctl` からなくなり、`keepCheckOf` は `endCtl` を聞く歩きになりました。そのあと、`all`、`inp`、`next` はフィールドでなくなりました（`RealRun` からの定義）。そのあと、`ctl` がフィールドでなくなり、`noStore` が入りました。`keepCheckOf` は 2 つ目の歩き `ctlKeepCheck` を持ちます。この回、`ix`（`ix0`、`order` も）がフィールドでなくなり、`top`、`many`、`seqAt` が入りました。地上のフレームのフィールド `unpaused`、`lagPaused`、`spare` はなくなりました。`clean` は `cleanF` になりました。そのあと、`seq` と `seqAt` がなくなりました（`Keep`。`seq` はどのフレームでも定義）。
 
 **変えたことで多く聞くもの.** `noStore`（前は `ctl`）と `clean` は、数えるフレームに聞くことを `lag` のフレームにも聞きます。操作中に終わらない `lag` のフレームは `noStore` の外です。コードによると、大きいマリオがダメージを受けたあとの、タイマーを止める制御のフレームがそうです。ダメージはダメージのルーチンとタイマーを止める制御を一緒に書きます。前の `lag` と `lagStart` は、城の旗、端数の下のビット、操作中のフレームの始まりが `lag` のフレームを通って保たれることだけを聞いていました。ですからそういう走りでも成り立ちえました。ポーズ中のフレームは操作中に終わります。
 

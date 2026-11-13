@@ -75,16 +75,18 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 
 ## 位置の端数と城の旗
 
-`seq j` は数えたフレーム `j` の終わりの機械です。`castle(m)` は `StarFlagTaskControl` が 0 でないことです。`frac(P) = P mod 256` は `CastleWalk.atPole` が書くバイトです。`fracs` は 16 の倍数の 16 個と 255 です。
+`seq j` は数えたフレーム `j` の終わりの機械です。走りのフレーム `a + ix(j)` で、`ix(j)` は操作から `j` 番目にポーズでない状態で終わるフレームです。定義です（`Run.seq`）。触る前もあとも、どのフレームでもそうです。`castle(m)` は `StarFlagTaskControl` が 0 でないことです。`frac(P) = P mod 256` は `CastleWalk.atPole` が書くバイトです。`fracs` は 16 の倍数の 16 個と 255 です。
 
 ```
-keep            :  FrameKeep.Frames: 触るまでの本物の機械のフレーム          （フィールド）
+keep            :  FrameKeep.Keep: 触るまでの本物の機械のフレーム          （フィールド）
+seq j           =  S.seq(a + ix(j))                                           （定義: Run.seq）
 fracCheck       :  posP(B.m) mod 16 = 0                                       （pole_frac、native_decide）
 keepCheck       :  操作中の 1 フレーム全体の歩き                              （keep_check、native_decide）
 AtCtl(seq 0)    :  seq 0 は操作中のフレームの始まりで、城の旗は立っていない   （引数。Route.Run.atCtl₀）
 Run.fracP       :  Start(seq 0),  fracCheck,  keepCheck,  AtCtl(seq 0),  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
 Run.frac        :  同じもの  →  P₂(g) mod 16 = 0
 Run.frac_mem    :  同じもの  →  frac(P₂(g)) ∈ fracs
+toCastle        :  c ≤ upTo(top)   （フレーム top の終わりまでに c 個のフレームがポーズでない状態で終わる）   （フィールド）
 atCastle        :  castle(seq c) = true                                       （フィールド）
 Run.noCastle_of :  同じもの  →  ∀ j ≤ g,  castle(seq j) = false
 Run.afterTouch  :  同じもの  →  g < c
@@ -108,6 +110,7 @@ Run.afterTouch  :  同じもの  →  g < c
 * そのあと（項目 1-1-0-4）: `Run` は走り全体の本物のフレームと操作のフレームをとります。`Run sy m0 b vs B T J Nc F S a`、`S : FrameKeep.RealRun`、`a : Nat`。`keep : FrameKeep.Frames sy m0 S a g seq` も同じです。`keep` からなくなったもの: `all`、`inp`、`next`（`all n = S.seq (a + n)` は定義、`Frames.next` は定理）。新しい定理 `Run.seq0 : seq 0 = S.seq a`。前のつなぎ `Route.Run.atCtl` はいまは同じ名前の定理です。非公開の `pole_join`、`pole_touch`、`pole_touch_castle` は `S`、`a` を暗黙の引数にとります。
 * そのあと、`keep` からなくなったもの: `ctl`（`keepCheckOf` の 2 つ目の歩きからの定理 `Frames.ctlAll` になった）。`keep` に増えたもの: `noStore`（触るフレームの前のフレームのどの命令も、ルーチン、モード、タスクを番地で書かない）。`edge` が変わりました。画面の端の書き込みと頭の当たりのルーチンを禁じません。書き込みまで、そのどちらかのすぐあとでは、旗の範囲より左にいる、というものです（`PoleFrame.again`）。型は変わっていません。
 * そのあと、`keep` からなくなったもの: `ix`、`ix0`、`order`（数えるフレームはいまはポーズでない状態で終わるフレームで、定義です: `Frames.ix`。定理 `Frames.ix0`、`Frames.order`、`Frames.up`、`Frames.down`）、`at_ix`（いまはフィールド `seqAt`）、`clean`（いまはフィールド `cleanF`、`FrameKeep.guardF` の `CleanK`。定理 `Frames.clean`）。`keep` に加えたもの: `top`、`many`（フレーム `top` の終わりまでに `g` 個のフレームがポーズでない状態で終わる）。`frames` のフィールド `unpaused`、`lagPaused`、`spare` はなくなりました（[地上のフレーム](e-2-SurfaceFrames-ja.md)）。型の変わったものはありません。
+* そのあと、なくなったもの: `seq`（定義 `Run.seq = keep.seq` になった。どのフレームでも `seq j = S.seq(a + ix(j))`。ですから触ったあとのフレームも走りの本物のフレームです）、`keep` のフィールド `seqAt`（`keep` は `FrameKeep.Keep sy m0 S a g` になった。`seq` を持ちません。`keep.toFrames` は前の `FrameKeep.Frames` で、`seqAt` は定義から成り立ちます）。増えたもの: `toCastle : c ≤ upTo(upAt, keep.top)`。城に入るのは走りの数えるフレームの終わりです。`flagAny`、`flagTight`、`other` は、`c` までのフレームの旗だけを仮定します（`FollowsTouch sy flag g c E n` は `g + k ≤ c` を仮定します）。弱くなりました。`DirectFlag`、`OtherFlag`、`FollowsTouch`、`DirectWay` は `g` のあとに `c` をとります。`frames` は `SurfaceFrames.OnFrames sy m0 B T J g keep.seq fr keep.toFrames` です。定理の型は変わっていません。
 
 本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
 
@@ -123,19 +126,31 @@ Run.afterTouch  :  同じもの  →  g < c
 * 触るまで、城の旗のある機械はありません。
 * `pole-join-check` は TAS（`frac(P₂(g)) = 80`）、1089 のあと `02808080`（64）、A を長く押した触り（112）で 3 つのフィールドを読みます。旗は、その端数で確かめた触り方の旗と同じです。
 
+触ってから城までの数えるフレームを本物の走りで（`castle-count-check`、exit 0、悪いもの 0）。`g` と `c` は操作から数えたフレームです。フレームはポーズでない状態で終わるとき数えます。
+
+| 走り | 走りの数 | 触る | 城に入る | 触ってから城までのフレーム（ポーズで終わるもの） | `c − g` |
+|---|---|---|---|---|---|
+| ムービー | 1 | 1 | 1 | 126 (0) | 126 |
+| ムービーの触る 2 フレーム前から、フレーム `k`（`k` = 0〜140）と 45 フレームあとに Start | 141 | 141 | 141 | 23,436 (5,670) | 126 |
+| 乱数の入力、Start も乱数で、ムービーのフレーム 1052〜1091 から | 200 | 158 | 140 | 41,863 (17,803) | 126、159〜166 |
+
+* どの走りでも、城の旗が最初に立つのはポーズでない状態で終わるフレームです。ですから `c` は数えるフレームで、`seq c` で旗が立ち、`top` をそのフレームにすると `toCastle` が成り立ちます。
+* 触ったあと、`c` までの数えるフレームの城の旗は、触ったフレームの終わりから入力なし、ポーズなしで進めた走りのものと同じです。`c − g` も同じです。触ったあとのポーズは、`FollowsTouch` が読むものを変えません。
+* 触ってから城まで、フレームを数えるのは時計の位相が動くときとちょうど同じです（`CastleToLevel.kindOf`）。食い違うフレームは 0 です。Lean はまだこれを使いません。`c` は時計の城に入るフレーム `E` とつながっていません（パート 0）。
+
 ## 前提（Lean では証明していない）
 
 仮定は `Run` とその中の構造のフィールドです。`pole_join` はこれらを全部仮定します。
 
 | 仮定 | 内容 | 根拠 |
 |---|---|---|
-| `fr`、`seq`、`frames.reads` | フレームは機械から読む。`g` では `P₂` までのフィールドだけが本物（触ると動かされる）。`next` は定理 | [地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md) |
+| `fr`、`frames.reads` | フレームは機械から読む（`seq` は定義）。`g` では `P₂` までのフィールドだけが本物（触ると動かされる）。`next` は定理 | [地上: 操作できてからのフレームを 1 つずつ](e-2-SurfaceFrames-ja.md) |
 | `frames.step` | Clean な状態からの 1 フレームは `OneFrame`。`model`、`hit`、`stop`、`off` は定理 | 同じページの本物の走り |
 | `frames.vert`、`frames.box` | `J` より前のフレームは `vstep` のとおりで、当たり判定は操作のときの機械と同じ。`box` は定理 | 同じページの本物の走り |
 | `touches`、`tiles`、`edge`、`moved` | `keep` のフレーム `g` は本物の機械で触る。書き込みまで、旗のタイルを読んだ横の判定は旗の列を読んでいる（`TileRead`）。画面の端の書き込みと頭の当たりのルーチンのすぐあとでは、旗の範囲より左にいる。`P₂(g)` は移動の終わりの位置。`P₀ ≤ P₂(g)` はこれらと `keep` からの定理 `Run.inRange`（1 フレーム全部の歩き） | [旗に触るフレーム: 1 フレーム全部](f-6-16-PoleFrame-ja.md) |
-| `keep` | 触るまでの本物の機械のフレーム（数えるかどうかによらない）。操作できるときから続く。走りのフレーム `a` からのフレーム（`all n = S.seq (a + n)` は定義、`next` は定理）。フレームはポーズでない状態で終わるとき数え、数えるフレーム `j` は `seq j` で終わる（`top`、`many`、`seqAt`）。触るフレームの前のフレームのどの命令も、ルーチン、モード、タスクを番地で書かない（`noStore`。それらのフレームが操作中に終わることは定理 `Frames.ctlAll`）。各命令は `guardF` の `CleanK` を満たす。これはポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化も守る（`cleanF`）。各フレームが操作中に始まること、`lag` のフレームが城の旗と端数の下 4 ビットを保つことは定理 `Frames.all_start`、`Frames.start`。`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
-| `atCastle` | フレーム `c` の終わりの機械の城の旗。`g < c` は定理 `Run.afterTouch` | コード。上の本物の走り |
-| `other` | 直接つかむのでないとき: 131 フレームのあいだ、確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
+| `keep` | 触るまでの本物の機械のフレーム（数えるかどうかによらない）。操作できるときから続く。走りのフレーム `a` からのフレーム（`all n = S.seq (a + n)` は定義、`next` は定理）。フレームはポーズでない状態で終わるとき数え、数えるフレーム `j` は `seq j = S.seq(a + ix(j))` で終わる。これは定義（`top`、`many`: フレーム `top` の終わりまでに `g` 個のフレームがポーズでない状態で終わる）。触るフレームの前のフレームのどの命令も、ルーチン、モード、タスクを番地で書かない（`noStore`。それらのフレームが操作中に終わることは定理 `Frames.ctlAll`）。各命令は `guardF` の `CleanK` を満たす。これはポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化も守る（`cleanF`）。各フレームが操作中に始まること、`lag` のフレームが城の旗と端数の下 4 ビットを保つことは定理 `Frames.all_start`、`Frames.start`。`16 ∣ P₂(g)` は定理 `Run.frac`、触るまで城の旗が立たないことは定理 `Run.noCastle_of` | [操作中の 1 フレーム全体は城の旗と端数の下のビットを保つ](f-6-19-FrameKeep-ja.md) |
+| `toCastle`、`atCastle` | 城に入る `c` は走りの数えるフレーム（`c ≤ upTo(top)`）で、その終わりの機械で城の旗が立っている。`g < c` は定理 `Run.afterTouch`。上限の証明は `toCastle` を使わない。`toCastle` は `c` を本物のフレームまでの数にする。時計とつなぐためのもの | コード。下の `castle-count-check` |
+| `other` | 直接つかむのでないとき: 131 フレームのあいだ、`c` まで、数えるフレームの旗は確かめたほかの高さの触り方と同じ | 測定: 触った + 153 以上 |
 | `path`、`atY`、`atRising` | ジャンプのフレームは地面からの `Jump.arcSucc` の道筋 | `Jump-ja.md`。地面からのジャンプであること: 旗の近くに踏める敵はいない |
 | `order`、`left`、`air` | 左から来て、フレーム `q` から土台の上面より下を落ちる。落下は着地の幅を飛び越せない。足が土台の上にあるフレームでは、ケースの動く向き、高さ、落下の速さはそのフレームのもの | コード。旗の上を越えて戻る走りは含まない |
 | `Collides`、`lowCase`、`inBlockCase` | 土台のところのフレームは `cases` の 1 つについて `PoleGrab.collide` のとおり | ルーチンを単独で確認。小さいマリオ |
@@ -144,7 +159,7 @@ Run.afterTouch  :  同じもの  →  g < c
 | `onGround` | `L + 1` より後の速いジャンプ: フレーム `T' − 1` は `frictionCheck` の状態で `ImposeFriction` を動かす（`Imposes`） | 下の本物の走り |
 | `stopped` | `L + 1` の速いジャンプ: 速さ 0 からのフレームは `ImposeFriction` を動かすか、`keepCases` の 1 つとして移動のルーチンを動かす | 下の本物の走り |
 | `fall` | 遅いジャンプ: 落下は `w ≤ q` で `fallStarts` の 1 つか、土台から降りて始まる。フレームは `fallNext` のとおり | 下のマップの事実 |
-| `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ、`P₂(g)` の端数で確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
+| `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ、`c` まで、数えるフレームの旗は `P₂(g)` の端数で確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
 
 操作できるときの状態 `Start` と、操作できるときの機械 `AtCtl` は定理の引数です。`Route.Run.start` と `Route.Run.atCtl₀` が切り替えの最後の段から与えます。
 
@@ -176,4 +191,5 @@ Run.afterTouch  :  同じもの  →  g < c
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # フレーム 1036 からの入力を入れ替えて同じことを
 .lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで 16 ∣ P' − P、fracCheck、城の旗（約 4 分）
 .lake/build/bin/smbrta keep-frames-check FM2 100            # 本物の走りで keep の条件
+.lake/build/bin/smbrta castle-count-check FM2 200           # 触ってから城までの数えるフレーム、ポーズあり（約 1 分）
 ```

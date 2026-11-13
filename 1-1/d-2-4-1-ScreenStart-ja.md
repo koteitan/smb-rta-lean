@@ -58,4 +58,4 @@ Route.Changes.roomAt :  RoomChecks ∧ Changes  →  Room(seq b₁)
 * **`chg.time₁`、`chg.ctlFirst₁`.** 出口で時間が切れていない。`b₁` は最初の操作。[b-3-2](b-3-2-PipeChangeEnd-ja.md) を見てください。
 * **切り替えの条件**（入るときの条件 `Run.entry₁`: `chg.entryRest₁`、`upClean₁` と `title`。`places₁`、`quiet₁`、`noStart₁`）。入るときの条件は、 `WorldNumber`、`PrimaryHardMode`、`AreaMusicBuffer_Alt` のビットも求めるようになりました。ファイアマリオ（`PlayerStatus` が 2）は `chg.entry₁` を満たしません。
 
-**ファイル.** `Theorems/ScreenStart.lean`、`Theorems/PipeChangeEnd.lean`（`timeRows`、`PipeRun.inRowsT`）、`Theorems/Route.lean`（`RoomChecks`、`Changes.roomAt`）、非公開の `Proof/ScreenStart.lean`。
+**ファイル.** `Theorems/ScreenStart.lean`、`Theorems/PipeChangeEnd.lean`（`timeRows`。第 9 回から音のバイトを表で運ぶ段の left が 0 のもの。`PipeRunK.inRowsT`）、`Theorems/Route.lean`（`RoomChecks`、`ChangesK.roomAt`）、非公開の `Proof/ScreenStart.lean`。

@@ -2,7 +2,7 @@
 
 # 地上への切り替えを、音のバイトを表にして
 
-**主張.** 地上への切り替えの行は、音のルーチンの外で 38 個の音のバイトを忘れてよいです。そのバイトの状態の表を行のそばに運びます。これは ROM の確認つきで証明しました。この行では出口の条件が弱くなります。ポーズの音は鳴っていなくても、ポーズを解く音が鳴っていても、出口のフレームでポーズを解いていてもよいです（`QuietK`）。前は鳴っていないことが要りました（`Quiet`）。道筋は今 `QuietK` を仮定します。`chg.quiet₂`（1-1-d-3-4）は弱くなりました。測った 880 の出口のすべてで `QuietK` が成り立ちました。`Quiet` は 257 でした。
+**主張.** 地上への切り替えの行は、音のルーチンの外で 38 個の音のバイトを忘れてよいです。そのバイトの状態の表を行のそばに運びます。これは ROM の確認つきで証明しました。この行では出口の条件が弱くなります。ポーズの音は鳴っていなくても、ポーズを解く音が鳴っていても、出口のフレームでポーズを解いていてもよいです（`QuietK`）。前は鳴っていないことが要りました（`Quiet`）。測った 880 の出口のすべてで `QuietK` が成り立ちました。`Quiet` は 257 でした。出口の `QuietK` は、今は入口の条件から証明しました（[横の土管のフレームを通るポーズ](d-3-4-3-SidePause-ja.md)）。道筋はそちらを仮定します。
 
 `m[i]` は `m` の RAM のバイト `i` です。`frame(m, i)` は `m` の入力 `i` での 1 フレームです。`Sim(S, m)` は抽象状態 `S` が `m` を覆うことです。`left`、`During2`、`Entry2`、`NoStart`、`TimerOK` は [地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) のものです。`Ph`、`SIn`、`tsuccs`、`tframe_of_walk` は [CPU の 1 ステップが RAM を書く場所](d-3-4-1-StepWrites-ja.md) のものです。
 
@@ -95,14 +95,14 @@ Lean: `Theorems/SideChangeSound.lean`（`scan`、`SRow`、`rowsFromS`、`incl`�
 
 ## 道筋で変わったもの
 
-* `Route.Changes` を分けました。`ChangesBase` は `quiet₂` 以外のすべてのフィールドを持ちます。`ChangesK` は `QuietK` の `quiet₂` を加え、`Run.chg` は `ChangesK` です。`Changes` は `Quiet` の古い `quiet₂` を加えます。`HurryStart` と `HurryMusic` はまだこれを読みます。`Changes.toK` は `Changes` を `ChangesK` にします。
+* `Route.Changes` を分けました。`ChangesBase` は `quiet₂` 以外のすべてのフィールドを持ちます。`ChangesK` は 2 つ目の切り替えのポーズの条件を加え、`Run.chg` は `ChangesK` です。第 8 回は `QuietK` の `quiet₂`、今は入口の `pause₂` です（[横の土管のフレームを通るポーズ](d-3-4-3-SidePause-ja.md)。`Changes.toK` はなくなりました）。`Changes` は `Quiet` の古い `quiet₂` を加えます。`HurryStart` と `HurryMusic` はまだこれを読みます。
 * `Run.change₂`、`Run.start`、`Run.atCtl₀`、`level_ge_of_parts` は、`SideChangeEnd.EndStatement`（と `startCheck`、`ctlCheck`）のかわりに `SideChangeSound.EndStatementK`（と `startCheckK`、`ctlCheckK`）をとります。
 * 切り替えの長さ（`Run.change₂`）は `chg.time₂` も使うようになりました。行が時間の行だからです。`time₂` はもとからフィールドでした。
 
 ## 仮定（Lean で証明していないもの）
 
-* 出口での `QuietK`（`chg.quiet₂`、1-1-d-3-4）。証明するには土管のフレームにも表が要ります。そこでは Start が許されるので、ポーズの音の状態を入るときから運ばなければなりません。
-* `NoStart`（`chg.noStart₂`、1-1-d-3-3）: 土管のあと、ゲームコアのフレームで Start を押さない。ポーズしたフレームは `left` を 1 減らさず、行は `left` の値ごとに 1 つです。まだです。
+* 出口の `QuietK` はもう仮定しません。[横の土管のフレームを通るポーズ](d-3-4-3-SidePause-ja.md) が、入口の条件 `PauseE`（`chg.pause₂`、1-1-d-3-4）から証明します。
+* `NoStart`（`chg.noStart₂`、1-1-d-3-3）: 土管のあと、ゲームコアのフレームで Start を押さない。ポーズしたフレームは `left` を 1 減らさず、行は `left` の値ごとに 1 つです。まだです。ポーズ中の行は [横の土管のフレームを通るポーズ](d-3-4-3-SidePause-ja.md) で試して測りました。
 * ほかは [地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) のとおりです: `Entry2`、`lagPaused`、`TimerOK`。
 
 **ファイル.** `Theorems/SideChangeSound.lean`。非公開の確認は `Proof/Route.lean`、音のルーチンの場所は `Proof/SideChangeSound.lean` にあります（`Main.lean` の `genSideSound`）。記号 `PauseSfxValue`、`UnpauseSfxValue`、`PauseSfxLength` は `tools/smb-symbols.txt` にあります。

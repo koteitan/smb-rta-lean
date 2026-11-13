@@ -6,6 +6,7 @@ import Theorems.OpenFrames
 import Theorems.LagFrames
 import Theorems.RoomJoin
 import Theorems.RoomVert
+import Theorems.RoomPair
 import Theorems.PoleJoin
 import Theorems.CastleToLevel
 import Theorems.PipeChangeBound
@@ -23,6 +24,7 @@ import Theorems.StartRun
 import Theorems.RoomMap
 import Theorems.SideEntryRest
 import Theorems.SideChangeSound
+import Theorems.SidePause
 
 /-!
 # The whole route: 1-2 does not start before frame 1748
@@ -83,9 +85,10 @@ structure Pipe (sy : Syms) (m0 : Machine) (g : Nat) (N : Nat) (D : Int) (S : Fra
   /-- `P₂` is the position at the end of the move (`PlayerSubs`), up to the write: the frame model's `P₂` -/
   moved : ∀ t, PipeEntryRule.Enters sy (lags.fm t) (lags.inp t) → ∀ n j, PipeEntryRule.WriteStep sy (lags.fm t) (lags.inp t) n → j ≤ n →
     (PipeEntryRule.trace (lags.fm t) (lags.inp t) j).pc = sy.PlayerSubs → (fr t).P₂ = posP sy (PipeEntryRule.trace (lags.fm t) (lags.inp t) j)
-  /-- the first `N` counted frames, on single frames, their instructions and their starts (`OpenFrames.Real`): the instructions of each meet `CleanK` and `Spare`, it
-  does not end during the movement, from the scroll handler on it changes no horizontal byte and leaves the stored speed `|v|` and the collision bits all 1, the
-  page stays below 128; the flat ground and the lengths of the jumps, read from the player's state. That each of them is a step of the opening's model (the old field
+  /-- the first `N` counted frames, on single frames, their instructions and their starts (`OpenFrames.Real`): the instructions of each meet `CleanK` and `Spare`,
+  from the scroll handler on it changes no horizontal byte and leaves the stored speed `|v|` and the collision bits all 1, the page is not 255 when the counted frame
+  `N + 1` begins; the flat ground and the lengths of the jumps, read from the player's state. That a frame does not end during the movement is a theorem
+  (`FrameModel.trace_inFrame` with `CleanK.time`), and so is the page at the ends of the frames before frame `N` (the search of `OpenLeft`). That each of them is a step of the opening's model (the old field
   `opening`, `OpenFrames.OpenRun`) is a theorem (`OpenFrames.Real.toRun`): the movement by `FrameModel.move_model`, the state at the player's routine by the walk of
   `CtrlKeep`. With the check of the opening this gives the bound at the end of frame `N` (`Run.pipeOpenB`). The bound up to frame `N` is not needed: the position at control
   is that of `m0` (`Run.pipeP1`), and up to frame `N` the top speed bounds it (`PipeFrames.no_entry_of_start`). -/
@@ -255,13 +258,8 @@ structure ChangesBase (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeCha
   paused₁ : ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → kind n = .lag → PipeChangeEnd.Paused d₁ (B.seq (n + 1))
   /-- on a frame of the pipe's routine, each instruction meets the condition at the places -/
   places₁ : ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → PipeChangeBound.inPipe sy sy.EngVerticalPipe (B.seq n) = true → ∀ j, PipeChangeEnd.PlaceOK d₁.places (PipeEntryRule.trace (B.seq n) (B.inp n) j)
-  /-- at the exit, the sound's bytes, the song and the screen buffer are as the condition says -/
-  quiet₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) →
-    SideChangeEnd.Quiet (PipeChangeEnd.quietQ d₁ (PipeTransition.entry m0)) (B.seq n) ∧ PipeChangeEnd.SongAt d₁.song (B.seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (B.seq n)
   /-- no Start on the frames of the game core after the pipe -/
   noStart₁ : ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → SideChangeEnd.coreFrame sy sy.EngVerticalPipe (B.seq n) = true → SideChangeEnd.noStart (B.inp n) = true
-  /-- at the exit, the sound's pause flag is 0 and the game timer is not 000: the time is not up on the way -/
-  time₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) → SideChangeEnd.TimeOK d₁.nx (B.seq n)
   /-- the second change: the machine after frame `e₂` is `B.seq a₂`, the first from `b₁` on that has left the player's routine (`Base.a₂`), and the machine after frame `c₃`
   is `B.seq b₂`, the first with control from there on (`Base.b₂`) -/
   ha₂ : seen kind (B.a₂ sy nmS m0) = e₂ + 1
@@ -281,21 +279,19 @@ structure ChangesBase (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeCha
   time₂ : ∀ n, B.a₂ sy nmS m0 ≤ n → n ≤ B.b₂ sy nmS m0 → SideChangeBound.ExitAt (SideChangeBound.exitBytes sy nm₂ (SideChangeEnd.refExit (SideTransition.entry m0) 160)) (B.seq n) →
     SideChangeEnd.TimerOK nx₂ (B.seq n)
 
-/-- **The two changes of area**, with the old condition at the side pipe's exit: the sound's pause bytes have the reference's values (`SideChangeEnd.Quiet`). `Run` asks
-`ChangesK`, which is weaker. `HurryStart` and `HurryMusic` read this one. -/
-structure Changes (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (nm₂ nx₂ nmS : Names) (B : Base) (kind : Nat → Kind) (e₁ c₂ e₂ c₃ : Nat)
-    extends ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃ where
-  /-- at the exit, the sound's pause bytes have the reference's values -/
-  quiet₂ : ∀ n, B.a₂ sy nmS m0 ≤ n → n ≤ B.b₂ sy nmS m0 → SideChangeBound.ExitAt (SideChangeBound.exitBytes sy nm₂ (SideChangeEnd.refExit (SideTransition.entry m0) 160)) (B.seq n) →
-    SideChangeEnd.Quiet (SideChangeEnd.quietBytes nx₂ (SideTransition.entry m0) 160) (B.seq n)
-
-/-- **The two changes of area, as `Run` asks them.** At the side pipe's exit the pause sound is silent, or the unpause sound plays, or the unpause was pressed on that frame
-(`SideChangeSound.QuietK`). The rows of `SideChangeSound` follow the sound's bytes in tables, so a press of Start on the pipe's frames is allowed. -/
+/-- **The two changes of area, as `Run` asks them.** At the side pipe's entry the pause is silent, or the unpause sound plays with the pause timer one more than its
+counter, or the unpause was pressed on that frame (`SidePause.PauseE`). The pipe's frames carry it to the exit for any input (`SidePause.PipeQ`), where the pause
+sound is as `SideChangeSound.QuietK` says; the rows of `SideChangeSound` follow the sound's bytes in tables after it. -/
 structure ChangesK (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (nm₂ nx₂ nmS : Names) (B : Base) (kind : Nat → Kind) (e₁ c₂ e₂ c₃ : Nat)
     extends ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃ where
-  /-- at the exit, the pause sound is one of the kinds of `SideChangeSound.QuietK` -/
-  quiet₂ : ∀ n, B.a₂ sy nmS m0 ≤ n → n ≤ B.b₂ sy nmS m0 → SideChangeBound.ExitAt (SideChangeBound.exitBytes sy nm₂ (SideChangeEnd.refExit (SideTransition.entry m0) 160)) (B.seq n) →
-    SideChangeSound.QuietK sy (SideChangeSound.pauseIdx nx₂) (SideChangeEnd.refExit (SideTransition.entry m0) 160) (B.seq n)
+  /-- at the vertical pipe's exit, the pause sound is silent with the song in a row, or the unpause sound plays (`PipeChangeEnd.QuietP`), and the screen buffer has a form of the
+  table -/
+  quiet₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) →
+    PipeChangeEnd.QuietP sy d₁ (PipeChangeEnd.refX (PipeTransition.entry m0)) (B.seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (B.seq n)
+  /-- at the vertical pipe's exit, the game timer is not 000: the time is not up on the way -/
+  time₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) → SideChangeEnd.TimerOK d₁.nx (B.seq n)
+  /-- at the entry, the pause is in one of the classes that are not paused (`SidePause.PauseE`) -/
+  pause₂ : SidePause.PauseE sy (SideChangeSound.pauseIdx nx₂) (SidePause.pauseBytesOf nx₂) (B.seq (B.a₂ sy nmS m0))
 
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
@@ -381,9 +377,9 @@ theorem seen_le_add (kind : Nat → Kind) {a b : Nat} (hab : a ≤ b) : seen kin
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
 
-/-- the first change as `PipeChangeEnd.PipeRun`, with the condition at the entry (`Run.entry₁`) -/
-def ChangesBase.run₁ (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃)
-    (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : PipeChangeEnd.PipeRun sy nm₁ d₁ (PipeTransition.entry m0) where
+/-- the first change as `PipeChangeEnd.PipeRunK`, with the condition at the entry (`Run.entry₁`) -/
+def ChangesK.run₁ (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃)
+    (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : PipeChangeEnd.PipeRunK sy nm₁ d₁ (PipeTransition.entry m0) where
   seq := B.seq
   inp := B.inp
   next := B.next
@@ -400,10 +396,12 @@ def ChangesBase.run₁ (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind 
   places := C.places₁
   quiet := C.quiet₁
   noStart := C.noStart₁
+  time := C.time₁
 
-/-- **The change into the room takes at least 91 frames**, from the condition at the entry and the conditions at the places. `hT` is what the check on the ROM gives. -/
-theorem ChangesBase.bound₁ {es : List Machine} (hT : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es)
-    (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : e₁ + 91 ≤ c₂ := by
+/-- **The change into the room takes at least 91 frames**, from the condition at the entry and the conditions at the places, with the rows with tables. `hT` is what the check
+on the ROM gives. -/
+theorem ChangesK.bound₁ {es : List Machine} (hT : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es)
+    (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : e₁ + 91 ≤ c₂ := by
   have h := (C.run₁ he).bound hT
   have h1 : (C.run₁ he).cnt (C.run₁ he).a = e₁ + 1 := C.ha₁
   have h2 : (C.run₁ he).cnt (C.run₁ he).b = c₂ + 1 := C.hb₁
@@ -411,11 +409,11 @@ theorem ChangesBase.bound₁ {es : List Machine} (hT : PipeChangeEnd.EndStatemen
   rw [h1, h2, h3] at h
   omega
 
-/-- **`left` is not 0 before control** in the change into the room: from the time at the exit and the first control (`PipeChangeEnd.PipeRun.first`) -/
-theorem ChangesBase.first₁ {es : List Machine} (hT : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es)
-    (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
+/-- **`left` is not 0 before control** in the change into the room: from the rows with tables and the first control (`PipeChangeEnd.PipeRunK.first`) -/
+theorem ChangesK.first₁ {es : List Machine} (hT : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es)
+    (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
     ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → left₁ sy nm₁ m0 (B.seq n) ≠ 0 :=
-  (C.run₁ he).first hT C.time₁ C.ctlFirst₁
+  (C.run₁ he).first hT C.ctlFirst₁
 
 end
 
@@ -430,34 +428,15 @@ structure RoomChecks (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChan
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
 
-/-- **The condition at the first control in the room**, from the rows of the time of the first change: the time at the exit and the first control -/
-theorem ChangesBase.roomAt (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
-    (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
+/-- **The condition at the first control in the room**, from the rows with tables of the first change and the first control -/
+theorem ChangesK.roomAt (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
     ScreenPage.Room sy nmS m0 (B.seq (B.b₁ sy)) :=
-  ScreenStart.room_of_rows hR.start ((C.run₁ he).inRowsT hR.pipe C.time₁ C.ctlFirst₁) C.ctl₁
+  ScreenStart.room_of_rows hR.start ((C.run₁ he).inRowsT hR.pipe C.ctlFirst₁) C.ctl₁
 
-/-- the second change as `SideChangeEnd.EndRun` -/
-def Changes.run₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃)
-    (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : SideChangeEnd.EndRun sy nm₂ nx₂ (SideTransition.entry m0) 160 122 where
-  seq := B.seq
-  inp := B.inp
-  next := B.next
-  lag := fun n => kind n = .lag
-  dec := fun _ => inferInstance
-  cnt := seen kind
-  hcnt := fun _ => rfl
-  a := B.a₂ sy nmS m0
-  b := B.b₂ sy nmS m0
-  order := C.order₂
-  entry := ScreenPage.entry_rest hR.facts hR.timer hR.rt B.next C.roomOrder (C.roomAt hR he) C.roomSites C.roomStay C.entry₂
-  atCtl := C.ctl₂
-  lagPaused := C.paused₂
-  noStart := C.noStart₂
-  quiet := C.quiet₂
-
-/-- the second change as `SideChangeSound.EndRunK`: the condition at the exit is `QuietK`, and the timer is not 000 there -/
+/-- the second change as `SidePause.EndRunQ`: the condition on the pause at the entry, and the timer not 000 at the exit -/
 def ChangesK.run₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃)
-    (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : SideChangeSound.EndRunK sy nm₂ nx₂ (SideTransition.entry m0) 160 where
+    (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : SidePause.EndRunQ sy nm₂ nx₂ (SideTransition.entry m0) 160 where
   seq := B.seq
   inp := B.inp
   next := B.next
@@ -469,23 +448,21 @@ def ChangesK.run₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C : Chan
   b := B.b₂ sy nmS m0
   order := C.order₂
   entry := ScreenPage.entry_rest hR.facts hR.timer hR.rt B.next C.roomOrder (C.roomAt hR he) C.roomSites C.roomStay C.entry₂
+  pause := C.pause₂
   atCtl := C.ctl₂
   lagPaused := C.paused₂
   noStart := C.noStart₂
-  quiet := C.quiet₂
   time := C.time₂
 
-/-- **The old conditions give the new ones**: `Quiet` at the exit gives `QuietK` (`SideChangeSound.quietK_of_quiet`) -/
-theorem Changes.toK (C : Changes sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃ :=
-  { C.toChangesBase with quiet₂ := fun n h1 h2 hx => SideChangeSound.quietK_of_quiet (C.quiet₂ n h1 h2 hx) }
 
 /-- **The change out of the side pipe takes at least 282 frames**, from the single frames. `hS` and `hT` are what the checks on the ROM give, `rt` the place of the sound
 routine. -/
 theorem ChangesK.bound₂ {es : List Machine} {rt : StepWrites.Rt}
     (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
-    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : e₂ + 282 ≤ c₃ := by
-  have h := (C.run₂ hR he).bound hS hT
+  have h := (C.run₂ hR he).bound hS hT hQ
   have h1 : (C.run₂ hR he).cnt (C.run₂ hR he).a = e₂ + 1 := C.ha₂
   have h2 : (C.run₂ hR he).cnt (C.run₂ hR he).b = c₃ + 1 := C.hb₂
   rw [h1, h2] at h
@@ -493,8 +470,8 @@ theorem ChangesK.bound₂ {es : List Machine} {rt : StepWrites.Rt}
 
 /-- **The room has at least one frame**: `b₁ < a₂`. The machine at the room's first control is in the player's routine (`Changes.roomAt`: the routine is a byte of the
 condition), the machine at the entry is in the side pipe's (`entry₂` and the check `RoomChecks.rt`), and the two routines differ (`RoomChecks.facts`). -/
-theorem ChangesBase.b₁_lt_a₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
-    (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
+theorem ChangesK.b₁_lt_a₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
     B.b₁ sy < B.a₂ sy nmS m0 := by
   have ho : B.b₁ sy ≤ B.a₂ sy nmS m0 := C.roomOrder
   refine Nat.lt_of_le_of_ne ho fun heq => ?_
@@ -598,9 +575,10 @@ theorem Run.change₁ {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement
 
 /-- the change out of the side pipe takes at least 282 frames -/
 theorem Run.change₂ {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
-    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) : R.room.E + 282 ≤ R.Cs :=
-  R.chg.bound₂ hS hT hR (R.entry₁ hB hK)
+  R.chg.bound₂ hS hT hQ hR (R.entry₁ hB hK)
 
 /-- every frame after the castle entry, up to the level change: its counters, by the rule on one frame. `hF` is the check of the ROM. -/
 def Run.flagRun (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hF : FlagRule.Checked fc (FlagRule.dataOf fc)) :
@@ -687,21 +665,29 @@ theorem Run.pipeHeld (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm�
   exact h₀.2
 
 /-- **Each of the first `N` counted frames is a step of the opening's model** (the old field `opening`): from the conditions on single frames (`pipe.opening`,
-`OpenFrames.Real.toRun`). `hc`, `hk`, `hp`, `hB`, `hP`, `hT` and `C` are checks on the ROM. -/
+`OpenFrames.Real.toRun`). The position at the end of a frame is exact by the bounds of the model: `hopt` (`Opening`: no input gets past `D` in `N` frames) and `hL`
+(`OpenLeft`: no input gets left of the position at control in fewer than `N` frames, and `P(m₀) + D < 2²⁴`). `hc`, `hk`, `hp`, `hB`, `hP`, `hT`, `C`, `hopt` and `hL` are
+checks on the ROM. -/
 def Run.pipeOpening {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 tc.gps = true)
     (hB : TitleStart.check sy tc t0 = true) (hP : StartRun.titlePosCheck sy tc m0 = true) (hT : StartRun.titleCheck sy tc (PipeWrites.guardOf sy m0) m0 = true)
-    (C : OpenFrames.Checks sy m0 (Opening.jumpLens sy m0) Zb v tc.gps) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hE : 1 ≤ R.pipe.E) :
+    (C : OpenFrames.Checks sy m0 (Opening.jumpLens sy m0) Zb v tc.gps)
+    (hopt : ∀ k u, k ≤ N → Cert.Reach (Opening.succ sy m0 (Opening.jumpLens sy m0)) (Opening.start sy m0) k u → u.2 ≤ D)
+    (hL : (∀ k u, k < N → Cert.Reach (Opening.succ sy m0 (Opening.jumpLens sy m0)) (Opening.start sy m0) k u → -posP sy m0 ≤ u.2) ∧ posP sy m0 + D < 0x1000000)
+    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hE : 1 ≤ R.pipe.E) :
     OpenFrames.OpenRun sy m0 (Opening.jumpLens sy m0) N R.pipe.E R.pipe.fm :=
   R.pipe.opening.toRun hc hk hp C (R.pipeStart₁ hB hT) (R.pipeHeld hc hk hp hB hP hT hE C.start).1 (R.pipeHeld hc hk hp hB hP hT hE C.start).2
+    (R.pipeHS hc hk hp hB hP hT hE) (R.pipePos hc hk hp hB hP hT hE) hopt hL.1 hL.2
 
 /-- **The bound of the opening at the end of frame `N`** (the old field `openB`): the first `N` frames are steps of the model (`Run.pipeOpening`), and the model does not get
-past `D` in `N` steps (`hopt`, the check of `Opening`). The start is that of `m0` (`Run.pipeHS`, `Run.pipePos`). `hc`, `hk`, `hp`, `hB`, `hP`, `hT`, `C` are checks on the ROM. -/
+past `D` in `N` steps (`hopt`, the check of `Opening`). The start is that of `m0` (`Run.pipeHS`, `Run.pipePos`). `hc`, `hk`, `hp`, `hB`, `hP`, `hT`, `C`, `hopt`, `hL`
+are checks on the ROM (`hL`: the search of `OpenLeft`). -/
 theorem Run.pipeOpenB {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 tc.gps = true)
     (hB : TitleStart.check sy tc t0 = true) (hP : StartRun.titlePosCheck sy tc m0 = true) (hT : StartRun.titleCheck sy tc (PipeWrites.guardOf sy m0) m0 = true)
     (C : OpenFrames.Checks sy m0 (Opening.jumpLens sy m0) Zb v tc.gps)
-    (hopt : ∀ k u, k ≤ N → Cert.Reach (Opening.succ sy m0 (Opening.jumpLens sy m0)) (Opening.start sy m0) k u → u.2 ≤ D) (h1 : 1 ≤ N)
-    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) : N < R.pipe.E → (R.pipe.fr N).P' ≤ posP sy m0 + D := fun hN =>
-  (R.pipeOpening hc hk hp hB hP hT C (by omega)).openB (R.pipeHS hc hk hp hB hP hT (by omega)) hopt (R.pipe.reads hc hk hp (R.pipeStart₁ hB hT))
+    (hopt : ∀ k u, k ≤ N → Cert.Reach (Opening.succ sy m0 (Opening.jumpLens sy m0)) (Opening.start sy m0) k u → u.2 ≤ D)
+    (hL : (∀ k u, k < N → Cert.Reach (Opening.succ sy m0 (Opening.jumpLens sy m0)) (Opening.start sy m0) k u → -posP sy m0 ≤ u.2) ∧ posP sy m0 + D < 0x1000000)
+    (h1 : 1 ≤ N) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) : N < R.pipe.E → (R.pipe.fr N).P' ≤ posP sy m0 + D := fun hN =>
+  (R.pipeOpening hc hk hp hB hP hT C hopt hL (by omega)).openB (R.pipeHS hc hk hp hB hP hT (by omega)) hopt (R.pipe.reads hc hk hp (R.pipeStart₁ hB hT))
     (R.pipePos hc hk hp hB hP hT (by omega)) h1 hN
 
 /-- the timer before frame 0, read from the machine when frame 0 begins -/
@@ -736,23 +722,25 @@ theorem Run.room_le (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm�
 /-- **The state at control above ground**, on the real machines: it comes from the last row of the change, under the change's conditions. `left` is not 0 before control,
 from the time at the exit and the first control (`SideChangeEnd.EndRun.first`). `hc` is the check on the ROM. -/
 theorem Run.start {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
-    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     (hc : SideChangeSound.startCheckK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt PA = true)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     SurfaceFrames.Start sy PA (R.pole.seq 0) := by
   rw [R.atCtl]
-  exact (R.chg.run₂ hR (R.entry₁ hB hK)).start hS hT hc R.chg.ctlFirst₂
+  exact (R.chg.run₂ hR (R.entry₁ hB hK)).start hS hT hQ hc R.chg.ctlFirst₂
 
 /-- **The machine at control above ground, as the walk of one whole frame needs it**, on the real machines: the start of a frame in control, with the castle flag down. From the last
 row of the change, under the same conditions as `Run.start`. `hc` and `hk` are checks on the ROM. With `PoleJoin.Run.keep` it gives no castle flag up to the touch
 (`PoleJoin.Run.noCastle_of`) and the start of every frame up to the touch (`FrameKeep.Frames.start`). -/
 theorem Run.atCtl₀ {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
-    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     (hk : SideChangeSound.ctlCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     FrameKeep.AtCtl sy m0 (R.pole.seq 0) := by
   rw [R.atCtl]
-  exact (R.chg.run₂ hR (R.entry₁ hB hK)).atCtl' hS hT hk R.chg.ctlFirst₂
+  exact (R.chg.run₂ hR (R.entry₁ hB hK)).atCtl' hS hT hQ hk R.chg.ctlFirst₂
 
 /-- **The state at first control in the room**, on the real machines: it comes from the last row of the change into the room, under the change's conditions and `Changes.first₁`. `hc` is the check on
 the ROM. -/
@@ -761,7 +749,7 @@ theorem Run.roomStart {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     RoomJoin.StartAt sy rN (R.room.fm R.room.C) := by
   rw [R.roomCtl]
-  exact RoomStart.PipeRun.start hT₁ hc (R.chg.run₁ (R.entry₁ hB hK)) (R.chg.first₁ hT₁ (R.entry₁ hB hK))
+  exact RoomStart.PipeRunK.start hT₁ hc (R.chg.run₁ (R.entry₁ hB hK)) R.chg.ctlFirst₁
 
 /-- **The frame of `room` that enters the side pipe is a frame of `base` in the room**, from its first control to the entry: frame `b₁ + (E − 1 − C)`. It is before `a₂`
 since the room counts no more frames than there are (`seen_le_add`, with `chg.hb₁`, `chg.ha₂`) and the room has a frame (`Changes.b₁_lt_a₂`). `hR`, `hB`, `hK` are
@@ -784,7 +772,7 @@ theorem Run.roomTiles {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement
     R.room.TilesE := by
   obtain ⟨k, h1, h2, e1, e2⟩ := R.roomEnter hR hB hK
   have he := R.entry₁ hB hK
-  have h := (RoomMap.map_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+  have h := (RoomMap.map_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.ctlFirst₁) R.chg.ctl₁
     R.chg.roomSites R.chg.roomStay).2 k h1 h2
   intro n j _ _ ha
   rw [e1, e2] at ha ⊢
@@ -798,7 +786,7 @@ theorem Run.roomStartE {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatemen
     R.room.StartE := by
   obtain ⟨k, h1, h2, e1, _⟩ := R.roomEnter hR hB hK
   have he := R.entry₁ hB hK
-  have h := RoomMap.start_of_rowsF (a := R.base.a₂ sy nmS m0) hM hS hF R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+  have h := RoomMap.start_of_rowsF (a := R.base.a₂ sy nmS m0) hM hS hF R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.ctlFirst₁) R.chg.ctl₁
     R.chg.roomSites R.chg.roomStay k h1 h2
   show PipeWrites.FrameStart (SideFrame.roomG sy m0) (PipeEntryRule.envOf m0) (R.room.fm (R.room.E - 1))
   rw [e1]
@@ -812,7 +800,7 @@ theorem Run.roomCleanE {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatemen
     R.room.CleanE := by
   obtain ⟨k, h1, h2, e1, e2⟩ := R.roomEnter hR hB hK
   have he := R.entry₁ hB hK
-  have h := RoomMap.clean_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+  have h := RoomMap.clean_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.ctlFirst₁) R.chg.ctl₁
     R.chg.roomSites R.chg.roomStay k h1 h2
   intro n _ j _
   show PipeWrites.Clean (SideFrame.roomG sy m0) (PipeEntryRule.trace (R.room.fm (R.room.E - 1)) (R.room.pad R.room.E) j)
@@ -827,7 +815,7 @@ theorem Run.roomHeadE {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement
     R.room.HeadE := by
   obtain ⟨k, h1, h2, e1, e2⟩ := R.roomEnter hR hB hK
   have he := R.entry₁ hB hK
-  have h := RoomMap.head_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁) R.chg.ctl₁
+  have h := RoomMap.head_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.ctlFirst₁) R.chg.ctl₁
     R.chg.roomSites R.chg.roomStay k h1 h2
   intro j
   show (PipeEntryRule.trace (R.room.fm (R.room.E - 1)) (R.room.pad R.room.E) j).pc ≠ PipeWrites.headAt sy m0
@@ -849,7 +837,7 @@ theorem Run.roomBump {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
   have h3 := seen_le_add R.clock.kind R.chg.roomOrder
   have h4 := R.chg.b₁_lt_a₂ hR (R.entry₁ hB hK)
   have hk : R.base.b₁ sy + (n - R.room.C) < R.base.a₂ sy nmS m0 := by omega
-  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
   exact ⟨RoomMap.head_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ (Nat.le_add_right _ _) hk j,
     RoomMap.bump_of_rows (a := R.base.a₂ sy nmS m0) hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ (Nat.le_add_right _ _) hk j⟩
 
@@ -867,19 +855,76 @@ theorem Run.roomMouthE {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatemen
     rw [← e1, ← e2]
     exact R.room.enters
   rw [e1, e2]
-  exact SideEntryRest.mouth_of_rows (a := R.base.a₂ sy nmS m0) hM hS hF hEnd hRest R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁)
+  exact SideEntryRest.mouth_of_rows (a := R.base.a₂ sy nmS m0) hM hS hF hEnd hRest R.base.next ((R.chg.run₁ he).inRowsT hT₁ R.chg.ctlFirst₁)
     R.chg.ctl₁ R.chg.roomSites R.chg.roomStay h1 h2 hen
+
+/-- an instruction that meets `SiteOK` of the room and is not at the idle loop runs at least 64 dots before the frame's end: the room's `late` is 6000 dots before it -/
+theorem late_of {nmS : Names} {m0 m : Machine} (h : ScreenPage.SiteOK (ScreenPage.placesR sy nmS m0) m) (hn : m.pc ≠ (ScreenPage.placesR sy nmS m0).idle) :
+    m.fdot ≤ dotsPerFrame - 64 := by
+  have e : (ScreenPage.placesR sy nmS m0).late = dotsPerFrame - 6000 := rfl
+  have h1 := h.late hn
+  rw [e] at h1
+  omega
+
+/-- **Each frame of `room` before the entry comes to the player's routine before its end**, on the real machines: `RoomVert.before_R` on the frames of `base` in the room (the
+walk to the player's routine; its states at the frame's end are not there). `hV` are the checks of `RoomVert`. -/
+theorem Run.roomArrive {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    ∀ n, R.room.C ≤ n → n < R.room.E → ∀ j, (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc = sy.PlayerCtrlRoutine →
+      (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).frame = (R.room.fm n).frame := by
+  intro n hC hE
+  have h1 : seen R.clock.kind (R.base.b₁ sy) = R.room.C + 1 := R.chg.hb₁
+  have h2 : seen R.clock.kind (R.base.a₂ sy nmS m0) = R.room.E + 1 := R.chg.ha₂
+  have h3 := seen_le_add R.clock.kind R.chg.roomOrder
+  have h4 := R.chg.b₁_lt_a₂ hR (R.entry₁ hB hK)
+  have hk : R.base.b₁ sy + (n - R.room.C) < R.base.a₂ sy nmS m0 := by omega
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have hcond := RoomMap.cond_of_rows hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) hk
+  have hsites := R.chg.roomSites (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) hk
+  exact (RoomVert.before_R (RoomVert.okV_of_check hV.a) (fun _ hB' => RoomVert.finR_spec hB') hcond hsites).2.2.2
+
+/-- **At the player's routine in each frame of `room` before the entry, the horizontal bytes are those of the frame's start**, on the real machines:
+`RoomVert.hbytes_at_R` on the frames of `base` in the room (the walk to the player's routine keeps them). The old part `before` of `room.clean`. -/
+theorem Run.roomBefore {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    ∀ n, R.room.C ≤ n → n < R.room.E → ∀ j, (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc = sy.PlayerCtrlRoutine →
+      ∀ a ∈ FrameModel.hBytes sy, peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j) a = peek (R.room.fm n) a := by
+  intro n hC hE j hj
+  have h1 : seen R.clock.kind (R.base.b₁ sy) = R.room.C + 1 := R.chg.hb₁
+  have h2 : seen R.clock.kind (R.base.a₂ sy nmS m0) = R.room.E + 1 := R.chg.ha₂
+  have h3 := seen_le_add R.clock.kind R.chg.roomOrder
+  have h4 := R.chg.b₁_lt_a₂ hR (R.entry₁ hB hK)
+  have hk : R.base.b₁ sy + (n - R.room.C) < R.base.a₂ sy nmS m0 := by omega
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have hcond := RoomMap.cond_of_rows hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) hk
+  have hsites := R.chg.roomSites (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) hk
+  exact RoomVert.hbytes_at_R (RoomVert.okV_of_check hV.a) (fun _ hB' => RoomVert.finR_spec hB') hcond hsites hj
+
+/-- **Each instruction of each frame of `room` before the entry that is not at the idle loop runs at least 64 dots before the frame's end**: `roomSites` and `late_of` -/
+theorem Run.roomTime (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    ∀ n, R.room.C ≤ n → n < R.room.E → ∀ j, (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc ≠ (ScreenPage.placesR sy nmS m0).idle →
+      (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).fdot ≤ dotsPerFrame - 64 := by
+  intro n hC hE j hj
+  have h1 : seen R.clock.kind (R.base.b₁ sy) = R.room.C + 1 := R.chg.hb₁
+  have h2 : seen R.clock.kind (R.base.a₂ sy nmS m0) = R.room.E + 1 := R.chg.ha₂
+  have h3 := seen_le_add R.clock.kind R.chg.roomOrder
+  have h4 := R.chg.b₁_lt_a₂ hR (R.entry₁ hB hK)
+  have hk : R.base.b₁ sy + (n - R.room.C) < R.base.a₂ sy nmS m0 := by omega
+  exact late_of (R.chg.roomSites (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) hk j) hj
 
 /-- **A frame of `room` on a jump's first frames follows `vstep`**, on the real machines: `RoomVert.air_arc` on the frames of `base` in the room. The room's frame `n + 1` is
 frame `b₁ + (n − C)` of `base`; it starts in the room's condition (`RoomMap.cond_of_rows`), its instructions meet `SiteOK` (`roomSites`), and before the entering frame it ends in
-the player's routine (`roomStay`). `hV` are the checks of `RoomVert`. -/
+the player's routine (`roomStay`). `SiteOK` puts each instruction away from the idle loop 6000 dots before the frame's end (`late_of`), so the frame does not end during the
+movement. `hV` are the checks of `RoomVert`, `hI` says that the idle loop is a `JMP` to itself. -/
 theorem Run.roomVert {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
     (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hI : FrameModel.idleAt (FrameModel.Rom.of m0) (ScreenPage.placesR sy nmS m0).idle = true)
     (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
     {n : Nat} (hC : R.room.C ≤ n) (hE : n + 1 < R.room.E) {k : Nat}
     (hAt : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k))
-    (hl : ((PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) (k + FrameModel.moveLen)).frame ≥ (R.room.fm n).frame + 1 ||
-      (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) (k + FrameModel.moveLen)).halted) = false)
     (hd : peek (R.room.fm n) sy.Player_State = 1 → peek (R.room.fm n) sy.DiffToHaltJump = 1)
     (hp : peek (R.room.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (R.room.fm n) sy.A_B_Buttons &&& 0x80)
     (hu : VertModel.vsOf sy (R.room.fm n) ∈ (VertAir.arcSet sy m0 rN.h rN.rise).map (·.s))
@@ -894,24 +939,46 @@ theorem Run.roomVert {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
   have h3 := seen_le_add R.clock.kind R.chg.roomOrder
   have h4 := R.chg.b₁_lt_a₂ hR (R.entry₁ hB hK)
   have hk : R.base.b₁ sy + (n - R.room.C) + 1 < R.base.a₂ sy nmS m0 := by omega
-  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.time₁ R.chg.ctlFirst₁
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
   have hcond := RoomMap.cond_of_rows hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) (by omega)
   have hsites := R.chg.roomSites (R.base.b₁ sy + (n - R.room.C)) (Nat.le_add_right _ _) (by omega)
   have hstay := R.chg.roomStay (R.base.b₁ sy + (n - R.room.C) + 1) (by omega) hk
   rw [R.base.next] at hstay
   have e : R.room.fm (n + 1) = PipeTransition.frame (R.room.fm n) (R.room.inAt n) := RoomJoin.RoomRun.next R.room n hC
   rw [e]
-  exact RoomVert.air_arc hV hcond hsites hAt hl hd hp hu ht hvy hstay
+  exact RoomVert.air_arc hV hI hcond hsites hAt (fun j hj => late_of (hsites j) hj) hd hp hu ht hvy hstay
 
-/-- **What the room's frames give**: the entering frame ends with the position at or right of the mouth, no frame before it comes to the head's collision with a block, and a
-frame on a jump's first frames follows `vstep` -/
+/-- **At the end of each frame of `room` before the entry, in a jump the jump's halt value is 1, and bit 7 of A of the frame before is bit 7 of A**, on the real machines:
+`RoomPair.pair_run` on the frames of `base` in the room. The room's frame `n` ends at frame `b₁ + (n − C)` of `base`, before `a₂`; the rows of the change give both at the
+first control, and each frame of the room keeps them (two walks). `hP` are the checks of `RoomPair`. The old fields `room.halt` and `room.prevA`. -/
+theorem Run.roomPair {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hP : RoomPair.Checks sy nmS m0 nm₁ d₁)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    ∀ n, R.room.C ≤ n → n < R.room.E → (peek (R.room.fm n) sy.Player_State = 1 → peek (R.room.fm n) sy.DiffToHaltJump = 1) ∧
+      peek (R.room.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (R.room.fm n) sy.A_B_Buttons &&& 0x80 := by
+  intro n hC hE
+  have h1 : seen R.clock.kind (R.base.b₁ sy) = R.room.C + 1 := R.chg.hb₁
+  have h2 : seen R.clock.kind (R.base.a₂ sy nmS m0) = R.room.E + 1 := R.chg.ha₂
+  have h3 := seen_le_add R.clock.kind R.chg.roomOrder
+  have h4 := R.chg.b₁_lt_a₂ hR (R.entry₁ hB hK)
+  have hk : R.base.b₁ sy + (n - R.room.C) < R.base.a₂ sy nmS m0 := by omega
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have h := RoomPair.pair_run (a := R.base.a₂ sy nmS m0) hP hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ (Nat.le_add_right _ _) hk
+  exact ⟨h.halt, h.prevA⟩
+
+/-- **What the room's frames give**: the entering frame ends with the position at or right of the mouth, no frame before it comes to the head's collision with a block, a
+frame on a jump's first frames follows `vstep`, at the end of each frame before the entry the jump's halt value and A of the frame before are as the movement routine needs,
+and each frame before the entry comes to the player's routine before its end and runs each instruction away from the idle loop at least 64 dots before it.
+`hV` are the checks of the room's walks (`RoomVert`, `RoomPair`) and of the idle loop. -/
 theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
     (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hF : RoomMap.startCheckF sy nmS m0 = true)
-    (hEnd : SideEntryEnd.sideEntryEndCheck sy m0 = true) (hRest : SideEntryRest.restCheck sy nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hEnd : SideEntryEnd.sideEntryEndCheck sy m0 = true) (hRest : SideEntryRest.restCheck sy nmS m0 = true) (hV : RoomPair.RoomWalks sy nmS m0 rN.h rN.rise nm₁ d₁)
     (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     R.room.InRoom :=
   ⟨R.roomMouthE hT₁ hM hS hF hEnd hRest hR hB hK, R.roomBump hT₁ hM hS hR hB hK,
-    fun _ hC hE _ hAt hl hd hp hu ht hvy => R.roomVert hT₁ hM hS hV hR hB hK hC hE hAt hl hd hp hu ht hvy⟩
+    fun _ hC hE _ hAt hd hp hu ht hvy => R.roomVert hT₁ hM hS hV.vert hV.idle hR hB hK hC hE hAt hd hp hu ht hvy,
+    R.roomPair hT₁ hM hS hV.pair hR hB hK, R.room_le, ⟨_, hV.idle, R.roomTime hR hB hK⟩, R.roomArrive hT₁ hM hS hV.vert hR hB hK,
+    R.roomBefore hT₁ hM hS hV.vert hR hB hK⟩
 
 /-- the frames after the timer's count: at least 33 -/
 theorem Run.hD (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hF : FlagRule.Checked fc (FlagRule.dataOf fc)) : 33 ≤ R.Df hF :=
@@ -930,6 +997,7 @@ theorem level_ge_of_parts {es es₁ : List Machine} {rt : StepWrites.Rt} (hq : 2
     (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
     (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
     (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
     (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     (hF : FlagRule.Checked fc (FlagRule.dataOf fc)) (hsy : fc.sy = sy) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
@@ -939,7 +1007,7 @@ theorem level_ge_of_parts {es es₁ : List Machine} {rt : StepWrites.Rt} (hq : 2
       (242 ≤ R.pole.g ∧ R.pole.g + 125 ≤ R.pole.c)) :
     1748 + R.j ≤ R.L := by
   have hc1 := R.change₁ hT₁ hB hK
-  have hc2 := R.change₂ hS hT hR hB hK
+  have hc2 := R.change₂ hS hT hQ hR hB hK
   have hE := R.hE
   have hgc : R.pole.g < R.pole.c := by
     rcases h₅ with ⟨_, b⟩ | ⟨_, _, b⟩ | ⟨_, b⟩ <;> omega

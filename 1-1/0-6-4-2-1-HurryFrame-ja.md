@@ -2,11 +2,11 @@
 
 # 急ぎの音楽を始めるフレーム
 
-**命題.** 操作中かプレイヤーの登場中に始まり、急ぎの音楽がない 1 フレーム全体を考えます。その各命令が機械の 1 つの条件を満たすなら、そのフレームは急ぎの音楽なしで終わるか、タイマー 100 以下で終わります。さらに操作できる状態で終わるなら、音楽がキューにある状態で終わるか、音楽なしで操作中のフレームの始まりの状態で終わります。つまり次のフレームも同じように始まります。
+**命題.** 操作中かプレイヤーの登場中に始まり、急ぎの音楽がない 1 フレーム全体を考えます。その各命令が機械の 1 つの条件を満たすなら、そのフレームは急ぎの音楽なしで終わるか、タイマー 100 以下で終わります。さらに操作できる状態で終わるなら、音楽がキューにある状態で終わるか、音楽なしで操作中のフレームの始まりの状態で終わります。つまり次のフレームも同じように始まります。操作中に始まるフレームは、どの命令もルーチン、モード、タスクをアドレスで書かないなら、操作できる状態で終わります。
 
-**これは仮定つきの定理です.** 仮定はこの 1 フレームの条件です。始まり方（`Start`）と、各命令の条件（`CleanM`）です。本物のフレームで確かめました。全部の走りについては証明していません。
+**これは仮定つきの定理です.** 仮定はこの 1 フレームの条件です。始まり方（`Start`）と、各命令の条件（`CleanM`）と、`frame_ctl` ではどの命令もルーチン、モード、タスクをアドレスで書かないこと（`CtlStore`）です。本物のフレームで確かめました。全部の走りについては証明していません。
 
-`HurryMusic.Run` にはフィールド `music` がありました。音楽を始めるフレームはタイマー 100 以下で始まる、というものです。これはこの歩きからの定理になりました（`HurryMusic.Run.music`）。タイマーは、フレームの始まりではなく終わりで読みます。`HurryMusic.Run` には音楽を始めるフレームのフィールド `start` もありました。これも、その前の操作中のフレームの帰納法で定理になりました（`HurryMusic.Run.startAt`）。同じ歩きを使います（`frame_start`）。
+`HurryMusic.Run` にはフィールド `music` がありました。音楽を始めるフレームはタイマー 100 以下で始まる、というものです。これはこの歩きからの定理になりました（`HurryMusic.Run.music`）。タイマーは、フレームの始まりではなく終わりで読みます。`HurryMusic.Run` には音楽を始めるフレームのフィールド `start` もありました。これも、その前の操作中のフレームの帰納法で定理になりました（`HurryMusic.Run.startAt`）。同じ歩きを使います（`frame_startC`）。フィールド `ctl`（これらのフレームはどれも操作できる状態で終わる）も定理になりました。3 つのバイトへの書き込みで道を止める歩き（`frame_ctl`）と、1 命令ずつの仮定 `noStore` からです。
 
 ## ゲームがすること
 
@@ -29,6 +29,12 @@ CleanM(m) :  PipeWrites.Clean。音楽のバイト、数字、6 バイトを守�
 frame_music :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j))   ⟹   off(frame(m, i))  ∨  timer(frame(m, i)) ≤ 100
 frame_start :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j)),  ctl(frame(m, i))   ⟹
                EventMusicQueue(frame(m, i)) & v ≠ 0  ∨  (Start(frame(m, i))  ∧  off(frame(m, i)))
+frame_startC : 同じもの。Start(frame(m, i)) のかわりに Startᶜ(frame(m, i))（操作中のフレームの始まり）
+
+Startᶜ(m)    :  ルーチンが操作の Start(m)
+CtlStore(m)  :  m.pc の命令が、ルーチン、モード、タスクをアドレス（ゼロページか絶対）で書く
+frame_ctl    :  ctl_check = true,  Startᶜ(m),  off(m),  ∀ j, CleanM(tr(j)),  ∀ j, ¬ CtlStore(tr(j))   ⟹   ctl(frame(m, i))
+ctl_of_start :  ctl_check = true,  Startᶜ(m)   ⟹   ctl(m)
 ```
 
 `ctl(m)` は `m` が操作できる状態であることです。操作のルーチン、ゲームのモード、ゲームコアです。
@@ -47,7 +53,19 @@ frame_start :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j)),  ctl(fra
 * どの道の終わりでも、音楽のビットは立っていないか、数字が分かっていてその値は 100 以下です（`finM`）。
 * さらにどの道の終わりでも（`finS`）、キューで音楽のビットが立っていると分かっているか、次のフレームの始まりの状態（`FrameKeep.endOK`: 何もしないループ、スタック、ドット、NMI、ジョイパッドのストローブ）で、6 バイトが 0 と分かっていて音楽のビットが立っていません。操作できる機械のルーチン、モード、タスクとあわせると、これはまた `Start` です（`frame_start`）。
 
-確かめ（`music_check`、`native_decide`）: 探索は 1,321,935 ステップで 75,437 の状態の表を見つけます。確かめは表の全部の状態と 4 つの始まりの状態（操作か登場、フレームの最初のできごとの直前か直後）から、両方の終わり（`finS`）で歩きます。ネイティブで 3 秒から 9 秒です（機械の混み具合による。`finS` で 3.9 秒）。`Proof/HurryFrame.lean` のビルドは 4.7 秒です。
+確かめ（`music_check`、`native_decide`）: 探索は 1,321,935 ステップで 75,437 の状態の表を見つけます。確かめは表の全部の状態と 4 つの始まりの状態（操作か登場、フレームの最初のできごとの直前か直後）から、両方の終わり（`finS`）で歩きます。ネイティブで 3 秒から 9 秒です（機械の混み具合による。`finS` で 3.9 秒）。
+
+## 操作中のフレームは操作中で終わる
+
+`frame_ctl` は同じ歩きを 2 か所変えたものです（地上のフレームの `FrameKeep.walkKC` と同じ考えです）。
+
+* 操作中のフレームの始まりからだけ始めます（`startsC`。フレームの最初のできごとの直前か直後）。
+* ルーチン、モード、タスクをアドレスで書く命令で、道を止めます（`storesTo`）。本物のフレームはそこに来ません。それが仮定 `¬ CtlStore` です。この 3 バイトは守るバイトなので、`CleanM` のもとでは添字やポインタでの書き込みでも変わりません。
+* どの道の終わりでも、3 バイトは操作の値でわかっています（`FrameKeep.guardK` の `FrameKeep.knownAll`）。なのでフレームは操作できる状態で終わります（`FrameKeep.ctl_of_known`）。
+
+音楽の歩きとこの歩きは、2 つの引数をもつ 1 つの歩き `walkM` です。書き込みで道を止めるバイト（音楽ではなし）と、終わりの条件（音楽では `finS`）です。
+
+確かめ（`hurry_ctl_check`、`native_decide`、`ctlCheckOf`）: 探索は 81,100 ステップで 5,519 の状態の表を見つけます。失敗はありません。確かめはプログラムで 0.33 秒です。`Proof/HurryFrame.lean` は 2 つの確かめ込みで 5.7 秒から 8.4 秒でビルドできます（機械の混み具合による）。
 
 ## 本物のフレームでの確認
 
@@ -62,17 +80,20 @@ frame_start :  check = true,  Start(m),  off(m),  ∀ j, CleanM(tr(j)),  ctl(fra
   終わりのタイマー                       108 全部で 99
   何もしないループで終わる               108 のうち 108
 動画の操作中か登場中のフレーム           833 フレーム。Start 833、音楽なし 833、CleanM は 4,034,601 命令のうち 4,034,601
+b から音楽のフレームまでのフレーム       108 の走りで 7,451。そのうち操作中に始まるものの命令で、CtlStore は 0
 ```
 
 ## 証明していないこと
 
 * 音楽を始めるフレームの `Start` と `CleanM`。1 フレームとその命令の条件で、`PipeWrites` や `FrameKeep` と同じ種類のものです。上で確かめました。`HurryMusic.Run` では、そのフレームの `Start` は `frame_start` で定理になりました。その前の操作中のフレームの最初のフレームからです（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。その最初のフレームの `Start` も定理です。フレーム 1 はタイトルで Start を押したことから、切り替えの最後のフレームは切り替えの段から出ます（[切り替えの最後のフレーム](0-6-4-2-2-2-1-HurryStart-ja.md)）。
 * 数字と 6 バイトに添字つきで書くのが数字のルーチンの書き込みだけであること。これは `CleanM` の一部で、上で確かめました。
+* 音楽の前の操作中のフレームの各命令で `¬ CtlStore` であること（`HurryMusic.Run.noStore`）。1 命令ずつの条件で、上で確かめました。エリアの切り替えや死を始めるフレームは、ルーチンをアドレスで書きます。なので `HurryMusic.Run` の走りでは、フレーム `b` は音楽の前の最後のそういうフレームよりあとです。
 
-**ファイル.** `Theorems/HurryFrame.lean`（`CleanM`、`Start`、`CleanAt`、`finS`、`frame_music`、`frame_start`）、非公開の `Proof/HurryFrame.lean`（`music_check`）。記号 `Eng_PlayerEntrance`（`tools/smb-symbols.txt`）。
+**ファイル.** `Theorems/HurryFrame.lean`（`CleanM`、`Start`、`CleanAt`、`finS`、`frame_music`、`frame_start`、`frame_startC`、`ctlCheckOf`、`frame_ctl`、`ctl_of_start`）、非公開の `Proof/HurryFrame.lean`（`music_check`、`hurry_ctl_check`）。記号 `Eng_PlayerEntrance`（`tools/smb-symbols.txt`）。
 
 **再現.**
 ```
 .lake/build/bin/smbrta music-check            # 探索と確かめをプログラムで
+.lake/build/bin/smbrta hurry-ctl-check        # 書き込みで道を止める、操作中のフレームの歩きをプログラムで
 .lake/build/bin/smbrta hurry-check FM2        # 本物のフレームでの条件
 ```

@@ -1535,4 +1535,57 @@ theorem Frames.frac (hc : keepCheckOf sy m0 = true) (K : Frames sy m0 S a g seq)
 
 end
 
+/-! ## The frames of a run with their ends defined
+
+`Frames` takes the machine at the end of each counted frame as a parameter `seq`, tied to the run up to the touch by the field `seqAt`. `Keep` has no such parameter: the
+machine at the end of the counted frame `j` is frame `a + ix j` of the run, by definition (`Keep.seq`), for every `j`, before the touch and after it. It is the end of the
+`j`-th frame that ends not paused whenever `j` such frames end by the end of frame `top` (`Keep.up_at`, `Keep.ends_at`). `Keep.toFrames` gives the same frames as `Frames`,
+with `seqAt` true by the definition. -/
+
+/-- **The frames of a run from control on**, up to the touch `g`: the fields of `Frames` without `seq` and `seqAt`. The machine at the end of the counted frame `j` is
+defined from the run (`Keep.seq`). Every field is a hypothesis. -/
+structure Keep (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) where
+  /-- a frame from control by whose end `g` frames have ended not paused: the search for the counted frames looks up to it -/
+  top : Nat
+  /-- `g` frames end not paused by the end of frame `top` -/
+  many : g ≤ upTo (upAt sy m0 S a) top
+  /-- no instruction of a frame before the touch's frame, counted or not, writes the routine, the mode or the task byte by its address -/
+  noStore : ∀ n, n + 1 < ixOf sy m0 S a top g → ∀ k, CtlStore sy (trace (S.seq (a + n)) (S.inp (a + n)) k) = false
+  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardF` -/
+  cleanF : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardF sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
+
+section
+variable {sy : Syms} {m0 : Machine} {S : RealRun} {a : Nat} {g : Nat}
+
+/-- **The machine at the end of the counted frame `j`**: frame `a + ix j` of the run, a definition for every `j`. When `j` frames end not paused by the end of frame
+`top`, it is the end of the `j`-th of them (`Keep.up_at`, `Keep.ends_at`); `seq 0` is frame `a`. -/
+abbrev Keep.seq (K : Keep sy m0 S a g) (j : Nat) : Machine := S.seq (a + ixOf sy m0 S a K.top j)
+
+/-- **The same frames as `Frames`**: the field `seqAt` holds by the definition of `Keep.seq` -/
+def Keep.toFrames (K : Keep sy m0 S a g) : Frames sy m0 S a g K.seq := ⟨K.top, K.many, fun _ _ => rfl, K.noStore, K.cleanF⟩
+
+/-- where the counted frame `j` begins: as `Frames.fm` -/
+abbrev Keep.fm (K : Keep sy m0 S a g) (j : Nat) : Machine := K.toFrames.fm j
+
+/-- the input of the counted frame `j`: as `Frames.pad` -/
+abbrev Keep.pad (K : Keep sy m0 S a g) (j : Nat) : UInt8 := K.toFrames.pad j
+
+/-- the machine at control is the run's frame `a` -/
+theorem Keep.seq0 (K : Keep sy m0 S a g) : K.seq 0 = S.seq a := K.toFrames.seq0
+
+/-- **A counted frame ends with the game not paused**, before the touch and after it: for every `j` with `j` frames ending not paused by the end of frame `top` -/
+theorem Keep.up_at (K : Keep sy m0 S a g) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ upTo (upAt sy m0 S a) K.top) : Unpaused sy m0 (K.seq j) := by
+  have h := (nthUp_at (f := upAt sy m0 S a) h1 h2).2.1
+  simpa [upAt] using h
+
+/-- **A counted frame is a real frame of the run**, before the touch and after it: it ends at `seq j`, from the machine and the input of frame `a + ix j − 1` -/
+theorem Keep.ends_at (K : Keep sy m0 S a g) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ upTo (upAt sy m0 S a) K.top) :
+    K.seq j = frame (S.seq (a + (ixOf sy m0 S a K.top j - 1))) (S.inp (a + (ixOf sy m0 S a K.top j - 1))) := by
+  have h : 1 ≤ ixOf sy m0 S a K.top j := (nthUp_at (f := upAt sy m0 S a) h1 h2).1
+  rw [Keep.seq, ← S.next]
+  congr 1
+  omega
+
+end
+
 end Smbrta.FrameKeep

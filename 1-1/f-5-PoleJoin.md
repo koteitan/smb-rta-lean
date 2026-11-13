@@ -75,16 +75,18 @@ L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_lat
 
 ## The fraction and the castle flag
 
-`seq j` is the machine at the end of the counted frame `j`. `castle(m)` says that `StarFlagTaskControl` is not 0. `frac(P) = P mod 256` is the byte that `CastleWalk.atPole` writes, and `fracs` are the 16 multiples of 16 and 255.
+`seq j` is the machine at the end of the counted frame `j`: the frame `a + ix(j)` of the run, where `ix(j)` is the `j`-th frame from control that ends not paused. It is a definition (`Run.seq`), on every frame, before the touch and after it. `castle(m)` says that `StarFlagTaskControl` is not 0. `frac(P) = P mod 256` is the byte that `CastleWalk.atPole` writes, and `fracs` are the 16 multiples of 16 and 255.
 
 ```
-keep            :  FrameKeep.Frames: the frames up to the touch on the real machine   (field)
+keep            :  FrameKeep.Keep: the frames up to the touch on the real machine   (field)
+seq j           =  S.seq(a + ix(j))                                           (definition: Run.seq)
 fracCheck       :  posP(B.m) mod 16 = 0                                       (pole_frac, native_decide)
 keepCheck       :  the walk of one whole frame in control                     (keep_check, native_decide)
 AtCtl(seq 0)    :  seq 0 is the start of a frame in control, with the castle flag down   (an argument; Route.Run.atCtl₀)
 Run.fracP       :  Start(seq 0),  fracCheck,  keepCheck,  AtCtl(seq 0),  Run  →  ∀ j,  1 ≤ j ≤ g  →  P(j) mod 16 = 0
 Run.frac        :  the same  →  P₂(g) mod 16 = 0
 Run.frac_mem    :  the same  →  frac(P₂(g)) ∈ fracs
+toCastle        :  c ≤ upTo(top)   (c frames end not paused by the end of frame top)   (field)
 atCastle        :  castle(seq c) = true                                       (field)
 Run.noCastle_of :  the same  →  ∀ j ≤ g,  castle(seq j) = false
 Run.afterTouch  :  the same  →  g < c
@@ -108,6 +110,7 @@ The fields changed:
 * Then (item 1-1-0-4): `Run` takes the real frames of the whole run and the frame of control, `Run sy m0 b vs B T J Nc F S a` with `S : FrameKeep.RealRun`, `a : Nat`; so does `keep : FrameKeep.Frames sy m0 S a g seq`. Removed in `keep`: `all`, `inp`, `next` (now `all n = S.seq (a + n)`, a definition, and the theorem `Frames.next`). New theorem `Run.seq0 : seq 0 = S.seq a`: the old link `Route.Run.atCtl` is now the theorem of that name. The private `pole_join`, `pole_touch`, `pole_touch_castle` take `S`, `a` as implicit arguments.
 * Then removed in `keep`: `ctl` (now the theorem `Frames.ctlAll`, from the second walk of `keepCheckOf`). Added in `keep`: `noStore` (no instruction of a frame before the touch's frame writes the routine, the mode or the task by its address). `edge` changed: it no longer forbids the edge store and the head's collision routine; right after either of them, up to the write, he is left of the pole's range (`PoleFrame.again`). No signature changed.
 * Then removed in `keep`: `ix`, `ix0`, `order` (the counted frames are now the frames that end not paused, a definition: `Frames.ix`, and the theorems `Frames.ix0`, `Frames.order`, `Frames.up`, `Frames.down`), `at_ix` (now the field `seqAt`), `clean` (now the field `cleanF`, `CleanK` of `FrameKeep.guardF`, and the theorem `Frames.clean`). Added in `keep`: `top`, `many` (`g` frames end not paused by the end of frame `top`). In `frames`, the fields `unpaused`, `lagPaused`, `spare` are gone ([the frames above ground](e-2-SurfaceFrames.md)). No signature changed.
+* Then removed: `seq` (now the definition `Run.seq = keep.seq`: `seq j = S.seq(a + ix(j))` on every frame, so the frames after the touch are real frames of the run too), and in `keep` the field `seqAt` (`keep` is now `FrameKeep.Keep sy m0 S a g`, which has no `seq`; `keep.toFrames` is the old `FrameKeep.Frames`, with `seqAt` true by the definition). Added: `toCastle : c ≤ upTo(upAt, keep.top)`: the castle entry is the end of a counted frame of the run. `flagAny`, `flagTight` and `other` now ask the flag only on the frames up to `c` (`FollowsTouch sy flag g c E n` asks `g + k ≤ c`): weaker. `DirectFlag`, `OtherFlag`, `FollowsTouch` and `DirectWay` take `c` after `g`. `frames` is `SurfaceFrames.OnFrames sy m0 B T J g keep.seq fr keep.toFrames`. No signature of a theorem changed.
 
 On real frames (`pole-frac-check`, after the last change, exit 0, bad 0):
 
@@ -123,19 +126,31 @@ On real frames (`pole-frac-check`, after the last change, exit 0, bad 0):
 * No machine has the castle flag up to the touch.
 * `pole-join-check` reads the three fields on the TAS (`frac(P₂(g)) = 80`), on 1089 then `02808080` (64), and on the touch with A held (112). The flags agree with the checked touch with that fraction.
 
+The counted frames from the touch to the castle, on real runs (`castle-count-check`, exit 0, bad 0). `g` and `c` are counted frames from control: a frame is counted when it ends not paused.
+
+| run | runs | touches | castle entries | frames from the touch to the castle (ending paused) | `c − g` |
+|---|---|---|---|---|---|
+| the movie | 1 | 1 | 1 | 126 (0) | 126 |
+| from 2 frames before the movie's touch, Start on frame `k` (`k` = 0 to 140) and again 45 frames later | 141 | 141 | 141 | 23,436 (5,670) | 126 |
+| random inputs, Start at random, from the movie's frames 1052 to 1091 | 200 | 158 | 140 | 41,863 (17,803) | 126, 159 to 166 |
+
+* On every run the castle flag first goes up on a frame that ends not paused. So `c` is a counted frame, `seq c` has the flag, and `toCastle` holds with `top` that frame.
+* After the touch, the castle flags of the counted frames up to `c` are those of the run from the touch's end with no input and no pause, and so is `c − g`. A pause after the touch changes nothing that `FollowsTouch` reads.
+* From the touch to the castle, a frame is counted exactly when the phase of the clock moves (`CastleToLevel.kindOf`): 0 frames disagree. Lean does not use this yet: `c` is not joined to the clock's castle entry `E` (part 0).
+
 ## Assumptions (not proved in Lean)
 
 The hypotheses are the fields of `Run` and the structures in it. `pole_join` assumes all of these.
 
 | hypothesis | says | evidence |
 |---|---|---|
-| `fr`, `seq`, `frames.reads` | frames are read from the machines; on `g`, only the fields up to `P₂` are real (the touch moves him); `next` is a theorem | [Above ground: the frames from control, one by one](e-2-SurfaceFrames.md) |
+| `fr`, `frames.reads` | frames are read from the machines (`seq` is a definition); on `g`, only the fields up to `P₂` are real (the touch moves him); `next` is a theorem | [Above ground: the frames from control, one by one](e-2-SurfaceFrames.md) |
 | `frames.step` | one frame from a clean state is a `OneFrame`; `model`, `hit`, `stop`, `off` are theorems | real runs on that page |
 | `frames.vert`, `frames.box` | frames before `J` follow `vstep`, and the collision routine does what it does on the machine at control; `box` is a theorem | real runs on that page |
 | `touches`, `tiles`, `edge`, `moved` | frame `g` of `keep` is a touch on real machines; up to the write, a side check that reads a pole tile reads the pole's column (`TileRead`); right after the edge store and after the head's collision routine he is left of the pole's range; `P₂(g)` is the position at the end of the move; `P₀ ≤ P₂(g)` is the theorem `Run.inRange` from these and `keep`, by the walk of the whole frame | [The touch of the pole: one whole frame](f-6-16-PoleFrame.md) |
-| `keep` | the frames up to the touch on the real machine, counted or not, one after the other from control: frames of the run from frame `a` on (`all n = S.seq (a + n)`, a definition; `next` is a theorem); a frame is counted when it ends not paused, and the counted frame `j` ends at `seq j` (`top`, `many`, `seqAt`); no instruction of a frame before the touch's frame writes the routine, the mode or the task by its address (`noStore`; that these frames end in control is the theorem `Frames.ctlAll`); each instruction meets `CleanK` of `guardF`, which also protects the pause byte, the area's type, the swimming flag and the change of size (`cleanF`). That each frame starts in control and that the `lag` frames keep the castle flag and the fraction's low 4 bits are the theorems `Frames.all_start`, `Frames.start`; `16 ∣ P₂(g)` is the theorem `Run.frac`, no castle flag up to the touch the theorem `Run.noCastle_of` | [One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md) |
-| `atCastle` | the castle flag of the machine at the end of frame `c`; `g < c` is the theorem `Run.afterTouch` | the code; real runs above |
-| `other` | not a direct grab: for 131 frames the flag is that of a checked touch at another height | measured: at least the touch + 153 |
+| `keep` | the frames up to the touch on the real machine, counted or not, one after the other from control: frames of the run from frame `a` on (`all n = S.seq (a + n)`, a definition; `next` is a theorem); a frame is counted when it ends not paused, and the counted frame `j` ends at `seq j = S.seq(a + ix(j))`, a definition (`top`, `many`: `g` frames end not paused by the end of frame `top`); no instruction of a frame before the touch's frame writes the routine, the mode or the task by its address (`noStore`; that these frames end in control is the theorem `Frames.ctlAll`); each instruction meets `CleanK` of `guardF`, which also protects the pause byte, the area's type, the swimming flag and the change of size (`cleanF`). That each frame starts in control and that the `lag` frames keep the castle flag and the fraction's low 4 bits are the theorems `Frames.all_start`, `Frames.start`; `16 ∣ P₂(g)` is the theorem `Run.frac`, no castle flag up to the touch the theorem `Run.noCastle_of` | [One whole frame in control keeps the castle flag and the fraction's low bits](f-6-19-FrameKeep.md) |
+| `toCastle`, `atCastle` | the castle entry `c` is a counted frame of the run (`c ≤ upTo(top)`), and the machine at its end has the castle flag; `g < c` is the theorem `Run.afterTouch`. The bound does not use `toCastle`: it makes `c` the number of frames up to a real frame, for the join with the clock | the code; `castle-count-check` below |
+| `other` | not a direct grab: for 131 frames, up to `c`, the flag of the counted frames is that of a checked touch at another height | measured: at least the touch + 153 |
 | `path`, `atY`, `atRising` | the jump's frames are a path of `Jump.arcSucc` from the ground | `Jump.md`; the jump starts from the ground: no enemy to bounce off near the pole |
 | `order`, `left`, `air` | he comes from the left, and from frame `q` he falls below the block's top. A fall cannot skip the landing window. On a frame with the feet over the block, the case has the frame's moving direction, height and fall speed | code; going over the pole and back is not covered |
 | `Collides`, `lowCase`, `inBlockCase` | a frame at the block runs `PlayerBGCollision` as `PoleGrab.collide` on a case of `cases` | routine checked alone; small Mario |
@@ -144,7 +159,7 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 | `onGround` | a fast jump later than `L + 1`: frame `T' − 1` runs `ImposeFriction` on a state of `frictionCheck` (`Imposes`) | real runs below |
 | `stopped` | a fast jump on `L + 1`: a frame from speed 0 runs `ImposeFriction`, or the movement routine on a case of `keepCases` | real runs below |
 | `fall` | a slow jump: the fall began on `w ≤ q` by a start of `fallStarts`, or by stepping off the base; the frames follow `fallNext` | map facts below |
-| `flagAny`, `flagTight` | slow grab: for 124 frames the flag is that of a checked direct grab with the fraction of `P₂(g)`; for 125 frames if the frame before moved left and the fraction is below `F` | measured below |
+| `flagAny`, `flagTight` | slow grab: for 124 frames, up to `c`, the flag of the counted frames is that of a checked direct grab with the fraction of `P₂(g)`; for 125 frames if the frame before moved left and the fraction is below `F` | measured below |
 
 The state at control, `Start`, and the machine at control, `AtCtl`, are arguments of the theorems. `Route.Run.start` and `Route.Run.atCtl₀` give them from the change's last row.
 
@@ -176,4 +191,5 @@ Not proved: that every run satisfies `Run`. The bound `B` of the position is in 
 .lake/build/bin/smbrta pole-join-check FM2 1036 HEX         # the same with the inputs from frame 1036 replaced
 .lake/build/bin/smbrta pole-frac-check FM2 300               # 16 ∣ P' − P, fracCheck, no castle flag on real runs (about 4 min)
 .lake/build/bin/smbrta keep-frames-check FM2 100            # the conditions of keep on real runs
+.lake/build/bin/smbrta castle-count-check FM2 200           # the counted frames from the touch to the castle, with pauses (about 1 min)
 ```

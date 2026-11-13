@@ -2,7 +2,7 @@
 
 # 地上: 操作できてからのフレームを 1 つずつ
 
-**主張.** [操作から城まで](f-5-PoleJoin-ja.md) は走り全体についての文 `model`、`hit`、`stop`、`box`、`off`、`next`、`startP`、`startV` を仮定していました。これらは定理になりました。残る仮定は 1 フレームについての文です。1〜8 フレーム目の縦の一歩（`vstep`）も本物の機械で定理になりました。そこで残るのは、スクロールの処理からあとが縦のバイトを変えないことです。各フレームの始まりからプレイヤーのルーチンまでの部分は定理になりました。その部分の歩き（[`CtrlKeep`](#プレイヤーのルーチンまでのフレーム)）が、25 バイトを保ち、移動の要る状態でルーチンに来ることを示します。なのでフィールド `vBefore`、`Moves.at_ctrl`、`Moves.before`、`Moves.bits` はなくなりました。フレームの両端も、1 つの機械か 1 つのフレームの条件から定理になりました。数えるフレームはポーズでない状態で終わるので、プレイヤーのルーチンに来ます（`Moves.arrive` をなくし、新しく `unpaused`）。数えないフレームはプレイヤーのルーチンに来ないので、25 バイトを保ちます（`Moves.lag` をなくしました）。フレームの残り、プレイヤーのルーチンからフレームの終わりまでの歩き（[下](#フレーム全体-プレイヤーのルーチンから終わりまで)）が、ルーチンに来たフレームはポーズでない状態で終わることと、操作中のどのフレームもエリアの種類、泳ぎのフラグ、大きさの変化を保つことを示すようになりました。なので数えないフレームがルーチンに来ないことは定理です（`OnFrames.lagNo`。新しく `lagPaused`: 数えないフレームはポーズで終わる）。`state` の値のうち 3 つも定理です。各命令の新しい条件は `spare` です: 添字かポインタでの書き込みは、これらの 4 バイトを書きません。フレームは `Run` のフィールド `keep`（[操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md)）のものと同じなので、フィールド `ends` もなくなりました。押している側がふさがれたフレームも定理になり、フィールド `masked` はなくなりました。`moves` の条件があと 2 つ定理になりました（[フレームの時間と位置の範囲](#フレームの時間と位置の範囲)）。移動のあいだにフレームが終わらないこと（`Moves.longer` をなくしました。移動の歩きと `CleanK` の条件 `time` から出ます）と、位置が範囲の端から遠いこと（`Moves.far` をなくしました。操作のときの位置と、`hstep` のとおりの前のフレームから出ます）です。`startP`、`startV` は本物の機械で証明しました。[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の最後の段から出ます。条件はその切り替えの条件と、`left` が操作の前に 0 にならないことだけです。
+**主張.** [操作から城まで](f-5-PoleJoin-ja.md) は走り全体についての文 `model`、`hit`、`stop`、`box`、`off`、`next`、`startP`、`startV` を仮定していました。これらは定理になりました。残る仮定は 1 フレームについての文です。1〜8 フレーム目の縦の一歩（`vstep`）も本物の機械で定理になりました。そこで残るのは、スクロールの処理からあとが縦のバイトを変えないことです。各フレームの始まりからプレイヤーのルーチンまでの部分は定理になりました。その部分の歩き（[`CtrlKeep`](#プレイヤーのルーチンまでのフレーム)）が、25 バイトを保ち、移動の要る状態でルーチンに来ることを示します。なのでフィールド `vBefore`、`Moves.at_ctrl`、`Moves.before`、`Moves.bits` はなくなりました。フレームの両端も、1 つの機械か 1 つのフレームの条件から定理になりました。数えるフレームはポーズでない状態で終わるので、プレイヤーのルーチンに来ます（`Moves.arrive` をなくし、新しく `unpaused`）。数えないフレームはプレイヤーのルーチンに来ないので、25 バイトを保ちます（`Moves.lag` をなくしました）。フレームの残り、プレイヤーのルーチンからフレームの終わりまでの歩き（[下](#フレーム全体-プレイヤーのルーチンから終わりまで)）が、ルーチンに来たフレームはポーズでない状態で終わることと、操作中のどのフレームもエリアの種類、泳ぎのフラグ、大きさの変化を保つことを示すようになりました。なので数えないフレームがルーチンに来ないことは定理です（`OnFrames.lagNo`。新しく `lagPaused`: 数えないフレームはポーズで終わる）。`state` の値のうち 3 つも定理です。各命令の新しい条件は `spare` です: 添字かポインタでの書き込みは、これらの 4 バイトを書きません。フレームは `Run` のフィールド `keep`（[操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md)）のものと同じなので、フィールド `ends` もなくなりました。押している側がふさがれたフレームも定理になり、フィールド `masked` はなくなりました。`moves` の条件があと 2 つ定理になりました（[フレームの時間と位置の範囲](#フレームの時間と位置の範囲)）。移動のあいだにフレームが終わらないこと（`Moves.longer` をなくしました。移動の歩きと `CleanK` の条件 `time` から出ます）と、位置が範囲の端から遠いこと（`Moves.far` をなくしました。操作のときの位置と、`hstep` のとおりの前のフレームから出ます）です。`startP`、`startV` は本物の機械で証明しました。[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の最後の段から出ます。条件はその切り替えの条件と、`left` が操作の前に 0 にならないことだけです。`moves` の部分があと 2 つ定理になりました。`state.prevA` はなくなりました: 操作中のどのフレームも、前のフレームの A と B の 7 ビット目を A と B の 7 ビット目と同じに保ちます（`OnFrames.prevAll`、[下](#前のフレームの-a-と-b)）。`After` のフィールド `md`、`rs` はなくなり、`stored` はスクロールの処理での機械の条件 `storedQ` になりました: フレームの終わりの動く向き、走りの速さ、覚えている速さは、スクロールの処理でのものです（`AfterKeep.keepH`、[下](#スクロールの処理からあと-3-つのバイト)）。各命令の新しい条件は `spareE` です: 添字かポインタでの書き込みは、これらの 5 バイトを書きません。
 
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
@@ -38,10 +38,11 @@ OneFrame(i, a, b) : MaskStop(a, b) ∨ (Pre(i, a, b) ∧ Coll(i, a, b))
 ```
 Masked(i, a)       : bits(a) & lr ≠ lr            lr は hstep が i から読む左右
 
-After(a, Q, b)     : b の f, fd, md は Q のもの ∧ (RunningSpeed(b) = 0 ⟺ RunningSpeed(Q) = 0) ∧ abs(b) = |v(Q)|
+After(a, Q, b)     : b の f, fd は Q のもの ∧ abs(Q) = |v(Q)|
                      ∧ ( (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = FF)
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
+AfterK(a, Q, b)    : After(a, Q, b) ∧ b の md, RunningSpeed, abs は Q のもの          3 つのバイトは定理（AfterKeep.keepH）
 
 MovesAt(a, M, x, n₀) : AtCtrl0(R)                                  プレイヤーのルーチンでの状態。FrameModel が要るもの（ふさぎは除く）
                        ∧ R の横の 8 バイトは a のもの                  a から R まで書かれない
@@ -49,10 +50,12 @@ MovesAt(a, M, x, n₀) : AtCtrl0(R)                                  プレイ�
                        ∧ frame(R) = frame(M)                           ルーチンは M のフレームの中で来る（Arrive）
                        ∧ ∀ n, pc(trM(n)) ≠ idle → fdot(trM(n)) ≤ dotsPerFrame − 64     CleanK の条件 time
                        ∧ idleAt(idle) ∧ far(a) ∧ after                 アイドルループは自分への JMP。far、after は下
+                       ∧ keepH                                         フレームの終わりの md, RunningSpeed, abs は各 Q のもの（AfterKeep.keepH）
 
-CtlState(a)        : Player_State(a) ∈ {0, 1, 2} ∧ JumpspringAnimCtrl(a) = 0 ∧ PrevA(a) & 80 = A_B(a) & 80
+CtlState(a)        : Player_State(a) ∈ {0, 1, 2} ∧ JumpspringAnimCtrl(a) = 0
+PrevOK(a)          : PrevA(a) & 80 = A_B(a) & 80                                         どのフレームでも定理（OnFrames.prevAll）
 AreaOK(v, a)       : AreaType(a) = v ∧ SwimmingFlag(a) = 0 ∧ PlayerChangeSizeFlag(a) = 0      どのフレームでも定理（OnFrames.areaAll）
-AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ ∀ n < ix g, AreaOK(v, all n)
+AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ hCheck(v) ∧ ∀ n < ix g, AreaOK(v, all n)
 
 Arrive(M, x, n₀)   : pc(trM(n₀)) = PlayerCtrlRoutine で M のフレームの中、n₀ より前の命令はそこにない
 
@@ -61,16 +64,16 @@ Moves(a, M, x, n₀) : state    CtlState(a)
 far(a)             : 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
 
 Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Arrive(M, x, n₀) ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ AreaOK(v, a) ∧ v ∈ {1, 2, 3}
-                ∧ far(a) ∧ idleAt(idle) ∧ Moves  →  MovesAt
-at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  スクロールの処理に来る Q があって hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ Moves  →  MovesAt
+at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  スクロールの処理に来る Q があって hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ AfterK(a, Q, b)
 one_of_moves  : modelOK ∧ MovesAt ∧ ¬Masked  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
 at_subsM      : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  スクロールの処理に来る Q があって (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
-                                                                  ∧ P(Q) = P(a) + 16·v(Q) ∧ After(a, Q, b)
+                                                                  ∧ P(Q) = P(a) + 16·v(Q) ∧ AfterK(a, Q, b)
 one_of_movesM : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  OneFrame(inAt(M, x, n₀), a, b)
 one_of_frames : OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ AreaRun(v) ∧ Clean(seq (j − 1)) ∧ far(seq (j − 1)) ∧ idleAt(idle)  →  OneFrame(inp j, seq (j − 1), seq j)
 ```
 
-`keepA` と `StartK`、`CleanK`、`ctrlCheck` は次の節にあります。`all n` は `keep` のフレームで、数えるものも数えないものも入ります。`ix g` は触るフレームです。`StartK(all n)` は操作できるときの機械から出る定理 `FrameKeep.Frames.all_start` です。各命令の `CleanK` はフィールド `keep.clean` です。`Moves.toAt` のほかの 2 つの条件は定理です（`OnFrames.arrive`、`OnFrames.lagKeep`、次の節）。
+`keepA` と `StartK`、`CleanK`、`ctrlCheck` は次の節にあります。`all n` は `keep` のフレームで、数えるものも数えないものも入ります。`ix g` は触るフレームです。`StartK(all n)` は操作できるときの機械から出る定理 `FrameKeep.Frames.all_start` です。各命令の `CleanK` はフィールド `keep.clean` です。`Moves.toAt` のほかの条件は定理です（`OnFrames.arrive`、`OnFrames.lagKeep`、次の節。`keepH` は `OnFrames.movesAt` の中で `AfterKeep.keepH` から）。
 
 `idle` はアイドルループ（`EndlessLoop`）で、`idleAt(idle)` はそれが自分への `JMP` だと言います。`numbersCheck` の中の ROM の確認です。`modelOK` は `FrameModel` の ROM の確認です。これは `numbersCheck` の一部になったので、非公開の証明が `native_decide` で計算します（約 3 秒増えます）。`move_model` は押している側がふさがれていないことを要ります。`bits(R) = bits(a)` があれば、これは `¬Masked` です。
 
@@ -85,6 +88,7 @@ moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1),
 vAfter   : 1 ≤ j < J, j < g、Q はスクロールの処理  →  seq j での縦のバイトと A は Q のもの
 box      : 1 ≤ j < J, j < g, Q はスクロールの処理  →  Q から seq j まで、当たり判定のルーチンは B.m で
            (pix P(Q), y, w, vy, st) を動かしたときと同じ        (y, vy, st) は vstep の結果、w は速さの符号の代表
+spareE   : n < ix g  →  all n のフレームの各命令は SpareE（下）を満たす
 ```
 
 `pause` はポーズのバイト（`GamePauseStatus`）で、ROM から読みます。NMI がモードのルーチンを呼ぶ直前の読み込みの番地です（`CtrlKeep.pauseA`）。ゲームがポーズしているあいだ、その最下位ビットは 1 です。ポーズの処理がこれを立て、消します。
@@ -98,13 +102,13 @@ box      : 1 ≤ j < J, j < g, Q はスクロールの処理  →  Q から seq 
 ```
 HaltOK(m)  : st(m) = 1 → DTHJ(m) = 1
 vNext(a, b) = vstepV(vs(a), A(b), abs(a))
-Moves.vBefore : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Arrive ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ Moves  →  R での縦のバイトと A は a のもの、
-                かつ PrevA(R) & 80 = A_B(R) & 80                       （前のフィールド vBefore）
-vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ far(seq (j − 1)) ∧ idleAt(idle) ∧ HaltOK(seq (j − 1))
+vBefore    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Arrive ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ PrevOK(a)  →  R での縦のバイトと A は a のもの、
+               かつ PrevA(R) & 80 = A_B(R) & 80                        （前のフィールド vBefore）
+vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ far(seq (j − 1)) ∧ idleAt(idle) ∧ HaltOK(seq (j − 1)) ∧ PrevOK(seq (j − 1))
                →  vs(seq j) = vNext(seq (j − 1), seq j) ∧ HaltOK(seq j)
 ```
 
-操作できるときの状態はジャンプ中ではないので（`numbersCheck` の中）、`HaltOK(seq 0)` が成り立ちます。なので `quiet_upto` は、ほかの事実といっしょに、`j < J` のすべてで `vs(seq j) = vNext(...)` と `HaltOK(seq j)` を帰納法で証明します。`vertOK` は `numbersCheck` の一部です（約 0.1 秒増えます）。
+操作できるときの状態はジャンプ中ではないので（`numbersCheck` の中）、`HaltOK(seq 0)` が成り立ちます。`PrevOK(seq (j − 1))` は `OnFrames.prevAll` から出ます。なので `quiet_upto` は、ほかの事実といっしょに、`j < J` のすべてで `vs(seq j) = vNext(...)` と `HaltOK(seq j)` を帰納法で証明します。`vertOK` は `numbersCheck` の一部です（約 0.1 秒増えます）。
 
 | 前のフィールド | 今 |
 |---|---|
@@ -114,7 +118,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `fr j` についての `box` | 本物の機械についての `box`、スクロールの処理から |
 | `Moves.input`: ルーチンは `readIn(a, b)` を読む | なくなった。モデルの入力はルーチンが読むものそのもの |
 | `vert`: 1〜8 フレーム目は `vstep` のとおり | 定理 `vert_of`。新しく `vBefore`、`vAfter`（移動のルーチンの外は縦のバイトを変えない） |
-| `vBefore`: プレイヤーのルーチンまで縦のバイトと A は前のフレームのもので、PrevA は A | 定理 `Moves.vBefore`。`CtrlKeep` の歩きから。`OnFrames.lagKeep` と `CtlState.prevA` を使う |
+| `vBefore`: プレイヤーのルーチンまで縦のバイトと A は前のフレームのもので、PrevA は A | 定理 `vBefore`（前の名前は `Moves.vBefore`）。`CtrlKeep` の歩きから。`OnFrames.lagKeep` と前のフレームの `PrevOK`（`OnFrames.prevAll`）を使う |
 | `Moves.at_ctrl`: プレイヤーのルーチンで `AtCtrl0` | 定理 `Moves.toAt`。歩きから。新しく `Moves.state`（前のフレームの終わりで `CtlState`） |
 | `Moves.before`、`Moves.bits`: ルーチンまで横のバイトと当たり判定のビットを書かない | 定理 `Moves.toAt`。歩きから |
 | `Moves.arrive`: フレームは終わる前に `arr j` で初めてルーチンに来る | 定理 `OnFrames.arrive`。ポーズのビットを追う歩きと `Frames.up`（数えるフレームはポーズのバイトの最下位ビットが 0 で終わる。数えるフレームの定義から）から |
@@ -125,6 +129,8 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `ends` と、データ `fm`、`pad` | `Run` の `keep.ends`、`keep.fm`、`keep.pad`。両方で同じフレームの組を使う |
 | `Moves.longer`: プレイヤーのルーチンから 728 命令のうちにフレームが終わらない | 定理 `FrameModel.trace_inFrame`。移動の歩き（`InFrameN`）と `CleanK` の条件 `time`（`keep.clean`）から。新しく `idleAt(idle)`、`numbersCheck` の中の ROM の確認 |
 | `Moves.far`: フレームの始まりの位置は範囲の両端から 8 ピクセル以上 | 定理 `far_of_follow`。`Start` と、`hstep` のとおりの前のフレームから。新しく `SurfaceRun.allCheck` の確認 `far`（`B.m` について） |
+| `CtlState.prevA`: 前のフレームの終わりで、前のフレームの A の 7 ビット目は A のもの | 定理 `OnFrames.prevAll`。`noStore` の書き込みで道を切った切れ目からの歩き（`PrevKeep.prev_end`）と、操作のときからの帰納法から。新しく `spareE`（その 2 バイト）、`Start.ab`、`Start.prev`（段から）、`numbersCheck` の中の確認 `prevCheck` と `PrevOK(B.m)` |
+| `After.md`、`After.rs`、`After.stored`: フレームの終わりの動く向き、走りの速さが 0 か、覚えている速さ | 定理 `AfterKeep.keepH`: フレームの終わりの 3 バイトはスクロールの処理でのもの。`stored` は `storedQ`（スクロールの処理の機械で abs(Q) = v(Q) の絶対値）になった。新しく `spareE`（その 3 バイト）、`numbersCheck` の中の確認 `hCheck` |
 
 ## フレームの時間と位置の範囲
 
@@ -206,6 +212,58 @@ OnFrames.lagNo   : ctrlCheck ∧ AreaRun(v) ∧ OnFrames ∧ (∀ n < ix g, Star
 * **ジャンプ台.** `JumpspringAnimCtrl` も守って見ると、探索は終わりませんでした: 9 分、6.8 GB で止めました。ジャンプ台の物の処理は、乗ったときにこれを書くので、どのみち歩きでは保てません。
 * **`unpaused` と `lagPaused` はなくなった.** どのフレームを数えるかは `keep` の `ix` です。歩きから、フレームがポーズでない状態で終わるのは、ちょうどプレイヤーのルーチンに来たときです。なので `ix` を、ポーズでない状態で終わるフレームとして定義しました。2 つのフィールドは定義から成り立ちます。
 
+## 前のフレームの A と B
+
+プレイヤーのルーチンは A と B（`A_B_Buttons`）をパッドのビットから書き、ゲームエンジンは終わりにそれを前のフレームの A と B（`PreviousA_B_Buttons`）に写します（ルーチン `SaveAB`）。`PrevKeep` は、操作中のフレームが 2 つの 7 ビット目を同じに保つことを示します。
+
+```
+PrevOK(m)        : PrevA(m) & 80 = A_B(m) & 80
+SpareAB(m)       : m の添字かポインタでの書き込みは、行き先 t < 2000h のとき、A_B も PrevA も書かない
+CtlStore(m)      : m の命令は、ルーチン、モード、タスクを番地で書く
+prev_end         : ctrlCheck ∧ prevCheck(v) ∧ StartK(M) ∧ (∀ n, CleanK_F(trM(n)) ∧ SpareAB(trM(n)) ∧ ¬CtlStore(trM(n))) ∧ AreaOK(v, M) ∧ PrevOK(M)
+                   →  PrevOK(frame(M, x))
+OnFrames.prevAll : ctrlCheck ∧ prevCheck(v) ∧ AreaRun(v) ∧ OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ PrevOK(seq 0)  →  ∀ n < ix g, PrevOK(all n)
+```
+
+`CleanK_F` は `FrameKeep.guardF` の `CleanK` です（フィールド `keep.cleanF`）。触るフレームより前のフレームに `CtlStore` の命令はありません（フィールド `keep.noStore`）。
+
+* **歩き.** ポーズのビットの歩きはプレイヤーのルーチン（切れ目）に来ます。そこから、パッドのビットの 7 ビット目の値 `b` ごとに、`FrameKeep.walkKC` の歩きがフレームの終わりまで追います。A_B と PrevA も守り、ルーチン、モード、タスクを番地で書く命令で道を止めます。フレームの終わりで A_B と PrevA の 7 ビット目が `b` であることを確かめます。ルーチンに来ないフレームは両方のバイトを保ちます（`CtrlKeep.keep_of_noCut`）。
+* **切る理由.** 第 8 回の、切らない探索は 26 のフレームの終わりで失敗しました。そこでは PrevA が分かりませんでした。失敗する道は、タスクを番地で書く道です: 斧（`HandleAxeMetatile`）とエリアの切り替え（`ChgAreaMode`）。タスクがゲームコアのものより小さいと、ゲームコアはゲームエンジンの前に戻るので、`SaveAB` は動きません。ルーチン、モード、タスクへの書き込み（8 か所: この 2 つとルーチンへの 6 つ）で道を切ると、探索の失敗は 0、表は 7,079 状態です（前は 74,910）。
+* **帰納法.** `seq 0` は `B.m` の A_B と PrevA を持ちます（`Start`、切り替えの段から。段は PrevA も知っています）。`numbersCheck` は `PrevOK(B.m)` を確かめます。触るフレームより前の `keep` の各フレームは `PrevOK` を保ちます。
+* **数.** `prevCheck`: 切れ目までのポーズのビットの歩きと、そこからの 2 つの歩き。ネイティブで 3.1 秒。`numbersCheck` の一部です（`Numbers.prev`）。
+
+## スクロールの処理からあと: 3 つのバイト
+
+`AfterKeep` はプレイヤーのルーチンからのフレームを 2 つの歩きで追います。1 つ目は切れ目から、フレームが初めてスクロールの処理（`PlayerSubs`）に来るところまでです。2 つ目はそこからフレームの終わりまでで、1 つのバイトを `TaintRun` のカウンタとして追います（`Env.rkI`）: そのバイトへのどの書き込みでも失敗し、フレームの終わりでまだ追えていることを確かめます。フレームがまたスクロールの処理に来ても失敗します。どちらもルーチン、モード、タスクを番地で書く命令で道を止めます。
+
+```
+hI          = Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute
+SpareH(m)   : m の添字かポインタでの書き込みは、行き先 t < 2000h のとき、hI のバイトを書かない
+keepH       : ctrlCheck ∧ hCheck(v) ∧ StartK(M) ∧ (∀ n, CleanK_F(trM(n)) ∧ SpareH(trM(n)) ∧ ¬CtlStore(trM(n))) ∧ AreaOK(v, M) ∧ Arrive(M, x, n₀)
+              →  ∀ k ≥ n₀, pc(trM(k)) = PlayerSubs  →  ∀ y ∈ hI, y(frame(M, x)) = y(trM(k))
+SpareE(m)   : SpareAB(m) ∧ SpareH(m)          OnFrames のフィールド spareE
+```
+
+* **数.** 1 つ目の歩き: 1,769 歩、表は 134 状態、スクロールの処理で 8 状態。2 つ目の歩き: バイトごとに 61,977 歩、表は 3,986 状態、失敗 0。`hCheck`: ネイティブで 1.9 秒。`numbersCheck` の一部です（`Numbers.keepH`）。
+* **追うバイトのある 1 歩.** `FrameKeep.s_kstep` はカウンタが 2 以上であることを要ります。2 つ目の歩きは代わりに、追うバイトを減らす命令がないこと（`isRkDec`）を確かめます。`LagFrames` と同じです: `s_kstepL`。
+
+**歩きが出会う書き込み.** プログラム `after-bytes` は、横のバイトのそれぞれについて、スクロールの処理の 8 状態から 2 つ目の探索を動かします。
+
+* `keep.cleanF` だけで、バイトを守らないと、歩きはそれぞれのバイトを、行き先の分からない添字かポインタでの書き込み約 95 か所で失います: 敵、スプライト、エリアの読み取り。`guardK` が守る `SprObject_X_MoveForce` はそこでは失いません。
+* バイトも守ると、`hI` の 3 バイトは閉じます。ほかは番地での書き込みに出会います:
+
+| バイト | 歩きが出会う、スクロールの処理からあとの書き込み |
+|---|---|
+| 速さ | `KillPlayer`、`KeepOnscr`（画面の端）、`ImpedePlayerMove`、`PutPlayerOnVine` |
+| サブ速さ | `PutPlayerOnVine` |
+| 向き | `FlagpoleCollision`、`PutPlayerOnVine` |
+| x | 添字 0 の移動のルーチン（歩きは分からない添字を分ける）、`PositionPlayerOnHPlat`、`ImpedePlayerMove`、`KeepOnscr`、`PutPlayerOnVine` |
+| ページ | x の書き込みと、`ExecGameLoopback` |
+| 端数 | 添字 0 の移動のルーチン |
+| 当たり判定のビット | `ImpedePlayerMove`、`PlayerBGCollision` の始め |
+
+`KillPlayer` はルーチンを書く前に速さを書くので、ルーチンへの書き込みで切っても、その前に出会います。`PutPlayerOnVine` には、ルーチンを書かない道からも来ます（ステータスバーより下のつたのタイル）。なのでサブ速さと向きは `After` に残ります: 歩きは、つたにもポールにも触らないことを知る必要があり、それは地図です。
+
 ## 走り全体の文は定理
 
 ```
@@ -236,6 +294,7 @@ Run.next, Run.startP, Run.startV                                 PoleJoin
 ```
 Start(B, m) : hs(m) = hs(B.m) ∧ P(m) = P(B.m) ∧ abs(m) = abs(B.m) ∧ bits(m) = bits(B.m) ∧ vs(m) = vs(B.m)
               ∧ AreaType(m) = AreaType(B.m) ∧ SwimmingFlag(m) = SwimmingFlag(B.m) ∧ PlayerChangeSizeFlag(m) = PlayerChangeSizeFlag(B.m)
+              ∧ A_B(m) = A_B(B.m) ∧ PrevA(m) = PrevA(B.m)
 ```
 
 切り替えの最後の段の操作できる状態は、2,048 バイトのうち 1,763 か 1,776 を知っています。`startCheck` は、全部の段の全部の状態について、操作できるかどうかが読めて、操作できるなら `Start` のバイトを知っていて `B.m` と同じであることを確かめます。
@@ -282,6 +341,7 @@ Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq
 * `lag` のフレーム 8,070 では、ここで読むバイトは変わりません。なので `seq j` のあとに `lag` のフレームがあっても読む値は同じです。はみ出すフレームはこれらの走りにありません。
 * 切り替え: TAS の入る状態と `E` から、Start なしのランダムな入力で 201 回。全部 282 フレーム以上で操作でき、操作の前に `left` が 0 になることはなく、操作のときの状態は全部 `Start` を満たします。
 * 測り方: 操作できない機械で終わるフレーム（死ぬ、旗に触る）はフィールドの外なので数えません。そこで `Follow` と `Hit` は成り立ちません。そういう走りは `Run` ではありません。
+* `after-real FM2 100`（TAS の 852 からと、操作からの自分の走り 300 回: ランダム、Select あり、Start あり。操作中のフレーム 35,802。ルーチン、モード、タスクを書くフレームで走りを止める）: `SpareE` はどの命令でも成り立ちます。`PrevOK` はどのフレームの始まりと終わりでも成り立ちます。`hI` の 3 バイトはフレームの終わりでスクロールの処理でのものと同じで、プレイヤーのルーチンのあとスクロールの処理に 2 度来るフレームはありません。Clean な状態からの 31,949 フレームで `storedQ` と `After` は成り立ちます。Clean でない状態からの 338 フレームで `storedQ` は成り立ちません。そこでは `moves` を聞きません。
 
 ## 最初のフレームを抽象機械で
 
@@ -298,17 +358,18 @@ Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq
 
 ## 前提（Lean では証明していない）
 
-* `moves`: 移動の外の部分。プレイヤーのルーチンまでは、操作中のフレームの始まりと `CleanK` から証明です（`ctrl_keep`）。ルーチンに来ることと、数えないフレームが 25 バイトを保つことも証明です。移動のあいだにフレームが終わらないこと（`CleanK` から）と、位置が端から遠いこと（前のフレームから）も証明です。残るのは、前のフレームの終わりの値（`state`）と `After` です。移動そのものは、押している側がふさがれていても証明です（[`FrameModel`](../0-0/0-3-2-FrameModel-ja.md)）。
+* `moves`: 移動の外の部分。プレイヤーのルーチンまでは、操作中のフレームの始まりと `CleanK` から証明です（`ctrl_keep`）。ルーチンに来ることと、数えないフレームが 25 バイトを保つことも証明です。移動のあいだにフレームが終わらないこと（`CleanK` から）と、位置が端から遠いこと（前のフレームから）も証明です。前のフレームの A の 7 ビット目（`OnFrames.prevAll`）と、スクロールの処理からあとの 3 バイト（`AfterKeep.keepH`）も証明です。残るのは、前のフレームの終わりの値（`state`: プレイヤーの状態とジャンプ台）と `After`（`f`、`fd`、`storedQ`、`coll`）です。移動そのものは、押している側がふさがれていても証明です（[`FrameModel`](../0-0/0-3-2-FrameModel-ja.md)）。
 * `unpaused`、`lagPaused`、`spare` はここではもう仮定しません。数えるフレームはポーズでない状態で終わるフレームで、4 バイトは `keep.clean` のガードに入っています（[操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md)）。
-* `state`: 残るのは `Player_State` ∈ {0, 1, 2}、ジャンプ台なし、`PrevA & 80 = A_B & 80` です。これらは地図と物のコードが書きます（ジャンプ台に乗ったときのジャンプ台、当たり判定のルーチンの `Player_State`、ゲームエンジンの終わりの `PreviousA_B_Buttons`）。操作中のフレームの歩きは地図も物も知らないので、これらを保つことは示せません。`AreaType`、`SwimmingFlag`、`PlayerChangeSizeFlag` は証明です（`OnFrames.areaAll`）。
-  `PrevA` については、この回に切れ目からの歩きを試しました（プログラム `ctrl-prev-check`）。プレイヤーのルーチンは `A_B_Buttons` を `SavedJoypadBits` からしか書かず、`SaveAB` がそれを写します。歩きは切れ目で `SavedJoypadBits` の 7 ビット目を決め（両方の値）、`SavedJoypadBits`、`A_B_Buttons`、`PreviousA_B_Buttons` を `spareI` のバイトと同じように守り、フレームの終わりで今のフレームと前のフレームの A の 7 ビット目がそのビットであることを確かめます。探索は終わります（74,910 状態、約 5 秒）が、26 のフレームの終わりで失敗します。そこでは `PreviousA_B_Buttons` が分からないので、探索には `SaveAB` を通らない道があります。どの道かはまだ見つけていません。歩きが閉じても、この 3 バイトには、プレイヤーのルーチンからあとの各命令に `spare` のような条件が要ります（パッドの処理はその前に添字で `SavedJoypadBits` に書きます）。
-* `vAfter`: 1〜8 フレーム目で、スクロールの処理からあとが縦のバイトを変えないこと。ルーチンが `vstep` のとおりなのは証明（`vert_of`）、その前の部分も証明（`Moves.vBefore`）です。`vAfter` は前の部分と同じ歩きでは出ません。測った 1〜8 フレーム目の 3,194 のうち 2,375 で、縦のバイトがスクロールの処理のあとで別の値になり、フレームの終わりに戻ります（当たり判定のルーチンが `Player_State` を 2 にして、また着地させます）。当たり判定のあとは敵の処理が縦の速さを書くことがあり（踏みつけ）、歩きは敵を知りません。
+* `state`: 残るのは `Player_State` ∈ {0, 1, 2} とジャンプ台なしです。これらは地図と物のコードが書きます（ジャンプ台に乗ったときのジャンプ台、当たり判定のルーチンの `Player_State`）。操作中のフレームの歩きは地図も物も知らないので、これらを保つことは示せません。`AreaType`、`SwimmingFlag`、`PlayerChangeSizeFlag` は証明（`OnFrames.areaAll`）、`PrevA` も証明です（`OnFrames.prevAll`）。
+* `After`: サブ速さと向き（つたとポールの道で書かれる。[表](#スクロールの処理からあと-3-つのバイト)）、`storedQ`（スクロールの処理での覚えている速さは、そこでの速さのもの。移動の歩きは覚えている速さを `X_Physics` のあとまで追わない）、`coll`（当たり判定のルーチンと画面の端）。
+* `spareE`（新しい、各命令の条件）: 添字かポインタでの書き込みは、A_B、PrevA、動く向き、走りの速さ、覚えている速さを書かない。測った失敗は 0 です（上）。`FrameKeep.spareK` がこの 5 バイトを持てば、`keep.cleanF` の一部になります。
+* `vAfter`: 1〜8 フレーム目で、スクロールの処理からあとが縦のバイトを変えないこと。ルーチンが `vstep` のとおりなのは証明（`vert_of`）、その前の部分も証明（`vBefore`）です。`vAfter` は前の部分と同じ歩きでは出ません。測った 1〜8 フレーム目の 3,194 のうち 2,375 で、縦のバイトがスクロールの処理のあとで別の値になり、フレームの終わりに戻ります（当たり判定のルーチンが `Player_State` を 2 にして、また着地させます）。当たり判定のあとは敵の処理が縦の速さを書くことがあり（踏みつけ）、歩きは敵を知りません。
 * [操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md) の `keep.ends`、`keep.clean` と定理 `keep.start`: フレームは同じなので、`ends` はここのフィールドではなくなりました。
 * `box`: 1〜8 フレーム目で、当たり判定が操作のときの機械と同じ結果になること。
 * `reads`: `fr` を機械から読むこと。`Frame` であること自体は [最高速の上限](../0-0/0-1-TopSpeed-ja.md) の前提のままです。
 * `chg.time₂`、`chg.ctlFirst₂`、定理 `Run.atCtl`。
 
-**ファイル.** `Theorems/SurfaceFrames.lean`、`Theorems/CtrlKeep.lean`、`Theorems/VertModel.lean`、`Theorems/FrameModel.lean`（`move_masked`、`trace_inFrame`）、`Theorems/FrameWalk.lean`（`InFrame`）、`Theorems/SurfaceRun.lean`（`far`）、非公開の `Proof/SurfaceFrames.lean`（`side_start`）、`Proof/PoleJoin.lean`（`pole_numbers`。`ctrlCheck` と `afterCheck` を含む）。
+**ファイル.** `Theorems/SurfaceFrames.lean`、`Theorems/CtrlKeep.lean`、`Theorems/PrevKeep.lean`（`prev_end`）、`Theorems/AfterKeep.lean`（`keepH`）、`Theorems/VertModel.lean`、`Theorems/FrameModel.lean`（`move_masked`、`trace_inFrame`）、`Theorems/FrameWalk.lean`（`InFrame`）、`Theorems/SurfaceRun.lean`（`far`）、非公開の `Proof/SurfaceFrames.lean`（`side_start`）、`Proof/PoleJoin.lean`（`pole_numbers`。`ctrlCheck`、`afterCheck`、`prevCheck`、`hCheck` を含む）。
 
 **再現.**
 ```
@@ -317,5 +378,10 @@ Run.start     : 同じ条件で、Route の走りについて  Start(B, pole.seq
 .lake/build/bin/smbrta mask-model-check                # maskOK とその部分、約 0.1 秒
 .lake/build/bin/smbrta ctrl-keep-check                 # プレイヤーのルーチンまでの歩き: 25 バイトのそれぞれとポーズのビット、約 4 秒
 .lake/build/bin/smbrta ctrl-after-check size           # 切れ目からの歩き（afterCheck）、約 20 秒。`pause` と `area` は見るバイトが少ない
-.lake/build/bin/smbrta ctrl-prev-check                 # PrevA の切れ目からの探索（証明には入らない）、約 10 秒。exit 1（26 のフレームの終わりで失敗）
+.lake/build/bin/smbrta ctrl-prev-check                 # 第 8 回の、書き込みで切らない PrevA の探索（証明には入らない）、約 10 秒。exit 1（26 のフレームの終わりで失敗）
+.lake/build/bin/smbrta prev-why none|cut                # 同じ探索で、失敗するフレームの終わりへの道を出す。cut は noStore の書き込みで切る: 失敗 0
+.lake/build/bin/smbrta prev-check                       # prevCheck、約 3 秒
+.lake/build/bin/smbrta after-keep-check                 # AfterKeep の探索と hCheck、約 4 秒
+.lake/build/bin/smbrta after-bytes guard|prot           # 横のバイトのそれぞれの 2 つ目の探索: guard は keep.cleanF だけ、prot はバイトも守る
+.lake/build/bin/smbrta after-real FM2 100               # 本物のフレームで SpareE、PrevOK、keepH、storedQ、After、約 80 秒
 ```

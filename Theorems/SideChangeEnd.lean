@@ -1673,7 +1673,7 @@ def quietNames : List (String × Nat × Nat) := [("PauseSoundBuffer", 0, 1), ("P
 /-- the names this file needs -/
 def namesOf (text : String) : Names :=
   let ls := text.splitOn "\n"
-  let l := ((extraNames ++ exitNames ++ quietNames).map (·.1)) ++ ["GamePauseStatus", "PauseModeFlag", "VRAM_Buffer1_Offset", "ScreenRoutineTask", "DisableScreenFlag", "GameTimerDisplay", "FetchNewGameTimerFlag", "Squ1_SfxLenCounter"]
+  let l := ((extraNames ++ exitNames ++ quietNames).map (·.1)) ++ ["GamePauseStatus", "PauseModeFlag", "VRAM_Buffer1_Offset", "ScreenRoutineTask", "DisableScreenFlag", "GameTimerDisplay", "FetchNewGameTimerFlag", "Squ1_SfxLenCounter", "GamePauseTimer"]
   SideChangeBound.namesOf text ++ (l.eraseDups.filterMap fun n => (PipeTransitionAll.asmValue ls n).map (n, ·))
 
 /-- a name as a RAM index -/

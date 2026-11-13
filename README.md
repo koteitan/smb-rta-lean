@@ -58,14 +58,16 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-0-6-2 Runs with a power-up
     - 🚨 1-1-0-6-3 Runs that die and start again
     - 🚨 1-1-0-6-4 Runs with the hurry-up music
-      - ✅ 1-1-0-6-4-1 1-2 does not start before frame 1748 (under `start`, `ctl`, `clean`, `below`)
-      - 🚨 1-1-0-6-4-2 The frame that starts the music (`start`, `ctl`, `clean`, `below`)
+      - ✅ 1-1-0-6-4-1 1-2 does not start before frame 1748 (under `start`, `bLe`, `noStore`, `clean`, `below`)
+      - 🚨 1-1-0-6-4-2 The frame that starts the music (`start`, `bLe`, `noStore`, `clean`, `below`)
         - ✅ 1-1-0-6-4-2-1 It ends with the timer at 100 or less (`music` removed; by a walk of one whole frame)
         - 🚨 1-1-0-6-4-2-2 It is a real frame in control
           - ✅ 1-1-0-6-4-2-2-1 It begins in control (induction over the frames in control; none from frame 1)
           - 🚨 1-1-0-6-4-2-2-2 The start of frame `b`, `ctl` and `clean` on each frame
-            - ✅ 1-1-0-6-4-2-2-2-1 The start of frame `b` (no state in `start`: frame 1, or the last frame of a change, from the change's rows)
+            - ✅ 1-1-0-6-4-2-2-2-1 The start of frame `b` (from the change's rows; `start` asks `ChangesK`)
             - 🚨 1-1-0-6-4-2-2-2-2 `ctl` and `clean` on each frame
+              - ✅ 1-1-0-6-4-2-2-2-2-1 Each frame ends with control (`ctl` removed; a walk with the stores of the three bytes cut)
+              - 🚨 1-1-0-6-4-2-2-2-2-2 `noStore` and `clean` on each instruction
         - 🚨 1-1-0-6-4-2-3 On the next frame the digits of `clock` are not above the machine's (`below`; one frame, was every frame)
 - 🚨 1-1-a To the pipe (0 → 368)
   - ✅ 1-1-a-1 Fast accel
@@ -84,7 +86,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - 🚨 1-1-a-5-4-3 The first 32 frames are steps of the model
         - ✅ 1-1-a-5-4-3-1 `hstep` and the 16·v move (`move_model`, walk of `CtrlKeep`; `opening` gone)
         - ✅ 1-1-a-5-4-3-2 Air frames read from the player's state (`air` gone)
-        - 🚨 1-1-a-5-4-3-3 Conditions on single frames (`cleanK`, `spare`, `st`, `spring`, `page`, `longer`, `after`)
+        - 🚨 1-1-a-5-4-3-3 Conditions on single frames (`cleanK`, `spare`, `st`, `spring`, `after`; `longer` gone; `page` only at counted frame 33)
+          - ✅ 1-1-a-5-4-3-3-1 No frame ends during the movement (`longer` gone; walk and `CleanK` time)
+          - ✅ 1-1-a-5-4-3-3-2 The opening to the left (not left of position 0 in 31 frames)
+          - 🚨 1-1-a-5-4-3-3-3 The jumpspring and the player's state (`spring`, `st`; depend on the map)
         - 🚨 1-1-a-5-4-3-4 Flat ground (`flat`, 1-1-a-5-6) and jump lengths (`jump`, 1-1-a-5-7)
     - 🚨 1-1-a-5-5 The frames after: read from the machines (`own`, `lags`)
       - ✅ 1-1-a-5-5-1 The frames follow each other, with the top speed (`next`, `speed` are theorems)
@@ -121,9 +126,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - 🚨 1-1-b-3-4-4 Each of its instructions is `Clean` (`chg.upClean₁`)
     - 🚨 1-1-b-3-5 The conditions at places of the pipe's frames (`chg.places₁`)
     - 🚨 1-1-b-3-6 No pause after the pipe (`chg.noStart₁`)
-    - 🚨 1-1-b-3-7 No pause sound or square sound effects, and the song and the screen buffer in the tables, at the exit (`chg.quiet₁`)
+    - 🚨 1-1-b-3-7 At the exit the pause sound is silent or the unpause sound plays, and the screen buffer is in the table (`chg.quiet₁`, `QuietP`)
+      - ✅ 1-1-b-3-7-1 Rows with the sound's bytes in tables (`Quiet ∧ Song` weakened to `QuietP`)
     - 🚨 1-1-b-3-8 A `lag` frame ends paused (`chg.paused₁`)
-    - 🚨 1-1-b-3-9 The time is not up at the exit (`chg.time₁`); `b₁` is defined as the first control (`chg.ctlFirst₁` is gone); `left₁` not 0 before control is proved
+    - 🚨 1-1-b-3-9 At the exit the game timer is not 000 (`chg.time₁`, `TimerOK`); `b₁` is defined as the first control (`chg.ctlFirst₁` is gone); `left₁` not 0 before control is proved
   - 🚨 1-1-b-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-b-4-1 The same for every input (`Merge`)
     - 🚨 1-1-b-4-2 The bytes, size and timer at frame 50 (`Cond`)
@@ -137,11 +143,13 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-c-6 Runs that reach the block without touching the floor
   - 🚨 1-1-c-7 Assumptions of part c
     - ✅ 1-1-c-7-1 Each frame follows `hstep` or stops him (from `clean`)
+      - ✅ 1-1-c-7-1-1 `before`, `longer`, upper half of `far` in `clean` are theorems (lower half of `far` is a new field)
     - ✅ 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`): from the change's rows
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
-    - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_long`, `stand_row`, `vfall`, `floor_at`, `vfloor`, `low_at`, `halt`, `prevA`)
+    - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_long`, `stand_row`, `vfall`, `floor_at`, `vfloor`, `low_at`)
       - ✅ 1-1-c-7-5-1 A jump's first 8 frames follow `vstep` (the air part of `vframes`: two walks of the room's frames)
+      - ✅ 1-1-c-7-5-2 The halt value and A of the frame before (`halt`, `prevA` gone: two walks of the room and the rows of the change)
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
     - 🚨 1-1-c-7-7 Takeoff and landing (`Approach`)
     - 🚨 1-1-c-7-8 The ways off the block (`Off`)
@@ -171,9 +179,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-d-3-1 `change₂` proved from `chg`
     - 🚨 1-1-d-3-2 A `lag` frame ends paused (`chg.paused₂`); that it keeps `left` is proved
     - 🚨 1-1-d-3-3 No pause after the pipe (`chg.noStart₂`)
-    - 🚨 1-1-d-3-4 At the exit the pause sound is silent, the unpause sound, or just unpaused (`chg.quiet₂`, `QuietK`)
+    - 🚨 1-1-d-3-4 At the entry the pause is silent, the unpause sound, or just unpaused (`chg.pause₂`); `QuietK` at the exit is proved
       - ✅ 1-1-d-3-4-1 One CPU step writes only where its instruction stores (`StepWrites`; a walk carries the sound's bytes in a table)
       - ✅ 1-1-d-3-4-2 Rows that carry the sound's bytes in tables (`SideChangeSound`; `Quiet` weakened to `QuietK`)
+      - ✅ 1-1-d-3-4-3 The pause through the pipe's frames, in 90 classes (`SidePause`; `chg.quiet₂` removed)
     - 🚨 1-1-d-3-5 The game timer is not 000 at the exit (`chg.time₂`; the sound's pause flag is proved); `left` not 0 before control is proved; `b₂` is the first control by definition
   - 🚨 1-1-d-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-d-4-1 The same for every input (`GMerge`)
@@ -197,13 +206,17 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - 🚨 1-1-e-2-8-2-2 The frame's ends and after the scroll handler
           - ✅ 1-1-e-2-8-2-2-1 It comes to the routine (`arrive` gone; from `unpaused` and the walk)
           - ✅ 1-1-e-2-8-2-2-2 Frames not counted keep the 25 bytes (`lag` gone; from `lagPaused` and the walks)
-          - 🚨 1-1-e-2-8-2-2-3 The values at the end of the frame before (`state`; area type, swimming, change of size from the walk of the whole frame)
+          - 🚨 1-1-e-2-8-2-2-3 The values at the end of the frame before (`state`; area type, swimming, change of size, A of the frame before from the walk of the whole frame)
+            - ✅ 1-1-e-2-8-2-2-3-1 A of the frame before (`prevA` gone; a walk with the paths cut at stores to the routine, mode, task)
           - 🚨 1-1-e-2-8-2-2-4 After the scroll handler (`after`; `longer`, `far` are theorems)
             - ✅ 1-1-e-2-8-2-2-4-1 The frame does not end during the movement (`longer` gone; from the walks and the time of `CleanK`)
             - ✅ 1-1-e-2-8-2-2-4-2 The position is far from the ends of its range (`far` gone; from the frames before and the position at control)
             - 🚨 1-1-e-2-8-2-2-4-3 After the scroll handler (`after`)
+              - ✅ 1-1-e-2-8-2-2-4-3-1 Moving direction, running speed, stored speed (`md`, `rs` gone; `stored` is now `storedQ`)
+              - 🚨 1-1-e-2-8-2-2-4-3-2 Subspeed, facing, `storedQ`, collision (the stores the walk meets are measured)
           - ✅ 1-1-e-2-8-2-2-5 A counted frame ends not paused, a frame not counted ends paused (`unpaused`, `lagPaused` gone: the definition of the counted frames)
           - ✅ 1-1-e-2-8-2-2-6 Stores through an index do not write 4 bytes (`spare` gone: a part of `keep.cleanF`, 1-1-f-6-21)
+          - 🚨 1-1-e-2-8-2-2-7 Stores through an index do not write 5 bytes (`spareE`, new)
       - ✅ 1-1-e-2-8-3 Frames whose pressed side is masked (`move_masked`, `one_of_movesM`)
     - 🚨 1-1-e-2-9 Frames 1 to 8 are `vstep` and the machine at control
       - ✅ 1-1-e-2-9-1 The movement routine is `vstep` (`vert_model`, `vert_of`)
@@ -236,13 +249,14 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
     - 🚨 1-1-f-6-17 The pole's tiles are read only in its column (`tiles`, `TileRead`)
-    - 🚨 1-1-f-6-18 `P₂(g)` is the position at the end of the move (`moved`); the edge store and the head bump do not bring him into the range (`edge`)
+    - 🚨 1-1-f-6-18 `P₂(g)` is the position at the end of the move (`moved`; the touch writes the position, so it cannot be read at the end); the edge store and the head bump do not bring him into the range (`edge`)
     - ✅ 1-1-f-6-19 Each frame moves the position by a multiple of 1/16 px (one whole frame by the walk, from `keep`)
     - 🚨 1-1-f-6-20 The frames up to the touch are real frames in control
       - ✅ 1-1-f-6-20-1 Each frame starts in control (`start` removed; from the walk and `ctl`)
       - 🚨 1-1-f-6-20-2 The frames before the touch write no routine, mode or task byte by its address (`noStore`, the `lag` frames too; ending in control is the theorem `Frames.ctlAll`)
       - ✅ 1-1-f-6-20-3 The link of the frames, and the `lag` frames (`ends`, `lag`, `lagStart` removed; from the list of all frames and the walk)
     - 🚨 1-1-f-6-21 Each instruction of those frames (`keep.cleanF`, `CleanK` with 4 more bytes, the `lag` frames too)
+    - ✅ 1-1-f-6-22 The frames from the touch to the castle are real frames too (`seq`, `seqAt` removed; `c` is a counted frame: `toCastle`)
 - 🚨 1-1-g From the castle to 1-2 (1218 → 1748)
   - ✅ 1-1-g-1 The timer and the grid
   - 🚨 1-1-g-2 Assumptions of part g

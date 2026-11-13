@@ -2,7 +2,7 @@
 
 # `fall` なしの部屋への切り替え
 
-**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入ります。入るときの条件 `Entry` は、いまはその一部をタイトルで Start を押したことと操作できるときからのフレームから出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。`keep₁` もなくなりました。[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)を見てください。さらに出口で時間が切れておらず（`TimeOK`）、`b` が入ったあと最初の操作なら、操作の前に `left` は 0 になりません（`PipeRun.first`）。操作のときの機械は時間の段の中にあります（`PipeRun.inRowsT`）。これでルートから `first₁` がなくなります。`Changes` には代わりに `time₁` と `ctlFirst₁` が入ります（項目 1-1-b-3-9）。
+**主張.** これは部分的な結果です。走りが、入るときの状態についての条件、土管のフレームのいくつかの場所での条件、出口での条件を満たすとします。さらに、土管のあとのゲームコアのフレームで Start を押さないとします。すると、入ってから操作できるまで、数えるフレームで 91 以上かかります。これで[ルート全体](0-1-Route-ja.md)から仮定 `fall₁` がなくなります。`Changes` には代わりにフィールド `places₁`、`quiet₁`、`noStart₁` が入ります。入るときの条件 `Entry` は、いまはその一部をタイトルで Start を押したことと操作できるときからのフレームから出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。`keep₁` もなくなりました。[部屋への切り替えの `lag` のフレーム](b-3-3-LagPaused-ja.md)を見てください。さらに出口で時間が切れておらず（`TimeOK`）、`b` が入ったあと最初の操作なら、操作の前に `left` は 0 になりません（`PipeRun.first`）。操作のときの機械は時間の段の中にあります（`PipeRun.inRowsT`）。これでルートから `first₁` がなくなります。`Changes` には代わりに `time₁` と `ctlFirst₁` が入ります（項目 1-1-b-3-9）。ルートはいま、音のバイトを表で運ぶ段を使い、出口でもっと弱い条件を求めます。[音のバイトを表で運ぶ、部屋への切り替え](b-3-7-1-SoundRows-ja.md)を見てください。そこでは、このページの時間の段を `InRowsTO` と呼び、`InRowsT` は表を運ぶ段で `left` が 0 のものです。
 
 `m₀`、`run`、`ctl`、`0^k`、`E` は[地下への切り替えの長さを決めるもの](b-2-1-PipeTransitionAll-ja.md)と同じです。`left` は[1 フレームずつの事実から出す下限](b-2-2-PipeChangeBound-ja.md)と同じです。土管のルーチンが動くあいだは `timer + 43` で、そのあとは 43 行の表から読みます。`frame(m, i)` は `m` から入力 `i` で進む 1 フレームです。`trace(m, i, j)` はそのフレームを `j` ステップ進めた機械です。`T = run(E, 0^48)` は出口の基準です。`m[b]` は `m` のバイト `b` です。`+k` のついた名前は、その名前の `k` バイトあとのバイトです。`Paused(m)` は、`GamePauseStatus` の最下位ビットが立っていることです。`m[GamePauseStatus] & 1 = 1` です。`TimeOK(m)` は時間が切れていないことです。`m[PauseModeFlag] = 0 ∧ (m[GameTimerDisplay], m[GameTimerDisplay+1], m[GameTimerDisplay+2]) ≠ (0, 0, 0)` です。
 
@@ -67,7 +67,7 @@
 
 `NoStart(m, i)` は、`m` がゲームコアで土管以外のルーチンなら入力 `i` に Start がないことです。
 
-**主張の形.** `During(m)` は、`m` が土管のフレームの抽象的な始まりの状態のどれかに含まれることです。`InRows(m)` は、`m` が下の段のどれかの状態に含まれることです。`InRowsT(m)` は、時間の段について同じことです。
+**主張の形.** `During(m)` は、`m` が土管のフレームの抽象的な始まりの状態のどれかに含まれることです。`InRows(m)` は、`m` が下の段のどれかの状態に含まれることです。`InRowsTO(m)` は、時間の段について同じことです。
 
 ```
 during     :  ∀ M,  Entry(M) → During(M)
@@ -83,16 +83,16 @@ atControl  :  ∀ m,  ctl(m) → left(m) = 0
 paused     :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) → Paused(frame(m, i)) → left(m) ≤ left(frame(m, i))
 rowsGo     :  ∀ m,  InRows(m) → ¬Paused(m)
 stepT      :  ∀ m, During(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
-                During(frame(m, i))  ∨  ( ExitAt(frame(m, i))  ∧  ( frame(m, i) で Quiet ∧ Song ∧ Shape ∧ TimeOK  →  InRowsT(frame(m, i)) ) )
-rowsT      :  ∀ m, InRowsT(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  InRowsT(frame(m, i))
-zeroT      :  ∀ m,  InRowsT(m) → left(m) = 0 → ctl(m)
+                During(frame(m, i))  ∨  ( ExitAt(frame(m, i))  ∧  ( frame(m, i) で Quiet ∧ Song ∧ Shape ∧ TimeOK  →  InRowsTO(frame(m, i)) ) )
+rowsT      :  ∀ m, InRowsTO(m) → ∀ i, NoStart(m, i) →  left(m) = 0  ∨  InRowsTO(frame(m, i))
+zeroT      :  ∀ m,  InRowsTO(m) → left(m) = 0 → ctl(m)
 
 no_control_exit :  Exit(s₀)  ∧  (∀ n, s₍ₙ₊₁₎ = frame(sₙ, iₙ)  ∧  NoStart(sₙ, iₙ))  →  ∀ j < 43, ¬ctl(sⱼ)
 PipeRun.bound   :  下のフィールドを持つ走り  →  cnt(a) + 91 ≤ cnt(b)
 Changes.bound₁  :  e₁ + 91 ≤ c₂
 PipeRun.first   :  下のフィールドを持つ走り  ∧  time  ∧  ctlFirst  →  ∀ n, a ≤ n < b,  left(seq n) ≠ 0
-PipeRun.inRowsT :  同じ  →  InRowsT(seq b)
-Changes.first₁  :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        （chg.time₁ と Changes.ctlFirst₁ での PipeRun.first）
+PipeRun.inRowsT :  同じ  →  InRowsTO(seq b)
+ChangesK.first₁ :  ∀ n, a₁ ≤ n < b₁,  left(seq n) ≠ 0        （Changes.ctlFirst₁ での b-3-7-1 の PipeRunK.first）
 ```
 
 `PipeRun` のフィールドです。`Changes` の 1 つ目の切り替えのフィールドも同じです（ただし `atCtl` は定理 `Changes.ctl₁` です）。
@@ -170,9 +170,9 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 * 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。項目 1-1-b-3-5:
   * `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許し、上限もないので、走りに何も求めません。状態はそこでこのオフセットで分かれ、確認にはそれが要ります。
   * `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater`、`ColorRotation` にはドットの上限 50,000 がありました。これらはなくなりました。5 つの上限（`UpdScrollVar` とこの 4 つ）のうちどの 4 つを外しても確認は成り立ち、5 つすべてを外すと成り立ちません。だから上限は 1 つ、パーサーの場所に残します。14 個の入る状態と 3 種類の入力では、土管の 1,974 フレームは、どれもドット 37,603 以下でパーサーの場所に着きます。
-* 出口で `Quiet ∧ Song ∧ Shape`（`chg.quiet₁`）。土管のフレームで Start を押すと成り立たないことがあります。`Shape` と `Song` は出口のフレームの歩みからは出ません。その歩みの出口での終わりの状態 36 個のどれも、1 つめの画面のバッファの形も曲のバイトも知りません。出口のフレームの NMI が 2 つめのバッファから書くとき、1 つめのバッファには前のフレームが書いたものが残ります。1 フレームの歩みはそれを知りません。CPU の 1 ステップは命令が書く場所にしか書きません（[CPU の 1 ステップが RAM を書く場所](d-3-4-1-StepWrites-ja.md)）。これを使えば音のバイトを段の状態の外に持てて、横の土管で測ったように `Quiet` をポーズの音の種類の列にできます。部屋への切り替えではしていません。
+* ルートは出口で `QuietP ∧ Shape` を求めます（`chg.quiet₁`）。`Quiet ∧ Song ∧ Shape` と `TimeOK` のフラグ 0 より弱い条件です。[b-3-7-1](b-3-7-1-SoundRows-ja.md) を見てください。前の条件は、土管のフレームで Start を押すと成り立たないことがあります。`Shape` と `Song` は出口のフレームの歩みからは出ません。その歩みの出口での終わりの状態 36 個のどれも、1 つめの画面のバッファの形も曲のバイトも知りません。出口のフレームの NMI が 2 つめのバッファから書くとき、1 つめのバッファには前のフレームが書いたものが残ります。1 フレームの歩みはそれを知りません。CPU の 1 ステップは命令が書く場所にしか書きません（[CPU の 1 ステップが RAM を書く場所](d-3-4-1-StepWrites-ja.md)）。これを使えば音のバイトを段の状態の外に持てて、`Quiet` をポーズの音の種類の列にできます。これは [b-3-7-1](b-3-7-1-SoundRows-ja.md) でしました。
 * 土管のあとのゲームコアのフレームで `NoStart`（`chg.noStart₁`）。
-* 出口で `TimeOK`（`chg.time₁`）。項目 1-1-b-3-9。`b` が入ったあと最初の操作であることは、もうフィールドではありません（フィールド `ctlFirst₁` はなくなりました）。`b₁` は、入るときから `dB` フレームの中で最初に操作できるフレームです（定義 `Base.b₁`: `b₁ = firstCtl(seq, a₁, dB)`）。さらに `ctlBy₁ : ctl(seq (a₁ + dB))`。すると `Changes.order₁ : a₁ ≤ b₁`、`Changes.ctl₁ : ctl(seq b₁)`、`Changes.ctlFirst₁ : ∀ n, a₁ ≤ n < b₁ → ¬ctl(seq n)` は定理です。`b₂` と同じです。土管の中でポーズすると `TimeOK` は成り立ちません（`changes-check FM2 pause 380 60` と `pause 416 60`）。そのときは同じ出口で `Quiet` も成り立ちません。
+* 出口で `TimeOK`。ルートはいま、ゲームのタイマーが 000 でないことだけを求めます（`chg.time₁`、`TimerOK`）。音のポーズのフラグは `QuietP` に入ります。項目 1-1-b-3-9。`b` が入ったあと最初の操作であることは、もうフィールドではありません（フィールド `ctlFirst₁` はなくなりました）。`b₁` は、入るときから `dB` フレームの中で最初に操作できるフレームです（定義 `Base.b₁`: `b₁ = firstCtl(seq, a₁, dB)`）。さらに `ctlBy₁ : ctl(seq (a₁ + dB))`。すると `Changes.order₁ : a₁ ≤ b₁`、`Changes.ctl₁ : ctl(seq b₁)`、`Changes.ctlFirst₁ : ∀ n, a₁ ≤ n < b₁ → ¬ctl(seq n)` は定理です。`b₂` と同じです。土管の中でポーズすると `TimeOK` は成り立ちません（`changes-check FM2 pause 380 60` と `pause 416 60`）。そのときは同じ出口で `Quiet` も成り立ちません。
 * `lagPaused`（`chg.paused₁`）: `lag` のフレームはポーズの状態で終わる。[b-3-3](b-3-3-LagPaused-ja.md) を見てください。
 
 **ファイル.** `Theorems/PipeChangeEnd.lean`、非公開の `Proof/PipeChangeEnd.lean`。
