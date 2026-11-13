@@ -1309,9 +1309,11 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   touchY : UInt8
   touchRising : Bool
   one_le : 1 ≤ g
-  /-- the frames up to the touch on the real machine, counted or not, as the walk of one whole frame in control needs them: each is the real frame of the one before, the counted
-  frame `j` ends at `seq j`, the frames before the touch's frame end in control, and each instruction meets `FrameKeep.CleanK`. That each frame starts in the idle loop in control,
-  and that the `lag` frames keep the castle flag and the fraction's low 4 bits, are theorems (`FrameKeep.Frames.all_start`, `FrameKeep.Frames.start`). -/
+  /-- the frames up to the touch on the real machine, counted or not, as the walk of one whole frame in control needs them: each is the real frame of the one before; a frame is
+  counted when it ends with the game not paused, and the counted frame `j` ends at `seq j`; no frame before the touch's frame writes the routine, the mode or the task by its
+  address; each instruction meets `FrameKeep.CleanK` of `FrameKeep.guardF`. That each frame starts in the idle loop in control, that the frames before the touch's frame end
+  in control, and that the `lag` frames keep the castle flag and the fraction's low 4 bits, are theorems (`FrameKeep.Frames.all_start`, `FrameKeep.Frames.ctlAll`,
+  `FrameKeep.Frames.start`). -/
   keep : FrameKeep.Frames sy m0 S a g seq
   /-- the frames: read from the machines; each one from a clean state follows `hstep`, up to a hit; the ones before `J` run the collision routine as on the machine at control.
   They are the frames of `keep`. -/
@@ -1467,7 +1469,7 @@ theorem hB_run (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J 
       posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
   have hgap := S.gap
   have hearly := H.hearly
-  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 H.hJT R.frames A.2 (fun n hn => (R.keep.all_start hkc hc0.start (R.watched₀ A.2 hfq hc0.castle) n hn).1)
+  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 H.hJT S.far R.frames A.2 (fun n hn => (R.keep.all_start hkc hc0.start (R.watched₀ A.2 hfq hc0.castle) n hn).1)
   exact hB_of_line (PA := posP sy (above m0 n)) Fa S H.h16 H.h255 H.hE H.hJ Rs (first_of_surface S.noHit H.hJT Rs) R.next (R.startV A.1 A.2) (R.startP A.2)
     (by omega) e d he1 heg hd hPf
 

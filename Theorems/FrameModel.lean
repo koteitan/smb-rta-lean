@@ -24,6 +24,10 @@ open TaintRun (AB bt)
 open PipeTransition (frame)
 open PipeEntryRule (trace trace_stop nxt)
 
+/-- `InFrameN.add` along a machine named by an equation -/
+theorem InFrameN.add' {E : Rom} {m m' : Machine} {k1 k2 : Nat} (h1 : InFrameN E m k1) (e : stepN k1 m = m') (h2 : InFrameN E m' k2) : InFrameN E m (k1 + k2) :=
+  InFrameN.add h1 (by rw [e]; exact h2)
+
 /-- the RAM index of a byte -/
 def I (a : UInt16) : Nat := (a &&& 0x7FF).toNat
 
@@ -462,7 +466,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
       (stepN k R).ram.get! (I sy.RunningSpeed) = R.ram.get! (I sy.RunningSpeed) ∧
       (stepN k R).ram.get! (I sy.Player_MovingDir) =
         (if R.ram.get! (I sy.Player_X_Speed) == 0 then R.ram.get! (I sy.Player_MovingDir) else if R.ram.get! (I sy.Player_X_Speed) < 0x80 then 1 else 2) ∧
-      (posP sy (stepN k R) - posP sy R - 16 * sbyte (R.ram.get! (I sy.Player_X_Speed))) % 0x1000000 = 0 := by
+      (posP sy (stepN k R) - posP sy R - 16 * sbyte (R.ram.get! (I sy.Player_X_Speed))) % 0x1000000 = 0 ∧ InFrameN E R k := by
   simp only [tailOK, Bool.and_eq_true, List.all_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne] at hc
   obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hiL, hiD⟩, hiE⟩, hmf⟩, hxI⟩, hpI⟩, hx0⟩, _⟩, hK⟩, _⟩, _⟩, _⟩, a7⟩, a8⟩, a9⟩, a10⟩, a11⟩, a12⟩ := hc
   have hb := fun (b : UInt8) => Potential.mem_bytes b
@@ -477,7 +481,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
     rcases List.mem_cons.1 hp with rfl | hp
     · exact hb0
     · exact h.K p hp
-  obtain ⟨k1, f1, A1, W1, _⟩ := piece_spec (a7 b (hb b)) hA1
+  obtain ⟨k1, f1, A1, W1, _, C1⟩ := piece_spec (a7 b (hb b)) hA1
   generalize hR1 : stepN k1 R = R1 at A1 W1
   have hWk1 : ∀ i ∈ keepM sy c4, i < 2048 → R1.ram.get! i = R.ram.get! i := fun i hi hl =>
     W1 i (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hi))) hl
@@ -505,7 +509,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
       cases hv
     · intro v hv
       cases hv
-  obtain ⟨k2, f2, A2, W2, _⟩ := piece_spec (a8 f0 (hb f0) (lOf b) (hb _)) hA2
+  obtain ⟨k2, f2, A2, W2, _, C2⟩ := piece_spec (a8 f0 (hb f0) (lOf b) (hb _)) hA2
   generalize hR2 : stepN k2 R1 = R2 at A2 W2
   have hWk2 : ∀ i ∈ keepM sy c4, i < 2048 → R2.ram.get! i = R1.ram.get! i := fun i hi hl =>
     W2 i (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hi)))) hl
@@ -535,7 +539,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
       have e := Option.some.inj hv
       rw [← e]
       exact hc1
-  obtain ⟨k3, f3, A3, W3, _⟩ := piece_spec (a9 x0 (hb x0) (dOf b) (hb _) (adcC f0 (lOf b) false).2 (by cases (adcC f0 (lOf b) false).2 <;> simp)) hA3
+  obtain ⟨k3, f3, A3, W3, _, C3⟩ := piece_spec (a9 x0 (hb x0) (dOf b) (hb _) (adcC f0 (lOf b) false).2 (by cases (adcC f0 (lOf b) false).2 <;> simp)) hA3
   generalize hR3 : stepN k3 R2 = R3 at A3 W3
   have hWk3 : ∀ i ∈ keepM sy c4, i < 2048 → R3.ram.get! i = R2.ram.get! i := fun i hi hl =>
     W3 i (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hi))) hl
@@ -564,7 +568,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
       have e := Option.some.inj hv
       rw [← e]
       exact hc2
-  obtain ⟨k4, f4, A4, W4, _⟩ := piece_spec (a10 p0 (hb p0) (eOf b) (hb _) (adcC x0 (dOf b) (adcC f0 (lOf b) false).2).2 (by cases (adcC x0 (dOf b) (adcC f0 (lOf b) false).2).2 <;> simp)) hA4
+  obtain ⟨k4, f4, A4, W4, _, C4⟩ := piece_spec (a10 p0 (hb p0) (eOf b) (hb _) (adcC x0 (dOf b) (adcC f0 (lOf b) false).2).2 (by cases (adcC x0 (dOf b) (adcC f0 (lOf b) false).2).2 <;> simp)) hA4
   generalize hR4 : stepN k4 R3 = R4 at A4 W4
   have hWk4 : ∀ i ∈ keepM sy c4, i < 2048 → R4.ram.get! i = R3.ram.get! i := fun i hi hl =>
     W4 i (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hi)) hl
@@ -591,7 +595,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
       cases hv
     · intro v hv
       cases hv
-  obtain ⟨k5, f5, A5, W5, _⟩ := piece_spec a11 hA5
+  obtain ⟨k5, f5, A5, W5, _, C5⟩ := piece_spec a11 hA5
   generalize hR5 : stepN k5 R4 = R5 at A5 W5
   have hk : ∀ i ∈ keepM sy c4, i < 2048 → R4.ram.get! i = R.ram.get! i := fun i hi hl => by
     rw [chain i hi hl, hWk1 i hi hl]
@@ -617,7 +621,7 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
       cases hv
     · intro v hv
       cases hv
-  obtain ⟨k6, f6, A6, W6, _⟩ := piece_spec (a12 b (hb b)) hA6
+  obtain ⟨k6, f6, A6, W6, _, C6⟩ := piece_spec (a12 b (hb b)) hA6
   generalize hR6 : stepN k6 R5 = R6 at A6 W6
   have hfin : stepN (k1 + (k2 + (k3 + (k4 + (k5 + k6))))) R = R6 := by
     rw [stepN_add, hR1, stepN_add, hR2, stepN_add, hR3, stepN_add, hR4, stepN_add, hR5, hR6]
@@ -627,7 +631,8 @@ theorem tail_spec {c4 : Cut} {R : Machine} (hc : tailOK sy E c4 = true) (hd : di
     fun i hi hl => W5 i hi hl
   have hdig := hd
   simp only [digitsOK, List.all_eq_true, beq_iff_eq] at hdig
-  refine ⟨k1 + (k2 + (k3 + (k4 + (k5 + k6)))), ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨k1 + (k2 + (k3 + (k4 + (k5 + k6)))), ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    InFrameN.add' C1 hR1 (InFrameN.add' C2 hR2 (InFrameN.add' C3 hR3 (InFrameN.add' C4 hR4 (InFrameN.add' C5 hR5 C6))))⟩
   · omega
   · rw [hfin]
     exact A6.good
@@ -767,14 +772,14 @@ theorem leaf_app {sp : UInt8} {entry r : UInt16} {a : Tag} {ain : UInt8} {L Lo :
       (∀ p ∈ Lo, p.2.R ((stepN k R).ram.get! p.1) ((runSub H entry ain 0 0).ram.get! p.1)) ∧
       (∀ i ∈ watch, i < 2048 → (stepN k R).ram.get! i = R.ram.get! i) ∧
       (∀ i ∈ watch, i < 2048 → i ≠ stkI sp → i ≠ stkI (sp - 1) → (runSub H entry ain 0 0).ram.get! i = H.ram.get! i) ∧
-      GoodH E (runSub H entry ain 0 0) ∧ (runSub H entry ain 0 0).s = sp := by
+      GoodH E (runSub H entry ain 0 0) ∧ (runSub H entry ain 0 0).s = sp ∧ InFrameN E R k := by
   subst hs
   simp only [leafAll, isRts, tagsOK, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, Bool.not_eq_true', List.all_eq_true, bne_iff_ne] at hc
   obtain ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩ := hc
-  obtain ⟨k, h6, h7, h8, h9, h10, h11, h12, h13, h14⟩ := leaf_spec (fuel := fuelS) h5 (by decide) h1 (by rw [h2]; exact lookup_rts) h3 gR pcR ha gH
+  obtain ⟨k, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩ := leaf_spec (fuel := fuelS) h5 (by decide) h1 (by rw [h2]; exact lookup_rts) h3 gR pcR ha gH
     (fun p hp => ⟨(h4 p hp).1.1, (h4 p hp).1.2, (h4 p hp).2, hL p hp⟩) (List.mem_cons_self) (List.mem_cons_of_mem _ List.mem_cons_self)
   exact ⟨k, h6, h7, h8, h9, h10, fun i hi hl => h11 i (List.mem_append_right _ hi) hl,
-    fun i hi hl h15 h16 => h12 i (List.mem_append_right _ hi) hl h15 h16, h13, h14⟩
+    fun i hi hl h15 h16 => h12 i (List.mem_append_right _ hi) hl h15 h16, h13, h14, h15⟩
 
 /-- `R` and the model agree on the horizontal state -/
 structure Rel5 (sy : Syms) (a b : Machine) : Prop where
@@ -811,11 +816,11 @@ theorem fric_stage {sp : UInt8} {c3 c4 : Cut} {r3 : UInt16} {lr : UInt8} {R C : 
       ([I sy.PlayerFacingDir, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce] ++ c3.ids) = true)
     (h2 : pieceOK E (afterLeaf c3 r3) c4 (watchM sy) fuelS = true) (hra : c3.ra = some lr) (hpc : c3.pc = sy.ImposeFriction)
     (hA : At E c3 R) (hK3 : ∀ p ∈ c3.K, p.1 < 2048) (gC : GoodH E C) (hs : C.s = sp) (hrel : ∀ p ∈ L, p.2.R (R.ram.get! p.1) (C.ram.get! p.1)) :
-    ∃ k, k ≤ 2 * fuelS ∧ At E c4 (stepN k R) ∧ Rel5 sy (stepN k R) (runSub C sy.ImposeFriction lr 0 0) ∧ Same3 sy (stepN k R) R := by
+    ∃ k, k ≤ 2 * fuelS ∧ At E c4 (stepN k R) ∧ Rel5 sy (stepN k R) (runSub C sy.ImposeFriction lr 0 0) ∧ Same3 sy (stepN k R) R ∧ InFrameN E R k := by
   have hae : R.a = lr := hA.ra lr hra
-  obtain ⟨k1, f1, g1, p1, s1, o1, w1, _, _, _⟩ := leaf_app h1 hA.good (by rw [hA.pc, hpc]) (by rw [hae]; exact Tag.R_kn _ _) gC hs hrel
+  obtain ⟨k1, f1, g1, p1, s1, o1, w1, _, _, _, C1⟩ := leaf_app h1 hA.good (by rw [hA.pc, hpc]) (by rw [hae]; exact Tag.R_kn _ _) gC hs hrel
   have hAf := at_after (r := r3) hA g1 p1 s1 (fun p hp => w1 _ (List.mem_append_right _ (List.mem_map.2 ⟨p, hp, rfl⟩)) (hK3 p hp))
-  obtain ⟨k2, f2, A2, W2, _⟩ := piece_spec h2 hAf
+  obtain ⟨k2, f2, A2, W2, _, C2⟩ := piece_spec h2 hAf
   have e : stepN (k1 + k2) R = stepN k2 (stepN k1 R) := stepN_add _ _ _
   have w1' : ∀ i, i ∈ [I sy.PlayerFacingDir, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce] → i < 2048 → (stepN k1 R).ram.get! i = R.ram.get! i :=
     fun i hi hl => w1 i (List.mem_append_left _ hi) hl
@@ -824,7 +829,7 @@ theorem fric_stage {sp : UInt8} {c3 c4 : Cut} {r3 : UInt16} {lr : UInt8} {R C : 
   have oM := o1 (I sy.Player_MovingDir, .eq) (by simp [outFric])
   have oD := o1 (I sy.PlayerFacingDir, .eq) (by simp [outFric])
   have oR := o1 (I sy.RunningSpeed, .nz) (by simp [outFric])
-  refine ⟨k1 + k2, by omega, by rw [e]; exact A2, ?_, ?_⟩
+  refine ⟨k1 + k2, by omega, by rw [e]; exact A2, ?_, ?_, InFrameN.add C1 C2⟩
   · rw [e]
     refine ⟨?_, ?_, ?_, ?_, ?_⟩
     · rw [W2 _ (by simp [watchM]) (I_lt _)]
@@ -919,8 +924,8 @@ theorem phase1 {m0 : Machine} {S : UInt8} {c : Case} {c1 : Cut} {r1 : UInt16} {R
       (∀ p ∈ outPhys sy, p.2.R ((stepN k R).ram.get! p.1) ((runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0).ram.get! p.1)) ∧
       (∀ j ∈ I sy.SavedJoypadBits :: watchH sy, (stepN k R).ram.get! j = R.ram.get! j) ∧
       (∀ j ∈ I sy.SavedJoypadBits :: watchH sy, j ≠ stkI m0.s → j ≠ stkI (m0.s - 1) → (runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0).ram.get! j = (pokeL m0 (hsL sy s i)).ram.get! j) ∧
-      GoodH E (runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0) ∧ (runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0).s = m0.s := by
-  obtain ⟨k1, f1, A1, W1, B1⟩ := piece_spec h1 hA
+      GoodH E (runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0) ∧ (runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0).s = m0.s ∧ InFrameN E R k := by
+  obtain ⟨k1, f1, A1, W1, B1, C1⟩ := piece_spec h1 hA
   have hH : GoodH E (pokeL m0 (hsL sy s i)) := pokeL_good _ hb
   have hHs : (pokeL m0 (hsL sy s i)).s = m0.s := pokeL_s _ _
   have hget : ∀ q ∈ hsL sy s i, (pokeL m0 (hsL sy s i)).ram.get! (I q.1) = q.2 := pokeL_get _ _ hb hap.nd
@@ -982,11 +987,11 @@ theorem phase1 {m0 : Machine} {S : UInt8} {c : Case} {c1 : Cut} {r1 : UInt16} {R
         rw [wG _ (by simp) (I_lt _), hget (sy.RunningTimer, i.rt) (by simp [hsL])]
         exact hirt hg
       · trivial
-  obtain ⟨k2, f2, g2, p2, s2, o2, w2, w3, g3, s3⟩ := leaf_app h2 A1.good (by rw [A1.pc, hpc1]) trivial hH hHs hR
+  obtain ⟨k2, f2, g2, p2, s2, o2, w2, w3, g3, s3, C2⟩ := leaf_app h2 A1.good (by rw [A1.pc, hpc1]) trivial hH hHs hR
   have hK : ∀ p ∈ c1.K, (stepN k2 (stepN k1 R)).ram.get! p.1 = (stepN k1 R).ram.get! p.1 := fun p hp =>
     w2 _ (List.mem_cons_of_mem _ (List.mem_append_right _ (List.mem_map.2 ⟨p, hp, rfl⟩))) (B1 p hp)
   have e : stepN (k1 + k2) R = stepN k2 (stepN k1 R) := stepN_add _ _ _
-  refine ⟨k1 + k2, by omega, ?_, ?_, ?_, ?_, g3, ?_⟩
+  refine ⟨k1 + k2, by omega, ?_, ?_, ?_, ?_, g3, ?_, InFrameN.add C1 C2⟩
   · rw [e]
     exact at_after A1 g2 p2 s2 hK
   · rw [e]
@@ -1022,7 +1027,7 @@ def SpeedFrom (sy : Syms) (m0 : Machine) (v : UInt8) (C : Machine) : Prop :=
 
 /-- what the friction stage gives: from the real machine `R5` at `ImposeFriction` and the model's machine `C` there, the cut of the mover, and `Out` of the two -/
 def FricStage (sy : Syms) (m0 : Machine) (c4 : Cut) (lr : UInt8) (Out : Machine → Machine → Prop) (R5 C : Machine) : Prop :=
-  ∃ k, k ≤ 2 * fuelS ∧ At (Rom.of m0) c4 (stepN k R5) ∧ Out (stepN k R5) (runSub C sy.ImposeFriction lr 0 0) ∧ Same3 sy (stepN k R5) R5
+  ∃ k, k ≤ 2 * fuelS ∧ At (Rom.of m0) c4 (stepN k R5) ∧ Out (stepN k R5) (runSub C sy.ImposeFriction lr 0 0) ∧ Same3 sy (stepN k R5) R5 ∧ InFrameN (Rom.of m0) R5 k
 
 /-- **From the player's routine to the mover**, with the friction stage as a hypothesis (`hfric`): it is given the machines at `ImposeFriction`, the real one and
 the model's, their tags but the collision bits, where the collision bits come from, and the speed of the model's machine. -/
@@ -1039,11 +1044,12 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
       GoodH (Rom.of m0) C → C.s = m0.s → (∀ p ∈ tagsFric0 sy, p.2.R (R5.ram.get! p.1) (C.ram.get! p.1)) →
       R5.ram.get! (I sy.Player_CollisionBits) = R.ram.get! (I sy.Player_CollisionBits) → C.ram.get! (I sy.Player_CollisionBits) = m0.ram.get! (I sy.Player_CollisionBits) →
       SpeedFrom sy m0 s.v C → FricStage sy m0 (planOf sy m0 S c).c4 (lrOf c.n) Out R5 C) :
-    ∃ k, k ≤ fuelW + 6 * fuelS ∧ At (Rom.of m0) (planOf sy m0 S c).c4 (stepN k R) ∧ Out (stepN k R) (midH sy m0 s i) ∧ Same3 sy (stepN k R) R := by
+    ∃ k, k ≤ fuelW + 6 * fuelS ∧ At (Rom.of m0) (planOf sy m0 S c).c4 (stepN k R) ∧ Out (stepN k R) (midH sy m0 s i) ∧ Same3 sy (stepN k R) R ∧
+      InFrameN (Rom.of m0) R k := by
   simp only [caseOK, Bool.and_eq_true, beq_iff_eq] at hc
   generalize planOf sy m0 S c = P at hc hfric ⊢
   obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨a1, a2⟩, a3⟩, a4⟩, a5⟩, a6⟩, a7⟩, a8⟩, a9⟩, _⟩, _⟩ := hc
-  obtain ⟨k1, f1, AF, oP, wR, wH, gA, sA⟩ := phase1 hb hap a1 a2 (List.contains_iff_mem.1 a3) (List.contains_iff_mem.1 a4) (List.contains_iff_mem.1 a5)
+  obtain ⟨k1, f1, AF, oP, wR, wH, gA, sA, C1⟩ := phase1 hb hap a1 a2 (List.contains_iff_mem.1 a3) (List.contains_iff_mem.1 a4) (List.contains_iff_mem.1 a5)
     (List.contains_iff_mem.1 a6) (List.contains_iff_mem.1 a7) a8 hA hv hf hfd hmd hrs habs hilr hist hiab hirt
   have hmid : midH sy m0 s i = if stOf c.n == 0 then
       runSub (if lrOf c.n != 0 then poke (runSub (runSub (pokeL m0 (hsL sy s i)) sy.X_Physics 0 0 0) sy.GetPlayerAnimSpeed 0 0 0) sy.PlayerFacingDir (lrOf c.n)
@@ -1093,7 +1099,7 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
     obtain ⟨⟨⟨⟨b1, b2⟩, b3⟩, b4⟩, b5⟩ := g
     simp only [fricOK, Bool.and_eq_true, beq_iff_eq] at fc
     obtain ⟨⟨⟨d1, d2⟩, d3⟩, d4⟩ := fc
-    obtain ⟨k2, f2, A3, W3, B3⟩ := piece_spec b2 AF
+    obtain ⟨k2, f2, A3, W3, B3, C2⟩ := piece_spec b2 AF
     generalize hR3 : stepN k2 R2 = R3 at A3 W3
     have c3 := carry W3
     have hrelA : ∀ p ∈ tagsAnim sy c, p.2.R (R3.ram.get! p.1) (A.ram.get! p.1) := by
@@ -1113,11 +1119,11 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
       · simp only
         rw [W3 _ (by simp [watchA]) (I_lt _), hRsv, hAsv]
         exact Tag.R_kn _ _
-    obtain ⟨k3, f3, g4, p4, s4, o4, w4, wH4, gB, sB⟩ := leaf_app b3 A3.good (by rw [A3.pc, b1]) trivial gA sA hrelA
+    obtain ⟨k3, f3, g4, p4, s4, o4, w4, wH4, gB, sB, C3⟩ := leaf_app b3 A3.good (by rw [A3.pc, b1]) trivial gA sA hrelA
     generalize hR4 : stepN k3 R3 = R4 at g4 p4 s4 o4 w4
     generalize hBe : runSub A sy.GetPlayerAnimSpeed 0 0 0 = B at o4 wH4 gB sB hmid
     have AF4 := at_after (r := P.r2) A3 g4 p4 s4 (fun p hp => w4 _ (List.mem_append_right _ (List.mem_map.2 ⟨p, hp, rfl⟩)) (B3 p hp))
-    obtain ⟨k4, f4, A5, W5, B5⟩ := piece_spec b4 AF4
+    obtain ⟨k4, f4, A5, W5, B5, C4⟩ := piece_spec b4 AF4
     generalize hR5 : stepN k4 R4 = R5 at A5 W5
     -- the machine of the model before `ImposeFriction`
     generalize hCe : (if lrOf c.n != 0 then poke B sy.PlayerFacingDir (lrOf c.n) else B) = C at hmid
@@ -1183,11 +1189,12 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
       rw [hCo _ (hap.fd _ (by simp)), wH4 _ (by simp) (I_lt _) hst1.1 hst1.2]
       exact hAcoll
     have hCv : SpeedFrom sy m0 s.v C := Or.inr ⟨A, gA, sA, hAv, by rw [hCo _ (hap.fd _ (by simp)), ← hBe]⟩
-    obtain ⟨k5, f5, A7, R7, S7⟩ := hfric (Or.inl h0) A5 B5 gC sC hrelF hbR hbC hCv
+    obtain ⟨k5, f5, A7, R7, S7, C5⟩ := hfric (Or.inl h0) A5 B5 gC sC hrelF hbR hbC hCv
     rw [← hmid] at R7
     have hfin : stepN (k1 + (k2 + (k3 + (k4 + k5)))) R = stepN k5 R5 := by
       rw [stepN_add, hR2, stepN_add, hR3, stepN_add, hR4, stepN_add, hR5]
-    refine ⟨k1 + (k2 + (k3 + (k4 + k5))), by omega, by rw [hfin]; exact A7, by rw [hfin]; exact R7, ?_⟩
+    refine ⟨k1 + (k2 + (k3 + (k4 + k5))), by omega, by rw [hfin]; exact A7, by rw [hfin]; exact R7, ?_,
+      InFrameN.add' C1 hR2 (InFrameN.add' C2 hR3 (InFrameN.add' C3 hR4 (InFrameN.add' C4 hR5 C5)))⟩
     rw [hfin]
     obtain ⟨s1, s2, s3⟩ := S7
     obtain ⟨t1, t2, t3⟩ := hS3
@@ -1205,7 +1212,7 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
       obtain ⟨g, fc⟩ := a9
       simp only [fricOK, Bool.and_eq_true, beq_iff_eq] at fc
       obtain ⟨⟨⟨d1, d2⟩, d3⟩, d4⟩ := fc
-      obtain ⟨k2, f2, A3, W3, B3⟩ := piece_spec g AF
+      obtain ⟨k2, f2, A3, W3, B3, C2⟩ := piece_spec g AF
       generalize hR3 : stepN k2 R2 = R3 at A3 W3
       have c3 := carry W3
       have hrelF : ∀ p ∈ tagsFric0 sy, p.2.R (R3.ram.get! p.1) (A.ram.get! p.1) := by
@@ -1224,11 +1231,11 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
       have hbR : R3.ram.get! (I sy.Player_CollisionBits) = R.ram.get! (I sy.Player_CollisionBits) := by
         rw [W3 _ (by simp [watchA, watchH]) (I_lt _)]
         exact hRcoll
-      obtain ⟨k5, f5, A7, R7, S7⟩ := hfric (Or.inr (by simpa using hl)) A3 B3 gA sA hrelF hbR hAcoll (Or.inl hAv)
+      obtain ⟨k5, f5, A7, R7, S7, C5⟩ := hfric (Or.inr (by simpa using hl)) A3 B3 gA sA hrelF hbR hAcoll (Or.inl hAv)
       rw [← hmid] at R7
       have hfin : stepN (k1 + (k2 + k5)) R = stepN k5 R3 := by
         rw [stepN_add, hR2, stepN_add, hR3]
-      refine ⟨k1 + (k2 + k5), by omega, by rw [hfin]; exact A7, by rw [hfin]; exact R7, ?_⟩
+      refine ⟨k1 + (k2 + k5), by omega, by rw [hfin]; exact A7, by rw [hfin]; exact R7, ?_, InFrameN.add' C1 hR2 (InFrameN.add' C2 hR3 C5)⟩
       rw [hfin]
       obtain ⟨s1, s2, s3⟩ := S7
       obtain ⟨t1, t2, t3⟩ := hS3
@@ -1238,12 +1245,12 @@ theorem to_moverG {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {
       · rw [s3, W3 _ (by simp [watchA, watchH]) (I_lt _), t3]
     · -- in the air, with neither
       rw [if_neg hl] at hmid a9
-      obtain ⟨k2, f2, A3, W3, _⟩ := piece_spec a9 AF
+      obtain ⟨k2, f2, A3, W3, _, C2⟩ := piece_spec a9 AF
       generalize hR3 : stepN k2 R2 = R3 at A3 W3
       have c3 := carry W3
       have hfin : stepN (k1 + k2) R = R3 := by
         rw [stepN_add, hR2, hR3]
-      refine ⟨k1 + k2, by omega, by rw [hfin]; exact A3, ?_, ?_⟩
+      refine ⟨k1 + k2, by omega, by rw [hfin]; exact A3, ?_, ?_, InFrameN.add' C1 hR2 C2⟩
       · rw [hfin, hmid]
         refine hOut _ _ ⟨c3 (I sy.Player_X_Speed, .eq) (by simp [outPhys]), c3 (I sy.Player_X_MoveForce, .eq) (by simp [outPhys]), c3 (I sy.PlayerFacingDir, .eq) (by simp [outPhys]),
           c3 (I sy.Player_MovingDir, .eq) (by simp [outPhys]), c3 (I sy.RunningSpeed, .nz) (by simp [outPhys])⟩
@@ -1286,7 +1293,8 @@ theorem to_mover {m0 : Machine} {S : UInt8} {c : Case} {R : Machine} {s : HS} {i
     (hcoll : R.ram.get! (I sy.Player_CollisionBits) &&& lrOf c.n = lrOf c.n) (hsv : R.ram.get! (I sy.SavedJoypadBits) = c.raw)
     (hilr : lrOf i = lrOf c.n) (hist : stOf i = stOf c.n) (hiab : habOf i = habOf c.n) (hisv : hsvOf i = hsvOf c.n)
     (hirt : c.gb = true → (R.ram.get! (I sy.RunningTimer) = 0 ↔ i.rt = 0)) :
-    ∃ k, k ≤ fuelW + 6 * fuelS ∧ At (Rom.of m0) (planOf sy m0 S c).c4 (stepN k R) ∧ Rel5 sy (stepN k R) (midH sy m0 s i) ∧ Same3 sy (stepN k R) R := by
+    ∃ k, k ≤ fuelW + 6 * fuelS ∧ At (Rom.of m0) (planOf sy m0 S c).c4 (stepN k R) ∧ Rel5 sy (stepN k R) (midH sy m0 s i) ∧ Same3 sy (stepN k R) R ∧
+      InFrameN (Rom.of m0) R k := by
   refine to_moverG hb hap hc hA hv hf hfd hmd hrs habs hsv hilr hist hiab hisv hirt (fun _ _ h => h) ?_
   intro hfr R5 C hA5 hK hC hCs hrel hbR hbC _
   have fc := fricOK_of hc hfr
@@ -1471,7 +1479,7 @@ modulo the size of the position. -/
 theorem move_model {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m0 S = true) (h : AtCtrl sy (Rom.of m0) S R) :
     ∃ k, k ≤ 2 * fuelW + 11 * fuelS ∧ Good (Rom.of m0) (stepN k R) ∧ (stepN k R).pc = sy.PlayerSubs ∧
       readHS sy (stepN k R) = hstep sy m0 (readHS sy R) (readIn sy R) ∧
-      (posP sy (stepN k R) - posP sy R - 16 * sbyte (readHS sy (stepN k R)).v) % 0x1000000 = 0 := by
+      (posP sy (stepN k R) - posP sy R - 16 * sbyte (readHS sy (stepN k R)).v) % 0x1000000 = 0 ∧ InFrameN (Rom.of m0) R k := by
   have hF := facts_of hOK
   have hb := base_good hF.base
   have hap := apart_of hF.apart
@@ -1490,7 +1498,7 @@ theorem move_model {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m0
   have hN : hstep sy m0 (readHS sy R) (readIn sy R) = finishH sy (midH sy m0 (readHS sy R) (norm (c.inp rtb))) := by
     rw [hI]
     exact hstepN_eq _ _ _ _
-  obtain ⟨k1, f1, A1, R1, S1⟩ := to_mover (i := norm (c.inp rtb)) (s := readHS sy R) hb hap (hF.cases c hmem).1 hA rfl rfl rfl rfl
+  obtain ⟨k1, f1, A1, R1, S1, C1⟩ := to_mover (i := norm (c.inp rtb)) (s := readHS sy R) hb hap (hF.cases c hmem).1 hA rfl rfl rfl rfl
     (rs_nz sy hap.rmin _) h.abs hcollC (by rw [← hc]; rfl)
     (lr_of n1 n2) (st_of n2 n3) (hab_of n1 n3) (hsv_of n1 n3)
     (fun hg => by
@@ -1500,10 +1508,10 @@ theorem move_model {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m0
   have e4 : t = (planOf sy m0 S c).c4 := cutSame_eq hte
   have htl := hF.tails t ht
   rw [e4] at htl
-  obtain ⟨k2, f2, g2, p2, v2, ff2, d2, r2, m2, q2⟩ := tail_spec htl hF.digits A1
-  generalize hR : stepN k1 R = R1' at A1 R1 S1 v2 ff2 d2 r2 m2 q2 g2 p2
+  obtain ⟨k2, f2, g2, p2, v2, ff2, d2, r2, m2, q2, C2⟩ := tail_spec htl hF.digits A1
+  generalize hR : stepN k1 R = R1' at A1 R1 S1 v2 ff2 d2 r2 m2 q2 g2 p2 C2
   have hfin : stepN (k1 + k2) R = stepN k2 R1' := by rw [stepN_add, hR]
-  refine ⟨k1 + k2, by omega, by rw [hfin]; exact g2, by rw [hfin]; exact p2, ?_, ?_⟩
+  refine ⟨k1 + k2, by omega, by rw [hfin]; exact g2, by rw [hfin]; exact p2, ?_, ?_, InFrameN.add' C1 hR C2⟩
   · rw [hfin, hN]
     refine readHS_of (v2.trans R1.v) (ff2.trans R1.f) (d2.trans R1.fd) (by rw [r2]; exact R1.rs) ?_
     rw [m2, R1.v, R1.md]
@@ -1780,8 +1788,8 @@ theorem fric_masked {m0 : Machine} {S : UInt8} {c : Case} {R R5 C : Machine} {v0
     · show (Tag.kn sy.noLeft sy.noLeft).R _ _
       rw [hbR, hRb, hNb]
       exact Tag.R_kn _ _
-  obtain ⟨k, hk, A4, R1, S1⟩ := fric_stage hN d4 d1 d2 hA5 hK gN sN hrelN
-  refine ⟨k, hk, A4, ?_, S1⟩
+  obtain ⟨k, hk, A4, R1, S1, C1⟩ := fric_stage hN d4 d1 d2 hA5 hK gN sN hrelN
+  refine ⟨k, hk, A4, ?_, S1, C1⟩
   -- the model's friction with the real bits next to the model's
   have hvb : I sy.Player_CollisionBits ≠ I sy.Player_X_Speed := hap0 (I sy.Player_X_Speed, .eq) (by simp [tagsFric0])
   have hstv := hap.st (I sy.Player_X_Speed) (by simp [pokeIdx])
@@ -1864,7 +1872,7 @@ theorem move_masked {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m
     (hv1 : peek R sy.Player_X_Speed ≠ 0) (hv2 : peek R sy.Player_X_Speed < 0x80) :
     ∃ k, k ≤ 2 * fuelW + 11 * fuelS ∧ Good (Rom.of m0) (stepN k R) ∧ (stepN k R).pc = sy.PlayerSubs ∧
       (readHS sy (stepN k R) = hstep sy m0 (readHS sy R) (readIn sy R) ∨ peek (stepN k R) sy.Player_X_Speed = 0) ∧
-      (posP sy (stepN k R) - posP sy R - 16 * sbyte (readHS sy (stepN k R)).v) % 0x1000000 = 0 := by
+      (posP sy (stepN k R) - posP sy R - 16 * sbyte (readHS sy (stepN k R)).v) % 0x1000000 = 0 ∧ InFrameN (Rom.of m0) R k := by
   have hF := facts_of hOK
   have hm := mfacts_of hmk
   have hb := base_good hF.base
@@ -1883,7 +1891,7 @@ theorem move_masked {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m
   have hN : hstep sy m0 (readHS sy R) (readIn sy R) = finishH sy (midH sy m0 (readHS sy R) (norm (c.inp rtb))) := by
     rw [hI]
     exact hstepN_eq _ _ _ _
-  obtain ⟨k1, f1, A1, R1, S1⟩ := to_moverG (Out := OutM sy) (i := norm (c.inp rtb)) (s := readHS sy R) hb hap (hF.cases c hmem).1 hA rfl rfl rfl rfl
+  obtain ⟨k1, f1, A1, R1, S1, C1⟩ := to_moverG (Out := OutM sy) (i := norm (c.inp rtb)) (s := readHS sy R) hb hap (hF.cases c hmem).1 hA rfl rfl rfl rfl
     (rs_nz sy hap.rmin _) h.abs (by rw [← hc]; rfl)
     (lr_of n1 n2) (st_of n2 n3) (hab_of n1 n3) (hsv_of n1 n3)
     (fun hg => by
@@ -1895,10 +1903,10 @@ theorem move_masked {m0 : Machine} {S : UInt8} {R : Machine} (hOK : modelOK sy m
   have e4 : t = (planOf sy m0 S c).c4 := cutSame_eq hte
   have htl := hF.tails t ht
   rw [e4] at htl
-  obtain ⟨k2, f2, g2, p2, v2, ff2, d2, r2, m2, q2⟩ := tail_spec htl hF.digits A1
-  generalize hR : stepN k1 R = R1' at A1 R1 S1 v2 ff2 d2 r2 m2 q2 g2 p2
+  obtain ⟨k2, f2, g2, p2, v2, ff2, d2, r2, m2, q2, C2⟩ := tail_spec htl hF.digits A1
+  generalize hR : stepN k1 R = R1' at A1 R1 S1 v2 ff2 d2 r2 m2 q2 g2 p2 C2
   have hfin : stepN (k1 + k2) R = stepN k2 R1' := by rw [stepN_add, hR]
-  refine ⟨k1 + k2, by omega, by rw [hfin]; exact g2, by rw [hfin]; exact p2, ?_, ?_⟩
+  refine ⟨k1 + k2, by omega, by rw [hfin]; exact g2, by rw [hfin]; exact p2, ?_, ?_, InFrameN.add' C1 hR C2⟩
   · rw [hfin]
     rcases R1 with R1 | R1
     · left
@@ -1971,6 +1979,40 @@ theorem trace_steps {M : Machine} {i : UInt8} {n₀ K : Nat} (h : ((trace M i (n
     unfold nxt
     rw [if_neg (by rw [h2]; decide)]
 
+/-- **The frame does not end during a walked run.** The machines of the next `k` steps from the machine `R` at the instruction `n₀` of the frame meet `InFrame` (`InFrameN`, from the
+walks), and each instruction of the frame that is not at the idle loop runs at a dot at least 64 before the frame's end (`ht`: the condition `time` of `FrameKeep.CleanK`). The idle
+loop is a `JMP` to itself. Then the frame does not end in these `k` steps, and they are the steps of the frame. -/
+theorem trace_inFrame {E : Rom} {M : Machine} {i : UInt8} {n₀ k : Nat} {idle : UInt16} (hidle : idleAt E idle = true)
+    (hR : (trace M i n₀).frame = M.frame) (hc : InFrameN E (trace M i n₀) k)
+    (ht : ∀ n, (trace M i n).pc ≠ idle → (trace M i n).fdot ≤ dotsPerFrame - 64) :
+    ∀ j, j ≤ k → trace M i (n₀ + j) = stepN j (trace M i n₀) ∧ (trace M i (n₀ + j)).frame = M.frame := by
+  intro j
+  induction j with
+  | zero => intro _; exact ⟨rfl, hR⟩
+  | succ j ih =>
+    intro hj
+    obtain ⟨e1, e2⟩ := ih (by omega)
+    have C := hc j (by omega)
+    have hne : (stepN j (trace M i n₀)).pc ≠ idle := by
+      intro e
+      have h1 := C.idle
+      rw [e, hidle] at h1
+      cases h1
+    have hfr : (stepN j (trace M i n₀)).frame = M.frame := by rw [← e1]; exact e2
+    have hf : (stepN j (trace M i n₀)).fdot + 64 ≤ dotsPerFrame := by
+      have h1 := ht (n₀ + j) (by rw [e1]; exact hne)
+      rw [e1] at h1
+      have h2 : 64 ≤ dotsPerFrame := by decide
+      omega
+    have e3 := C.frame hf
+    have e4 : trace M i (n₀ + (j + 1)) = (PipeTransitionAll.go step (stepN j (trace M i n₀))).2 := by
+      show nxt (M.frame + 1) (trace M i (n₀ + j)) = _
+      rw [e1]
+      unfold nxt
+      rw [if_neg (by rw [hfr, C.halted]; simp)]
+    refine ⟨by rw [e4, stepN_succ], ?_⟩
+    rw [e4, e3, hfr]
+
 theorem readHS_congr {x y : Machine} (h : ∀ a ∈ hBytes sy, peek x a = peek y a) : readHS sy x = readHS sy y := by
   simp only [readHS, h _ (show sy.Player_X_Speed ∈ hBytes sy by simp [hBytes]), h _ (show sy.Player_X_MoveForce ∈ hBytes sy by simp [hBytes]),
     h _ (show sy.PlayerFacingDir ∈ hBytes sy by simp [hBytes]), h _ (show sy.Player_MovingDir ∈ hBytes sy by simp [hBytes]), h _ (show sy.RunningSpeed ∈ hBytes sy by simp [hBytes])]
@@ -2002,7 +2044,7 @@ theorem sbyte_range (v : UInt8) : -128 ≤ sbyte v ∧ sbyte v ≤ 127 := by
 theorem clean_frame {m0 : Machine} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} (hOK : modelOK sy m0 S = true) (h : Clean sy (Rom.of m0) S M i n₀) :
     readHS sy (frame M i) = hstep sy m0 (readHS sy M) (readIn sy (trace M i n₀)) ∧
       posP sy (frame M i) = posP sy M + 16 * sbyte (readHS sy (frame M i)).v := by
-  obtain ⟨k, hk, _, hpc, h1, h2⟩ := move_model hOK h.at_ctrl
+  obtain ⟨k, hk, _, hpc, h1, h2, _⟩ := move_model hOK h.at_ctrl
   have e0 := trace_steps h.longer k hk
   have e1 := h.after (n₀ + k) (by omega) (by rw [e0]; exact hpc)
   rw [e0] at e1
@@ -2239,10 +2281,10 @@ theorem frame_path {m0 : Machine} {S : UInt8} {R : Machine} (hb : GoodH (Rom.of 
     simp
   have hsp : TopSpeed.inSpeed sy (R.ram.get! (I sy.Player_X_Speed)) = true := h.speed
   have hco : R.ram.get! (I sy.Player_CollisionBits) ∈ TopSpeed.collBits sy := h.coll
-  obtain ⟨k1, f1, A1, W1, B1⟩ := piece_spec a1 hA
+  obtain ⟨k1, f1, A1, W1, B1, _⟩ := piece_spec a1 hA
   generalize hR1 : stepN k1 R = R1 at A1 W1
   have wG : ∀ j ∈ I sy.RunningTimer :: I sy.SavedJoypadBits :: watchH sy, j < 2048 → R1.ram.get! j = R.ram.get! j := W1
-  obtain ⟨k2, Q2, f2, A2, W2, _, cg, L2⟩ := piece_specX (c' := afterLeaf P.c1 P.r1) (watch := I sy.SavedJoypadBits :: watchH sy) (extra := capsGood sy m0) x1 A1
+  obtain ⟨k2, Q2, f2, A2, W2, _, cg, L2, _⟩ := piece_specX (c' := afterLeaf P.c1 P.r1) (watch := I sy.SavedJoypadBits :: watchH sy) (extra := capsGood sy m0) x1 A1
   generalize hR2 : stepN k2 R1 = R2 at A2 W2 L2
   obtain ⟨mr, ml, lo, hi, c1, c2, c3, c4, m1, m2, m3⟩ := capsGood_spec cg L2
   have wX : ∀ j ∈ I sy.SavedJoypadBits :: watchH sy, j < 2048 → R2.ram.get! j = R1.ram.get! j := W2
@@ -2258,16 +2300,16 @@ theorem frame_path {m0 : Machine} {S : UInt8} {R : Machine} (hb : GoodH (Rom.of 
     obtain ⟨⟨⟨⟨b1, b2⟩, _⟩, b4⟩, b5⟩ := g
     simp only [fricOK, Bool.and_eq_true, beq_iff_eq] at fc
     obtain ⟨⟨⟨d1, d2⟩, _⟩, d4⟩ := fc
-    obtain ⟨k3, f3, A3, W3, B3⟩ := piece_spec b2 A2
+    obtain ⟨k3, f3, A3, W3, B3, _⟩ := piece_spec b2 A2
     generalize hR3 : stepN k3 R2 = R3 at A3 W3
     have x2' : walkT (Rom.of m0) (fun Q => Q.pc == P.r2) (fun Q => goalC (afterLeaf P.c2 P.r2) ([I sy.PlayerFacingDir, I sy.Player_CollisionBits, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce] ++ capsL sy) Q && animGood sy Q) fuelS (startQ P.c2) = true := by
       rcases x2 with x2 | x2
       · exact absurd h0 x2
       · exact x2
-    obtain ⟨k4, Q4, f4, A4, W4, _, ag, L4⟩ := piece_specX (c' := afterLeaf P.c2 P.r2) (extra := animGood sy) x2' A3
+    obtain ⟨k4, Q4, f4, A4, W4, _, ag, L4, _⟩ := piece_specX (c' := afterLeaf P.c2 P.r2) (extra := animGood sy) x2' A3
     generalize hR4 : stepN k4 R3 = R4 at A4 W4 L4
     have an := animGood_spec ag L4
-    obtain ⟨k5, f5, A5, W5, B5⟩ := piece_spec b4 A4
+    obtain ⟨k5, f5, A5, W5, B5, _⟩ := piece_spec b4 A4
     generalize hR5 : stepN k5 R4 = R5 at A5 W5
     have wf : ∀ j ∈ [I sy.Player_X_Speed, I sy.Player_X_MoveForce, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_CollisionBits, I sy.Player_X_Position, I sy.Player_PageLoc, I sy.SprObject_X_MoveForce] ++ capsL sy,
         j < 2048 → R5.ram.get! j = R4.ram.get! j := fun j hj hl => W5 j (List.mem_append_left _ hj) hl
@@ -2313,7 +2355,7 @@ theorem frame_path {m0 : Machine} {S : UInt8} {R : Machine} (hb : GoodH (Rom.of 
       obtain ⟨g, fc⟩ := a9
       simp only [fricOK, Bool.and_eq_true, beq_iff_eq] at fc
       obtain ⟨⟨⟨d1, d2⟩, _⟩, d4⟩ := fc
-      obtain ⟨k3, f3, A3, W3, B3⟩ := piece_spec g A2
+      obtain ⟨k3, f3, A3, W3, B3, _⟩ := piece_spec g A2
       generalize hR3 : stepN k3 R2 = R3 at A3 W3
       have hCaps : ∀ j ∈ capsL sy, R3.ram.get! j = R2.ram.get! j := fun j hj => by
         have hl : j < 2048 := by
@@ -2392,7 +2434,7 @@ theorem frame_read {m0 : Machine} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : 
   have e4 : t = (planOf sy m0 S (caseOf sy (trace M i n₀))).c4 := cutSame_eq hte
   have htl := hF.tails t ht
   rw [e4] at htl
-  obtain ⟨k2, b2, g2, p2, v2, ff2, d2, r2, m2, q2⟩ := tail_spec htl hF.digits A1
+  obtain ⟨k2, b2, g2, p2, v2, ff2, d2, r2, m2, q2, _⟩ := tail_spec htl hF.digits A1
   have hk : k1 + k2 ≤ moveLen := by
     show k1 + k2 ≤ 2 * fuelW + 11 * fuelS
     omega

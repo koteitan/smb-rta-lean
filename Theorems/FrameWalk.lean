@@ -2371,6 +2371,343 @@ theorem stepN_add (j k : Nat) (m : Machine) : stepN (j + k) m = stepN k (stepN j
     show stepN (j + k) (go step m).2 = stepN k (stepN j (go step m).2)
     exact ih _
 
+/-! ### The time of a step
+
+The walk does not look at the time, but an instruction that it follows is not an idle loop (`JMP` to itself) and writes only RAM: no DMA and no register of the PPU. Its
+action takes the page penalty or a branch's cycles, at most 6 dots, and then the cycles of its opcode, at most 7. So a step from a machine with 64 dots or more left in the frame
+keeps the frame (`InFrame`, `inFrame_of_tstep`). -/
+
+/-- the time of an action on one machine: it keeps the frame and adds at most `d` dots, if the frame has more than `d` dots left -/
+def DotsOK {α : Type} (d : Nat) (f : M α) (m : Machine) : Prop :=
+  m.fdot + d < dotsPerFrame - 1 → (go f m).2.frame = m.frame ∧ (go f m).2.fdot ≤ m.fdot + d
+
+theorem DotsOK.of_eq {α : Type} {d : Nat} {f : M α} {m : Machine} {a : α} {r : Machine} (h : go f m = (a, r)) (h1 : r.frame = m.frame) (h2 : r.fdot = m.fdot) :
+    DotsOK d f m := by
+  intro _
+  rw [h]
+  exact ⟨h1, by rw [h2]; omega⟩
+
+theorem tick_time (c : Nat) (m : Machine) : DotsOK (3 * c) (tick c) m := by
+  intro hd
+  rw [PipeTransitionAll.tick_eq]
+  have k1 : ∀ (b : Bool) (n : Machine), (PipeTransitionAll.tick1 b n).frame = n.frame ∧ (PipeTransitionAll.tick1 b n).fdot = n.fdot ∧
+      (PipeTransitionAll.tick1 b n).ppuMask = n.ppuMask := fun b n => by cases b <;> exact ⟨rfl, rfl, rfl⟩
+  have k2 : ∀ (b : Bool) (n : Machine), (PipeTransitionAll.tick2 b n).frame = n.frame ∧ (PipeTransitionAll.tick2 b n).fdot = n.fdot ∧
+      (PipeTransitionAll.tick2 b n).ppuMask = n.ppuMask := fun b n => by cases b <;> exact ⟨rfl, rfl, rfl⟩
+  have k3 : ∀ (b : Bool) (n : Machine), (PipeTransitionAll.tick3 b n).frame = n.frame ∧ (PipeTransitionAll.tick3 b n).fdot = n.fdot ∧
+      (PipeTransitionAll.tick3 b n).ppuMask = n.ppuMask := fun b n => by cases b <;> exact ⟨rfl, rfl, rfl⟩
+  dsimp only
+  generalize hn : PipeTransitionAll.tick3 _ (PipeTransitionAll.tick2 _ (PipeTransitionAll.tick1 _ { m with cyc := m.cyc + c })) = n
+  have hnf : n.frame = m.frame ∧ n.fdot = m.fdot := by
+    rw [← hn]
+    obtain ⟨a1, a2, _⟩ := k3 (decide (m.fdot < dotSpr0) && decide (dotSpr0 ≤ m.fdot + 3 * c)) (PipeTransitionAll.tick2 (decide (m.fdot < dotVblClr) && decide (dotVblClr ≤ m.fdot + 3 * c))
+      (PipeTransitionAll.tick1 (decide (m.fdot < dotVblSet) && decide (dotVblSet ≤ m.fdot + 3 * c)) { m with cyc := m.cyc + c }))
+    obtain ⟨b1, b2, _⟩ := k2 (decide (m.fdot < dotVblClr) && decide (dotVblClr ≤ m.fdot + 3 * c)) (PipeTransitionAll.tick1 (decide (m.fdot < dotVblSet) && decide (dotVblSet ≤ m.fdot + 3 * c)) { m with cyc := m.cyc + c })
+    obtain ⟨c1, c2, _⟩ := k1 (decide (m.fdot < dotVblSet) && decide (dotVblSet ≤ m.fdot + 3 * c)) { m with cyc := m.cyc + c }
+    rw [a1, b1, c1, a2, b2, c2]
+    exact ⟨rfl, rfl⟩
+  have hl : dotsPerFrame - 1 ≤ PipeTransitionAll.tickLen n := by
+    unfold PipeTransitionAll.tickLen
+    split <;> (try omega)
+  unfold PipeTransitionAll.tick4
+  rw [if_neg (by omega)]
+  exact ⟨hnf.1, by simp⟩
+
+
+
+theorem DotsOK.bind {α β : Type} {a b : Nat} {f : M α} {g : α → M β} {m : Machine} (hf : DotsOK a f m) (hg : DotsOK b (g (go f m).1) (go f m).2) :
+    DotsOK (a + b) (f >>= g) m := by
+  intro hd
+  rw [PipeTransitionAll.go_bind]
+  obtain ⟨e1, e2⟩ := hf (by omega)
+  obtain ⟨e3, e4⟩ := hg (by omega)
+  exact ⟨e3.trans e1, by omega⟩
+
+theorem DotsOK.bind0 {α β : Type} {b : Nat} {f : M α} {g : α → M β} {m : Machine} (hf : DotsOK 0 f m) (hg : DotsOK b (g (go f m).1) (go f m).2) :
+    DotsOK b (f >>= g) m := by
+  have h := DotsOK.bind hf hg
+  rw [Nat.zero_add] at h
+  exact h
+
+theorem DotsOK.mono {α : Type} {a b : Nat} {f : M α} {m : Machine} (h : DotsOK a f m) (hab : a ≤ b) : DotsOK b f m := by
+  intro hd
+  obtain ⟨e1, e2⟩ := h (by omega)
+  exact ⟨e1, by omega⟩
+
+theorem DotsOK.congr {α : Type} {d : Nat} {f g : M α} {m m' : Machine} (h : go f m = go g m') (h1 : m'.frame = m.frame) (h2 : m'.fdot = m.fdot)
+    (hg : DotsOK d g m') : DotsOK d f m := by
+  intro hd
+  obtain ⟨e1, e2⟩ := hg (by omega)
+  rw [h]
+  exact ⟨e1.trans h1, by omega⟩
+
+theorem penalty_time (b e : UInt16) (m : Machine) : DotsOK 3 (pagePenalty b e) m := by
+  unfold pagePenalty
+  split
+  · exact tick_time 1 m
+  · exact DotsOK.of_eq rfl rfl rfl
+
+theorem rf_time (f : RF) (v : UInt8) (s : Machine) : DotsOK 0 (rf f v) s := by
+  intro _
+  rw [rf_eff]
+  cases f <;> exact ⟨rfl, Nat.le_refl _⟩
+
+
+/-- the time of a mode of an instruction that reads: the page penalty -/
+theorem Md.r_time (md : Md) (g : Good E m) (hp : 0x8000 ≤ m.pc) (hp2 : 0x8000 ≤ m.pc + 1) : DotsOK 3 md.r m := by
+  cases md with
+  | imm => exact DotsOK.of_eq (Md.w_spec .imm g hp hp2) rfl rfl
+  | zp => exact DotsOK.of_eq (Md.w_spec .zp g hp hp2) rfl rfl
+  | zpx => exact DotsOK.of_eq (Md.w_spec .zpx g hp hp2) rfl rfl
+  | zpy => exact DotsOK.of_eq (Md.w_spec .zpy g hp hp2) rfl rfl
+  | abs => exact DotsOK.of_eq (Md.w_spec .abs g hp hp2) rfl rfl
+  | abx =>
+    have key : go (Md.r .abx) m = go (pagePenalty (E.w m.pc) (E.w m.pc + m.x.toUInt16) >>= fun _ => pure (E.w m.pc + m.x.toUInt16)) { m with pc := m.pc + 1 + 1 } := by
+      show go (fetch16 >>= fun b => get >>= fun n => pagePenalty b (b + n.x.toUInt16) >>= fun _ => pure (b + n.x.toUInt16)) m = _
+      rw [PipeTransitionAll.go_bind, fetch16_eq g hp hp2]
+      rfl
+    exact DotsOK.congr key rfl rfl ((DotsOK.bind (penalty_time _ _ _) (DotsOK.of_eq (d := 0) rfl rfl rfl)).mono (by omega))
+  | aby =>
+    have key : go (Md.r .aby) m = go (pagePenalty (E.w m.pc) (E.w m.pc + m.y.toUInt16) >>= fun _ => pure (E.w m.pc + m.y.toUInt16)) { m with pc := m.pc + 1 + 1 } := by
+      show go (fetch16 >>= fun b => get >>= fun n => pagePenalty b (b + n.y.toUInt16) >>= fun _ => pure (b + n.y.toUInt16)) m = _
+      rw [PipeTransitionAll.go_bind, fetch16_eq g hp hp2]
+      rfl
+    exact DotsOK.congr key rfl rfl ((DotsOK.bind (penalty_time _ _ _) (DotsOK.of_eq (d := 0) rfl rfl rfl)).mono (by omega))
+  | izy =>
+    have g1 : Good E { m with pc := m.pc + 1 } := ⟨g.prg, g.mask, g.nmi, g.halted, g.trk, g.size, g.ctl⟩
+    have key : go (Md.r .izy) m = go (pagePenalty (ptrAt m (E.b m.pc)) (ptrAt m (E.b m.pc) + m.y.toUInt16) >>= fun _ => pure (ptrAt m (E.b m.pc) + m.y.toUInt16)) { m with pc := m.pc + 1 } := by
+      show go (fetch >>= fun z => rd16zp z >>= fun b => get >>= fun n => pagePenalty b (b + n.y.toUInt16) >>= fun _ => pure (b + n.y.toUInt16)) m = _
+      rw [PipeTransitionAll.go_bind, fetch_eq g hp]
+      simp only
+      rw [PipeTransitionAll.go_bind, rd16zp_eq g1]
+      rfl
+    exact DotsOK.congr key rfl rfl ((DotsOK.bind (penalty_time _ _ _) (DotsOK.of_eq (d := 0) rfl rfl rfl)).mono (by omega))
+
+
+/-- what an instruction of the walk needs of the machine for its time: a read reads RAM or ROM, a write writes RAM -/
+def InsOK (E : Rom) (a : Machine) : Ins → Prop
+  | .rd _ md => okAd (md.ea E { a with pc := a.pc + 1 })
+  | .wr _ md => md.ea E { a with pc := a.pc + 1 } < 0x2000
+  | .rmw _ md => md.ea E { a with pc := a.pc + 1 } < 0x2000
+  | .jmpi => okAd (E.w (a.pc + 1)) ∧ okAd ((E.w (a.pc + 1) &&& 0xFF00) ||| ((E.w (a.pc + 1) + 1) &&& 0x00FF))
+  | _ => True
+
+/-- **The time of an instruction that the walk knows**, after its opcode: at most 6 dots, the page penalty or a branch -/
+theorem sem_time {I : Ins} (g : Good E m) (hp1 : 0x8000 ≤ m.pc + 1) (hp2 : 0x8000 ≤ m.pc + 1 + 1) (hI : InsOK E m I) :
+    DotsOK 6 (sem I) { m with pc := m.pc + 1 } := by
+  have g1 := g.pc (m.pc + 1)
+  cases I with
+  | rd f md =>
+    have hI' : okAd (md.ea E { m with pc := m.pc + 1 }) := hI
+    obtain ⟨h1, h2⟩ := Md.r_spec md g1 hp1 hp2
+    have g2 : Good E (go md.r { m with pc := m.pc + 1 }).2 := Good.of_nt h2 (g.pc (md.adv (m.pc + 1)))
+    show DotsOK 6 (md.r >>= fun a => rd a >>= rf f) _
+    refine (DotsOK.bind (b := 0) (Md.r_time md g1 hp1 hp2) ?_).mono (by omega)
+    rw [h1]
+    refine DotsOK.bind0 (b := 0) (DotsOK.of_eq (rd_ok g2 hI') rfl rfl) ?_
+    rw [rd_ok g2 hI']
+    exact rf_time f _ _
+  | wr f md =>
+    have hI' : md.ea E { m with pc := m.pc + 1 } < 0x2000 := hI
+    exact DotsOK.of_eq (sem_wr g hp1 hp2 rfl hI') rfl rfl
+  | rmw f md =>
+    have hI' : md.ea E { m with pc := m.pc + 1 } < 0x2000 := hI
+    exact DotsOK.of_eq (sem_rmw g hp1 hp2 rfl hI') rfl rfl
+  | acc f => exact DotsOK.of_eq (sem_acc _) rfl rfl
+  | br f =>
+    show DotsOK 6 f.op _
+    rw [BF.op_eq]
+    show DotsOK 6 (fetch >>= fun off => get >>= fun s => if (bt s.p f.i == f.set) = true then
+      (setPC (s.pc + (off.toUInt16 ||| (if off ≥ 0x80 then 0xFF00 else 0))) >>= fun _ =>
+        tick (if (s.pc ^^^ (s.pc + (off.toUInt16 ||| (if off ≥ 0x80 then 0xFF00 else 0)))) &&& 0xFF00 != 0 then 2 else 1))
+      else pure ()) _
+    refine DotsOK.bind0 (DotsOK.of_eq (fetch_eq g1 hp1) rfl rfl) ?_
+    rw [fetch_eq g1 hp1]
+    refine DotsOK.bind0 (DotsOK.of_eq rfl rfl rfl) ?_
+    show DotsOK 6 (if (bt _ f.i == f.set) = true then _ else pure ()) _
+    split
+    · refine DotsOK.bind0 (DotsOK.of_eq rfl rfl rfl) ?_
+      refine (tick_time _ _).mono ?_
+      have h3 : ∀ (p : Prop) [Decidable p], 3 * (if p then 2 else 1) ≤ 6 := by
+        intro p _
+        split <;> omega
+      exact h3 _
+    · exact DotsOK.of_eq rfl rfl rfl
+  | jmp =>
+    show DotsOK 6 (fetch16 >>= fun t => setPC t) _
+    refine DotsOK.bind0 (DotsOK.of_eq (fetch16_eq g1 hp1 hp2) rfl rfl) ?_
+    exact DotsOK.of_eq rfl rfl rfl
+  | jmpi =>
+    obtain ⟨u1, v1⟩ := (hI : okAd (E.w (m.pc + 1)) ∧ okAd ((E.w (m.pc + 1) &&& 0xFF00) ||| ((E.w (m.pc + 1) + 1) &&& 0x00FF)))
+    show DotsOK 6 (fetch16 >>= fun ptr => rd ptr >>= fun lo => rd ((ptr &&& 0xFF00) ||| ((ptr + 1) &&& 0x00FF)) >>= fun hi => setPC (lo.toUInt16 ||| (hi.toUInt16 <<< 8))) _
+    refine DotsOK.bind0 (DotsOK.of_eq (fetch16_eq g1 hp1 hp2) rfl rfl) ?_
+    rw [fetch16_eq g1 hp1 hp2]
+    have g3 := g.pc (m.pc + 1 + 1 + 1)
+    refine DotsOK.bind0 (DotsOK.of_eq (rd_ok g3 u1) rfl rfl) ?_
+    rw [rd_ok g3 u1]
+    refine DotsOK.bind0 (DotsOK.of_eq (rd_ok g3 v1) rfl rfl) ?_
+    rw [rd_ok g3 v1]
+    exact DotsOK.of_eq rfl rfl rfl
+  | jsr =>
+    have g2 := g.pc (m.pc + 1 + 1 + 1)
+    have e : go (sem .jsr) { m with pc := m.pc + 1 } = go (Smbrta.push ((m.pc + 1 + 1 + 1 - 1) >>> 8).toUInt8 >>= fun _ => Smbrta.push (m.pc + 1 + 1 + 1 - 1).toUInt8 >>= fun _ =>
+        setPC (E.w (m.pc + 1))) { m with pc := m.pc + 1 + 1 + 1 } := by
+      show go (fetch16 >>= fun t => get >>= fun s => Smbrta.push ((s.pc - 1) >>> 8).toUInt8 >>= fun _ => Smbrta.push (s.pc - 1).toUInt8 >>= fun _ => setPC t) _ = _
+      rw [PipeTransitionAll.go_bind, fetch16_eq g1 hp1 hp2]
+      rfl
+    refine DotsOK.congr e rfl rfl ?_
+    refine DotsOK.bind0 (DotsOK.of_eq (push_eff g2) rfl rfl) ?_
+    rw [push_eff g2]
+    have g3 : Good E { { m with pc := m.pc + 1 + 1 + 1 } with s := m.s - 1, ram := m.ram.set! (stkI m.s) ((m.pc + 1 + 1 + 1 - 1) >>> 8).toUInt8 } := by
+      refine ⟨g.prg, g.mask, g.nmi, g.halted, g.trk, ?_, g.ctl⟩
+      show (m.ram.set! _ _).size = 2048
+      rw [PipeTransitionAll.ba_size_set]
+      exact g.size
+    refine DotsOK.bind0 (DotsOK.of_eq (push_eff g3) rfl rfl) ?_
+    exact DotsOK.of_eq rfl rfl rfl
+  | rts => exact DotsOK.of_eq (rts_eff g1) rfl rfl
+  | pha =>
+    show DotsOK 6 (Smbrta.push m.a) _
+    exact DotsOK.of_eq (push_eff g1) rfl rfl
+  | pla =>
+    show DotsOK 6 (Smbrta.pull >>= fun v => setA v) _
+    refine DotsOK.bind0 (DotsOK.of_eq (pull_eff g1) rfl rfl) ?_
+    exact DotsOK.of_eq rfl rfl rfl
+  | clc => exact DotsOK.of_eq rfl rfl rfl
+  | sec => exact DotsOK.of_eq rfl rfl rfl
+  | tax => exact DotsOK.of_eq rfl rfl rfl
+  | tay => exact DotsOK.of_eq rfl rfl rfl
+  | txa => exact DotsOK.of_eq rfl rfl rfl
+  | tya => exact DotsOK.of_eq rfl rfl rfl
+  | inx => exact DotsOK.of_eq rfl rfl rfl
+  | iny => exact DotsOK.of_eq rfl rfl rfl
+  | dex => exact DotsOK.of_eq rfl rfl rfl
+  | dey => exact DotsOK.of_eq rfl rfl rfl
+
+
+set_option maxRecDepth 100000 in
+/-- the instructions of the walk take at most 7 cycles, but the penalties -/
+theorem cyc_le : ∀ p ∈ insList, (cycTable.get! p.1.toNat).toNat ≤ 7 := by decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- **A step that the walk follows keeps the frame** when the frame has at least 64 dots left -/
+theorem step_time {I : Ins} (g : Good E m) (hp : 0x8000 ≤ m.pc) (hp1 : 0x8000 ≤ m.pc + 1) (hp2 : 0x8000 ≤ m.pc + 1 + 1)
+    (hd : lookupOp (E.b m.pc) insList = some I) (hi : idleAt E m.pc = false) (hI : InsOK E m I) (hf : m.fdot + 64 ≤ dotsPerFrame) :
+    (go step m).2.frame = m.frame := by
+  rw [step_run g hp hd hi]
+  have hc : (cycTable.get! (E.b m.pc).toNat).toNat ≤ 7 := cyc_le _ (lookupOp_mem hd)
+  have h := DotsOK.bind (g := fun _ => tick (cycTable.get! (E.b m.pc).toNat).toNat) (sem_time g hp1 hp2 hI)
+    (tick_time (cycTable.get! (E.b m.pc).toNat).toNat (go (sem I) { m with pc := m.pc + 1 }).2)
+  exact (h (by show m.fdot + _ < _; omega)).1
+
+theorem insOK_of_exec {I : Ins} {l : List TS} (h : Lk E m₀ n₀ Q m n) (he : exec E Q I = some l) : InsOK E m I ∧ InsOK E n I := by
+  have el := h.pcl
+  have er := h.pcr
+  cases I with
+  | rd f md =>
+    simp only [exec] at he
+    split at he
+    · rename_i t ht
+      obtain ⟨h1, h2, _⟩ := srcT_spec h ht
+      exact ⟨h2, by show okAd _; rw [← h1]; exact h2⟩
+    · cases he
+  | wr f md =>
+    simp only [exec] at he
+    split at he
+    · rename_i a ha
+      split at he
+      · rename_i hl
+        obtain ⟨e1, e2⟩ := dstT_spec h ha
+        exact ⟨by show _ < _; rw [e1]; exact hl, by show _ < _; rw [e2]; exact hl⟩
+      · cases he
+    · cases he
+  | rmw f md =>
+    simp only [exec] at he
+    split at he
+    · rename_i a ha
+      split at he
+      · rename_i hl
+        obtain ⟨e1, e2⟩ := dstT_spec h ha
+        exact ⟨by show _ < _; rw [e1]; exact hl, by show _ < _; rw [e2]; exact hl⟩
+      · cases he
+    · cases he
+  | jmpi =>
+    simp only [exec] at he
+    split at he
+    · rename_i lo hi' h1 h2
+      obtain ⟨u1, _, _⟩ := memS_spec h h1
+      obtain ⟨v1, _, _⟩ := memS_spec h h2
+      exact ⟨by show okAd _ ∧ okAd _; rw [el]; exact ⟨u1, v1⟩, by show okAd _ ∧ okAd _; rw [er]; exact ⟨u1, v1⟩⟩
+    · cases he
+  | acc f => exact ⟨trivial, trivial⟩
+  | br f => exact ⟨trivial, trivial⟩
+  | jmp => exact ⟨trivial, trivial⟩
+  | jsr => exact ⟨trivial, trivial⟩
+  | rts => exact ⟨trivial, trivial⟩
+  | pha => exact ⟨trivial, trivial⟩
+  | pla => exact ⟨trivial, trivial⟩
+  | clc => exact ⟨trivial, trivial⟩
+  | sec => exact ⟨trivial, trivial⟩
+  | tax => exact ⟨trivial, trivial⟩
+  | tay => exact ⟨trivial, trivial⟩
+  | txa => exact ⟨trivial, trivial⟩
+  | tya => exact ⟨trivial, trivial⟩
+  | inx => exact ⟨trivial, trivial⟩
+  | iny => exact ⟨trivial, trivial⟩
+  | dex => exact ⟨trivial, trivial⟩
+  | dey => exact ⟨trivial, trivial⟩
+
+
+/-- **A machine that the walk follows for one more step**: it runs, it is not at an idle loop, and its step keeps the frame when the frame has at least 64 dots left -/
+structure InFrame (E : Rom) (m : Machine) : Prop where
+  halted : m.halted = false
+  idle : idleAt E m.pc = false
+  frame : m.fdot + 64 ≤ dotsPerFrame → (go step m).2.frame = m.frame
+
+
+/-- a state from which the walk takes a step covers machines whose step stays in the frame -/
+theorem inFrame_of_tstep {l : List TS} (h : Lk E m₀ n₀ Q m n) (he : tstep E Q = some l) : InFrame E m ∧ InFrame E n := by
+  unfold tstep at he
+  split at he
+  · rename_i hc
+    simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at hc
+    obtain ⟨⟨⟨hp, hp1⟩, hp2⟩, hi⟩ := hc
+    split at he
+    · rename_i I hd
+      obtain ⟨o1, o2⟩ := insOK_of_exec h he
+      have el := h.pcl
+      have er := h.pcr
+      refine ⟨⟨h.gl.halted, by rw [el]; exact hi, fun hf => step_time h.gl (by rw [el]; exact hp) (by rw [el]; exact hp1) (by rw [el]; exact hp2) (by rw [el]; exact hd)
+        (by rw [el]; exact hi) o1 hf⟩, ⟨h.gr.halted, by rw [er]; exact hi, fun hf => step_time h.gr (by rw [er]; exact hp) (by rw [er]; exact hp1) (by rw [er]; exact hp2)
+        (by rw [er]; exact hd) (by rw [er]; exact hi) o2 hf⟩⟩
+    · cases he
+  · cases he
+
+set_option maxRecDepth 100000 in
+/-- a return in the code meets `InFrame`: as `inFrame_of_tstep`, with no condition on the bytes after it -/
+theorem inFrame_rts {E : Rom} {m : Machine} (g : Good E m) (hp : 0x8000 ≤ m.pc) (hd : lookupOp (E.b m.pc) insList = some .rts) (hi : idleAt E m.pc = false) :
+    InFrame E m := by
+  refine ⟨g.halted, hi, fun hf => ?_⟩
+  rw [step_run g hp hd hi]
+  have hc : (cycTable.get! (E.b m.pc).toNat).toNat ≤ 7 := cyc_le _ (lookupOp_mem hd)
+  have h := DotsOK.bind (g := fun _ => tick (cycTable.get! (E.b m.pc).toNat).toNat) (DotsOK.of_eq (f := sem .rts) (d := 0) (rts_eff (g.pc (m.pc + 1))) rfl rfl)
+    (tick_time (cycTable.get! (E.b m.pc).toNat).toNat _)
+  exact (h (by show m.fdot + _ < _; omega)).1
+
+/-- the machines of the next `k` steps from `m` meet `InFrame` -/
+def InFrameN (E : Rom) (m : Machine) (k : Nat) : Prop := ∀ j, j < k → InFrame E (stepN j m)
+
+theorem InFrameN.zero (E : Rom) (m : Machine) : InFrameN E m 0 := fun _ h => absurd h (Nat.not_lt_zero _)
+
+theorem InFrameN.add {E : Rom} {m : Machine} {k1 k2 : Nat} (h1 : InFrameN E m k1) (h2 : InFrameN E (stepN k1 m) k2) : InFrameN E m (k1 + k2) := by
+  intro j hj
+  by_cases hjk : j < k1
+  · exact h1 j hjk
+  · have e : j = k1 + (j - k1) := by omega
+    have h3 := h2 (j - k1) (by omega)
+    rw [← stepN_add, ← e] at h3
+    exact h3
+
 /-- from `Q`, step by step, until every path stops, and there `goal` holds -/
 def walkT (E : Rom) (stop goal : TS → Bool) : Nat → TS → Bool
   | 0, _ => false
@@ -2384,7 +2721,7 @@ def walkT (E : Rom) (stop goal : TS → Bool) : Nat → TS → Bool
 /-- a walk that succeeds follows the two machines, whatever their other bytes are -/
 theorem walkT_spec {stop goal : TS → Bool} : ∀ (f : Nat) (Q : TS) (m n : Machine), walkT E stop goal f Q = true → Lk E m₀ n₀ Q m n →
     ∃ k Q', k ≤ f ∧ stop Q' = true ∧ goal Q' = true ∧ Lk E m₀ n₀ Q' (stepN k m) (stepN k n) ∧
-      ∀ j, j < k → ∃ Qj, stop Qj = false ∧ 0x8000 ≤ Qj.pc ∧ Lk E m₀ n₀ Qj (stepN j m) (stepN j n)
+      ∀ j, j < k → ∃ Qj, stop Qj = false ∧ 0x8000 ≤ Qj.pc ∧ Lk E m₀ n₀ Qj (stepN j m) (stepN j n) ∧ InFrame E (stepN j m) ∧ InFrame E (stepN j n)
   | 0, _, _, _, h, _ => by cases h
   | f + 1, Q, m, n, h, hl => by
     unfold walkT at h
@@ -2400,7 +2737,7 @@ theorem walkT_spec {stop goal : TS → Bool} : ∀ (f : Nat) (Q : TS) (m n : Mac
         intro j hj
         cases j with
         | zero =>
-          refine ⟨Q, by simpa using h1, ?_, hl⟩
+          refine ⟨Q, by simpa using h1, ?_, hl, inFrame_of_tstep hl h2⟩
           unfold tstep at h2
           split at h2
           · rename_i hc
@@ -2582,20 +2919,20 @@ theorem at_of_goal {c' : Cut} {watch : List Nat} {Q : TS} {m r : Machine} (hg : 
 
 /-- from one cut to the next, on a real machine -/
 theorem piece_spec {c c' : Cut} {watch : List Nat} {fuel : Nat} {m : Machine} (hc : pieceOK E c c' watch fuel = true) (h : At E c m) :
-    ∃ k, k ≤ fuel ∧ At E c' (stepN k m) ∧ (∀ i ∈ watch, i < 2048 → (stepN k m).ram.get! i = m.ram.get! i) ∧ (∀ p ∈ c'.K, p.1 < 2048) := by
-  obtain ⟨k, Q, h1, _, h3, h4, _⟩ := walkT_spec (m₀ := m) (n₀ := m) fuel (startQ c) m m hc (lk_self h)
+    ∃ k, k ≤ fuel ∧ At E c' (stepN k m) ∧ (∀ i ∈ watch, i < 2048 → (stepN k m).ram.get! i = m.ram.get! i) ∧ (∀ p ∈ c'.K, p.1 < 2048) ∧ InFrameN E m k := by
+  obtain ⟨k, Q, h1, _, h3, h4, h5⟩ := walkT_spec (m₀ := m) (n₀ := m) fuel (startQ c) m m hc (lk_self h)
   obtain ⟨a, b, d⟩ := at_of_goal h3 h4
-  exact ⟨k, h1, a, b, d⟩
+  exact ⟨k, h1, a, b, d, fun j hj => by obtain ⟨_, _, _, _, c1, _⟩ := h5 j hj; exact c1⟩
 
 /-- the same, with something more that the walk's end says -/
 theorem piece_specX {c c' : Cut} {watch : List Nat} {fuel : Nat} {extra : TS → Bool} {m : Machine}
     (hc : walkT E (fun Q => Q.pc == c'.pc) (fun Q => goalC c' watch Q && extra Q) fuel (startQ c) = true) (h : At E c m) :
     ∃ k Q, k ≤ fuel ∧ At E c' (stepN k m) ∧ (∀ i ∈ watch, i < 2048 → (stepN k m).ram.get! i = m.ram.get! i) ∧ (∀ p ∈ c'.K, p.1 < 2048) ∧
-      extra Q = true ∧ Lk E m m Q (stepN k m) (stepN k m) := by
-  obtain ⟨k, Q, h1, _, h3, h4, _⟩ := walkT_spec (m₀ := m) (n₀ := m) fuel (startQ c) m m hc (lk_self h)
+      extra Q = true ∧ Lk E m m Q (stepN k m) (stepN k m) ∧ InFrameN E m k := by
+  obtain ⟨k, Q, h1, _, h3, h4, h5⟩ := walkT_spec (m₀ := m) (n₀ := m) fuel (startQ c) m m hc (lk_self h)
   simp only [Bool.and_eq_true] at h3
   obtain ⟨a, b, d⟩ := at_of_goal h3.1 h4
-  exact ⟨k, Q, h1, a, b, d, h3.2, h4⟩
+  exact ⟨k, Q, h1, a, b, d, h3.2, h4, fun j hj => by obtain ⟨_, _, _, _, c1, _⟩ := h5 j hj; exact c1⟩
 
 /-! ## A routine of the game, next to `runSub` -/
 
@@ -2724,7 +3061,7 @@ theorem leaf_spec {entry r : UInt16} {a : Tag} {ain : UInt8} {L Lo : List (Nat �
       (∀ p ∈ Lo, p.2.R ((stepN k R).ram.get! p.1) ((runSub H entry ain 0 0).ram.get! p.1)) ∧
       (∀ i ∈ watch, i < 2048 → (stepN k R).ram.get! i = R.ram.get! i) ∧
       (∀ i ∈ watch, i < 2048 → i ≠ stkI H.s → i ≠ stkI (H.s - 1) → (runSub H entry ain 0 0).ram.get! i = H.ram.get! i) ∧
-      GoodH E (runSub H entry ain 0 0) ∧ (runSub H entry ain 0 0).s = H.s := by
+      GoodH E (runSub H entry ain 0 0) ∧ (runSub H entry ain 0 0).s = H.s ∧ InFrameN E R k := by
   have g1 : Good E (callM H entry ain) := by
     refine ⟨gH.prg, gH.mask, rfl, gH.halted, gH.trk, ?_, (by decide : (0 : UInt8) &&& 0x80 = 0)⟩
     show ((H.ram.set! _ _).set! _ _).size = 2048
@@ -2786,12 +3123,12 @@ theorem leaf_spec {entry r : UInt16} {a : Tag} {ain : UInt8} {L Lo : List (Nat �
     by_cases hjk : j = k
     · subst hjk
       exact ⟨by rw [hXpc]; exact hne _ hr80, hX.halted⟩
-    · obtain ⟨Qj, _, h10, h11⟩ := h5 j (by omega)
+    · obtain ⟨Qj, _, h10, h11, _⟩ := h5 j (by omega)
       exact ⟨by rw [h11.pcr]; exact hne _ h10, h11.gr.halted⟩
   have hram : (runSub H entry ain 0 0).ram = (stepN k (callM H entry ain)).ram := by
     rw [hrun, stepN_succ]
     exact y3
-  refine ⟨k, h1, h4.gl, by rw [h4.pcl, h6], (h4.s0 h7).1, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨k, h1, h4.gl, by rw [h4.pcl, h6], (h4.s0 h7).1, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro p hp
     rw [hram]
     exact tagImp_R (h8 p hp).2 (h4.ram _ (h8 p hp).1)
@@ -2806,6 +3143,9 @@ theorem leaf_spec {entry r : UInt16} {a : Tag} {ain : UInt8} {L Lo : List (Nat �
       exact y4
     exact ⟨g3.prg, g3.mask, g3.halted, g3.trk, g3.size⟩
   · rw [hrun, stepN_succ, y2, hXs, sp2]
+  · intro j hj
+    obtain ⟨_, _, _, _, c1, _⟩ := h5 j hj
+    exact c1
 
 end walk
 
@@ -2913,12 +3253,12 @@ variable {E : Rom} {m₀ n₀ : Machine}
 /-- `piece_spec`, and the machines on the way are in the code and good -/
 theorem piece_specI {c c' : Cut} {watch : List Nat} {fuel : Nat} {m : Machine} (hc : pieceOK E c c' watch fuel = true) (h : At E c m) :
     ∃ k, k ≤ fuel ∧ At E c' (stepN k m) ∧ (∀ i ∈ watch, i < 2048 → (stepN k m).ram.get! i = m.ram.get! i) ∧
-      ∀ j, j < k → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m) := by
+      ∀ j, j < k → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m) ∧ InFrame E (stepN j m) := by
   obtain ⟨k, Q, h1, _, h3, h4, h5⟩ := walkT_spec (m₀ := m) (n₀ := m) fuel (startQ c) m m hc (lk_self h)
   obtain ⟨a, b, _⟩ := at_of_goal h3 h4
   refine ⟨k, h1, a, b, fun j hj => ?_⟩
-  obtain ⟨Qj, _, h6, h7⟩ := h5 j hj
-  exact ⟨by rw [h7.pcl]; exact h6, h7.gl⟩
+  obtain ⟨Qj, _, h6, h7, h8, _⟩ := h5 j hj
+  exact ⟨by rw [h7.pcl]; exact h6, h7.gl, h8⟩
 
 /-- what a walk's state says of two machines at a cut -/
 theorem at_of_goal2 {c : Cut} {watch : List Nat} {Q : TS} {m n : Machine} (hg : goalC c watch Q = true) (h : Lk E m₀ n₀ Q m n) :
@@ -3056,7 +3396,8 @@ theorem Detour.ok_both {d : Detour} (hd : d.ok E = true) : pieceOK E d.c d.c' d.
 /-- **A detour**: the two machines run apart from the cut to the next, and the walk goes on with the kept bytes as before -/
 theorem lk_detour {d : Detour} {Q : TS} {m n : Machine} (hd : d.ok E = true) (hg : goalD d Q = true) (h : Lk E m₀ n₀ Q m n) :
     ∃ k1 k2, k1 ≤ d.fuel ∧ k2 ≤ d.fuel ∧ Lk E m₀ n₀ (detourQ Q d) (stepN k1 m) (stepN k2 n) ∧
-      (∀ j, j < k1 → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m)) ∧ (∀ j, j < k2 → 0x8000 ≤ (stepN j n).pc ∧ Good E (stepN j n)) := by
+      (∀ j, j < k1 → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m) ∧ InFrame E (stepN j m)) ∧
+      (∀ j, j < k2 → 0x8000 ≤ (stepN j n).pc ∧ Good E (stepN j n) ∧ InFrame E (stepN j n)) := by
   obtain ⟨am, an⟩ := at_of_goalD hg h
   obtain ⟨hd1, hd2⟩ := Detour.ok_both hd
   obtain ⟨k1, f1, A1, W1, I1⟩ := piece_specI hd1 am
@@ -3102,7 +3443,8 @@ theorem stepN_one (m : Machine) : stepN 1 m = (go step m).2 := rfl
 theorem walkD_spec {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {stop goal : TS → Bool} :
     ∀ (f : Nat) (Q : TS) (m n : Machine), walkD E ds stop goal f Q = true → Lk E m₀ n₀ Q m n →
     ∃ k1 k2 Q', k1 ≤ f ∧ k2 ≤ f ∧ stop Q' = true ∧ goal Q' = true ∧ Lk E m₀ n₀ Q' (stepN k1 m) (stepN k2 n) ∧
-      (∀ j, j < k1 → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m)) ∧ (∀ j, j < k2 → 0x8000 ≤ (stepN j n).pc ∧ Good E (stepN j n)) := by
+      (∀ j, j < k1 → 0x8000 ≤ (stepN j m).pc ∧ Good E (stepN j m) ∧ InFrame E (stepN j m)) ∧
+      (∀ j, j < k2 → 0x8000 ≤ (stepN j n).pc ∧ Good E (stepN j n) ∧ InFrame E (stepN j n)) := by
   intro f
   induction f using Nat.strongRecOn with
   | ind f ih =>
@@ -3154,14 +3496,14 @@ theorem walkD_spec {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {stop 
             refine ⟨1 + j1, 1 + j2, Q', by omega, by omega, hs, hgo, hl3, ?_, ?_⟩
             · intro j hj
               cases j with
-              | zero => exact ⟨by show 0x8000 ≤ m.pc; rw [hl.pcl]; exact hp, hl.gl⟩
+              | zero => exact ⟨by show 0x8000 ≤ m.pc; rw [hl.pcl]; exact hp, hl.gl, (inFrame_of_tstep hl htl).1⟩
               | succ j =>
                 have := J1 j (by omega)
                 rw [← stepN_one, ← stepN_add, Nat.add_comm 1 j] at this
                 exact this
             · intro j hj
               cases j with
-              | zero => exact ⟨by show 0x8000 ≤ n.pc; rw [hl.pcr]; exact hp, hl.gr⟩
+              | zero => exact ⟨by show 0x8000 ≤ n.pc; rw [hl.pcr]; exact hp, hl.gr, (inFrame_of_tstep hl htl).2⟩
               | succ j =>
                 have := J2 j (by omega)
                 rw [← stepN_one, ← stepN_add, Nat.add_comm 1 j] at this
@@ -3182,7 +3524,7 @@ theorem leafD_spec {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {entry
     (hL : ∀ p ∈ L, p.1 < 2048 ∧ p.1 ≠ stkI H.s ∧ p.1 ≠ stkI (H.s - 1) ∧ p.2.R (R.ram.get! p.1) (H.ram.get! p.1)) :
     ∃ k Q, k ≤ fuel ∧ stop Q = true ∧ goal Q = true ∧ Good E (stepN k R) ∧ (stepN k R).pc = Q.pc ∧ (stepN k R).s = sp ∧
       (∀ i, i < 2048 → (Q.ram i).R ((stepN k R).ram.get! i) ((runSub H entry ain 0 0).ram.get! i)) ∧
-      (∀ i, i < 2048 → Q.w i = false → (stepN k R).ram.get! i = R.ram.get! i) := by
+      (∀ i, i < 2048 → Q.w i = false → (stepN k R).ram.get! i = R.ram.get! i) ∧ InFrameN E R k := by
   have g1 : Good E (callM H entry ain) := by
     refine ⟨gH.prg, gH.mask, rfl, gH.halted, gH.trk, ?_, (by decide : (0 : UInt8) &&& 0x80 = 0)⟩
     show ((H.ram.set! _ _).set! _ _).size = 2048
@@ -3209,7 +3551,7 @@ theorem leafD_spec {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {entry
       rfl
     · intro _ _ _
       rfl
-  obtain ⟨k1, k2, Q, h1, h2, hs, hg, h4, _, J2⟩ := walkD_spec hds fuel _ R _ hc st
+  obtain ⟨k1, k2, Q, h1, h2, hs, hg, h4, J1, J2⟩ := walkD_spec hds fuel _ R _ hc st
   obtain ⟨p1, p2, p3, p4⟩ := hstop Q hs
   obtain ⟨w1, w2⟩ := hgoal Q hg
   have hX := h4.gr
@@ -3245,12 +3587,12 @@ theorem leafD_spec {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {entry
     by_cases hjk : j = k2
     · subst hjk
       exact ⟨by rw [hXpc]; exact hne _ p1, hX.halted⟩
-    · obtain ⟨h10, h11⟩ := J2 j (by omega)
+    · obtain ⟨h10, h11, _⟩ := J2 j (by omega)
       exact ⟨hne _ h10, h11.halted⟩
   have hram : (runSub H entry ain 0 0).ram = (stepN k2 (callM H entry ain)).ram := by
     rw [hrun, stepN_succ]
     exact y3
-  refine ⟨k1, Q, h1, hs, hg, h4.gl, h4.pcl, (h4.s _ p4).1, ?_, ?_⟩
+  refine ⟨k1, Q, h1, hs, hg, h4.gl, h4.pcl, (h4.s _ p4).1, ?_, ?_, fun j hj => (J1 j hj).2.2⟩
   · intro i hi
     rw [hram]
     exact h4.ram i hi
@@ -3399,9 +3741,9 @@ theorem runSub2 {ds : List Detour} (hds : ∀ d ∈ ds, d.ok E = true) {entry : 
   have w1' : Q.w (stkI H₂.s) = false := by rw [hs]; exact w1
   have w2' : Q.w (stkI (H₂.s - 1)) = false := by rw [hs]; exact w2
   obtain ⟨r1, _, _⟩ := run_of_rts (by omega) h4.gl (by rw [h4.pcl]; exact p1) (by rw [h4.pcl]; exact p2) (by rw [h4.pcl]; exact p3)
-    (by rw [(h4.s _ p4).1, hsp]) (by rw [h4.fixl _ (mask_stk _) w2, b11]) (by rw [h4.fixl _ (mask_stk _) w1, b12]) J1
+    (by rw [(h4.s _ p4).1, hsp]) (by rw [h4.fixl _ (mask_stk _) w2, b11]) (by rw [h4.fixl _ (mask_stk _) w1, b12]) (fun j hj => ⟨(J1 j hj).1, (J1 j hj).2.1⟩)
   obtain ⟨r2, _, _⟩ := run_of_rts (by omega) h4.gr (by rw [h4.pcr]; exact p1) (by rw [h4.pcr]; exact p2) (by rw [h4.pcr]; exact p3)
-    (by rw [(h4.s _ p4).2, hs, hsp]) (by rw [h4.fixr _ (mask_stk _) w2', hs, b21]) (by rw [h4.fixr _ (mask_stk _) w1', hs, b22]) J2
+    (by rw [(h4.s _ p4).2, hs, hsp]) (by rw [h4.fixr _ (mask_stk _) w2', hs, b21]) (by rw [h4.fixr _ (mask_stk _) w1', hs, b22]) (fun j hj => ⟨(J2 j hj).1, (J2 j hj).2.1⟩)
   refine ⟨Q, hs', hg, fun i hi => ?_, fun i hi hw n1 n2 => ?_⟩
   · rw [r1, r2]
     exact h4.ram i hi

@@ -18,10 +18,11 @@ they can come between `seq j` and the frame `j + 1`, and they change none of the
   A hit (`Hit`) leaves a speed of at most 0, and `P` at most `P₂ − 256` or at most `P + 256`. The screen's left edge is a hit of the second kind.
 * `one_of_moves`: a real frame is a `OneFrame`. The movement, from the player's routine to the scroll handler, is `FrameModel.move_model`, proved. The state at the player's routine
   (`FrameModel.AtCtrl0`, and that nothing writes the horizontal bytes before it) is a theorem too (`Moves.toAt`): the walk of `CtrlKeep` from the frame's start in control.
-  So are the first arrival at the routine (`OnFrames.arrive`, from `unpaused`: the counted frame ends with the game not paused) and that the frames not counted keep the bytes
-  (`OnFrames.lagKeep`, from `OnFrames.lagNo`: they do not come to the routine). That they do not is a theorem too, from `lagPaused` (they end paused) and the walk of the
-  whole frame (`CtrlKeep.area_end`), which also shows that every frame keeps the area's type, the swimming flag and the change of size (`OnFrames.areaAll`); its condition on each
-  instruction is `spare`. What is assumed is the rest of the state at the end of the frame before (`Moves.state`) and what the frame does from the scroll handler on (`After`).
+  So are the first arrival at the routine (`OnFrames.arrive`: the counted frame ends with the game not paused, by the definition of the counted frames in `FrameKeep.Frames`)
+  and that the frames not counted keep the bytes (`OnFrames.lagKeep`, from `OnFrames.lagNo`: they do not come to the routine). That they do not is a theorem too: they end
+  paused (`FrameKeep.Frames.down`), and the walk of the whole frame (`area_endF`) shows that every frame keeps the area's type, the swimming flag and the change of size
+  (`OnFrames.areaAll`), and that a frame that comes to the routine ends not paused; its condition on each instruction is `CleanK` of `FrameKeep.guardF`, the field
+  `cleanF` of `FrameKeep.Frames`. What is assumed is the rest of the state at the end of the frame before (`Moves.state`) and what the frame does from the scroll handler on (`After`).
   A frame with the pressed side masked (`Masked`) is a `OneFrame` too: `FrameModel.move_masked` follows `hstep`, or leaves the speed 0 (`MaskStop`).
 * `BoxRun`: the frames before `J` run the collision routine as on the machine at control, from the machine at the scroll handler, on its pixel and the height of `vstep`. The height comes from
   `vert_of`, one frame of `Jump.vstep` (the movement routine by `VertModel.vert_model`, the part before it by the walk of `CtrlKeep` (`Moves.vBefore`), the part after it by `OnFrames.vAfter`), and a small search (`vCheck`).
@@ -320,7 +321,7 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     ((List.range J).all fun j => decide (dl sy m0 (Opening.pOf sy m0 (startHS sy m0)) j ≤ 256 * (B.dx : Int))) &&
     vCheck sy m0 B (J - 1) [vsOf sy c] &&
     CtrlKeep.afterCheck sy m0 (peek c sy.AreaType) && [(1 : UInt8), 2, 3].contains (peek c sy.AreaType) && peek c sy.SwimmingFlag == 0 &&
-    peek c sy.PlayerChangeSizeFlag == 0
+    peek c sy.PlayerChangeSizeFlag == 0 && FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -345,11 +346,13 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   area3 : peek B.m sy.AreaType ∈ [(1 : UInt8), 2, 3]
   swim0 : peek B.m sy.SwimmingFlag = 0
   size0 : peek B.m sy.PlayerChangeSizeFlag = 0
+  /-- the idle loop is a `JMP` to itself -/
+  idle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩ := h
-  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩ := h
+  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14⟩
 
 theorem absB_natAbs (v : UInt8) : (absB v).toNat = (sbyte v).natAbs := by
   have h1 := v.toNat_lt
@@ -524,8 +527,12 @@ structure MovesAt (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Prop
   before : ∀ x ∈ hBytes sy, peek (trace M i n₀) x = peek a x
   /-- nor the collision bits -/
   bits : bitsOf sy (trace M i n₀) = bitsOf sy a
-  /-- the frame does not end during the movement -/
-  longer : ((trace M i (n₀ + moveLen)).frame ≥ M.frame + 1 || (trace M i (n₀ + moveLen)).halted) = false
+  /-- the routine comes in the frame of `M` -/
+  start : (trace M i n₀).frame = M.frame
+  /-- each instruction of the frame but the idle loop runs at least 64 dots before the frame's end (`FrameKeep.CleanK.time`) -/
+  time : ∀ n, (trace M i n).pc ≠ sy.EndlessLoop → (trace M i n).fdot ≤ dotsPerFrame - 64
+  /-- the idle loop is a `JMP` to itself -/
+  idle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true
   /-- the position is away from both ends of its range -/
   far : 2048 ≤ posP sy a ∧ posP sy a + 2048 < 0x1000000
   /-- the rest of the frame, from the scroll handler -/
@@ -547,8 +554,8 @@ theorem at_subs (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = t
     by_cases e2 : peek a sy.Player_CollisionBits &&& lrOf (Potential.norm (inAt sy M i n₀)) = lrOf (Potential.norm (inAt sy M i n₀))
     · exact e2
     · exact absurd e2 hm
-  obtain ⟨k, hk, _, hpc, h1, h2⟩ := FrameModel.move_model hOK (h.at_ctrl.mk1 hc)
-  have e0 := FrameModel.trace_steps h.longer k hk
+  obtain ⟨k, hk, _, hpc, h1, h2, hC⟩ := FrameModel.move_model hOK (h.at_ctrl.mk1 hc)
+  have e0 := (FrameModel.trace_inFrame h.idle h.start hC h.time k (Nat.le_refl k)).1
   have e2 : FrameModel.readHS sy (trace M i n₀) = FrameModel.readHS sy a := FrameModel.readHS_congr h.before
   have e3 : posP sy (trace M i n₀) = posP sy a := FrameModel.posP_congr h.before
   rw [e2] at h1
@@ -626,8 +633,8 @@ theorem at_subsM (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = 
     have e : bitsOf sy a = sy.noLeft := hb
     rw [e] at hm
     simpa using hm
-  obtain ⟨k, hk, _, hpc, h1, h2⟩ := FrameModel.move_masked hOK hmk h.at_ctrl hRb hml (by rw [ev]; exact hv1) (by rw [ev]; exact hv2)
-  have e0 := FrameModel.trace_steps h.longer k hk
+  obtain ⟨k, hk, _, hpc, h1, h2, hC⟩ := FrameModel.move_masked hOK hmk h.at_ctrl hRb hml (by rw [ev]; exact hv1) (by rw [ev]; exact hv2)
+  have e0 := (FrameModel.trace_inFrame h.idle h.start hC h.time k (Nat.le_refl k)).1
   have e2 : FrameModel.readHS sy (trace M i n₀) = FrameModel.readHS sy a := FrameModel.readHS_congr h.before
   have e3 : posP sy (trace M i n₀) = posP sy a := FrameModel.posP_congr h.before
   rw [e2] at h1
@@ -708,14 +715,11 @@ def ctlStateB (sy : Syms) (m : Machine) : Bool :=
 
 /-- **A real frame from the state `a`**: the frame of `M` with the input `i`, which comes to the player's routine at the instruction `n₀`. `M` is `a`, or later by `lag` frames.
 The state at the player's routine is a theorem (`Moves.toAt`, by the walk of `CtrlKeep`), and so are the first arrival at the routine and that the `lag` frames keep the
-bytes (`OnFrames.arrive`, `OnFrames.lagKeep`); what is assumed is the state at the end of the frame before, and the rest of the frame. -/
+bytes (`OnFrames.arrive`, `OnFrames.lagKeep`); what is assumed is the state at the end of the frame before, and the rest of the frame. That the position is away from
+both ends of its range is not a field: on the frames where it is needed it comes from the frames before, which follow `hstep` (`far_of_follow`). -/
 structure Moves (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Prop where
   /-- the values at the end of the frame before -/
   state : CtlState sy a
-  /-- the frame does not end during the movement -/
-  longer : ((trace M i (n₀ + moveLen)).frame ≥ M.frame + 1 || (trace M i (n₀ + moveLen)).halted) = false
-  /-- the position is away from both ends of its range -/
-  far : 2048 ≤ posP sy a ∧ posP sy a + 2048 < 0x1000000
   /-- the rest of the frame, from the scroll handler -/
   after : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → After sy a (trace M i k) (frame M i)
 
@@ -735,16 +739,18 @@ def Arrive (sy : Syms) (M : Machine) (i : UInt8) (n₀ : Nat) : Prop :=
 /-- **The state at the player's routine, from the frame's start.** The frame starts in the idle loop in control (`FrameKeep.StartK`), each of its instructions meets
 `FrameKeep.CleanK`, and `ctrlCheck` is the walk's check on the ROM. It comes to the player's routine at `n₀` (`harr`), and the `lag` frames before it keep the bytes of
 `CtrlKeep.keepA` (`hlag`). The area's type is one of 1, 2, 3, the swimming flag 0 and the change of size 0 at the end of the frame before (`harea`, `hswim`, `hsize`:
-`OnFrames.areaAll`).
+`OnFrames.areaAll`). The position is away from both ends of its range (`hfar`).
 Then the conditions at the end of the frame before (`Moves`) give those at the player's routine (`MovesAt`). -/
 theorem Moves.toAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (h0 : FrameKeep.StartK sy m0 M)
     (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace M i n)) (hc : Clean sy a) (harr : Arrive sy M i n₀)
     (hlag : ∀ x ∈ CtrlKeep.keepA sy, peek M x = peek a x) (harea : peek a sy.AreaType ∈ [(1 : UInt8), 2, 3]) (hswim : peek a sy.SwimmingFlag = 0)
-    (hsize : peek a sy.PlayerChangeSizeFlag = 0) (h : Moves sy m0 a M i n₀) : MovesAt sy m0 a M i n₀ := by
+    (hsize : peek a sy.PlayerChangeSizeFlag = 0) (hfar : 2048 ≤ posP sy a ∧ posP sy a + 2048 < 0x1000000)
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (h : Moves sy m0 a M i n₀) : MovesAt sy m0 a M i n₀ := by
   have A := CtrlKeep.ctrl_keep hck h0 hcl harr.1 harr.2.1 harr.2.2
   have kp : ∀ x ∈ CtrlKeep.keepA sy, peek (trace M i n₀) x = peek a x := fun x hx => (A.keep x hx).trans (hlag x hx)
   have S := h.state
-  refine ⟨⟨A.good, harr.1, A.s, A.eng, ?_, ?_, ?_, ?_, ?_, ?_⟩, fun x hx => kp x (keepA_mem (Or.inl hx)), ?_, h.longer, h.far, h.after⟩
+  refine ⟨⟨A.good, harr.1, A.s, A.eng, ?_, ?_, ?_, ?_, ?_, ?_⟩, fun x hx => kp x (keepA_mem (Or.inl hx)), ?_, harr.2.1,
+    fun n hn => (hcl n).time hn, hidle, hfar, h.after⟩
   · rw [kp _ (keepA_mem (by simp))]
     exact harea
   · rw [kp _ (keepA_mem (by simp [vKeep]))]
@@ -779,19 +785,13 @@ end Real
 
 /-- **What the run assumes of its frames above ground, frame by frame.** The frames are those of `K` (`FrameKeep.Frames`, the field `keep` of `PoleJoin.Run`): `K.fm j`,
 `K.pad j` are where the counted frame `j` begins on the real machine, the machine (`seq (j − 1)`, or later by `lag` frames) and the input, and `K.ends` says that it ends at
-`seq j`. `CtrlKeep.arrAt` is the instruction at which it first comes to the player's routine: it does so, since it ends with the game not paused (`unpaused`, `OnFrames.arrive`).
-The frames not counted end paused (`lagPaused`), so they do not come to the player's routine (`OnFrames.lagNo`, by the walk of the whole frame `CtrlKeep.area_end`, with `spare`),
-and they keep the bytes the routine needs (`OnFrames.lagKeep`). Every frame keeps the area's type, the swimming flag and the change of size (`OnFrames.areaAll`). -/
+`seq j`. `CtrlKeep.arrAt` is the instruction at which it first comes to the player's routine: it does so, since it ends with the game not paused (`OnFrames.arrive`): a frame
+is counted when it ends not paused (`FrameKeep.Frames`). The frames not counted end paused (`FrameKeep.Frames.down`), so they do not come to the player's routine
+(`OnFrames.lagNo`, by the walk of the whole frame `area_endF`), and they keep the bytes the routine needs (`OnFrames.lagKeep`). Every frame keeps the area's type, the
+swimming flag and the change of size (`OnFrames.areaAll`). -/
 structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat → Machine) (fr : Nat → Frame (top sy) (amax sy m0))
     {S : FrameKeep.RealRun} {a : Nat} (K : FrameKeep.Frames sy m0 S a g seq) where
   reads : Reads sy g seq fr
-  /-- a counted frame ends with the game not paused: the low bit of the pause byte is 0 -/
-  unpaused : ∀ j, 1 ≤ j → j ≤ T → j < g → CtrlKeep.Unpaused sy m0 (seq j)
-  /-- a frame not counted, between the counted frames `j − 1` and `j`, ends with the game paused: the low bit of the pause byte is 1 -/
-  lagPaused : ∀ j, 1 ≤ j → j ≤ T → j < g → ∀ n, K.ix (j - 1) ≤ n → n + 1 < K.ix j → ¬ CtrlKeep.Unpaused sy m0 (K.all (n + 1))
-  /-- each frame before the touch's frame, counted or not: no store through an index or a pointer writes the pause byte, the area's type or the swimming flag
-  (`FrameKeep.CleanK` with these three bytes protected too) -/
-  spare : ∀ n, n + 1 < K.ix g → ∀ k, CtrlKeep.Spare sy m0 (PipeEntryRule.trace (K.all n) (K.inp n) k)
   /-- a frame from a clean state: the parts outside the movement -/
   moves : ∀ j, 1 ≤ j → j ≤ T → j < g → Clean sy (seq (j - 1)) → Moves sy m0 (seq (j - 1)) (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))
   /-- the frames before `J`, from the scroll handler on: the rest of the frame leaves these bytes as they are there; he does not land on these frames -/
@@ -808,6 +808,60 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   after : CtrlKeep.afterCheck sy m0 v = true
   v3 : v ∈ [(1 : UInt8), 2, 3]
   all : ∀ n, n < K.ix g → CtrlKeep.AreaOK sy v (K.all n)
+
+/-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
+routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
+but at the player's own store of the fraction, where the walk after the cut does not ask it. The proof is that of `CtrlKeep.area_end`. -/
+theorem area_endF (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (ha : CtrlKeep.afterCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace m i n)) (hv : CtrlKeep.AreaOK sy v m) :
+    CtrlKeep.AreaOK sy v (PipeTransition.frame m i) ∧
+      ((∃ k, (PipeEntryRule.trace m i k).frame = m.frame ∧ (PipeEntryRule.trace m i k).pc = sy.PlayerCtrlRoutine) → CtrlKeep.Unpaused sy m0 (PipeTransition.frame m i)) := by
+  have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace m i n) := fun n => FrameKeep.cleanK_of_F (hcl n)
+  have hclA : ∀ j, FrameKeep.CleanK (CtrlKeep.guardP sy m0 (CtrlKeep.spareI sy m0)) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace m i j) := hcl
+  obtain ⟨ha1, ha2⟩ := CtrlKeep.afterCheck_parts ha
+  generalize CtrlKeep.cutTable sy m0 true = q at ha1 ha2
+  rcases CtrlKeep.cut_or_end2 (C := CtrlKeep.cfgPA sy m0 v q (CtrlKeep.afterOf sy m0 v q)) ha1 rfl rfl rfl (CtrlKeep.cfg_start q _ true h0) hclK with
+    ⟨k, h1, h2, _, h4, h5, B, _, hB2, hs⟩ | ⟨hno, _⟩
+  · have hw : FrameKeep.walkK (CtrlKeep.afterOf sy m0 v q) FrameKeep.fuelK (CtrlKeep.toA (CtrlKeep.watchA sy m0 v) (CtrlKeep.valA sy v) B) = true := hB2
+    have A := CtrlKeep.ctrl_keep hc h0 hclK h1 h2 h4
+    have hV : FrameKeep.Watched (CtrlKeep.valA sy v) (PipeEntryRule.trace m i k) := by
+      intro w hw
+      simp only [CtrlKeep.valA, List.mem_cons, List.not_mem_nil, or_false] at hw
+      rcases hw with rfl | rfl | rfl
+      · show (PipeEntryRule.trace m i k).ram.get! (sy.AreaType &&& 0x7FF).toNat &&& 0xFF = v &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [CtrlKeep.keepA])).trans hv.1
+      · show (PipeEntryRule.trace m i k).ram.get! (sy.SwimmingFlag &&& 0x7FF).toNat &&& 0xFF = 0 &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [CtrlKeep.keepA])).trans hv.2.1
+      · show (PipeEntryRule.trace m i k).ram.get! (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat &&& 0xFF = 0 &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [CtrlKeep.keepA])).trans hv.2.2
+    have hsA := CtrlKeep.sim_toA (W := CtrlKeep.watchA sy m0 v) hs (CtrlKeep.watchA_lt v) hV
+    obtain ⟨B', hB', hs'⟩ := CtrlKeep.after_end (CA := CtrlKeep.afterOf sy m0 v q) (F := (m.frame, 2)) ha2 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw hsA h2 h5 hclA
+    have hW := FrameKeep.watched_of hB' hs'
+    have e1 := hW _ (List.mem_append_left _ (List.mem_singleton.2 rfl))
+    have e2 := hW _ (List.mem_append_right _ (List.mem_cons_self (a := ((sy.AreaType &&& 0x7FF).toNat, (0xFF : UInt8), v))))
+    have e3 := hW _ (List.mem_append_right _ (List.mem_cons_of_mem _ (List.mem_cons_self (a := ((sy.SwimmingFlag &&& 0x7FF).toNat, (0xFF : UInt8), (0 : UInt8))))))
+    have e4 := hW _ (List.mem_append_right _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_singleton.2 rfl))))
+    simp only [FrameKeep.and_ff] at e2 e3 e4
+    refine ⟨⟨e2, e3, e4⟩, fun _ => ?_⟩
+    have e1' : (PipeTransition.frame m i).ram.get! (CtrlKeep.pauseI sy m0) &&& 1 = (0 : UInt8) &&& 1 := e1
+    exact e1'.trans rfl
+  · refine ⟨⟨?_, ?_, ?_⟩, fun ⟨k, hk1, hk2⟩ => absurd hk2 (hno k hk1)⟩
+    · rw [CtrlKeep.keep_of_noCut hc h0 hclK hno _ (by simp [CtrlKeep.keepA])]
+      exact hv.1
+    · rw [CtrlKeep.keep_of_noCut hc h0 hclK hno _ (by simp [CtrlKeep.keepA])]
+      exact hv.2.1
+    · rw [CtrlKeep.keep_of_noCut hc h0 hclK hno _ (by simp [CtrlKeep.keepA])]
+      exact hv.2.2
+
+/-- **A frame in control that ends paused does not come to the player's routine**, under the conditions of `area_endF` (`CtrlKeep.noCut_of_paused`) -/
+theorem noCut_of_pausedF (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (ha : CtrlKeep.afterCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace m i n)) (hv : CtrlKeep.AreaOK sy v m)
+    (hp : ¬ CtrlKeep.Unpaused sy m0 (PipeTransition.frame m i)) :
+    ∀ k, (PipeEntryRule.trace m i k).frame = m.frame → (PipeEntryRule.trace m i k).pc ≠ sy.PlayerCtrlRoutine :=
+  fun k h1 h2 => hp ((area_endF hc ha h0 hcl hv).2 ⟨k, h1, h2⟩)
 
 section Frames
 variable {B : Box} {T J g : Nat} {seq : Nat → Machine} {fr : Nat → Frame (top sy) (amax sy m0)} {Sr : FrameKeep.RealRun} {ar : Nat} {K : FrameKeep.Frames sy m0 Sr ar g seq}
@@ -835,17 +889,18 @@ theorem start_fm (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) 
   have b := K.one_le_ix h1 h3
   exact hst _ (by omega)
 
-/-- **The counted frame `j` comes to the player's routine at `arr j`, the first time, before its end**: it ends with the game not paused (`unpaused`), and the walk of
-`CtrlKeep` shows that a frame in control that does not come to the routine ends paused (`CtrlKeep.arrive_at`). -/
+/-- **The counted frame `j` comes to the player's routine at `arr j`, the first time, before its end**: it ends with the game not paused (`FrameKeep.Frames.up`: the
+counted frames are the frames that end not paused), and the walk of `CtrlKeep` shows that a frame in control that does not come to the routine ends paused
+(`CtrlKeep.arrive_at`). -/
 theorem OnFrames.arrive (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq fr K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
     {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) : Arrive sy (O.fm j) (O.pad j) (O.arr j) := by
-  have hu := O.unpaused j h1 h2 h3
+  have hu : CtrlKeep.Unpaused sy m0 (seq j) := K.up h1 (by omega)
   rw [K.ends j h1 (by omega)] at hu
   exact CtrlKeep.arrive_at hck (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) hu
 
 /-- **Every frame before the touch's frame starts with the area's type `v`, the swimming flag 0 and the change of size 0**, counted or not, from the machine at control:
 each frame keeps them
-(`CtrlKeep.area_end`: up to the player's routine the walks of `ctrlCheck`, from there the walk after the cut, with `spare`). -/
+(`area_endF`: up to the player's routine the walks of `ctrlCheck`, from there the walk after the cut, with `FrameKeep.Frames.cleanF`). -/
 theorem OnFrames.areaAll (hck : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (ha : CtrlKeep.afterCheck sy m0 v = true) (O : OnFrames sy m0 B T J g seq fr K)
     (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) (h0 : CtrlKeep.AreaOK sy v (seq 0)) : ∀ n, n < K.ix g → CtrlKeep.AreaOK sy v (K.all n) := by
   intro n
@@ -859,19 +914,19 @@ theorem OnFrames.areaAll (hck : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (ha
     intro hn
     have h1 := ih (by omega)
     rw [K.next n]
-    exact (CtrlKeep.area_end hck ha (hst n (by omega)) (K.clean n (by omega)) (O.spare n hn) h1).1
+    exact (area_endF hck ha (hst n (by omega)) (K.cleanF n (by show n < K.ix g; omega)) h1).1
 
-/-- **A frame not counted does not come to the player's routine** (the field `lagNo` of before): it ends paused (`lagPaused`), and by the walk of the whole frame a frame
-that comes to the routine ends not paused (`CtrlKeep.noCut_of_paused`). -/
+/-- **A frame not counted does not come to the player's routine** (the field `lagNo` of before): it ends paused (`FrameKeep.Frames.down`), and by the walk of the whole
+frame a frame that comes to the routine ends not paused (`noCut_of_pausedF`). -/
 theorem OnFrames.lagNo (hck : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (Ar : AreaRun sy m0 K v) (O : OnFrames sy m0 B T J g seq fr K)
     (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) :
     ∀ j, 1 ≤ j → j ≤ T → j < g → ∀ n, K.ix (j - 1) ≤ n → n + 1 < K.ix j →
       ∀ k, (PipeEntryRule.trace (K.all n) (K.inp n) k).frame = (K.all n).frame → (PipeEntryRule.trace (K.all n) (K.inp n) k).pc ≠ sy.PlayerCtrlRoutine := by
   intro j h1 h2 h3 n hn1 hn2
   have hg := K.ix_mono j g (by omega) (Nat.le_refl g)
-  have hp := O.lagPaused j h1 h2 h3 n hn1 hn2
+  have hp := K.down h1 (by omega) hn1 hn2
   rw [K.next n] at hp
-  exact CtrlKeep.noCut_of_paused hck Ar.after (hst n (by omega)) (K.clean n (by omega)) (O.spare n (by omega)) (Ar.all n (by omega)) hp
+  exact noCut_of_pausedF hck Ar.after (hst n (by omega)) (K.cleanF n (by show n < K.ix g; omega)) (Ar.all n (by omega)) hp
 
 /-- **The frames not counted before the counted frame `j` keep the bytes of `CtrlKeep.keepA`**: each starts in control and does not come to the player's routine
 (`OnFrames.lagNo`), and the walk of `CtrlKeep` shows that such a frame writes none of these bytes (`CtrlKeep.keep_of_noCut`). -/
@@ -899,7 +954,8 @@ theorem OnFrames.lagKeep (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames s
 /-- the state at the player's routine of the counted frame `j`, from a clean state: `Moves.toAt` with the frame's start in control (`hst`), `K.cleanAt`, `OnFrames.arrive`
 and `OnFrames.lagKeep` -/
 theorem OnFrames.movesAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq fr K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) (hc : Clean sy (seq (j - 1))) :
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) (hc : Clean sy (seq (j - 1)))
+    (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) :
     MovesAt sy m0 (seq (j - 1)) (O.fm j) (O.pad j) (O.arr j) := by
   have a1 := K.order (j - 1) (by omega)
   have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
@@ -911,14 +967,16 @@ theorem OnFrames.movesAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames s
     rw [hA.1]
     exact Ar.v3
   exact (O.moves j h1 h2 h3 hc).toAt hck (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) hc (O.arrive hck hst h1 h2 h3) (O.lagKeep hck hst Ar h1 h2 h3)
-    harea hA.2.1 hA.2.2
+    harea hA.2.1 hA.2.2 hfar hidle
 
 /-- **Each frame from a clean state is a `OneFrame`**, by the movement: `one_of_moves`, or with the side he presses masked `one_of_movesM`. -/
 theorem one_of_frames (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hmk : FrameModel.maskOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq fr K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
     {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g)
-    (hc : Clean sy (seq (j - 1))) : OneFrame sy m0 (O.inp j) (seq (j - 1)) (seq j) := by
-  have hmv := O.movesAt hck hst Ar h1 h2 h3 hc
+    (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) :
+    OneFrame sy m0 (O.inp j) (seq (j - 1)) (seq j) := by
+  have hmv := O.movesAt hck hst Ar h1 h2 h3 hc hfar hidle
   by_cases hm : Masked sy (O.inp j) (seq (j - 1))
   · have e := one_of_movesM hOK hmk hmv hc hm
     rw [← O.ends j h1 h2 h3] at e
@@ -932,13 +990,13 @@ theorem one_of_frames (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m
 frame's start, and so at its end. -/
 theorem vert_of (hv : VertModel.vertOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq fr K)
     (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j < J) (hT : j ≤ T) (h3 : j < g)
-    (hc : Clean sy (seq (j - 1))) (hh : HaltOK sy (seq (j - 1))) :
+    (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (hh : HaltOK sy (seq (j - 1))) :
     vsOf sy (seq j) = vNext sy m0 (seq (j - 1)) (seq j) ∧ HaltOK sy (seq j) := by
   have hmv0 := O.moves j h1 hT h3 hc
-  have hmv := O.movesAt hck hst Ar h1 hT h3 hc
+  have hmv := O.movesAt hck hst Ar h1 hT h3 hc hfar hidle
   have hv0 : peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.Player_X_Speed = peek (seq (j - 1)) sy.Player_X_Speed := hmv.before _ (.head _)
   have hat := hmv.at_ctrl
-  have hlong := hmv.longer
   obtain ⟨vb1, vb2, vb3⟩ := hmv0.vBefore hck (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) (O.arrive hck hst h1 hT h3) (O.lagKeep hck hst Ar h1 hT h3)
   change (∀ x ∈ vKeep sy, peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) x = peek (seq (j - 1)) x) at vb1
   change peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.A_B_Buttons &&& 0x80 = _ at vb2
@@ -950,9 +1008,11 @@ theorem vert_of (hv : VertModel.vertOK sy m0 (FrameModel.ctrlStack sy m0) = true
     rw [vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))))]
     rw [vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))))] at e
     exact hh e
-  obtain ⟨k, hk, _, hpc, _, hvs, hhk⟩ := VertModel.vert_model hv hat hd vb3
-  have e0 := FrameModel.trace_steps hlong k hk
-  rw [hR] at e0
+  obtain ⟨k, hk, _, hpc, _, hvs, hhk, hC⟩ := VertModel.vert_model hv hat hd vb3
+  have e0 : PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k) = FrameModel.stepN k R := by
+    have e1 := (FrameModel.trace_inFrame hmv.idle hmv.start (by rw [hR]; exact hC) hmv.time k (Nat.le_refl k)).1
+    rw [hR] at e1
+    exact e1
   have hpc' : (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)).pc = sy.PlayerSubs := by rw [e0]; exact hpc
   obtain ⟨va1, va2⟩ := O.vAfter j h1 h2 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
   rw [e0] at va1 va2
@@ -1033,6 +1093,37 @@ theorem pos_next (n : Nat) (h : ∀ i, i < n → Follow sy m0 (inp (i + 1)) (seq
   rw [wlist_succ]
   exact h2
 
+/-- the model moves at most `16·top` per frame, either way -/
+theorem hdist_abs (F : Facts sy m0) : ∀ (is : List HIn) (s : HS), inD sy s = true → (∀ i ∈ is, i ∈ inputs) →
+    -(16 * (top sy : Int) * (is.length : Int)) ≤ hdist sy m0 s is ∧ hdist sy m0 s is ≤ 16 * (top sy : Int) * (is.length : Int)
+  | [], _, _, _ => by simp [hdist]
+  | i :: r, s, hD, his => by
+    obtain ⟨h1, _⟩ := FastTakeoff.step_facts F hD (his i (by simp))
+    have ih := hdist_abs F r _ h1 (fun j hj => his j (by simp [hj]))
+    have hv : -(top sy : Int) ≤ sbyte (hstep sy m0 s i).v ∧ sbyte (hstep sy m0 s i).v ≤ (top sy : Int) := by
+      have := h1
+      simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at this
+      omega
+    simp only [hdist, List.length_cons]
+    push_cast
+    rw [Int.mul_add, Int.mul_one]
+    omega
+
+/-- **The position is away from both ends of its range** after `d ≤ T` frames that follow `hstep` from control: each moves at most `16·top`, and the position at
+control is away from the ends by more than `T` such frames (`hfar`, a check of `SurfaceRun.allCheck`). This was the field `Moves.far`. -/
+theorem far_of_follow (F : Facts sy m0) (Nm : Numbers sy m0 B Jn) (st : Start sy B (seq 0))
+    (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000)
+    (hin : ∀ j, inp j ∈ inputs) {d : Nat} (hd : d ≤ T) (hf : ∀ i, i < d → Follow sy m0 (inp (i + 1)) (seq i) (seq (i + 1))) :
+    2048 ≤ posP sy (seq d) ∧ posP sy (seq d) + 2048 < 0x1000000 := by
+  have e1 := pos_wlist (m0 := m0) (seq := seq) d hf
+  have hd0 : startHS sy (seq 0) = startHS sy m0 := by rw [st.hs, Nm.hs]
+  rw [hd0, st.P] at e1
+  have h2 := hdist_abs F (wlist inp d) (startHS sy m0) Nm.hD (wlist_mem hin d)
+  rw [wlist_length] at h2
+  have h3 : 16 * (top sy : Int) * (d : Int) ≤ 16 * (top sy : Int) * (T : Int) := Int.mul_le_mul_of_nonneg_left (by omega) (by omega)
+  rw [e1]
+  omega
+
 /-- the state at control is clean -/
 theorem clean_start (Nm : Numbers sy m0 B Jn) (st : Start sy B (seq 0)) : Clean sy (seq 0) := by
   have e : peek (seq 0) sy.Player_X_Speed = peek B.m sy.Player_X_Speed := by
@@ -1065,7 +1156,8 @@ theorem stored_le {m : Machine} (h : Clean sy m) : (peek m sy.Player_XSpeedAbsol
 /-- **The frames before `J` are quiet**, and they follow `hstep`: each is a real frame (`moves`) that comes to the scroll handler at the model's state, near the start, and in the box's height
 (`vert`, `vCheck`), and there the collision routine does what it does on the machine at control (`box`), which is nothing (`noHitCheck`). -/
 theorem quiet_upto (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy = true) (Nm : Numbers sy m0 B Jn) (hJT : Jn ≤ T + 1) (O : OnFrames sy m0 B T Jn g seq fr K)
-    (st : Start sy B (seq 0)) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) :
+    (st : Start sy B (seq 0)) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000) :
     ∀ d, d + 1 < Jn → d + 1 < g → (∀ i, i ≤ d → Follow sy m0 (O.inp (i + 1)) (seq i) (seq (i + 1))) ∧
       (∀ i, i ≤ d + 1 → Clean sy (seq i)) ∧ bitsOf sy (seq (d + 1)) = 0xFF ∧
       (∀ i, i ≤ d → vsOf sy (seq (i + 1)) = vNext sy m0 (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → HaltOK sy (seq i)) := by
@@ -1099,8 +1191,10 @@ where
       rw [hb', ff_and]
       exact fun h => h rfl
     have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := ⟨Nm.after, Nm.area3, O.areaAll Nm.ctrl Nm.after hst ⟨st.area, st.swim.trans Nm.swim0, st.size.trans Nm.size0⟩⟩
-    have hmv := O.movesAt Nm.ctrl hst Ar (j := d + 1) (by omega) (by omega) h2 hc'
-    have hvd := vert_of Nm.vmodel Nm.ctrl O hst Ar (j := d + 1) (by omega) h1 (by omega) h2 hc' (by simpa using hho d (Nat.le_refl d))
+    have hfd : 2048 ≤ posP sy (seq (d + 1 - 1)) ∧ posP sy (seq (d + 1 - 1)) + 2048 < 0x1000000 := by
+      simpa using far_of_follow F.pot Nm st hfar (fun j => inAt_mem Nm.model _ _ _) (d := d) (by omega) hf
+    have hmv := O.movesAt Nm.ctrl hst Ar (j := d + 1) (by omega) (by omega) h2 hc' hfd Nm.idle
+    have hvd := vert_of Nm.vmodel Nm.ctrl O hst Ar (j := d + 1) (by omega) h1 (by omega) h2 hc' hfd Nm.idle (by simpa using hho d (Nat.le_refl d))
     simp only [Nat.add_sub_cancel] at hvd
     obtain ⟨hvd, hhd⟩ := hvd
     have hvt' : ∀ i, i ≤ d → vsOf sy (seq (i + 1)) = vNext sy m0 (seq i) (seq (i + 1)) := by
@@ -1193,6 +1287,7 @@ theorem exists_first (P : Nat → Prop) : ∀ n, (∀ j, 1 ≤ j → j ≤ n →
 /-- **The statements about the whole run follow from the frames.** `model`, `hit`, `stop`, and no hit before `J`, with no search. `h` is the first frame up to `T` before the touch that does not
 follow `hstep` into a clean state. -/
 theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy = true) (hn : numbersCheck sy m0 B Jn = true) (hJT : Jn ≤ T)
+    (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000)
     (O : OnFrames sy m0 B T Jn g seq fr K) (st : Start sy B (seq 0)) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) :
     ∃ w h, Surface sy m0 (posP sy B.m) T Jn g fr w h := by
   have Nm := numbers_of_check hn
@@ -1221,7 +1316,8 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
   have hhit : h ≤ T → Hit sy m0 (O.inp h) (seq (h - 1)) (seq h) := by
     intro hT
     obtain ⟨h1, h2, h3⟩ := H2 hT
-    have ho := one_of_frames Nm.model Nm.mask Nm.ctrl O hst Ar h1 hT h2 (hclean hT)
+    have hfh := far_of_follow F.pot Nm st hfar hin (d := h - 1) (by omega) (hfol (h - 1) (by omega) (by omega) (by omega))
+    have ho := one_of_frames Nm.model Nm.mask Nm.ctrl O hst Ar h1 hT h2 (hclean hT) hfh Nm.idle
     rcases step_of_one F.pot (hin h) (hclean hT) ho with h4 | h4
     · exact absurd h4 h3
     · exact h4
@@ -1243,7 +1339,7 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
       · exact hJ
       · exfalso
         obtain ⟨d, rfl⟩ : ∃ d, h = d + 1 := ⟨h - 1, by omega⟩
-        obtain ⟨hf, hcl, _⟩ := quiet_upto F hc Nm (by omega) O st hst d (by omega) h2
+        obtain ⟨hf, hcl, _⟩ := quiet_upto F hc Nm (by omega) O st hst hfar d (by omega) h2
         exact h3 ⟨by simpa using hf d (Nat.le_refl d), hcl (d + 1) (Nat.le_refl _)⟩
     · omega
   · -- `model`

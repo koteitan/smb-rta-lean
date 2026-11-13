@@ -137,6 +137,10 @@ HandleSquare1Music
 HandleTriangleMusic
 HandleNoiseMusic
 SkipSoundSubroutines
+# the sound's pause: the value of the pause sound in its queue, that of the unpause sound, and the length of the sound
+PauseSfxValue=byte:SndOn+18
+UnpauseSfxValue=byte:DecPauC+14
+PauseSfxLength=byte:InPause+32
 ReadPortBits
 GameEngine
 ProcELoop

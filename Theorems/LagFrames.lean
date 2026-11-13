@@ -9,7 +9,8 @@ counter of `TaintRun` (`Env.rkI`): a walk that does not fail shows that no instr
 the instruction before `SkipMainOper`: a paused frame skips that call. So, under `Clean` on each instruction before the call:
 
 * `keeps_frame`: a frame from the idle loop in control either calls the routine of the mode, or it ends with the five bytes of the speed, the subspeed and the
-  position (`vfpI`) and the three bytes of control (`ctlI`: the routine, the mode, the task) as it began. One walk for each byte.
+  position (`vfpI`), the three bytes of control (`ctlI`: the routine, the mode, the task) and nine more bytes (`moreI`: the rest of the horizontal state, the stored
+  speed, the collision bits, the area's type, the swimming flag, the change of size, the player's state) as it began. One walk for each byte.
 * `known_of_keep`: so such a frame ends in control (`known_ctl` of `StartRun` the other way: the known bytes of `guardOf`).
 
 The five bytes of `V` are not in `prot` of `guardOf`: a store with a target not known makes the walk forget the followed byte, and then the walk fails at the frame's end.
@@ -37,8 +38,14 @@ def vfpI (sy : Syms) : List Nat :=
 /-- the bytes that say that the game is in control: the routine, the mode, the task (the known bytes of `guardOf`) -/
 def ctlI (sy : Syms) : List Nat := [I sy.GameEngineSubroutine, I sy.OperMode, I sy.OperMode_Task]
 
+/-- the other bytes of the horizontal state (the facing and moving directions, the running speed), the stored speed, the collision bits, the area's type, the swimming flag,
+the change of size and the player's state: what the next counted frame needs at its start (`OpenFrames`) -/
+def moreI (sy : Syms) : List Nat :=
+  [I sy.PlayerFacingDir, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_XSpeedAbsolute, I sy.Player_CollisionBits, I sy.AreaType, I sy.SwimmingFlag,
+   I sy.PlayerChangeSizeFlag, I sy.Player_State]
+
 /-- the bytes that the walk follows, one walk each -/
-def lagI (sy : Syms) : List Nat := vfpI sy ++ ctlI sy
+def lagI (sy : Syms) : List Nat := vfpI sy ++ ctlI sy ++ moreI sy
 
 /-- the machine of the walk, with the byte `b` followed -/
 def lagEnv (m0 : Machine) (b : Nat) : Env := { PipeEntryRule.envOf m0 with rkI := b }
@@ -557,7 +564,7 @@ theorem known_of_keep {sy : Syms} {m0 m m' : Machine} {E : Env} (h0 : FrameStart
   have hm : p.1 ∈ lagI sy := by
     rw [e] at hp
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hp
-    refine List.mem_append_right _ ?_
+    refine List.mem_append_left _ (List.mem_append_right _ ?_)
     rcases hp with rfl | rfl | rfl <;> simp [ctlI]
   rw [h p.1 hm]
   exact h0.known p hp

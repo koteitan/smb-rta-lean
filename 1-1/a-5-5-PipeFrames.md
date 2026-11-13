@@ -76,12 +76,14 @@ the speed, the subspeed and the position.
 * **Each frame is a `Frame`.** This is the type of `fr`. It was assumed before; it is item 0-0-0-3-1 (`FrameModel.frame_read` gives it under `ReadFrame`). It is checked on the real frames above.
   New is that it is used for frames 1 to `N` as well.
 * **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
-  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, and (this round, in place of `lags.game`)
-  `lags.paused`, `lags.keeps` ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). `lags.store` is proved now.
+  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, and (in place of `lags.game`)
+  `lags.keeps` ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). `lags.store` is proved now. `lags.paused` is gone: a frame not counted
+  ends paused by the definition of the counted frames.
 * **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
 * **The frames are those of the run (item 1-1-0-4).** `Lags` takes the real frames of the whole run (`FrameKeep.RealRun`, `Route.Run.base`) as a parameter. Where the counted frames are is
-  data, `gap t` (the frames not counted after the counted frame `t`), and `ixOf gap` is a definition: the counted frame 1 is frame 1 and `ixOf gap t < ixOf gap (t + 1)`. So the
-  machine of `pipe` at control is the run's frame 1 (`Lags.fm_one`, `Route.Run.pipeAt`); the old link `pipeAt`, the old fields `seq`, `sin`, `next`, `ix`, `order`, `fm_ix`, `inp_ix` of `Lags` and the fields `fm`, `inp`, `one_le` of `Route.Pipe` are gone (`Pipe.fm` is `Lags.fm`, a definition; `Pipe.one_le` is a theorem).
+  read from the machines: `ixP` is a definition, the counted frame `t + 1` is the first frame after the counted frame `t` that ends not paused (looking at `dP` frames), and the
+  counted frame 1 is the first such frame from frame 1 on. So the machine of `pipe` at control has the values of the run's frame 1 (`Route.Run.pipeKeep₁`); the old link
+  `pipeAt` (the counted frame 1 is frame 1), the field `gap`, the old fields `seq`, `sin`, `next`, `ix`, `order`, `fm_ix`, `inp_ix` of `Lags` and the fields `fm`, `inp`, `one_le` of `Route.Pipe` are gone (`Pipe.fm` is `Lags.fm`, a definition; `Pipe.one_le` is a theorem).
 * **Not in this item.** `openP` is gone and `openB` is a theorem from the field `opening` (item 1-1-a-5-4, [The opening on real frames](a-5-4-OpenFrames.md)). `edge`, `moved` (item 1-1-a-5-9) stay hypotheses.
 
 **Files.** `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.

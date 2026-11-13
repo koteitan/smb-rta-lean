@@ -251,7 +251,7 @@ theorem vert_model {S : UInt8} {R : Machine} (hOK : vertOK sy m0 S = true) (h : 
     (hp : peek R sy.PreviousA_B_Buttons &&& 0x80 = peek R sy.A_B_Buttons &&& 0x80) :
     ∃ k, k ≤ FrameModel.moveLen ∧ Good (Rom.of m0) (stepN k R) ∧ (stepN k R).pc = sy.PlayerSubs ∧ (stepN k R).s = S ∧
       vsOf sy (stepN k R) = vstepV sy m0 S (vsOf sy R) (peek R sy.SavedJoypadBits &&& 0x80 != 0) (peek R sy.Player_XSpeedAbsolute) ∧
-      (peek (stepN k R) sy.Player_State = 1 → peek (stepN k R) sy.DiffToHaltJump = 1) := by
+      (peek (stepN k R) sy.Player_State = 1 → peek (stepN k R) sy.DiffToHaltJump = 1) ∧ FrameModel.InFrameN (Rom.of m0) R k := by
   have F := vfacts_of hOK
   have gB := FrameModel.base_good F.base
   obtain ⟨abm, a80, ab80⟩ := ab_facts (peek R sy.SavedJoypadBits)
@@ -283,7 +283,7 @@ theorem vert_model {S : UInt8} {R : Machine} (hOK : vertOK sy m0 S = true) (h : 
   have hpre := F.pre pc hpm
   simp only [prefixOK, Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at hpre
   obtain ⟨⟨⟨hpiece, hPpc⟩, hPs⟩, hK⟩ := hpre
-  obtain ⟨kP, fP, AP, WP, _⟩ := FrameModel.piece_specI hpiece hA0
+  obtain ⟨kP, fP, AP, WP, IP⟩ := FrameModel.piece_specI hpiece hA0
   have kX : ∀ q ∈ knownP sy (Rom.of m0) S pc, (stepN kP R).ram.get! q.1 = q.2 := fun q hq => AP.K q (List.contains_iff_mem.1 (hK q hq))
   have kmem : ∀ q, q ∈ knownP sy (Rom.of m0) S pc → (stepN kP R).ram.get! q.1 = q.2 := kX
   have wX : ∀ i ∈ watchP sy, i < 2048 → (stepN kP R).ram.get! i = R.ram.get! i := WP
@@ -397,7 +397,7 @@ theorem vert_model {S : UInt8} {R : Machine} (hOK : vertOK sy m0 S = true) (h : 
     rw [hHs]
     simp only [goalV, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hQ
     exact ⟨hQ.1.2 (stkI S) (.tail _ (.head _)), hQ.1.2 (stkI (S - 1)) (.tail _ (.tail _ (.head _)))⟩
-  obtain ⟨k, Q, hk, hs, hg, gX', pcX', sX', rel, fix⟩ :=
+  obtain ⟨k, Q, hk, hs, hg, gX', pcX', sX', rel, fix, CX⟩ :=
     FrameModel.leafD_spec (ain := 0) F.ds hc (by decide) hstop hgoal AP.good (by rw [AP.pc, hPpc]) (by rw [AP.s, hPs]) gH (by rw [hHs]) hL
   simp only [goalV, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hg
   obtain ⟨⟨⟨_, heq⟩, hw⟩, hdt⟩ := hg
@@ -425,13 +425,15 @@ theorem vert_model {S : UInt8} {R : Machine} (hOK : vertOK sy m0 S = true) (h : 
   -- the last piece, to the scroll handler
   have hAY : At (Rom.of m0) { pc := retPc sy (Rom.of m0) S, s := S, K := [] } (stepN 1 (stepN k X)) :=
     ⟨y4, hYpc, hYs, (fun q hq => by cases hq), (fun q hq => by cases hq), (fun v hv => by cases hv), (fun v hv => by cases hv), (fun v hv => by cases hv)⟩
-  obtain ⟨kL, fL, AL, WL, _⟩ := FrameModel.piece_specI F.last hAY
+  obtain ⟨kL, fL, AL, WL, IL⟩ := FrameModel.piece_specI F.last hAY
   have wZ : ∀ i ∈ watchR sy, i < 2048 → (stepN kL (stepN 1 (stepN k X))).ram.get! i = (stepN k X).ram.get! i := by
     intro i hi hl
     rw [WL i hi hl, y3]
   have eZ : stepN (kP + (k + (1 + kL))) R = stepN kL (stepN 1 (stepN k X)) := by
     rw [FrameModel.stepN_add, hX, FrameModel.stepN_add, FrameModel.stepN_add]
-  refine ⟨kP + (k + (1 + kL)), ?_, ?_, ?_, ?_, ?_, ?_⟩
+  have CR : FrameModel.InFrame (Rom.of m0) (stepN k X) := FrameModel.inFrame_rts gX' (by rw [pcX']; exact p1) (by rw [pcX']; exact p2) (by rw [pcX']; exact p3)
+  refine ⟨kP + (k + (1 + kL)), ?_, ?_, ?_, ?_, ?_, ?_, FrameModel.InFrameN.add' (fun j hj => (IP j hj).2.2) hX
+    (FrameModel.InFrameN.add CX (FrameModel.InFrameN.add (fun j hj => by rw [show j = 0 by omega]; exact CR) (fun j hj => (IL j hj).2.2)))⟩
   · have e1 : FrameModel.moveLen = 728 := rfl
     have e2 : fuelP = 60 := rfl
     have e3 : fuelV = 600 := rfl

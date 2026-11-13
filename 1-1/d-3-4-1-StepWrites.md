@@ -2,7 +2,7 @@
 
 # Where one step of the CPU writes RAM
 
-**Claim.** One step of the Lean CPU changes RAM only at the address that its instruction stores to, and at the bytes of the stack that it pushes. This is proved for every machine and every opcode. With it, a walk of the abstract machine can carry a fact about bytes that its states do not know: the sound's bytes are in a state of a table. This is proved as a general step and a general frame, with no game data. Used on the side change, it is measured, not proved: rows that forget the sound's bytes close for 52 kinds of the pause sound at the exit. So `chg.quiet₂` (1-1-d-3-4) and `chg.noStart₂` (1-1-d-3-3) stay; this page says what they need now.
+**Claim.** One step of the Lean CPU changes RAM only at the address that its instruction stores to, and at the bytes of the stack that it pushes. This is proved for every machine and every opcode. With it, a walk of the abstract machine can carry a fact about bytes that its states do not know: the sound's bytes are in a state of a table. This is proved as a general step and a general frame, with no game data. Used on the side change, rows that forget the sound's bytes close for 52 kinds of the pause sound at the exit. This was measured here, and is proved on [the next page](d-3-4-2-SideChangeSound.md): `chg.quiet₂` (1-1-d-3-4) is now weaker. `chg.noStart₂` (1-1-d-3-3) stays.
 
 `step(m)` is one step of the CPU. `m[i]` is the RAM byte `i` of `m`. `trace(m, inp, k)` is the machine after `k` steps of the frame of `m` with the input `inp`. `Sim(A, m)` says that the abstract state `A` of `TaintRun` covers `m`.
 
@@ -81,7 +81,7 @@ The 122 rows close, and `left` falls by one on each. Before, `rows0` and `rows1`
 
 ## What this gives
 
-* `quiet₂` (1-1-d-3-4). With rows like these, the condition at the exit becomes: the pause bytes are one of 52 kinds. This is weaker than `Quiet` and holds at all 860 measured exits; `Quiet` holds at 275. Not done: the rows as a proof (the link of two rows with `twalk`, the condition `Ph` in `InvL`, the rows of the time with `dg`, `EndStatement`). The rows are also read by `SurfaceFrames.startCheck` and `ControlStart.ctlCheck`: their theorems take a run with `quiet`, so the route keeps `quiet₂` until they read the new rows. Their tests (`start_of_invL`, `ctl_of_invL`) work on any list of rows.
+* `quiet₂` (1-1-d-3-4). Done in the next round: the rows are proved, and the route now asks the kinds of the pause sound at the exit (`QuietK`). See [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md). There one set of rows of the time serves all 52 kinds, and the tables are made by the check.
 * The kinds are still an assumption on the exit. To prove them, the pipe's frames need the same tables: Start is allowed there, so the pause sound's state must be carried from the entry.
 * `noStart₂` (1-1-d-3-3). The table makes the delay of the song harmless: the 32,325 states with Start after the exit all close. But Start pauses the game, and a paused frame does not take one off `left`. The rows have one row for each value of `left`, so paused states need rows that can stay. Not done.
 * `quiet₁`, `noStart₁` (1-1-b-3-7, 1-1-b-3-6). The same holds for the change into the room: `Quiet` fails after Start on the pipe's frames, and the same tables would replace it by kinds of the pause sound. Its rows are read by `ScreenStart` and `RoomMap`. Not done.

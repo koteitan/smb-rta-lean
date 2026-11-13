@@ -135,17 +135,32 @@ def posI (sy : Syms) : List Nat := [(sy.Player_PageLoc &&& 0x7FF).toNat, (sy.Pla
 def hsI (sy : Syms) : List Nat := [(sy.Player_X_Speed &&& 0x7FF).toNat, (sy.Player_X_MoveForce &&& 0x7FF).toNat, (sy.PlayerFacingDir &&& 0x7FF).toNat,
   (sy.Player_MovingDir &&& 0x7FF).toNat, (sy.RunningSpeed &&& 0x7FF).toNat]
 
+/-- the RAM indices of the rest of the state at control that the first frames need (`OpenFrames`): the stored speed, the collision bits, the player's state, the area's type,
+the swimming flag, the change of size -/
+def stI (sy : Syms) : List Nat := [(sy.Player_XSpeedAbsolute &&& 0x7FF).toNat, (sy.Player_CollisionBits &&& 0x7FF).toNat, (sy.Player_State &&& 0x7FF).toNat,
+  (sy.AreaType &&& 0x7FF).toNat, (sy.SwimmingFlag &&& 0x7FF).toNat, (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat]
+
 /-- **The check on the ROM of the state at control**: frame 0 from each near or held state of the set, with any input, ends with control and the speed 0 and with the
-position's bytes and the horizontal state's bytes known, with the values of `m0`, or without control in a state of the set -/
+position's bytes, the horizontal state's bytes and the bytes of `stI` known, with the values of `m0`, or without control in a state of the set -/
 def titlePosCheck (sy : Syms) (c : Ctx) (m0 : Machine) : Bool :=
-  frame0Check sy c (fun B => finNear sy B && (posI sy ++ hsI sy).all fun i => TaintRun.knownIs B (i, m0.ram.get! i))
+  frame0Check sy c (fun B => finNear sy B && (posI sy ++ hsI sy ++ stI sy).all fun i => TaintRun.knownIs B (i, m0.ram.get! i))
 
 /-- the bytes of the check at control have the values of `m0` -/
-theorem Begin.bytes₁ (hB : check sy c t0 = true) (hc : titlePosCheck sy c m0 = true) (B : Begin sy c seq inp) (hn : seq 1 = frame (seq 0) (inp 0)) :
-    ∀ i ∈ posI sy ++ hsI sy, (seq 1).ram.get! i = m0.ram.get! i := by
+theorem Begin.bytesAll₁ (hB : check sy c t0 = true) (hc : titlePosCheck sy c m0 = true) (B : Begin sy c seq inp) (hn : seq 1 = frame (seq 0) (inp 0)) :
+    ∀ i ∈ posI sy ++ hsI sy ++ stI sy, (seq 1).ram.get! i = m0.ram.get! i := by
   obtain ⟨Bs, hf, hb⟩ := B.frame0 hB hc hn
   simp only [Bool.and_eq_true, List.all_eq_true] at hf
   exact fun i hi => TaintRun.sim_known hb (hf.2 i hi)
+
+/-- the bytes of the position and of the horizontal state at control have the values of `m0` -/
+theorem Begin.bytes₁ (hB : check sy c t0 = true) (hc : titlePosCheck sy c m0 = true) (B : Begin sy c seq inp) (hn : seq 1 = frame (seq 0) (inp 0)) :
+    ∀ i ∈ posI sy ++ hsI sy, (seq 1).ram.get! i = m0.ram.get! i :=
+  fun i hi => Begin.bytesAll₁ hB hc B hn i (List.mem_append_left _ hi)
+
+/-- the bytes of `stI` at control have the values of `m0` -/
+theorem Begin.st₁ (hB : check sy c t0 = true) (hc : titlePosCheck sy c m0 = true) (B : Begin sy c seq inp) (hn : seq 1 = frame (seq 0) (inp 0)) :
+    ∀ i ∈ stI sy, (seq 1).ram.get! i = m0.ram.get! i :=
+  fun i hi => Begin.bytesAll₁ hB hc B hn i (List.mem_append_right _ hi)
 
 /-- **The position at control is that of `m0`**, with any input: from the press of Start on the title (`Begin`). `hB` and `hc` are checks on the ROM. -/
 theorem Begin.pos₁ (hB : check sy c t0 = true) (hc : titlePosCheck sy c m0 = true) (B : Begin sy c seq inp) (hn : seq 1 = frame (seq 0) (inp 0)) :

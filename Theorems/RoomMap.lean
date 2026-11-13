@@ -22,7 +22,7 @@ screen's bytes that the scroll handler reads are known at each frame's start and
 routine of the head's collision with a block (`PipeWrites.headAt`) and the bump of the head on a solid block (`SideFrame.bumpAt`). No state of the walk is at either of them
 (`cuts_run`, `head_of_rows`, `bump_of_rows`): `SiteOK` lets a read for the head give only nothing or a coin. So no frame of the room changes the vertical motion by the head's
 collision with a block. The walks of the entering frame (`SideEntryEnd`, `SideEntryRest`) use these facts on the entering frame (and `SideFrame` four of them), and
-`RoomJoin.RoomRun.vframes` the last one on the frames before it.
+`RoomJoin.RoomRun.vfloor` the last one on the frames before it; `RoomVert` uses the condition at each frame's start (`cond_of_rows`).
 
 What stays assumed is what `ScreenPage` assumes: `SiteOK` on each instruction of the frames, and that each frame before the entry starts in the player's routine. The condition at
 the first control comes from the rows of the time of the change (`start_of_rows`). No game data: the map comes from a reference machine. Page: `1-1/c-7-12-RoomMap.md`.
@@ -798,6 +798,14 @@ theorem map_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS m0
   rw [hb]
   exact hF.sub i hi
 
+
+/-- **Every frame from the first control in the room to the entry starts in the room's condition**, under the hypotheses of `map_of_rows` -/
+theorem cond_of_rows (hF : MapFacts sy nmS m0) (hc : startCheckT sy nm d e nmS m0 = true) {seq : Nat → Machine} {inp : Nat → UInt8}
+    (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat} (hin : InRowsT sy nm d e (seq b)) (hctl : controllable sy (seq b) = true)
+    (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
+    (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
+    ∀ n, b ≤ n → n < a → RoomCond (ScreenPage.envR sy nmS m0) (refR m0) (knownT sy nmS m0) (seq n) :=
+  (map_run hF.ok next (start_of_rows hc hin hctl) sites stay).1
 end
 
 /-! ## Each frame of the room starts in control -/

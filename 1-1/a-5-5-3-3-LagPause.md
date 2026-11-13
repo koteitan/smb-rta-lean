@@ -4,29 +4,31 @@
 
 **Claim.** A frame that starts in the idle loop in control and calls the routine of the mode ends with the low bit of the pause byte 0. So a frame that ends paused does not call
 the routine. This holds if each instruction of the frame is `Clean` and does not write the pause byte through an index or a pointer. Up to the vertical pipe, a frame not counted
-ends paused (the new field `lags.paused`). So it does not call the routine, and it keeps the speed, the subspeed and the position and ends in control by the check of
-[Frames not counted, up to the pipe](a-5-5-3-LagFrames.md). The old field `lags.game` is gone.
+ends paused. This is now a definition: the counted frames are read from the machines, a counted frame is a frame that ends not paused (`PipeFrames.ixP`), and the old field
+`lags.paused` is gone (`Lags.paused` is a theorem). So a frame not counted does not call the routine, and it keeps the speed, the subspeed and the position and ends in control by
+the check of [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md). The old field `lags.game` is gone too.
 
 Notation. `tr(m, i, k)` is the machine after `k` instructions of the frame of `m` with the input `i`, and `frame(m, i)` is the machine at its end. `c` is the call of the
 mode's routine (the instruction before `SkipMainOper`). `g` is the RAM index of the pause byte (`GamePauseStatus`), and `bit₀(m)` is its low bit in `m`. `FrameStart(m)` and `Clean` are those of
 `PipeWrites.guardOf`, as in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md). `KeepsPause(m)` says: a store through an index or a pointer at `m` does not write the byte `g`.
-`seq(n)`, `sin(n)` are the machine and the input of frame `n` of the run (every frame counted); counted frame `t` is frame `ix(t)`.
+`seq(n)`, `sin(n)` are the machine and the input of frame `n` of the run (every frame counted); counted frame `t` is frame `ix(t)`. `first(a, d)` is the first frame `n`
+from `a` on, among `d` of them, with `bit₀(seq(n + 1)) = 0`, and `a + d` if there is none. `dP` is a number of the run, longer than its pauses.
 
 ```
 ends_unpaused      :  pauseCheck,  FrameStart(m),  ∀ k, Clean(tr k),  ∀ k, KeepsPause(tr k),
                       ∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c          →   bit₀(frame(m, i)) = 0
 no_call_of_paused  :  the same,  bit₀(frame(m, i)) = 1                        →   ¬ ∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c
 
-Lags   (new fields, for a frame not counted:  1 ≤ t < E,  ix t < n < ix(t + 1))
-  paused  :  bit₀(seq(n + 1)) = 1
-  keeps   :  ∀ k,  KeepsPause(tr(seq n, sin n, k))
-Lags.no_call       :  pauseCheck,  Lags,  FrameStart(seq n)   →   frame n does not call c
+ix(0) = 0,   ix(t + 1) = first(ix t + 1, dP)                 (PipeFrames.ixP: a counted frame ends not paused)
+Lags.paused   :  t < E,  ix t < n < ix(t + 1)   →   bit₀(seq(n + 1)) = 1          (by the definition; frames 1 to ix(1) − 1 too)
+Lags.keeps    :  for a frame not counted,  t < E,  ix t < n < ix(t + 1):   ∀ k,  KeepsPause(tr(seq n, sin n, k))
+Lags.no_call  :  pauseCheck,  Lags,  FrameStart(seq n)   →   frame n does not call c
 ```
 
 `pauseCheck` is a check on the ROM, by `native_decide` in the private `pause_check` (`Proof/LagPause.lean`). It takes about 6 s natively.
 The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
-Lean: `Theorems/LagPause.lean`; `Lags.paused`, `Lags.keeps`, `Lags.no_call` in `Theorems/PipeFrames.lean`; private `Proof/LagPause.lean`.
+Lean: `Theorems/LagPause.lean`; `ixP`, `ixP_paused`, `Lags.paused`, `Lags.keeps`, `Lags.no_call` in `Theorems/PipeFrames.lean`; private `Proof/LagPause.lean`.
 
 ## How it works
 
@@ -60,17 +62,22 @@ first counted frame that ends out of control.
 | big with the super status, own inputs (60) | 18,076 | 19,157 | 19,157 | 0 | 0 | 0 of 18,076 |
 | followed past a counted frame out of control (60; not part of the check) | 19,980 | 22,020 | 21,187 | 0 | 831 | 0 of 20,811 |
 
-* Every frame not counted of the runs in the theorem ends paused: the new field `paused` holds. No instruction writes the pause byte through an index or a pointer: `keeps` holds.
+* Every frame not counted of the runs in the theorem ends paused. No instruction writes the pause byte through an index or a pointer: `keeps` holds.
+* So a frame is counted (the interval timers' phase moves) exactly when it ends not paused. `open-real-check` checks this on every frame of its runs up to the first frame out of
+  control: 81,931 frames, no exception ([The opening on real frames](a-5-4-OpenFrames.md)). This is why `ixP` reads the counted frames from the pause byte.
 * No frame that calls `c` ends paused, also after an injury or a death (last row): what `ends_unpaused` says.
 * In the last row, 833 frames not counted do not end paused. They come after an injury or a death, when the master timer control stops the timers. Such a run has a counted
   frame out of control before the entry, so it is outside the theorem (`lags.ctl`; items 1-1-0-6-2, 1-1-0-6-3).
 
 ## Assumed (not proved in Lean)
 
-* **`lags.game` is no longer assumed.** A frame not counted does not call the mode's routine; this is now a theorem from `paused` and `keeps`.
-* **`lags.paused`**: each frame not counted, from control to the entry, ends paused. This is a condition on one state: the machine after the frame. Up to the pipe the frames
-  not counted are those of a pause; `gap` (which frames are not counted) is not tied to the interval timer. This is the same condition as `chg.paused₁` of the first change
-  (item 1-1-b-3-8).
+* **`lags.game` is no longer assumed.** A frame not counted does not call the mode's routine; this is now a theorem from `Lags.paused` and `keeps`.
+* **`lags.paused` is no longer assumed.** Which frames are counted is read from the pause byte (`ixP`), so a frame not counted ends paused by the definition. What ties these
+  counted frames to the frames on which the timers run is the count of `chg.ha₁` (part 0, as before). The counted frame 1 is the first frame from frame 1 on that ends not
+  paused: a run that pauses on the first frame in control is covered now (before, the counted frame 1 was frame 1).
+* **`lags.resume`** (new): each counted frame up to the entry comes within `dP` frames of the one before, that is, no pause from frame 1 to the entry lasts `dP` frames.
+  `dP` is a field of `Lags` that the run chooses, so a run whose pauses end before the entry meets it with a large `dP`. With it a counted frame ends not paused
+  (`Lags.unpaused`), which [The opening on real frames](a-5-4-OpenFrames.md) uses.
 * **`lags.keeps`**: no instruction of a frame not counted writes the pause byte through an index or a pointer. It is of the kind of `Clean`, for one more byte.
 * **Not proved: that the master timer control stays 0.** It is not needed now.
 

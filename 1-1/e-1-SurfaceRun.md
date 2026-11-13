@@ -18,7 +18,10 @@ after   :  ∀ w ∈ I*,  |w| = 31 + k  →  d(w) ≤ 9424 + 16·v_top·k
 reached :  ∃ w ∈ I⁴⁰,  d(w) = 9424 + 16·v_top·9 = 15184
 gap     :  P(A) + 9424 + 16·v_top·(233 − 31) + 32  <  P₀
 short   :  ∀ w ∈ I*,  |w| ≤ 233  →  P(A) + d(w) + 32 < P₀
+far     :  2048 + 16·v_top·233 ≤ P(A)  ∧  P(A) + 16·v_top·233 + 2048 < 2²⁴
 ```
+
+`far` says that 233 frames of at most `16·v_top` each, either way, keep the position away from both ends of its range. The private proof checks it on `A` (`surface_checks`). [The frames from control](e-2-SurfaceFrames.md) use it in place of the old assumption `Moves.far`.
 
 Compared with the TAS, from its frame 852:
 

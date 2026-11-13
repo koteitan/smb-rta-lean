@@ -1,5 +1,6 @@
 import Theorems.PipeWrites
 import Theorems.CastleWalk
+import Theorems.LagFrames
 
 /-!
 # One frame in control keeps watched bits
@@ -25,6 +26,12 @@ frame starts in control, and that the `lag` frames keep the watched bits, are th
 A second walk (`walkKC`, `ctlKeepCheck`) stops a path at an instruction that writes the routine, the mode or the task byte by its address (`storesTo`), and asks at the frame's
 end that the three bytes still have the values of control. So a frame in control that writes none of them by its address ends in control (`keep_frame_startC`); this is how the
 frames before the touch end in control (`Frames.noStore`, `Frames.ctlAll`).
+
+A frame of `Frames` is counted when it ends with the game not paused (the low bit of the pause byte 0, `upAt`): the counted frame `j` is the `j`-th such frame (`ixOf`, by
+a count `upTo` and a search `firstLe`). So the counted frames come in order (`Frames.order`), each ends not paused (`Frames.up`), and the frames between them end paused
+(`Frames.down`); these are theorems from the definition. The condition on each instruction of the frames of a run is `CleanK` of `guardF`: `guardK` with four more bytes
+protected (`spareK`: the pause byte, the area's type, the swimming flag, the change of size). The walks of this file use `guardK`; `CleanK` of `guardF` gives `CleanK` of
+`guardK` (`cleanK_of_F`).
 There is no game data in this file. Page: `1-1/f-6-19-FrameKeep.md`.
 -/
 
@@ -1176,21 +1183,195 @@ structure RealRun where
   inp : Nat → UInt8
   next : ∀ n, seq (n + 1) = frame (seq n) (inp n)
 
+/-! ## The counted frames: the frames that end not paused
+
+A frame is counted when it ends with the game not paused. `upTo f n` counts the frames `1, …, n` for which `f` holds, and the counted frame `j` is the first frame
+`n` with `j ≤ upTo f n` (`firstLe`). No game data: the pause byte is read through `sy` and the ROM of `m0`, as `CtrlKeep.pauseI`. -/
+
+/-- of the frames `1, …, n`, the number for which `f` holds -/
+def upTo (f : Nat → Bool) : Nat → Nat
+  | 0 => 0
+  | n + 1 => upTo f n + (if f (n + 1) then 1 else 0)
+
+/-- the first `n ≤ N` with `p n`, or `N` if there is none -/
+def firstLe (p : Nat → Bool) : Nat → Nat
+  | 0 => 0
+  | N + 1 => if p (firstLe p N) then firstLe p N else N + 1
+
+theorem upTo_succ (f : Nat → Bool) (n : Nat) : upTo f (n + 1) = upTo f n + (if f (n + 1) then 1 else 0) := rfl
+
+theorem upTo_mono (f : Nat → Bool) {n k : Nat} (h : n ≤ k) : upTo f n ≤ upTo f k := by
+  obtain ⟨d, rfl⟩ : ∃ d, k = n + d := ⟨k - n, by omega⟩
+  induction d with
+  | zero => exact Nat.le_refl _
+  | succ d ih =>
+    rw [show n + (d + 1) = n + d + 1 by omega, upTo_succ]
+    have := ih (by omega)
+    omega
+
+theorem upTo_succ_le (f : Nat → Bool) (n : Nat) : upTo f (n + 1) ≤ upTo f n + 1 := by
+  rw [upTo_succ]
+  split <;> omega
+
+theorem firstLe_le (p : Nat → Bool) : ∀ N, firstLe p N ≤ N
+  | 0 => Nat.le_refl _
+  | N + 1 => by
+    have := firstLe_le p N
+    simp only [firstLe]
+    split <;> omega
+
+/-- **The first `n ≤ N` with `p n`**: if there is one, `firstLe` is one, and no smaller `n` has `p n` -/
+theorem firstLe_spec (p : Nat → Bool) : ∀ N, (∃ n, n ≤ N ∧ p n = true) → p (firstLe p N) = true ∧ ∀ k, k < firstLe p N → p k = false
+  | 0, ⟨n, hn, hp⟩ => by
+    have e : n = 0 := by omega
+    subst e
+    exact ⟨hp, fun k hk => absurd hk (Nat.not_lt_zero _)⟩
+  | N + 1, ⟨n, hn, hp⟩ => by
+    by_cases h : ∃ n, n ≤ N ∧ p n = true
+    · obtain ⟨h1, h2⟩ := firstLe_spec p N h
+      have e : firstLe p (N + 1) = firstLe p N := by simp only [firstLe, h1, if_true]
+      rw [e]
+      exact ⟨h1, h2⟩
+    · have hno : ∀ k, k ≤ N → p k = false := fun k hk => by
+        cases hk' : p k with
+        | false => rfl
+        | true => exact absurd ⟨k, hk, hk'⟩ h
+      have hf := hno _ (firstLe_le p N)
+      have e : firstLe p (N + 1) = N + 1 := by simp [firstLe, hf]
+      rw [e]
+      have hN : n = N + 1 := by
+        by_cases e : n ≤ N
+        · rw [hno n e] at hp
+          cases hp
+        · omega
+      subst hN
+      exact ⟨hp, fun k hk => hno k (by omega)⟩
+
+/-- `firstLe` is `0` when `p 0` holds -/
+theorem firstLe_zero (p : Nat → Bool) (h : p 0 = true) : ∀ N, firstLe p N = 0
+  | 0 => rfl
+  | N + 1 => by
+    have e := firstLe_zero p h N
+    simp only [firstLe, e, h, if_true]
+
+/-- the `j`-th frame for which `f` holds, among the frames up to `N` -/
+def nthUp (f : Nat → Bool) (N j : Nat) : Nat := firstLe (fun n => decide (j ≤ upTo f n)) N
+
+section
+variable {f : Nat → Bool} {N : Nat}
+
+theorem nthUp_spec {j : Nat} (h : j ≤ upTo f N) : nthUp f N j ≤ N ∧ j ≤ upTo f (nthUp f N j) ∧ ∀ k, k < nthUp f N j → upTo f k < j := by
+  obtain ⟨h1, h2⟩ := firstLe_spec (fun n => decide (j ≤ upTo f n)) N ⟨N, Nat.le_refl _, by simp [h]⟩
+  refine ⟨firstLe_le _ N, by simpa using h1, fun k hk => ?_⟩
+  have := h2 k hk
+  simp only [decide_eq_false_iff_not, Nat.not_le] at this
+  exact this
+
+theorem nthUp_zero : nthUp f N 0 = 0 := firstLe_zero _ (by simp) N
+
+/-- **The `j`-th frame for which `f` holds**: `f` holds there, and `j` frames up to it -/
+theorem nthUp_at {j : Nat} (h1 : 1 ≤ j) (h : j ≤ upTo f N) : 1 ≤ nthUp f N j ∧ f (nthUp f N j) = true ∧ upTo f (nthUp f N j) = j := by
+  obtain ⟨_, a2, a3⟩ := nthUp_spec h
+  generalize nthUp f N j = n at a2 a3
+  cases n with
+  | zero => exact absurd a2 (by simp [upTo]; omega)
+  | succ k =>
+    have b := a3 k (by omega)
+    rw [upTo_succ] at a2 ⊢
+    cases hf : f (k + 1) with
+    | false =>
+      rw [hf] at a2
+      simp at a2
+      omega
+    | true =>
+      rw [hf] at a2
+      simp at a2
+      refine ⟨by omega, rfl, ?_⟩
+      simp
+      omega
+
+/-- the counted frames come in order -/
+theorem nthUp_lt {j : Nat} (h : j + 1 ≤ upTo f N) : nthUp f N j < nthUp f N (j + 1) := by
+  have hle : upTo f (nthUp f N j) ≤ j := by
+    cases j with
+    | zero => rw [nthUp_zero]; simp [upTo]
+    | succ j =>
+      rw [(nthUp_at (f := f) (N := N) (j := j + 1) (by omega) (by omega)).2.2]
+      exact Nat.le_refl _
+  obtain ⟨_, a2, _⟩ := nthUp_spec h
+  apply Nat.lt_of_not_le
+  intro hn
+  have := upTo_mono f hn
+  omega
+
+/-- **Between two counted frames `f` does not hold** -/
+theorem nthUp_between {j n : Nat} (h1 : 1 ≤ j) (h : j ≤ upTo f N) (hn1 : nthUp f N (j - 1) ≤ n) (hn2 : n + 1 < nthUp f N j) : f (n + 1) = false := by
+  obtain ⟨_, _, a3⟩ := nthUp_spec h
+  obtain ⟨_, b2, _⟩ := nthUp_spec (f := f) (N := N) (j := j - 1) (by omega)
+  have c1 := a3 (n + 1) hn2
+  have c2 := upTo_mono f hn1
+  rw [upTo_succ] at c1
+  cases hf : f (n + 1) with
+  | false => rfl
+  | true =>
+    rw [hf] at c1
+    simp at c1
+    omega
+
+end
+
+/-- **The pause byte**, as `CtrlKeep.pauseI`: the operand of the load just before the NMI's call of the mode's routine. Its low bit is 1 while the game is paused. -/
+def pauseI (sy : Syms) (m0 : Machine) : Nat :=
+  (((romByte m0 (LagFrames.modeCall sy - 5)).toUInt16 ||| ((romByte m0 (LagFrames.modeCall sy - 4)).toUInt16 <<< 8)) &&& 0x7FF).toNat
+
+/-- **The game is not paused** on the machine `m`: the low bit of the pause byte is 0 (as `CtrlKeep.Unpaused`) -/
+def Unpaused (sy : Syms) (m0 m : Machine) : Prop := m.ram.get! (pauseI sy m0) &&& 1 = 0
+
+/-- the frame of the run `S` that ends at `S.seq (a + n)` ends with the game not paused -/
+def upAt (sy : Syms) (m0 : Machine) (S : RealRun) (a n : Nat) : Bool := (S.seq (a + n)).ram.get! (pauseI sy m0) &&& 1 == 0
+
+/-- **The counted frame `j`** of the run `S` from frame `a` on: the `j`-th frame that ends with the game not paused, among the frames up to `N`. The counted frame 0 is
+frame `a`. -/
+abbrev ixOf (sy : Syms) (m0 : Machine) (S : RealRun) (a N j : Nat) : Nat := nthUp (upAt sy m0 S a) N j
+
+/-- **The bytes that no frame of a run writes through an index or a pointer**, besides those of `guardK`: the pause byte, the area's type, the swimming flag, the change of
+size (as `CtrlKeep.spareI`) -/
+def spareK (sy : Syms) (m0 : Machine) : List Nat :=
+  [pauseI sy m0, (sy.AreaType &&& 0x7FF).toNat, (sy.SwimmingFlag &&& 0x7FF).toNat, (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat]
+
+/-- **The guard of the frames of a run**: `guardK`, with the bytes of `spareK` protected too (as `CtrlKeep.guardP` with `CtrlKeep.spareI`). The walks use `guardK`;
+this guard is only in the condition on each instruction (`Frames.cleanF`). -/
+def guardF (sy : Syms) (m0 : Machine) : Guard := { guardK sy m0 with prot := spareK sy m0 ++ (guardK sy m0).prot }
+
+/-- `CleanK` with more bytes protected gives `CleanK` -/
+theorem cleanK_weak {G : Guard} {l : List Nat} {q : UInt16} {m : Machine} (h : CleanK { G with prot := l ++ G.prot } q m) : CleanK G q m := by
+  refine ⟨fun t ht hq => ?_, h.read, h.jump, h.time⟩
+  rcases h.store t ht hq with ⟨h1, h2⟩ | h1
+  · exact Or.inl ⟨h1, fun h3 => h2 (List.mem_append_right _ h3)⟩
+  · exact Or.inr h1
+
+/-- `CleanK` of `guardF` gives `CleanK` of `guardK` -/
+theorem cleanK_of_F {sy : Syms} {m0 : Machine} {q : UInt16} {m : Machine} (h : CleanK (guardF sy m0) q m) : CleanK (guardK sy m0) q m := cleanK_weak h
+
 /-- **The frames of a run, as the walk needs them.** They are the frames of the real run `S` from frame `a` on: `all n = S.seq (a + n)` is the machine when frame `n` begins,
-counted or not (a `lag` frame), from the machine at control (`all 0`) on, and `inp n` its input. These are definitions, so `all 0` is `S.seq a`, and each frame is the real frame of
-the one before (`Frames.next`). `seq j` is the machine at the end of the counted frame `j`: `all (ix j)`. The frames between two counted frames are the `lag` frames. Every field is a hypothesis.
+counted or not, from the machine at control (`all 0`) on, and `inp n` its input. These are definitions, so `all 0` is `S.seq a`, and each frame is the real frame of
+the one before (`Frames.next`). A frame is counted when it ends with the game not paused (`upAt`): the counted frame `j` ends at `all (ix j)`, the `j`-th such end, also by
+definition (`ixOf`). So the counted frames come in order (`Frames.order`), each ends not paused (`Frames.up`), and the frames between two counted frames, the `lag` frames,
+end paused (`Frames.down`). `seq j` is the machine at the end of the counted frame `j`. Every field is a hypothesis.
 That each frame starts in the idle loop in control (`StartK`) is not a field: it follows from the machine at control, `noStore` and `clean` (`Frames.all_start`), and so do the
 watched bits of the `lag` frames. That each frame before the touch's frame ends in control is a theorem too (`Frames.ctlAll`): the walk with the stores of the three bytes cut. -/
 structure Frames (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) (seq : Nat → Machine) where
-  /-- the counted frame `j` ends at `all (ix j)`; `ix 0 = 0` is control -/
-  ix : Nat → Nat
-  ix0 : ix 0 = 0
-  order : ∀ j, j < g → ix j < ix (j + 1)
-  at_ix : ∀ j, j ≤ g → seq j = S.seq (a + ix j)
+  /-- a frame from control by whose end `g` frames have ended not paused: the search for the counted frames looks up to it -/
+  top : Nat
+  /-- `g` frames end not paused by the end of frame `top` -/
+  many : g ≤ upTo (upAt sy m0 S a) top
+  /-- the counted frame `j` ends at `seq j` -/
+  seqAt : ∀ j, j ≤ g → seq j = S.seq (a + ixOf sy m0 S a top j)
   /-- no instruction of a frame before the touch's frame, counted or not, writes the routine, the mode or the task byte by its address -/
-  noStore : ∀ n, n + 1 < ix g → ∀ k, CtlStore sy (trace (S.seq (a + n)) (S.inp (a + n)) k) = false
-  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` -/
-  clean : ∀ n, n < ix g → ∀ k, CleanK (guardK sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
+  noStore : ∀ n, n + 1 < ixOf sy m0 S a top g → ∀ k, CtlStore sy (trace (S.seq (a + n)) (S.inp (a + n)) k) = false
+  /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardF`: no store through an index or a pointer writes the bytes of
+  `guardK` (but the player's own store of the fraction), the pause byte, the area's type, the swimming flag or the change of size -/
+  cleanF : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardF sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section
 variable {sy : Syms} {m0 : Machine} {S : RealRun} {a : Nat} {g : Nat} {seq : Nat → Machine}
@@ -1203,6 +1384,40 @@ abbrev Frames.inp (_K : Frames sy m0 S a g seq) (n : Nat) : UInt8 := S.inp (a + 
 
 /-- each frame is the real frame of the one before: from the real run -/
 theorem Frames.next (K : Frames sy m0 S a g seq) (n : Nat) : K.all (n + 1) = frame (K.all n) (K.inp n) := S.next (a + n)
+
+/-- **The counted frame `j` ends at `all (ix j)`**: the `j`-th frame from control that ends not paused (a definition, `ixOf`) -/
+abbrev Frames.ix (K : Frames sy m0 S a g seq) (j : Nat) : Nat := ixOf sy m0 S a K.top j
+
+/-- the counted frame `j` ends at `seq j` (the field `seqAt`) -/
+theorem Frames.at_ix (K : Frames sy m0 S a g seq) : ∀ j, j ≤ g → seq j = S.seq (a + K.ix j) := K.seqAt
+
+/-- the counted frame 0 is control: the field `ix0` of before -/
+theorem Frames.ix0 (K : Frames sy m0 S a g seq) : K.ix 0 = 0 := nthUp_zero
+
+/-- **The counted frames come in order**: the field `order` of before, now from the definition -/
+theorem Frames.order (K : Frames sy m0 S a g seq) : ∀ j, j < g → K.ix j < K.ix (j + 1) :=
+  fun _ hj => nthUp_lt (Nat.le_trans hj K.many)
+
+/-- **A counted frame ends with the game not paused**: by the definition -/
+theorem Frames.up (K : Frames sy m0 S a g seq) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ g) : Unpaused sy m0 (seq j) := by
+  have h := (nthUp_at (f := upAt sy m0 S a) h1 (Nat.le_trans h2 K.many)).2.1
+  rw [K.at_ix j h2]
+  simpa [upAt] using h
+
+/-- **A frame between two counted frames, a `lag` frame, ends with the game paused**: by the definition -/
+theorem Frames.down (K : Frames sy m0 S a g seq) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ g) {n : Nat} (hn1 : K.ix (j - 1) ≤ n) (hn2 : n + 1 < K.ix j) :
+    ¬ Unpaused sy m0 (K.all (n + 1)) := by
+  have h := nthUp_between (f := upAt sy m0 S a) h1 (Nat.le_trans h2 K.many) hn1 hn2
+  intro hu
+  have e : upAt sy m0 S a (n + 1) = true := by
+    simp only [upAt, beq_iff_eq]
+    exact hu
+  rw [e] at h
+  cases h
+
+/-- **Each instruction meets `CleanK`** of `guardK`, on each frame up to the touch's frame: from `cleanF` -/
+theorem Frames.clean (K : Frames sy m0 S a g seq) : ∀ n, n < K.ix g → ∀ k, CleanK (guardK sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k) :=
+  fun n hn k => cleanK_of_F (K.cleanF n hn k)
 
 /-- the machine at control is the real run's frame `a` -/
 theorem Frames.seq0 (K : Frames sy m0 S a g seq) : seq 0 = S.seq a := by

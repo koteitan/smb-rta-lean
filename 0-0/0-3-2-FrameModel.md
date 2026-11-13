@@ -2,7 +2,7 @@
 
 # A real frame and the horizontal and vertical models
 
-**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). With the pressed side masked, the frame follows `hstep` or leaves the speed 0 (`move_masked`). The parts before the player's routine and after the scroll handler are assumptions on one frame.
+**Statement.** `hstep` is the horizontal part of one frame, and `vstep` the vertical part. For one frame `frame(M, i)` of a real machine, Lean proves this: from the player's routine to the scroll handler, the machine's bytes change as `hstep` says, and the position moves by `16·v'`. The vertical bytes change as `vstep` says (`vert_model`). With the pressed side masked, the frame follows `hstep` or leaves the speed 0 (`move_masked`). Each of the three also says that each step on the way stays in the frame if the frame has 64 dots left (`InFrameN`, [below](#the-time-of-a-walked-step)): so the frame does not end during the movement if no instruction runs late in the frame (`trace_inFrame`). The parts before the player's routine and after the scroll handler are assumptions on one frame.
 
 `tr(n)` is the machine `n` instructions into `frame(M, i)`. `HS(m)` is the horizontal state read from machine `m` (speed, subspeed, facing, moving direction, whether `RunningSpeed` is 0). `P(m)` is the position. `In(m)` is the input read from the machine at the player's routine. `v'` is the speed of `HS(frame(M, i))`.
 
@@ -10,6 +10,7 @@
 move_model  :  modelOK,  AtCtrl(R)
                →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  HS(stepN(k, R)) = hstep(HS(R), In(R))
                               ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)
+                              ∧  InFrameN(R, k)
 clean_frame :  modelOK,  Clean(M, i, n₀)
                →  HS(frame(M, i)) = hstep(HS(M), In(tr(n₀)))  ∧  P(frame(M, i)) = P(M) + 16·v'
 frame_read  :  modelOK,  frictionCheck,  ReadFrame(M, i, n₀)
@@ -27,6 +28,22 @@ Instructions advance on two machines at the same place at once. For each registe
 * Each instruction form is proved once (`tstep_spec`). The ROM is looked at only in the check.
 * With a real machine next to the machine of `runSub`, a routine does the same in both (`leaf_spec`). Their stack pointers and times may differ.
 * With one machine given twice, a piece of code is shown to leave bytes alone and to reach a place (`piece_spec`).
+
+## The time of a walked step
+
+The walk does not look at the time. But an instruction that it follows is not the idle loop (a `JMP` to itself: the emulator jumps there to the next PPU event), and it writes only RAM: no DMA and no register of the PPU. Its action adds at most 6 dots (the page penalty, or a branch), and then the cycles of its opcode, at most 7 (21 dots). A machine of the walk is `Good`: no NMI pending and the NMI off.
+
+```
+InFrame(m)        :  m is not halted  ∧  m.pc is not an idle loop  ∧  (fdot(m) + 64 ≤ dotsPerFrame  →  frame(step(m)) = frame(m))
+inFrame_of_tstep  :  the walk takes a step from a state Q that holds of m, n  →  InFrame(m) ∧ InFrame(n)
+InFrameN(R, k)    :  InFrame(stepN(j, R)) for each j < k
+trace_inFrame     :  idle loop at idle,  frame(tr(n₀)) = frame(M),  InFrameN(tr(n₀), k),  ∀ n, tr(n).pc ≠ idle → fdot(tr(n)) ≤ dotsPerFrame − 64
+                  →  ∀ j ≤ k,  tr(n₀ + j) = stepN(j, tr(n₀))  ∧  frame(tr(n₀ + j)) = frame(M)
+```
+
+`walkT_spec`, `walkD_spec` and `piece_specI` now say `InFrame` of every machine before the stop, and `piece_spec`, `leaf_spec`, `leafD_spec` and the pieces of `move_model` say `InFrameN`. A return that ends a routine of `leafD_spec` meets `InFrame` too (`inFrame_rts`). The cycles of the opcodes are bounded by a check (`cyc_le`, `decide`).
+
+So the old field `longer` (the frame does not end within 728 instructions after the player's routine) follows from the time of each instruction. Above ground that is the condition `time` of `FrameKeep.CleanK`, which every instruction of a frame in control meets (the field `keep.clean`).
 
 ## Two machines that run apart for a while
 
@@ -50,7 +67,7 @@ leafD_spec :  walkD from a routine's entry, the stack pointer the same on both
 ```
 vert_model :  vertOK,  AtCtrl0(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
               →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), abs(R))
-                             ∧  (st = 1 → DTHJ = 1)  at stepN(k, R)
+                             ∧  (st = 1 → DTHJ = 1)  at stepN(k, R)  ∧  InFrameN(R, k)
 ```
 
 `DTHJ` is `DiffToHaltJump`, `PrevA` is `PreviousA_B_Buttons`, `A_B` is `A_B_Buttons`. The check `vertOK`:
@@ -71,7 +88,7 @@ Found while the check ran as a program first: with only some bits of the buttons
 move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr ≠ lr,  0 < v(R) < 128
                →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs
                               ∧  ( HS(stepN(k, R)) = hstep(HS(R), In(R))  ∨  v(stepN(k, R)) = 0 )
-                              ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)
+                              ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)  ∧  InFrameN(R, k)
 ```
 
 `lr` is the Left/Right that `hstep` reads from `In(R)`. `AtCtrl0` is `AtCtrl` without the condition on the mask. The proof:
@@ -109,9 +126,9 @@ The fields of `Clean(M, i, n₀)`, all on one frame:
 
 * `at_ctrl` (`AtCtrl`): at instruction `n₀` it is at the player's routine. The stack pointer has its value, the routine number is the player's control, `AreaType` is not water, `Player_State` is 0, 1 or 2, no jumpspring, no swimming, no change of size, no NMI. The stored speed is `|v|`. The pressed side is not masked. The last two fail right after a hit.
 * `before`: until then nothing writes the horizontal bytes and the position.
-* `longer`: the frame does not end during the movement (728 instructions).
+* `longer`: the frame does not end during the movement (728 instructions). Above ground it is a theorem (`trace_inFrame`); `Clean` of the room keeps it.
 * `after`: from the scroll handler to the frame's end nothing writes them.
-* `far`: the position is at least 8 px from both ends of its range.
+* `far`: the position is at least 8 px from both ends of its range. Above ground it is a theorem from the frames before (`SurfaceFrames.far_of_follow`); `Clean` of the room keeps it.
 
 The fields of `ReadFrame(M, i, n₀)`:
 

@@ -73,10 +73,10 @@ Lean: `Theorems/PipeFrames.lean`、`Theorems/Route.lean` の `Pipe`、非公開�
 * **各フレームは `Frame` である.** `fr` の型です。前からの前提で、項目 0-0-0-3-1 です（`FrameModel.frame_read` は `ReadFrame` のもとでこれを出します）。上の本物のフレームで確かめました。
   新しいのは、フレーム 1 から `N` までにもこれを使うことです。
 * **数えないフレームは 3 つの値を変えない.** まとめての仮定ではなくなりました。モードのルーチンを呼ばないフレーム（ポーズ）では証明しました。
-  残る仮定は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) と [操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md) の `lags.ctl`（いまは数えるフレームだけ）、`lags.clean`、そして（この回、`lags.game` のかわりに）`lags.paused`、`lags.keeps` です（[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。`lags.store` はいまは証明しています。
+  残る仮定は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) と [操作から土管までの各フレームはアイドルループで始まる](a-5-5-3-2-StartRun-ja.md) の `lags.ctl`（いまは数えるフレームだけ）、`lags.clean`、そして（`lags.game` のかわりに）`lags.keeps` です（[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。`lags.store` はいまは証明しています。`lags.paused` はなくなりました。数えないフレームは、数えるフレームの定義からポーズで終わります。
 * **`still`: 操作できるときの速さは 0.** いまはタイトルで Start を押したところから証明しています（`Route.Run.still`、[タイトルの Start から操作できるまで](0-5-3-TitleStart-ja.md)）。
-* **フレームは走りのフレーム（項目 1-1-0-4）.** `Lags` は走り全体の本物のフレーム（`FrameKeep.RealRun`、`Route.Run.base`）を引数にとります。数えるフレームの場所はデータ `gap t`（数えるフレーム `t` のあとの数えないフレームの数）で、`ixOf gap` は定義です。数えるフレーム 1 はフレーム 1 で、`ixOf gap t < ixOf gap (t + 1)` です。
-  なので `pipe` の操作できるときの機械は走りのフレーム 1 です（`Lags.fm_one`、`Route.Run.pipeAt`）。前のつなぎ `pipeAt`、`Lags` の前のフィールド `seq`、`sin`、`next`、`ix`、`order`、`fm_ix`、`inp_ix`、`Route.Pipe` のフィールド `fm`、`inp`、`one_le` はなくなりました（`Pipe.fm` は定義 `Lags.fm`、`Pipe.one_le` は定理）。
+* **フレームは走りのフレーム（項目 1-1-0-4）.** `Lags` は走り全体の本物のフレーム（`FrameKeep.RealRun`、`Route.Run.base`）を引数にとります。数えるフレームの場所は機械から読みます。`ixP` は定義で、数えるフレーム `t + 1` は数えるフレーム `t` のあとでポーズでなく終わる最初のフレーム（`dP` フレームまで見る）、数えるフレーム 1 はフレーム 1 から先の最初のそういうフレームです。
+  なので `pipe` の操作できるときの機械は走りのフレーム 1 の値を持ちます（`Route.Run.pipeKeep₁`）。前のつなぎ `pipeAt`（数えるフレーム 1 はフレーム 1）、フィールド `gap`、`Lags` の前のフィールド `seq`、`sin`、`next`、`ix`、`order`、`fm_ix`、`inp_ix`、`Route.Pipe` のフィールド `fm`、`inp`、`one_le` はなくなりました（`Pipe.fm` は定義 `Lags.fm`、`Pipe.one_le` は定理）。
 * **この項目でないもの.** `openP` はなくなり、`openB` はフィールド `opening` からの定理です（項目 1-1-a-5-4、[本物のフレームでの出だし](a-5-4-OpenFrames-ja.md)）。`edge`、`moved`（項目 1-1-a-5-9）は、仮定のままです。
 
 **ファイル.** `Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/PipeWrites.lean`。

@@ -24,6 +24,7 @@ map_run       :  RoomOKT,  seq(n + 1) = frame(seq(n), inp(n)),  Cond(seq(c)),
                  フレーム c … e − 1 で SiteOK,  rt(seq(n)) = rt_r (c ≤ n < e)
                  →  (∀ n ∈ [c, e),  Cond(seq(n)))  ∧  (∀ n ∈ [c, e),  ∀ j,  AtRead(tr(j)) → TilesOK(tr(j)))
 start_of_rows :  startCheckT,  InRowsT(m),  control(m)  →  Cond(m)
+cond_of_rows  :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  RoomCond(seq(n))          （上下のバイトの歩きが使う、c-7-5-1-RoomVert-ja.md）
 map_of_rows   :  MapFacts,  startCheckT,  seq(n + 1) = frame(seq(n), inp(n)),  InRowsT(seq(b)),  control(seq(b)),
                  フレーム b … a − 1 で SiteOK,  rt(seq(n)) = rt_r (b ≤ n < a)
                  →  (∀ n ∈ [b, a),  Zero(seq(n)))  ∧  (∀ n ∈ [b, a),  ∀ j,  AtRead(tr(j)) → TilesOK(tr(j)))

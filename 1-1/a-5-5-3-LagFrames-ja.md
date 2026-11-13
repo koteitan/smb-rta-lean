@@ -2,7 +2,7 @@
 
 # 土管までの数えないフレーム
 
-**主張.** アイドルループで操作できる状態で始まるフレームは、モードのルーチンを呼ぶか、または速さ、端数、位置、ルーチン、モード、タスクを始まりのまま終わります。
+**主張.** アイドルループで操作できる状態で始まるフレームは、モードのルーチンを呼ぶか、または速さ、端数、位置、ルーチン、モード、タスクとほかの 9 バイトを始まりのまま終わります。
 ただし、その呼び出しまでの各命令が `Clean` を満たすときです。ポーズのフレームはこの呼び出しをしません。なので縦の土管まで、数えるフレームの終わりは
 そのフレーム自身の機械から読みます。2 つの数えるフレームのあいだの数えないフレームは、3 つの値を変えません。これは 1 フレームごとの条件から出ます。
 [土管までのフレームを機械から読む](a-5-5-PipeFrames-ja.md) の `Reads` が仮定していたことは、この条件からの定理になりました。
@@ -14,27 +14,31 @@
 記号. `fm(t)`、`inp(t)` は数えるフレーム `t` の機械と入力です。`seq(n)`、`sin(n)` は、全部のフレームを数えたときのフレーム `n` の機械と入力です。
 数えるフレーム `t` はフレーム `ix(t)` です。`tr(m, i, k)` は、入力 `i` での `m` のフレームの `k` 命令あとの機械、`frame(m, i)` はその終わりの機械です。
 `c` はモードのルーチンの呼び出しで、`SkipMainOper` の前の命令です。`V(m) = (v(m), f(m), P(m))` は速さ、端数、位置です（5 バイト）。
-`K(m)` はルーチン、モード、タスクです（3 バイト）。`ctl(m)` は、それが操作できるときの値であることです。
+`K(m)` はルーチン、モード、タスクです（3 バイト）。`ctl(m)` は、それが操作できるときの値であることです。`W(m)` はほかの 9 バイトです。向き、動く向き、走りの速さ、
+覚えている速さ、当たりのビット、エリアの種類、泳ぎのフラグ、大きさの変化、プレイヤーの状態です。[本物のフレームでの出だし](a-5-4-OpenFrames-ja.md) がこれを使います。
 `FrameStart(m)` は `guardOf` の `PipeWrites.FrameStart` です。`m` はアイドルループにいて、スタックポインタはそこでの値、フレームの始まりで、NMI が有効で、`ctl(m)` です。
 `Clean` は `PipeWrites.guardOf` の `Clean` です。行き先のわからない書き込みは、その `prot` のバイトに触れません。`V` の 5 バイトはそこに入っていません。
 
 ```
 keeps_frame    :  lagCheck,  FrameStart(m),
                   (∀ k,  frame(tr k) = frame(m)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)   →   Clean(tr k))
-                  →   (∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c)   ∨   (V(frame(m, i)) = V(m)  ∧  K(frame(m, i)) = K(m))
+                  →   (∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c)   ∨   (V, K, W)(frame(m, i)) = (V, K, W)(m)
 known_of_keep  :  FrameStart(m),  K(m') = K(m)   →   ctl(m')
 
-Lags           :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,   ix t < ix(t + 1),  そして
+Lags           :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,
+                  ix(0) = 0,  ix(t + 1) = ix(t) のあとでポーズでなく終わる最初のフレーム（dP フレームまで見る）,   そして
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                     （入る前の数えるフレームはどれも操作できる状態で終わる）
-                    clean :  ∀ n ∈ [ix 1, ix E),  ∀ k,  Clean(tr(seq n, sin n, k))
-                  そして数えないフレーム  1 ≤ t < E,  ix t < n < ix(t + 1)  で（LagPause）:
-                    paused :  bit₀(seq(n + 1)) = 1                                   （ポーズで終わる）
+                    resume:  ∀ t < E,  ix(t + 1) < ix t + 1 + dP                     （入る前のどのポーズも dP フレーム続かない）
+                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr(seq n, sin n, k))
+                  そして数えないフレーム  t < E,  ix t < n < ix(t + 1)  で（LagPause）:
                     keeps  :  ∀ k,  KeepsPause(tr(seq n, sin n, k))                  （添字やポインタを通ってポーズのバイトを書かない）
+Lags.paused    :  t < E,  ix t < n < ix(t + 1)   →   bit₀(seq(n + 1)) = 1               （ポーズで終わる。ix の定義から）
 
 Lags.no_call   :  pauseCheck,  Lags,  FrameStart(seq n)   →   数えないフレームは c を呼ばない
-Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ E,  ix 1 ≤ n < ix E,  FrameStart(seq n)   →   ctl(seq(n + 1))
+Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ n < ix E,  FrameStart(seq n)   →   ctl(seq(n + 1))
 Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)      （StartRun）
-lags_keep      :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
+lags_keepI     :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   (V, K, W)(fm(t + 1)) = (V, K, W)(frame(fm t, inp t))
+lags_keep      :  同じ前提   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
 ReadsOwn       :  ∀ t ∈ [1, E],  fr(t) の始まりは V(fm t);   ∀ t ∈ [1, E),  fr(t) の終わりは V(frame(fm t, inp t))
 reads_of_lags  :  lagCheck,  walkCheck,  pauseCheck,  ReadsOwn,  Lags,  FrameStart(fm 1)   →   Reads
 Pipe.reads     :  前のフィールド reads を定理として（Route）
@@ -42,16 +46,16 @@ Pipe.reads     :  前のフィールド reads を定理として（Route）
 
 `lagCheck` は ROM での確認で、非公開の `lag_check` が `native_decide` で示します。`pauseCheck` は `pause_check` のものです（[LagPause](a-5-5-3-3-LagPause-ja.md)）。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean` の `ReadsOwn`、`Lags`、`Lags.known_end`、`Lags.starts`、`lags_keep`、`reads_of_lags`、
+Lean: `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean` の `ReadsOwn`、`Lags`、`Lags.known_end`、`Lags.starts`、`lags_keepI`、`lags_keep`、`reads_of_lags`、
 `Theorems/Route.lean` の `Pipe.own`、`Pipe.lags`、`Pipe.reads`、非公開の `Proof/PipeWrites.lean`。
 
 ## しくみ
 
 * **歩き.** `TaintRun` の抽象機械で、[1 フレーム全部](a-5-2-PipeWrites-ja.md) と同じです。ルーチン、モード、タスクがわかっていて、RAM のほかのバイトはわからない状態で、
   アイドルループから始めます。1 つのバイトを `TaintRun` のカウンタ（`Env.rkI`）として追います。そこへの書き込みがあると、歩きは失敗します。フレームの終わりでもそのバイトを
-  追えているので、値は始まりのままです。`V` と `K` の 8 バイトそれぞれに 1 つの歩きがあります。
+  追えているので、値は始まりのままです。`V`、`K`、`W` の 17 バイトそれぞれに 1 つの歩きがあります。
 * **打ち切り.** 歩きは呼び出し `c` で止まります。ポーズのバイトはわからないので、歩きはポーズの道とポーズでない道の両方をたどります。ポーズでない道は `c` に来ます。
-  ポーズのフレームは `c` を飛ばして終わります。そのあいだに画面、音、パッド、ポーズの処理が動きますが、どれも 8 バイトを書きません。
+  ポーズのフレームは `c` を飛ばして終わります。そのあいだに画面、音、パッド、ポーズの処理が動きますが、どれも 17 バイトを書きません。
 * **行き先のわからない書き込み.** `Clean.store` は、そういう書き込みが `prot` のバイトに触れないと言います。`V` の 5 バイトは `prot` に入っていません。なので、そういう書き込みで
   歩きは追っているバイトを忘れ、フレームの終わりで失敗します。歩きは失敗しません。`c` に来ないどの道でも、歩きは各書き込みの行き先を知っています。
   `c` より前の書き込みは添字を通ります（画面のバッファ、タイマー、乱数のビット）。添字はプログラムか ROM の表から来ます。それを覚えておくため、探索は RAM のどのバイトも忘れず、
@@ -61,8 +65,8 @@ Lean: `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean` の `ReadsOwn`、`L
 * **フレームの列.** `lags_keep` はフレーム `ix(t) + 1` から `ix(t + 1)` までをたどります。各フレームで、`keeps_frame` が `V` は変わらないと言うか、フレームが `c` を呼びます。
   数えないフレームは `c` を呼びません（`Lags.no_call`: ポーズで終わる、`paused`、`keeps`）。
   帰納法 `Lags.starts` は、操作から入るまでの各フレームの終わりで `ctl` を求めます。数えるフレームでは `ctl` から、数えないフレームでは `keeps_frame`（`K`）から出ます（`Lags.known_end`）。
-* **数.** 8 バイトのどれも、108,633 段、分かれ 7,157、失敗 0、表は 7,846 状態です。`c` に来る道が 3、フレームを終える道が 6 です。1 バイトあたり、探索はネイティブで約 0.17 秒、
-  確認は約 0.25 秒です。
+* **数.** 17 バイトのどれも、108,633 段、分かれ 7,157、失敗 0、表は 7,846 状態です。`c` に来る道が 3、フレームを終える道が 6 です。1 バイトあたり、探索はネイティブで約 0.17 秒、
+  確認は約 0.3 秒です。確認全体で約 6 秒です。
 
 ## 本物のフレームで確かめたこと
 
@@ -87,9 +91,9 @@ Lean: `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean` の `ReadsOwn`、`L
 
 * **`lags.store` はもう仮定しません**: 呼び出しをしないフレームでは、呼び出しまでの書き込みが 5 バイトに触れないことを、確認が証明します。
 * **`lags.ctl`**: いまは入る前の数えるフレームだけで、どれも操作できる状態で終わる。`c` を呼ばない数えないフレームが操作できる状態で終わることは、確認から出ます。
-* **`game` はもう仮定しません**（この回）: 数えないフレームはモードのルーチンを呼びません。ポーズで終わり（`paused`）、ポーズで終わるフレームはルーチンを呼びません
-  （[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。そこで仮定として残るのは `paused` と `keeps` です。どれが数えないフレームか（`gap`）は、
-  いまもインターバルタイマーとつながっていません。
+* **`game` はもう仮定しません**: 数えないフレームはモードのルーチンを呼びません。ポーズで終わり（`Lags.paused`）、ポーズで終わるフレームはルーチンを呼びません
+  （[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。そこで仮定として残るのは `keeps` です。どのフレームを数えるかはポーズのバイトから読む
+  （`ixP`）ので、`paused` はもう仮定しません。それがインターバルタイマーの動くフレームであることは、前と同じく `chg.ha₁` の数です。
 * **この項目でないもの.** 数えるフレームが `clock` のものであること（前と同じく、フレームの番号だけでつながります）。数えるフレームが `Frame` であること（項目 0-0-0-3-1）。
 
 **ファイル.** `Theorems/LagFrames.lean`、`Theorems/PipeFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の `Proof/PipeWrites.lean`。

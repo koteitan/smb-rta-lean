@@ -2,7 +2,7 @@
 
 # 本物のフレームと横と縦のモデル
 
-**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。押している側がふさがれていると、フレームは `hstep` のとおりか、速さを 0 にします（`move_masked`）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
+**主張.** `hstep` は 1 フレームの横の部分、`vstep` は縦の部分です。本物の機械の 1 フレーム `frame(M, i)` について、次のことを Lean で証明します。プレイヤーのルーチンに来てからスクロールの処理に行くまで、機械のバイトは `hstep` のとおりに変わり、位置は `16·v'` だけ動きます。縦のバイトは `vstep` のとおりに変わります（`vert_model`）。押している側がふさがれていると、フレームは `hstep` のとおりか、速さを 0 にします（`move_masked`）。3 つとも、途中の各命令は、フレームに 64 ドット以上残っていればフレームの中にとどまる（`InFrameN`、[下](#歩いた命令の時間)）とも言います。なので、フレームの遅い時刻に動く命令がなければ、移動のあいだにフレームは終わりません（`trace_inFrame`）。ルーチンに来るまでとスクロールの処理のあとは、1 フレームについての前提です。
 
 `tr(n)` は `frame(M, i)` の `n` 命令あとの機械です。`HS(m)` は機械 `m` から読んだ横の状態（速さ、subspeed、向き、動く向き、`RunningSpeed` が 0 かどうか）です。`P(m)` は位置です。`In(m)` はプレイヤーのルーチンに来た機械から読んだ入力です。`v'` は `HS(frame(M, i))` の速さです。
 
@@ -10,6 +10,7 @@
 move_model  :  modelOK,  AtCtrl(R)
                →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  HS(stepN(k, R)) = hstep(HS(R), In(R))
                               ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)
+                              ∧  InFrameN(R, k)
 clean_frame :  modelOK,  Clean(M, i, n₀)
                →  HS(frame(M, i)) = hstep(HS(M), In(tr(n₀)))  ∧  P(frame(M, i)) = P(M) + 16·v'
 frame_read  :  modelOK,  frictionCheck,  ReadFrame(M, i, n₀)
@@ -27,6 +28,22 @@ Lean: `Theorems/FrameWalk.lean`（2 台の機械の歩き。`tstep_spec`、`walk
 * 使う命令ごとに 1 回証明します（`tstep_spec`）。ROM はチェックのときだけ見ます。
 * 本物の機械と `runSub` の機械を並べると、ルーチンが両方で同じことをすると分かります（`leaf_spec`）。スタックポインタと時間が違っていても構いません。
 * 同じ機械を 2 回渡すと、コードの区間がどのバイトを書かないか、どこに着くかが分かります（`piece_spec`）。
+
+## 歩いた命令の時間
+
+歩きは時間を見ません。でも歩きが進める命令は、アイドルループ（自分への `JMP`。エミュレータはそこで次の PPU の出来事まで飛びます）ではなく、書くのは RAM だけです。DMA も PPU のレジスタもありません。命令の動作で増えるのは 6 ドット以下（ページをまたぐ分か分岐）で、そのあとオペコードのサイクルが 7 以下（21 ドット）です。`Good` な機械では NMI は待っておらず、NMI は切れています。
+
+```
+InFrame(m)        :  m は止まっていない  ∧  m.pc はアイドルループでない  ∧  (fdot(m) + 64 ≤ dotsPerFrame  →  frame(step(m)) = frame(m))
+inFrame_of_tstep  :  m, n で成り立つ状態 Q から歩きが 1 歩進む  →  InFrame(m) ∧ InFrame(n)
+InFrameN(R, k)    :  j < k のどの stepN(j, R) も InFrame
+trace_inFrame     :  idle はアイドルループ,  frame(tr(n₀)) = frame(M),  InFrameN(tr(n₀), k),  ∀ n, tr(n).pc ≠ idle → fdot(tr(n)) ≤ dotsPerFrame − 64
+                  →  ∀ j ≤ k,  tr(n₀ + j) = stepN(j, tr(n₀))  ∧  frame(tr(n₀ + j)) = frame(M)
+```
+
+`walkT_spec`、`walkD_spec`、`piece_specI` は止まる前のどの機械も `InFrame` だと言うようになりました。`piece_spec`、`leaf_spec`、`leafD_spec` と `move_model` の各部分は `InFrameN` を言います。`leafD_spec` のルーチンを終える戻りの命令も `InFrame` を満たします（`inFrame_rts`）。オペコードのサイクルの上限はチェックです（`cyc_le`、`decide`）。
+
+なので前のフィールド `longer`（プレイヤーのルーチンから 728 命令のうちにフレームが終わらない）は、各命令の時刻から出ます。地上ではそれは `FrameKeep.CleanK` の条件 `time` で、操作中のフレームのどの命令も満たします（フィールド `keep.clean`）。
 
 ## しばらく別々に進む 2 台の機械
 
@@ -50,7 +67,7 @@ leafD_spec :  ルーチンの入口からの walkD、スタックポインタは
 ```
 vert_model :  vertOK,  AtCtrl0(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
               →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), abs(R))
-                             ∧  stepN(k, R) で (st = 1 → DTHJ = 1)
+                             ∧  stepN(k, R) で (st = 1 → DTHJ = 1)  ∧  InFrameN(R, k)
 ```
 
 `DTHJ` は `DiffToHaltJump`、`PrevA` は `PreviousA_B_Buttons`、`A_B` は `A_B_Buttons` です。チェック `vertOK` の中身です。
@@ -71,7 +88,7 @@ vert_model :  vertOK,  AtCtrl0(R),  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 
 move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr ≠ lr,  0 < v(R) < 128
                →  ∃ k ≤ 728,  stepN(k, R).pc = PlayerSubs
                               ∧  ( HS(stepN(k, R)) = hstep(HS(R), In(R))  ∨  v(stepN(k, R)) = 0 )
-                              ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)
+                              ∧  P(stepN(k, R)) ≡ P(R) + 16·v'  (mod 2²⁴)  ∧  InFrameN(R, k)
 ```
 
 `lr` は `hstep` が `In(R)` から読む左右です。`AtCtrl0` は `AtCtrl` からふさぎの条件を除いたものです。証明は次のとおりです。
@@ -109,9 +126,9 @@ move_masked :  modelOK,  maskOK,  AtCtrl0(R),  bits(R) = noLeft,  noLeft & lr �
 
 * `at_ctrl`（`AtCtrl`）: 命令 `n₀` でプレイヤーのルーチンに来ます。スタックポインタは決まった値、ルーチンの番号はプレイヤーの操作、`AreaType` は水でない、`Player_State` は 0、1、2、ジャンプ台なし、泳ぎなし、大きさの変化なし、NMI なし。覚えている速さは `|v|` です。押した向きはマスクされていません。後の 2 つはぶつかった直後に成り立ちません。
 * `before`: そこまで横のバイトと位置のバイトを誰も書きません。
-* `longer`: 移動のあいだ（728 命令）にフレームは終わりません。
+* `longer`: 移動のあいだ（728 命令）にフレームは終わりません。地上では定理です（`trace_inFrame`）。部屋の `Clean` には残っています。
 * `after`: スクロールの処理からフレームの最後まで、横のバイトと位置のバイトを誰も書きません。
-* `far`: 位置は範囲の両端から 8 ピクセル以上離れています。
+* `far`: 位置は範囲の両端から 8 ピクセル以上離れています。地上では前のフレームから出る定理です（`SurfaceFrames.far_of_follow`）。部屋の `Clean` には残っています。
 
 `ReadFrame(M, i, n₀)` のフィールドです。
 

@@ -24,7 +24,7 @@ open PipeTransition (frame run zeros)
 open PipeTransitionAll (go Names asmValue)
 open TaintRun
 open SideChangeBound (startOf)
-open SideChangeEnd (xsuccs s_xsuccs noStartPad canon sim_refine noStart)
+open SideChangeEnd (xsuccs s_xsuccs canon sim_refine)
 
 /-! ## Splitting a state by the value of a byte -/
 
@@ -85,16 +85,16 @@ def regsTop (A : AS) : AS := { A with a := AB.top, x := AB.top, y := AB.top, p :
 def fcover (C : Cfg) (wide : List UInt16) (B : AS) : Bool :=
   C.cut.get! B.pc.toNat != 0 && (coverIn C B || (wide.contains B.pc && coverIn C (regsTop B)))
 
-/-- from `A`, step by step until every path comes to `cut`, in a state that `stop` accepts, or to a state of the table. The frame must not end before that. -/
-def cwalk (C : Cfg) (spl : List (UInt16 × Nat)) (wide : List UInt16) (cut : UInt16) (stop : AS → Bool) : Nat → AS → Bool
+/-- from `A`, step by step until every path comes to one of `cuts`, in a state that `stop` accepts, or to a state of the table. The frame must not end before that. -/
+def cwalk (C : Cfg) (spl : List (UInt16 × Nat)) (wide : List UInt16) (cuts : List UInt16) (stop : AS → Bool) : Nat → AS → Bool
   | 0, _ => false
   | n + 1, A => (fsuccs C.E C.ops spl A).all fun r =>
     match r with
     | none => false
     | some B =>
       if B.k == A.k then
-        if B.pc == cut then stop B
-        else fcover C wide B || cwalk C spl wide cut stop n B
+        if cuts.contains B.pc then stop B
+        else fcover C wide B || cwalk C spl wide cuts stop n B
       else false
 
 /-- from `A`, step by step until every path ends in a state of the table, or at the frame's end in a state that `fin` accepts -/
@@ -115,25 +115,25 @@ def stN : Nat → Machine → Machine
   | 0, m => m
   | n + 1, m => stN n (st m)
 
-/-- the machine `m` comes to `cut` first after `j` steps, inside its frame -/
-structure Arr (cut : UInt16) (m : Machine) (j : Nat) : Prop where
+/-- the machine `m` comes to one of `cuts` first after `j` steps, inside its frame -/
+structure Arr (cuts : List UInt16) (m : Machine) (j : Nat) : Prop where
   pos : 1 ≤ j
-  at_ : (stN j m).pc = cut
-  first : ∀ i, 1 ≤ i → i < j → (stN i m).pc ≠ cut
+  at_ : (stN j m).pc ∈ cuts
+  first : ∀ i, 1 ≤ i → i < j → (stN i m).pc ∉ cuts
   frame : ∀ i, i ≤ j → (stN i m).frame = m.frame
   halted : ∀ i, i ≤ j → (stN i m).halted = false
   dot : m.fdot + 3 * j ≤ (stN j m).fdot
 
-theorem Arr.unique {c : UInt16} {m : Machine} {j j' : Nat} (h : Arr c m j) (h' : Arr c m j') : j = j' := by
+theorem Arr.unique {c : List UInt16} {m : Machine} {j j' : Nat} (h : Arr c m j) (h' : Arr c m j') : j = j' := by
   rcases Nat.lt_trichotomy j j' with l | l | l
   · exact absurd h.at_ (h'.first j h.pos l)
   · exact l
   · exact absurd h'.at_ (h.first j' h'.pos l)
 
 section
-variable {C : Cfg} {spl : List (UInt16 × Nat)} {wide : List UInt16} {cut : UInt16} {stop fin : AS → Bool} {Fu : Nat} {F : Nat × UInt8}
+variable {C : Cfg} {spl : List (UInt16 × Nat)} {wide : List UInt16} {cut : List UInt16} {stop fin : AS → Bool} {Fu : Nat} {F : Nat × UInt8}
 
-def CLive (C : Cfg) (spl : List (UInt16 × Nat)) (wide : List UInt16) (cut : UInt16) (stop : AS → Bool) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
+def CLive (C : Cfg) (spl : List (UInt16 × Nat)) (wide : List UInt16) (cut : List UInt16) (stop : AS → Bool) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
   Sim C.E F A m ∧ ∃ n, cwalk C spl wide cut stop n A = true
 
 def ELive (C : Cfg) (spl : List (UInt16 × Nat)) (wide : List UInt16) (fin : AS → Bool) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
@@ -169,7 +169,7 @@ theorem fcover_state {w : Nat → AS → Bool} (ht : C.t.all (w Fu) = true) {B :
   · obtain ⟨D, a1, a2, a3⟩ := cover_state (B := regsTop B) ht (sim_regsTop hs) h2
     exact ⟨D, a1, a2, a3⟩
 
-/-- **A walk up to `cut`.** -/
+/-- **A walk up to the first of `cut`.** -/
 theorem cwalk_run (ht : C.t.all (cwalk C spl wide cut stop Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hsz : ∀ p ∈ spl, p.2 < 2048) :
     ∀ (fuel : Nat) (A : AS) (m : Machine), CLive C spl wide cut stop F A m → dotsPerFrame ≤ m.fdot + 3 * fuel →
       ∃ j, Arr cut m j ∧ ∃ B, stop B = true ∧ B.k = A.k ∧ Sim C.E F B (stN j m) := by
@@ -198,12 +198,13 @@ theorem cwalk_run (ht : C.t.all (cwalk C spl wide cut stop Fu) = true) (hops : C
         rcases h2 with ⟨k1, k2, k3⟩ | ⟨k1, k2⟩
         · rw [if_pos (by simp [k1])] at hw2
           have hp1 : (st m).pc = B.pc := h1.pc
-          by_cases hc : (B.pc == cut) = true
+          by_cases hc : cut.contains B.pc = true
           · rw [if_pos hc] at hw2
-            have hc' : B.pc = cut := by simpa using hc
+            have hc' : B.pc ∈ cut := by simpa using hc
             refine ⟨1, ⟨Nat.le_refl _, ?_, fun i h3 h4 => by omega, ?_, ?_, ?_⟩, B, hw2, k1, h1⟩
-            · show (st m).pc = cut
-              rw [hp1, hc']
+            · show (st m).pc ∈ cut
+              rw [hp1]
+              exact hc'
             · intro i hi
               cases i with
               | zero => rfl
@@ -241,7 +242,7 @@ theorem cwalk_run (ht : C.t.all (cwalk C spl wide cut stop Fu) = true) (hops : C
               | succ i =>
                 cases i with
                 | zero =>
-                  show (st m).pc ≠ cut
+                  show (st m).pc ∉ cut
                   rw [hp1]
                   simpa using hc
                 | succ i => exact hA.first (i + 1) (by omega) (by omega)
@@ -353,8 +354,8 @@ def croute (turns : Bool) (E : Env) (keep : List Nat) (X : Search) (B : AS) : Se
       | none => { X with pending := X.pending.insert K B, done := X.done.insert K B, inN := X.inN.insert K 2 }
     else { X with pending := X.pending.insert K B, inN := X.inN.insert K 1 }
 
-/-- follow one waiting state as far as no other path can join; a path that comes to `cut` stops there, a frame's end is a failure if `cut` is given -/
-partial def crunChain (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : List (UInt16 × Nat)) (rel : List (UInt16 × Nat × AB)) (wide gates : List UInt16) (sset : List (UInt16 × Nat × UInt8)) (keep : List Nat) (cut : Option UInt16) (X0 : Search) (A0 : AS) : Search := Id.run do
+/-- follow one waiting state as far as no other path can join; a path that comes to one of `cuts` stops there, a frame's end is a failure if `cuts` is not empty -/
+partial def crunChain (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : List (UInt16 × Nat)) (rel : List (UInt16 × Nat × AB)) (wide gates : List UInt16) (sset : List (UInt16 × Nat × UInt8)) (keep : List Nat) (cuts : List UInt16) (X0 : Search) (A0 : AS) : Search := Id.run do
   let mut X := X0
   let mut cur := A0
   let mut run := 0
@@ -375,7 +376,7 @@ partial def crunChain (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : Li
     let isRel := fun (b : AS) => rel.any (·.1 == b.pc) || wide.contains b.pc || gates.contains b.pc
     match good with
     | [b] =>
-      if b.k == cur.k && some b.pc != cut && !isRel b && (X.leaders[b.pc.toNat]?).isNone && run < 128 &&
+      if b.k == cur.k && !cuts.contains b.pc && !isRel b && (X.leaders[b.pc.toNat]?).isNone && run < 128 &&
           (b.pc.toNat == cur.pc.toNat + 1 || b.pc.toNat == cur.pc.toNat + 2 || b.pc.toNat == cur.pc.toNat + 3) then
         cur := b
         run := run + 1
@@ -384,9 +385,9 @@ partial def crunChain (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : Li
     | _ => pure ()
     for b in good do
       if b.k != cur.k then
-        if cut.isSome then X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur }
+        if !cuts.isEmpty then X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur }
         else X := { X with ends := X.ends.push b }
-      else if some b.pc == cut then X := { X with ends := X.ends.push b }
+      else if cuts.contains b.pc then X := { X with ends := X.ends.push b }
       else
         X := { X with leaders := X.leaders.insert b.pc.toNat () }
         X := croute turns E keep X b
@@ -394,8 +395,8 @@ partial def crunChain (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : Li
     break
   return X
 
-/-- the search up to `cut`, or up to the frame's end. It stops after `limit` steps, with a failure. -/
-partial def csearch (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : List (UInt16 × Nat)) (rel : List (UInt16 × Nat × AB)) (wide gates : List UInt16) (sset : List (UInt16 × Nat × UInt8)) (keep : List Nat) (cut : Option UInt16) (starts : List AS) (limit : Nat := 300000) : Search := Id.run do
+/-- the search up to the first of `cuts`, or up to the frame's end if `cuts` is empty. It stops after `limit` steps, with a failure. -/
+partial def csearch (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : List (UInt16 × Nat)) (rel : List (UInt16 × Nat × AB)) (wide gates : List UInt16) (sset : List (UInt16 × Nat × UInt8)) (keep : List Nat) (cuts : List UInt16) (starts : List AS) (limit : Nat := 300000) : Search := Id.run do
   let mut X : Search := starts.foldl (croute turns E keep) {}
   let mut c := 0
   while true do
@@ -410,7 +411,7 @@ partial def csearch (turns : Bool) (E : Env) (ops : Array (AM Unit)) (spl : List
       c := c + 1
       if n ≥ 2 then X := { X with out := X.out.push A }
       if isSpin E A then X := { X with done := X.done.insert key A }
-      X := crunChain turns E ops spl rel wide gates sset keep cut X A
+      X := crunChain turns E ops spl rel wide gates sset keep cuts X A
   return X
 
 /-- the table from a search -/
@@ -443,6 +444,8 @@ def knownStart (r : Machine) (K : List Nat) (low : Bool) : AS := { startOf r K l
 structure Stage where
   name : String
   cut : Option UInt16
+  /-- other places the stage may end at: the stage ends at the first of `cut` and these -/
+  alt : List UInt16 := []
   spl : List (UInt16 × Nat) := []
   wide : List UInt16 := []
   /-- at these places the search forgets a byte: no part of the proof -/
@@ -455,9 +458,12 @@ structure Stage where
   turns : Bool := false
   deriving Inhabited
 
+/-- the places a stage ends at: none if it ends at the frame's end -/
+def Stage.cuts (st : Stage) : List UInt16 := st.cut.toList ++ st.alt
+
 /-- the search of a stage -/
 def searchOf (E : Env) (st : Stage) (starts : List AS) (limit : Nat := 3000000) : Search :=
-  csearch st.turns E (aRows E).toArray (if st.sset.isEmpty then st.spl else []) st.rel st.wide (st.spl.map (·.1)) st.sset st.keep st.cut starts limit
+  csearch st.turns E (aRows E).toArray (if st.sset.isEmpty then st.spl else []) st.rel st.wide (st.spl.map (·.1)) st.sset st.keep st.cuts starts limit
 
 /-- the table of a list of states -/
 def cfgFrom (sy : Syms) (E : Env) (st : Stage) (t : Array AS) : Cfg :=
@@ -467,7 +473,7 @@ def cfgFrom (sy : Syms) (E : Env) (st : Stage) (t : Array AS) : Cfg :=
 def walkAll (C : Cfg) (st : Stage) (l : List AS) (stop : AS → Bool) : Bool :=
   st.spl.all (fun p => decide (p.2 < 2048)) &&
   match st.cut with
-  | some cut => C.t.all (cwalk C st.spl st.wide cut stop walkFuel) && l.all (cwalk C st.spl st.wide cut stop walkFuel)
+  | some _ => C.t.all (cwalk C st.spl st.wide st.cuts stop walkFuel) && l.all (cwalk C st.spl st.wide st.cuts stop walkFuel)
   | none => C.t.all (ewalk C st.spl st.wide stop walkFuel) && l.all (ewalk C st.spl st.wide stop walkFuel)
 
 /-- a walk with a table from `A0` -/
@@ -510,6 +516,12 @@ def Ctx.pg (c : Ctx) : Nat := c.i "SprObject_PageLoc"
 
 def Ctx.rs (c : Ctx) : Nat := c.i "RunningSpeed"
 def Ctx.md (c : Ctx) : Nat := c.i "Player_MovingDir"
+
+/-- the pause status: its bit 0 says that the game is paused -/
+def Ctx.gps (c : Ctx) : Nat := c.i "GamePauseStatus"
+
+/-- the bit 0 of the pause status, if the state knows it -/
+def pausedBit (c : Ctx) (X : AS) : Option Bool := (X.getK c.gps).bit 0x01
 
 def Ctx.lim (c : Ctx) : Nat := c.sy.StarFlagTopY.toNat
 def Ctx.w0 (c : Ctx) : Nat := c.sy.StarFlagDelay.toNat
@@ -562,10 +574,10 @@ def mainStages (c : Ctx) : List Main :=
   let bufK := [c.i "VRAM_Buffer1_Offset", c.i "EnemyFrenzyBuffer", qI]
   let sprK := varKey c
   let squ1 := [oI, c.i "Squ1_NoteLenCounter", c.i "Squ1_EnvelopeDataCtrl", c.i "AltRegContentFlag"]
-  [ { st := { name := "screen", cut := some sy.SoundEngine, keep := [c.i "VRAM_Buffer1_Offset", qI] ++ sprK }, key := [qI] },
-    { st := { name := "sound effects", cut := some sy.MusicHandler, keep := [qI] ++ sprK } },
+  let stages : List Main := [ { st := { name := "screen", cut := some sy.SoundEngine, keep := [c.i "VRAM_Buffer1_Offset", qI] ++ sprK }, key := [qI] },
+    { st := { name := "sound effects", cut := some sy.MusicHandler, alt := [sy.SkipSoundSubroutines], keep := [qI] ++ sprK } },
     { st := { name := "music", cut := some sy.ReadJoypads, spl := [(sy.FetchSqu1MusicData, oI)], wide := [sy.FetchSqu1MusicData, sy.MiscSqu1MusicTasks], rel := squ1.map (fun b => (sy.MiscSqu1MusicTasks, b, AB.top)), sset := [(sy.FetchSqu1MusicData, oI, c.r.ram.get! oI)], keep := sprK } },
-    { st := { name := "pad", cut := some sy.DecTimers, keep := sprK } },
+    { st := { name := "pad", cut := some sy.DecTimers, alt := [sy.SkipMainOper], keep := sprK } },
     { st := { name := "timers", cut := some sy.NoDecTimers, keep := sprK } },
     { st := { name := "sprites", cut := some sy.PlayerEndLevel, keep := sprK } },
     { st := { name := "move", cut := some sy.PlayerSubs, keep := sprK }, forget := [xI, pgI] },
@@ -578,14 +590,57 @@ def mainStages (c : Ctx) : List Main :=
       refs := refsOf c 10, forget := [tI], key := bufK },
     { st := { name := "the other slots", cut := some sy.FlagpoleRoutine, keep := sprK ++ bufK ++ [c.i "ObjectOffset"], turns := true }, key := bufK },
     { st := { name := "the pole", cut := some sy.RunGameTimer, keep := sprK ++ bufK }, key := bufK },
-    { st := { name := "the end", cut := none, spl := [(sy.UpdScrollVar, c.i "ScrollThirtyTwo")], keep := sprK ++ bufK ++ [c.i "ScrollThirtyTwo"] }, forgetP := [(c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩)], key := bufK } ]
+    { st := { name := "the end", cut := none, spl := [(sy.UpdScrollVar, c.i "ScrollThirtyTwo")], keep := sprK ++ bufK ++ [c.i "ScrollThirtyTwo"] }, forgetP := [(c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩)], key := bufK },
+    { st := { name := "no sound", cut := some sy.ReadJoypads, keep := sprK } },
+    { st := { name := "paused", cut := none, keep := sprK ++ bufK }, key := bufK } ]
+  -- the search keeps the pause status apart: a join before its branch would lose the bit
+  stages.map fun ms => { ms with st := { ms.st with keep := ms.st.keep ++ [c.gps] } }
+
+/-- the place each stage ends at. Stages 13 and 15 end at the frame's end. -/
+def cutOf (sy : Syms) : Nat → UInt16
+  | 0 => sy.SoundEngine
+  | 1 => sy.MusicHandler
+  | 2 => sy.ReadJoypads
+  | 3 => sy.DecTimers
+  | 4 => sy.NoDecTimers
+  | 5 => sy.PlayerEndLevel
+  | 6 => sy.PlayerSubs
+  | 7 => sy.GetXOffscreenBits
+  | 8 => sy.GetPlayerOffscreenBits
+  | 9 => sy.RunStarFlagObj
+  | 10 => sy.FloateyNumbersRoutine
+  | 11 => sy.FlagpoleRoutine
+  | 12 => sy.RunGameTimer
+  | 14 => sy.ReadJoypads
+  | _ => 0
+
+/-- the other place a stage may end at: the sound with the pause's sound, and a paused frame -/
+def altOf (sy : Syms) : Nat → List UInt16
+  | 1 => [sy.SkipSoundSubroutines]
+  | 3 => [sy.SkipMainOper]
+  | _ => []
+
+/-- the places a stage ends at: it ends at the first of them -/
+def cutsOf (sy : Syms) (j : Nat) : List UInt16 := cutOf sy j :: altOf sy j
+
+/-- the stage that comes after the stage `j` ended at `pc`: the stage 14 after the sound of the pause, the stage 15 after a paused frame's main part -/
+def nextIdx (sy : Syms) (j : Nat) (pc : UInt16) : Nat :=
+  if j == 1 && pc == sy.SkipSoundSubroutines then 14
+  else if j == 3 && pc == sy.SkipMainOper then 15
+  else if j == 14 then 3
+  else j + 1
+
+/-- the states of a list, grouped at each place by the known values of `key` -/
+def groupAt (key : List Nat) (l : List AS) : List AS :=
+  let pcs := (l.map (·.pc)).eraseDups
+  pcs.flatMap fun p => groupBy key (l.filter (·.pc == p))
 
 /-- a stage of the main walk: the next states -/
 def runMain (c : Ctx) (ms : Main) (B : List AS) : Search × List AS :=
   let starts := B.flatMap fun A => ms.refs.map fun r => SideChangeEnd.refine r A
   let X := searchOf c.E ms.st starts
   let e := X.ends.toList.map (fun b => normF c (refineAB ms.forgetP (forgetAll ms.forget b)))
-  (X, groupBy (ms.key ++ varKey c) e)
+  (X, if ms.st.cut.isSome then groupAt (ms.key ++ varKey c) e else e)
 
 /-! ## The states of each place -/
 
@@ -597,9 +652,11 @@ def startKnown (c : Ctx) : List Nat :=
   c.K ++ sprBytes c ++ [c.i "VRAM_Buffer1_Offset", c.i "Square2SoundQueue", c.i "EventMusicBuffer", c.i "ScrollThirtyTwo", c.i "ScreenEdge_X_Pos", c.i "ScreenRight_X_Pos"] ++
     (List.range 80).map (c.i "VRAM_Buffer1" + ·) ++ (List.range 6).map (c.i "Enemy_ID" + ·) ++ (List.range 6).map (c.i "Enemy_Flag" + ·)
 
-/-- what the seeds know of the bytes that the screen's position has -/
+/-- what the seeds know of the bytes that the screen's position has, and of the pause: the status is 0, 1, 0x80 or 0x81, the pause's sound queue and mode 0 to 3,
+the pause timer any value -/
 def partials (c : Ctx) : List (Nat × AB) :=
-  [(c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0xC0⟩), (c.i "ScreenRight_X_Pos", ⟨0, 0xC0⟩), (c.i "VRAM_Buffer1", AB.known 0), (c.i "Square2SoundQueue", AB.known 0)]
+  [(c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0xC0⟩), (c.i "ScreenRight_X_Pos", ⟨0, 0xC0⟩), (c.i "VRAM_Buffer1", AB.known 0), (c.i "Square2SoundQueue", AB.known 0),
+   (c.gps, ⟨0, 0x7E⟩), (c.i "GamePauseTimer", AB.top), (c.i "PauseModeFlag", ⟨0, 0xFC⟩), (c.i "PauseSoundQueue", ⟨0, 0xFC⟩)]
 
 /-- the states a frame can start from, before any frame -/
 def seeds (c : Ctx) : List AS :=
@@ -615,18 +672,27 @@ def seeds (c : Ctx) : List AS :=
 def endState (c : Ctx) (mask : ByteArray) (b : AS) : AS :=
   (List.range 2048).foldl (fun B i => if mask.get! i == 0 then B.setK i AB.top else B) (canon b)
 
-/-- the main walk from the states `B0`: the states at each place, and the ends of the frame -/
+/-- the main walk from the states `B0`: the states at each place, and the ends of the frame. The stages 0 to 13 follow each other; the sound of the pause goes
+through the stage 14 from the stage 1 to the stage 3, and a paused frame goes from the stage 3 to its end through the stage 15. -/
 def mainRun (c : Ctx) (B0 : List AS) : List (Main × List AS × List AS × Array AS) × List AS :=
   let mask := SideChangeBound.knOf (startKnown c)
-  let r := (mainStages c).foldl (fun (acc : List (Main × List AS × List AS × Array AS) × List AS) (ms : Main) =>
-      let (X, nx) := runMain c ms acc.2
-      match ms.st.cut with
-      | some _ => (acc.1 ++ [(ms, acc.2, nx, X.out)], nx)
-      | none =>
-        let e := X.ends.toList.map fun b => endState c mask (normF c (refineAB ms.forgetP (forgetAll ms.forget b)))
-        let g := groupBy (endKey c) (e.filter (·.lo == 0)) ++ groupBy (endKey c) (e.filter (·.lo != 0))
-        (acc.1 ++ [(ms, acc.2, g, X.out)], g)) ([], B0)
-  r
+  let ms := (mainStages c).toArray
+  let empty : Main × List AS × List AS × Array AS := (default, [], [], #[])
+  let step := fun (pl : Array (Main × List AS × List AS × Array AS)) (j : Nat) (B : List AS) =>
+    let (X, nx) := runMain c ms[j]! B
+    pl.set! j (ms[j]!, B, nx, X.out)
+  let nxOf := fun (pl : Array (Main × List AS × List AS × Array AS)) (j : Nat) => pl[j]!.2.2.1
+  let pl := step (Array.replicate 16 empty) 0 B0
+  let pl := step pl 1 (nxOf pl 0)
+  let pl := step pl 2 ((nxOf pl 1).filter (nextIdx c.sy 1 ·.pc == 2))
+  let pl := step pl 14 ((nxOf pl 1).filter (nextIdx c.sy 1 ·.pc == 14))
+  let pl := step pl 3 (groupAt (varKey c) (nxOf pl 2 ++ nxOf pl 14))
+  let pl := step pl 15 ((nxOf pl 3).filter (nextIdx c.sy 3 ·.pc == 15))
+  let pl := (List.range 10).foldl (fun pl k =>
+    let j := k + 4
+    step pl j (if j == 4 then (nxOf pl 3).filter (nextIdx c.sy 3 ·.pc == 4) else nxOf pl (j - 1))) pl
+  let e := (nxOf pl 13 ++ nxOf pl 15).map (endState c mask)
+  (pl.toList, groupBy (endKey c) (e.filter (·.lo == 0)) ++ groupBy (endKey c) (e.filter (·.lo != 0)))
 
 /-- the states a frame can start from: the seeds and the ends of a frame from the seeds -/
 def frameStarts (c : Ctx) : List AS :=
@@ -706,25 +772,10 @@ def coverKey (key : List Nat) (l : List AS) (X : AS) : Bool :=
 def coverEnd (c : Ctx) (l : List AS) (X : AS) : Bool :=
   coverKey (endKey c) l { X with k := 0 }
 
-/-- the place each stage ends at -/
-def cutOf (sy : Syms) : Nat → UInt16
-  | 0 => sy.SoundEngine
-  | 1 => sy.MusicHandler
-  | 2 => sy.ReadJoypads
-  | 3 => sy.DecTimers
-  | 4 => sy.NoDecTimers
-  | 5 => sy.PlayerEndLevel
-  | 6 => sy.PlayerSubs
-  | 7 => sy.GetXOffscreenBits
-  | 8 => sy.GetPlayerOffscreenBits
-  | 9 => sy.RunStarFlagObj
-  | 10 => sy.FloateyNumbersRoutine
-  | 11 => sy.FlagpoleRoutine
-  | 12 => sy.RunGameTimer
-  | _ => 0
-
 /-- the bytes that the walks of keeping and of facts need known at a stage -/
 def coarseKey (c : Ctx) : Nat → List Nat
+  | 14 => []
+  | 15 => []
   | 0 => [c.i "VRAM_Buffer1_Offset"]
   | 1 => [c.i "Square2SoundQueue"]
   | 2 => [c.i "EventMusicBuffer"]
@@ -923,8 +974,8 @@ def stageOK (c : Ctx) (d : Data) (j : Nat) : Bool :=
   match d.pl[j]? with
   | none => false
   | some (ms, B, nx, t) =>
-    ms.st.cut == some (cutOf c.sy j) && ms.refs == refsOf c j &&
-    nx.all (fun D => (d.B (j + 1)).any (D.le ·)) &&
+    ms.st.cut == some (cutOf c.sy j) && ms.st.alt == altOf c.sy j && ms.refs == refsOf c j &&
+    nx.all (fun D => (d.B (nextIdx c.sy j D.pc)).any (D.le ·)) &&
     walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => SideChangeEnd.refine r S) (coverKey (ms.key ++ varKey c) nx) &&
     (factSpec c d j).all (fun e =>
       let Cs := coarse e.1 B
@@ -933,14 +984,14 @@ def stageOK (c : Ctx) (d : Data) (j : Nat) : Bool :=
       let Cs := coarse e.1 B
       B.all (fun S => Cs.any (S.le ·)) && keepsOK c ms.st Cs e.2.1 e.2.2)
 
-/-- the walks of the stage that ends at the frame's end -/
-def endStageOK (c : Ctx) (d : Data) : Bool :=
-  match d.pl[13]? with
+/-- the walks of a stage that ends at the frame's end: the stage 13 ends the frame not paused, the stage 15 paused (`p`) -/
+def endStageOK (c : Ctx) (d : Data) (j : Nat) (p : Bool) : Bool :=
+  match d.pl[j]? with
   | none => false
   | some (ms, B, _, t) =>
     ms.st.cut == none && ms.refs == [[]] &&
-    walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => SideChangeEnd.refine r S) (coverEnd c d.B0) &&
-    (let Cs := coarse (coarseKey c 13) B
+    walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => SideChangeEnd.refine r S) (fun X => coverEnd c d.B0 X && pausedBit c X == some p) &&
+    (let Cs := coarse (coarseKey c j) B
      B.all (fun S => Cs.any (S.le ·)) && keepsEndOK c ms.st Cs c.ruled)
 
 /-- the machine is one of the state: as a program -/
@@ -959,13 +1010,13 @@ def startFacts (c : Ctx) : Bytes :=
 
 /-- what the rest of the proof needs of the numbers -/
 def basicOK (c : Ctx) (d : Data) : Bool :=
-  c.E.pad.v == noStartPad.v && c.E.pad.k == noStartPad.k && c.ruled.all (fun b => decide (b < 2048)) &&
+  c.E.pad.v == AB.top.v && c.E.pad.k == AB.top.k && decide (c.gps < 2048) && c.ruled.all (fun b => decide (b < 2048)) &&
   d.B0.all (fun S => (d.B 0).any (S.le ·)) && d.B0.all (fun S => knows S (startFacts c)) && (startFacts c).all (fun p => decide (p.1 < 2048)) &&
   decide (1 ≤ c.lim) && decide (c.lim ≤ 255) && decide (c.lim + 30 ≤ (c.r.ram.get! c.y).toNat) && decide (c.w0 ≤ 255) && decide ((c.r.ram.get! c.y).toNat ≤ 255) && decide (c.tmax ≤ 999)
 
 /-- **The whole check on the ROM.** -/
 def flagCheck (c : Ctx) (d : Data) : Bool :=
-  (List.range 13).all (stageOK c d) && endStageOK c d && marioCheck c d.Q d.tbl && basicOK c d
+  (List.range 13).all (stageOK c d) && stageOK c d 14 && endStageOK c d 13 false && endStageOK c d 15 true && marioCheck c d.Q d.tbl && basicOK c d
 
 /-- the machine is one of the states `B0`, and its numbers are those of the rule: as a program -/
 def goodOK (c : Ctx) (d : Data) (m : Machine) : Bool :=
@@ -981,10 +1032,10 @@ def goodOK (c : Ctx) (d : Data) (m : Machine) : Bool :=
 
 open SideChangeEnd (Quiet refine sim_refines two_le)
 
-/-- `m'` is the machine when `m` first comes to `cut`, inside its frame -/
-def Next (cut : UInt16) (m m' : Machine) : Prop := ∃ j, Arr cut m j ∧ m' = stN j m
+/-- `m'` is the machine when `m` first comes to one of `cut`, inside its frame -/
+def Next (cut : List UInt16) (m m' : Machine) : Prop := ∃ j, Arr cut m j ∧ m' = stN j m
 
-theorem Next.unique {c : UInt16} {m a b : Machine} (h1 : Next c m a) (h2 : Next c m b) : a = b := by
+theorem Next.unique {c : List UInt16} {m a b : Machine} (h1 : Next c m a) (h2 : Next c m b) : a = b := by
   obtain ⟨j, h3, rfl⟩ := h1
   obtain ⟨k, h4, rfl⟩ := h2
   rw [h3.unique h4]
@@ -993,7 +1044,7 @@ section
 variable {C : Cfg} {st : Stage} {l : List AS} {stop : AS → Bool} {F : Nat × UInt8}
 
 theorem walkAll_cut {cut : UInt16} (h : walkAll C st l stop = true) (hc : st.cut = some cut) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} (hA : A ∈ l) {m : Machine} (hs : Sim C.E F A m) :
-    ∃ m', Next cut m m' ∧ ∃ B, stop B = true ∧ B.k = A.k ∧ Sim C.E F B m' := by
+    ∃ m', Next st.cuts m m' ∧ ∃ B, stop B = true ∧ B.k = A.k ∧ Sim C.E F B m' := by
   unfold walkAll at h
   rw [hc] at h
   simp only [Bool.and_eq_true] at h
@@ -1026,24 +1077,27 @@ theorem quiet_of_knows {E : Env} {F : Nat × UInt8} {X : AS} {m : Machine} {l : 
 /-- the machine is in one of the states -/
 abbrev AtL (E : Env) (f : Nat) (B : List AS) (m : Machine) : Prop := ∃ S ∈ B, Sim E (f, 2) S m
 
-/-- from each state of `B` with one of `refs`, the machine comes to `cut` in a state of `nx` -/
-def CoverP (E : Env) (cut : UInt16) (B nx : List AS) (refs : List Bytes) : Prop :=
-  ∀ f m, AtL E f B m → ∀ r ∈ refs, Quiet r m → ∃ m', Next cut m m' ∧ AtL E f nx m'
+/-- from each state of `B` with one of `refs`, the machine comes to the first of `cut` in a state of `nx` at that place -/
+def CoverP (E : Env) (cut : List UInt16) (B : List AS) (nx : UInt16 → List AS) (refs : List Bytes) : Prop :=
+  ∀ f m, AtL E f B m → ∀ r ∈ refs, Quiet r m → ∃ m', Next cut m m' ∧ AtL E f (nx m'.pc) m'
 
-/-- under `pre`, one of `alts` holds when the machine comes to `cut` -/
-def FactP (E : Env) (cut : UInt16) (B : List AS) (fa : Fact) : Prop :=
+/-- under `pre`, one of `alts` holds when the machine comes to the first of `cut` -/
+def FactP (E : Env) (cut : List UInt16) (B : List AS) (fa : Fact) : Prop :=
   ∀ f m, AtL E f B m → Quiet fa.pre m → ∀ m', Next cut m m' → ∃ a ∈ fa.alts, Quiet a m'
 
-/-- under `pre`, the byte `b` is the same when the machine comes to `cut` -/
-def KeepP (E : Env) (cut : UInt16) (B : List AS) (pre : Bytes) (b : Nat) : Prop :=
+/-- under `pre`, the byte `b` is the same when the machine comes to the first of `cut` -/
+def KeepP (E : Env) (cut : List UInt16) (B : List AS) (pre : Bytes) (b : Nat) : Prop :=
   ∀ f m, AtL E f B m → Quiet pre m → ∀ m', Next cut m m' → m'.ram.get! b = m.ram.get! b
 
 /-- the machine `e` is where `m` ends its frame, with enough fuel -/
 def EndsAt (m e : Machine) : Prop := ∃ n, dotsPerFrame ≤ m.fdot + 3 * n ∧ e = (go (runUntilFrame (m.frame + 1) n) m).2
 
-/-- from each state of `B`, for every fuel that is enough, the frame ends in a state of `nx` -/
-def EndCoverP (E : Env) (B nx : List AS) : Prop :=
-  ∀ m, AtL E m.frame B m → ∀ e, EndsAt m e → e.frame = m.frame + 1 ∧ AtL E (m.frame + 1) nx e
+/-- the bit 0 of the byte `g`: the game is paused when `g` is the pause status -/
+def bit0 (g : Nat) (m : Machine) : Bool := m.ram.get! g &&& 0x01 != 0
+
+/-- from each state of `B`, for every fuel that is enough, the frame ends in a state of `nx`, with the bit 0 of the byte `g` equal to `p` -/
+def EndCoverP (E : Env) (B nx : List AS) (g : Nat) (p : Bool) : Prop :=
+  ∀ m, AtL E m.frame B m → ∀ e, EndsAt m e → e.frame = m.frame + 1 ∧ AtL E (m.frame + 1) nx e ∧ bit0 g e = p
 
 def EndKeepP (E : Env) (B : List AS) (b : Nat) : Prop :=
   ∀ m, AtL E m.frame B m → ∀ e, EndsAt m e → e.ram.get! b = m.ram.get! b
@@ -1057,7 +1111,7 @@ theorem sim_le_any {E : Env} {F : Nat × UInt8} {key : List Nat} {nx : List AS} 
   exact ⟨D, hD, sim_le h2.2 hs⟩
 
 theorem coverP_of {ms : Main} {B nx : List AS} {t : Array AS} {key : List Nat} {cut : UInt16} (hc : ms.st.cut = some cut)
-    (h : walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => refine r S) (coverKey key nx) = true) : CoverP c.E cut B nx ms.refs := by
+    (h : walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => refine r S) (coverKey key nx) = true) : CoverP c.E ms.st.cuts B (fun _ => nx) ms.refs := by
   intro f m ⟨S, hS, hs⟩ r hr hq
   have hA : refine r S ∈ (B.flatMap fun S => ms.refs.map fun r => refine r S) :=
     List.mem_flatMap.2 ⟨S, hS, List.mem_map.2 ⟨r, hr, rfl⟩⟩
@@ -1073,13 +1127,13 @@ theorem cfgFrom_E (sy : Syms) (E : Env) (st : Stage) (t : Array AS) : (cfgFrom s
 theorem cfgFrom_ops (sy : Syms) (E : Env) (st : Stage) (t : Array AS) : (cfgFrom sy E st t).ops = (aRows (cfgFrom sy E st t).E).toArray := rfl
 
 theorem walkOK_cut {sy : Syms} {E : Env} {st : Stage} {t : Array AS} {cut : UInt16} {A : AS} {stop : AS → Bool} {F : Nat × UInt8} (h : walkOK (cfgFrom sy E st t) st A stop = true) (hc : st.cut = some cut) (hT : 2 ≤ F.2.toNat)
-    {m : Machine} (hs : Sim E F A m) : ∃ m', Next cut m m' ∧ ∃ B, stop B = true ∧ Sim E F B m' := by
+    {m : Machine} (hs : Sim E F A m) : ∃ m', Next st.cuts m m' ∧ ∃ B, stop B = true ∧ Sim E F B m' := by
   have hs2 : Sim (cfgFrom sy E st t).E F A m := by rw [cfgFrom_E]; exact hs
   obtain ⟨m2, g1, X, g2, _, g3⟩ := walkAll_cut h hc (cfgFrom_ops sy E st t) hT (List.mem_singleton.2 rfl) hs2
   rw [cfgFrom_E] at g3
   exact ⟨m2, g1, X, g2, g3⟩
 
-theorem factP_of {Cs : List AS} {cut : UInt16} (hc : st.cut = some cut) {fa : Fact} (h : factOK c st Cs fa = true) : FactP c.E cut Cs fa := by
+theorem factP_of {Cs : List AS} {cut : UInt16} (hc : st.cut = some cut) {fa : Fact} (h : factOK c st Cs fa = true) : FactP c.E st.cuts Cs fa := by
   intro f m ⟨T, hT, hs⟩ hq m' hn
   simp only [factOK, Bool.and_eq_true, List.all_eq_true] at h
   obtain ⟨h0, h1⟩ := h
@@ -1105,7 +1159,7 @@ theorem keep_of_walks {b : Nat} {cut : UInt16} {T : AS} {t : Array AS} (hc : st.
     (h1 : walkOK (cfgFrom c.sy { c.E with rkI := b } st (t.map (rkState b))) st (rkState b T) (fun Y => Y.rk && !Y.spent) = true)
     (h2 : walkOK (cfgFrom c.sy c.E st (t.map fun A => A.setK b (AB.known 0))) st (T.setK b (AB.known 0)) (fun Y => knows Y [(b, 0)]) = true)
     (h3 : walkOK (cfgFrom c.sy c.E st (t.map fun A => A.setK b (AB.known 1))) st (T.setK b (AB.known 1)) (fun Y => knows Y [(b, 1)]) = true)
-    {f : Nat} {m m' : Machine} (hs : Sim c.E (f, 2) T m) (hn : Next cut m m') : m'.ram.get! b = m.ram.get! b := by
+    {f : Nat} {m m' : Machine} (hs : Sim c.E (f, 2) T m) (hn : Next st.cuts m m') : m'.ram.get! b = m.ram.get! b := by
   have hbsz : ∀ (v : UInt8), ∀ p ∈ [(b, v)], p.1 < 2048 := by
     intro v p hp
     rw [List.mem_singleton.1 hp]
@@ -1135,7 +1189,7 @@ theorem keep_of_walks {b : Nat} {cut : UInt16} {T : AS} {t : Array AS} (hc : st.
     rw [g2.2] at this
     exact this
 
-theorem keepP_of {Cs : List AS} {cut : UInt16} (hc : st.cut = some cut) {pre : Bytes} {bs : List Nat} (h : keepsOK c st Cs pre bs = true) {b : Nat} (hb : b ∈ bs) : KeepP c.E cut Cs pre b := by
+theorem keepP_of {Cs : List AS} {cut : UInt16} (hc : st.cut = some cut) {pre : Bytes} {bs : List Nat} (h : keepsOK c st Cs pre bs = true) {b : Nat} (hb : b ∈ bs) : KeepP c.E st.cuts Cs pre b := by
   intro f m ⟨T0, hT, hs⟩ hq m' hn
   simp only [keepsOK, List.all_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h
   obtain ⟨h0, ⟨h1, h2⟩, h3⟩ := h T0 hT b hb
@@ -1156,22 +1210,33 @@ theorem walkOK_end {sy : Syms} {E : Env} {st : Stage} {t : Array AS} {A : AS} {s
   rw [cfgFrom_E] at g3
   exact ⟨X, g2, g3⟩
 
-theorem endCover_of {ms : Main} {B nx : List AS} {t : Array AS} (hc : ms.st.cut = none) (hr : ms.refs = [[]])
-    (h : walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => refine r S) (coverEnd c nx) = true) : EndCoverP c.E B nx := by
+/-- the bit 0 of the byte `g` of a machine, from a state that knows it -/
+theorem bit0_of {E : Env} {F : Nat × UInt8} {X : AS} {m : Machine} {g : Nat} {p : Bool} (hg : g < 2048) (hs : Sim E F X m) (h : (X.getK g).bit 0x01 = some p) :
+    bit0 g m = p := by
+  have t := TR_bit 0x01 (hs.ram g hg)
+  rw [h] at t
+  rcases t with t | t
+  · cases t
+  · exact (Option.some.inj t).symm
+
+theorem endCover_of {ms : Main} {B nx : List AS} {t : Array AS} (hc : ms.st.cut = none) (hr : ms.refs = [[]]) {p : Bool} (hg : c.gps < 2048)
+    (h : walkAll (cfgFrom c.sy c.E ms.st t) ms.st (B.flatMap fun S => ms.refs.map fun r => refine r S) (fun X => coverEnd c nx X && pausedBit c X == some p) = true) :
+    EndCoverP c.E B nx c.gps p := by
   intro m ⟨S, hS, hs⟩ e ⟨n, hd, he⟩
   have hA : refine [] S ∈ (B.flatMap fun S => ms.refs.map fun r => refine r S) :=
     List.mem_flatMap.2 ⟨S, hS, List.mem_map.2 ⟨[], by rw [hr]; exact List.mem_singleton.2 rfl, rfl⟩⟩
   have hs2 : Sim (cfgFrom c.sy c.E ms.st t).E (m.frame, 2) (refine [] S) m := hs
   obtain ⟨g0, X, g1, g2, g3⟩ := walkAll_end (C := cfgFrom c.sy c.E ms.st t) (F := (m.frame, 2)) h hc (cfgFrom_ops _ _ _ _) two_le hA hs2 rfl hd
   rw [← he] at g0 g3
-  refine ⟨g0, ?_⟩
+  simp only [Bool.and_eq_true, beq_iff_eq] at g1
+  refine ⟨g0, ?_, bit0_of hg g3 g1.2⟩
   have hbase : Sim c.E (m.frame + 1, 2) ({ X with k := 0 } : AS) e := by
     have g4 : Sim c.E (m.frame, 2) X e := g3
     refine { g4 with fr := ?_, rkv := ?_ }
     · show e.frame = m.frame + 1 + 0
       omega
     · exact g4.rkv
-  exact sim_le_any g1 hbase
+  exact sim_le_any g1.1 hbase
 
 theorem keepEnd_of {Cs : List AS} (hc : st.cut = none) {bs : List Nat} (h : keepsEndOK c st Cs bs = true) {b : Nat} (hb : b ∈ bs) : EndKeepP c.E Cs b := by
   intro m ⟨T0, hT, hs⟩ e ⟨n, hd, he⟩
@@ -1207,15 +1272,19 @@ end
 
 /-! ### What the whole check gives -/
 
-/-- **What the check gives on the machines of a frame.** -/
+/-- **What the check gives on the machines of a frame.** The stages 0 to 12 and 14 end at a place (`cov`), the stages 13 and 15 at the frame's end: the stage 13 not
+paused, the stage 15 paused. -/
 structure Checked (c : Ctx) (d : Data) : Prop where
-  cov : ∀ j, j < 13 → CoverP c.E (cutOf c.sy j) (d.B j) (d.B (j + 1)) (refsOf c j)
-  fact : ∀ j, j < 13 → ∀ e ∈ factSpec c d j, ∀ f ∈ e.2, FactP c.E (cutOf c.sy j) (d.B j) f
-  keep : ∀ j, j < 13 → ∀ e ∈ keepSpec c j, ∀ b ∈ e.2.2, KeepP c.E (cutOf c.sy j) (d.B j) e.2.1 b
-  endCov : EndCoverP c.E (d.B 13) d.B0
+  cov : ∀ j, (j < 13 ∨ j = 14) → CoverP c.E (cutsOf c.sy j) (d.B j) (fun pc => d.B (nextIdx c.sy j pc)) (refsOf c j)
+  fact : ∀ j, (j < 13 ∨ j = 14) → ∀ e ∈ factSpec c d j, ∀ f ∈ e.2, FactP c.E (cutsOf c.sy j) (d.B j) f
+  keep : ∀ j, (j < 13 ∨ j = 14) → ∀ e ∈ keepSpec c j, ∀ b ∈ e.2.2, KeepP c.E (cutsOf c.sy j) (d.B j) e.2.1 b
+  endCov : EndCoverP c.E (d.B 13) d.B0 c.gps false
   endKeep : ∀ b ∈ c.ruled, EndKeepP c.E (d.B 13) b
+  pauseCov : EndCoverP c.E (d.B 15) d.B0 c.gps true
+  pauseKeep : ∀ b ∈ c.ruled, EndKeepP c.E (d.B 15) b
   mario : ∀ p ∈ d.Q, marioOK c d.Q d.tbl p = true
-  pad : c.E.pad = noStartPad
+  pad : c.E.pad = AB.top
+  gpsI : c.gps < 2048
   start : d.B0.all (fun S => (d.B 0).any (S.le ·)) = true
   known : ∀ S ∈ d.B0, knows S (startFacts c) = true
   knownI : ∀ p ∈ startFacts c, p.1 < 2048
@@ -1225,16 +1294,16 @@ structure Checked (c : Ctx) (d : Data) : Prop where
   w0 : c.w0 ≤ 255
   tmax : c.tmax ≤ 999
 
-theorem factP_mono {E : Env} {cut : UInt16} {B Cs : List AS} {f : Fact} (h : B.all (fun S => Cs.any (S.le ·)) = true) (hf : FactP E cut Cs f) : FactP E cut B f :=
+theorem factP_mono {E : Env} {cut : List UInt16} {B Cs : List AS} {f : Fact} (h : B.all (fun S => Cs.any (S.le ·)) = true) (hf : FactP E cut Cs f) : FactP E cut B f :=
   fun fr m ha hq m' hn => hf fr m (atL_coarse h ha) hq m' hn
 
-theorem keepP_mono {E : Env} {cut : UInt16} {B Cs : List AS} {pre : Bytes} {b : Nat} (h : B.all (fun S => Cs.any (S.le ·)) = true) (hf : KeepP E cut Cs pre b) : KeepP E cut B pre b :=
+theorem keepP_mono {E : Env} {cut : List UInt16} {B Cs : List AS} {pre : Bytes} {b : Nat} (h : B.all (fun S => Cs.any (S.le ·)) = true) (hf : KeepP E cut Cs pre b) : KeepP E cut B pre b :=
   fun fr m ha hq m' hn => hf fr m (atL_coarse h ha) hq m' hn
 
 theorem stage_sound {c : Ctx} {d : Data} {j : Nat} (h : stageOK c d j = true) :
-    CoverP c.E (cutOf c.sy j) (d.B j) (d.B (j + 1)) (refsOf c j) ∧
-    (∀ e ∈ factSpec c d j, ∀ f ∈ e.2, FactP c.E (cutOf c.sy j) (d.B j) f) ∧
-    (∀ e ∈ keepSpec c j, ∀ b ∈ e.2.2, KeepP c.E (cutOf c.sy j) (d.B j) e.2.1 b) := by
+    CoverP c.E (cutsOf c.sy j) (d.B j) (fun pc => d.B (nextIdx c.sy j pc)) (refsOf c j) ∧
+    (∀ e ∈ factSpec c d j, ∀ f ∈ e.2, FactP c.E (cutsOf c.sy j) (d.B j) f) ∧
+    (∀ e ∈ keepSpec c j, ∀ b ∈ e.2.2, KeepP c.E (cutsOf c.sy j) (d.B j) e.2.1 b) := by
   unfold stageOK at h
   cases hj : d.pl[j]? with
   | none =>
@@ -1246,51 +1315,67 @@ theorem stage_sound {c : Ctx} {d : Data} {j : Nat} (h : stageOK c d j = true) :
     have hB : d.B j = B := by simp [Data.B, hj]
     rw [hB]
     simp only [Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at h
-    obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := h
+    obtain ⟨⟨⟨⟨⟨⟨h1, h1a⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := h
+    have hcuts : ms.st.cuts = cutsOf c.sy j := by simp [Stage.cuts, cutsOf, h1, h1a]
     refine ⟨?_, ?_, ?_⟩
     · have g := coverP_of (c := c) (key := ms.key ++ varKey c) h1 h4
-      rw [h2] at g
+      rw [h2, hcuts] at g
       intro f m ha r hr hq
       obtain ⟨m', g1, S, hS, g2⟩ := g f m ha r hr hq
       obtain ⟨T, hT, hle⟩ := List.any_eq_true.1 (h3 S hS)
-      exact ⟨m', g1, T, hT, sim_le hle g2⟩
+      have hpc : m'.pc = S.pc := g2.pc
+      refine ⟨m', g1, T, ?_, sim_le hle g2⟩
+      rw [hpc]
+      exact hT
     · intro e he f hf
       have g := h5 e he
       obtain ⟨g1, g2⟩ := g
+      rw [← hcuts]
       exact factP_mono (List.all_eq_true.2 g1) (factP_of h1 (g2 f hf))
     · intro e he b hb
       have g := h6 e he
       obtain ⟨g1, g2⟩ := g
+      rw [← hcuts]
       exact keepP_mono (List.all_eq_true.2 g1) (keepP_of h1 g2 hb)
+
+theorem endStage_sound {c : Ctx} {d : Data} {j : Nat} {p : Bool} (h : endStageOK c d j p = true) (hg : c.gps < 2048) :
+    EndCoverP c.E (d.B j) d.B0 c.gps p ∧ ∀ b ∈ c.ruled, EndKeepP c.E (d.B j) b := by
+  unfold endStageOK at h
+  cases hj : d.pl[j]? with
+  | none =>
+    rw [hj] at h
+    cases h
+  | some x =>
+    obtain ⟨ms, B, nx, t⟩ := x
+    rw [hj] at h
+    have hB : d.B j = B := by simp [Data.B, hj]
+    simp only [Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at h
+    obtain ⟨⟨⟨b1, b2⟩, b3⟩, b4, b5⟩ := h
+    refine ⟨?_, ?_⟩
+    · rw [hB]
+      exact endCover_of b1 b2 hg b3
+    · intro b hb
+      rw [hB]
+      intro m ha e he
+      exact keepEnd_of b1 b5 hb m (atL_coarse (List.all_eq_true.2 b4) ha) e he
 
 theorem checked_of_check {c : Ctx} {d : Data} (h : flagCheck c d = true) : Checked c d := by
   simp only [flagCheck, basicOK, Bool.and_eq_true, List.all_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨h1, h2⟩, h3⟩, ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨a1, a0⟩, a2⟩, a3⟩, a4⟩, a5⟩, a6⟩, a7⟩, a8⟩, a9⟩, a10⟩, a11⟩⟩ := h
-  have hpad : c.E.pad = noStartPad := by
+  obtain ⟨⟨⟨⟨⟨h1, h14⟩, h13⟩, h15⟩, h3⟩, ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨a1, a0⟩, ag⟩, a2⟩, a3⟩, a4⟩, a5⟩, a6⟩, a7⟩, a8⟩, a9⟩, a10⟩, a11⟩⟩ := h
+  have hpad : c.E.pad = AB.top := by
     cases hE : c.E.pad with
     | mk v k =>
       rw [hE] at a1 a0
       simp only at a1 a0
       rw [a1, a0]
-  have hs : ∀ j, j < 13 → stageOK c d j = true := fun j hj => h1 j (List.mem_range.2 hj)
-  unfold endStageOK at h2
-  cases hj : d.pl[13]? with
-  | none =>
-    rw [hj] at h2
-    cases h2
-  | some x =>
-    obtain ⟨ms, B, nx, t⟩ := x
-    rw [hj] at h2
-    have hB : d.B 13 = B := by simp [Data.B, hj]
-    simp only [Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at h2
-    obtain ⟨⟨⟨b1, b2⟩, b3⟩, b4, b5⟩ := h2
-    refine ⟨fun j hj => (stage_sound (hs j hj)).1, fun j hj => (stage_sound (hs j hj)).2.1, fun j hj => (stage_sound (hs j hj)).2.2, ?_, ?_, List.all_eq_true.1 h3, hpad, List.all_eq_true.2 a3, a4, a5, a6, a7, a8, a9, a11⟩
-    · rw [hB]
-      exact endCover_of b1 b2 b3
-    · intro b hb
-      rw [hB]
-      intro m ha e he
-      exact keepEnd_of b1 b5 hb m (atL_coarse (List.all_eq_true.2 b4) ha) e he
+  have hs : ∀ j, (j < 13 ∨ j = 14) → stageOK c d j = true := fun j hj => by
+    rcases hj with hj | rfl
+    · exact h1 j (List.mem_range.2 hj)
+    · exact h14
+  have e13 := endStage_sound h13 ag
+  have e15 := endStage_sound h15 ag
+  exact ⟨fun j hj => (stage_sound (hs j hj)).1, fun j hj => (stage_sound (hs j hj)).2.1, fun j hj => (stage_sound (hs j hj)).2.2, e13.1, e13.2, e15.1, e15.2,
+    List.all_eq_true.1 h3, hpad, ag, List.all_eq_true.2 a3, a4, a5, a6, a7, a8, a9, a11⟩
 
 /-! ## One frame -/
 
@@ -1345,7 +1430,7 @@ theorem byteN_q5 (a b c d e : UInt8) :
 
 theorem tt (x : UInt8) : x.toNat.toUInt8 = x := by simp
 
-theorem Next.frame {cut : UInt16} {m m' : Machine} (h : Next cut m m') : m'.frame = m.frame := by
+theorem Next.frame {cut : List UInt16} {m m' : Machine} (h : Next cut m m') : m'.frame = m.frame := by
   obtain ⟨j, hj, rfl⟩ := h
   exact hj.frame j (Nat.le_refl _)
 
@@ -1353,7 +1438,7 @@ theorem atL_fdot {E : Env} {f : Nat} {B : List AS} {m : Machine} (h : AtL E f B 
   obtain ⟨_, _, hs⟩ := h
   exact Nat.lt_of_le_of_lt hs.hi hs.lim
 
-theorem EndsAt.next {cut : UInt16} {m m' e : Machine} (he : EndsAt m e) (hn : Next cut m m') (hl : m'.fdot < dotsPerFrame) : EndsAt m' e := by
+theorem EndsAt.next {cut : List UInt16} {m m' e : Machine} (he : EndsAt m e) (hn : Next cut m m') (hl : m'.fdot < dotsPerFrame) : EndsAt m' e := by
   obtain ⟨n, hd, rfl⟩ := he
   obtain ⟨j, hj, rfl⟩ := hn
   have h1 := hj.dot
@@ -1376,16 +1461,6 @@ theorem mem_of_lookup {l : List (Nat × Nat)} {a b : Nat} (h : l.lookup a = some
       exact List.mem_cons_self
     · exact List.mem_cons_of_mem _ (ih h)
 
-/-- the machine with a pad that has no Start, from a state where the pad is not known -/
-theorem sim_noStart {c : Ctx} (hp : c.E.pad = noStartPad) {F : Nat × UInt8} {S : AS} {m : Machine} {i : UInt8} (hs : Sim { c.E with pad := AB.top } F S m) (hi : noStart i = true) :
-    Sim c.E F S { m with pad := smbToPad i } := by
-  refine ⟨hs.a, hs.x, hs.y, hs.p, hs.s, hs.pc, hs.prg, hs.mask, hs.ppuCtrl, hs.ppuMask, hs.vb, hs.nmi, hs.s0, hs.lo, hs.hi, hs.lim, ?_, hs.padShift, hs.strobe, hs.halted, hs.trk, hs.size, hs.ram, hs.dg, hs.szR, hs.szK, hs.fr, hs.rkv⟩
-  rw [hp]
-  have e : smbToPad i &&& 0x08 = 0 := by simpa [noStart] using hi
-  show smbToPad i &&& 0x08 = 0 &&& 0x08
-  rw [e]
-  rfl
-
 theorem sim_anyPad {c : Ctx} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : Sim c.E F S m) : Sim { c.E with pad := AB.top } F S m :=
   ⟨hs.a, hs.x, hs.y, hs.p, hs.s, hs.pc, hs.prg, hs.mask, hs.ppuCtrl, hs.ppuMask, hs.vb, hs.nmi, hs.s0, hs.lo, hs.hi, hs.lim, mem_top _, hs.padShift, hs.strobe, hs.halted, hs.trk, hs.size, hs.ram, hs.dg, hs.szR, hs.szK, hs.fr, hs.rkv⟩
 
@@ -1394,7 +1469,7 @@ theorem ruled_mem (c : Ctx) : c.ph ∈ c.ruled ∧ c.w ∈ c.ruled ∧ c.y ∈ c
     c.v ∈ c.ruled ∧ c.fF ∈ c.ruled ∧ c.ff ∈ c.ruled ∧ c.abs ∈ c.ruled ∧ c.coll ∈ c.ruled ∧ c.tm ∈ c.ruled ∧ c.rs ∈ c.ruled ∧ c.md ∈ c.ruled := by
   simp [Ctx.ruled, Ctx.digits, Ctx.mario]
 
-theorem fact1 {E : Env} {cut : UInt16} {B : List AS} {pre al : Bytes} {pl : Bool} (h : FactP E cut B { pre := pre, alts := [al], plain := pl }) {f : Nat} {m m' : Machine}
+theorem fact1 {E : Env} {cut : List UInt16} {B : List AS} {pre al : Bytes} {pl : Bool} (h : FactP E cut B { pre := pre, alts := [al], plain := pl }) {f : Nat} {m m' : Machine}
     (a : AtL E f B m) (q : Quiet pre m) (n : Next cut m m') : Quiet al m' := by
   obtain ⟨x, hx, hq⟩ := h f m a q m' n
   rw [List.mem_singleton.1 hx] at hq
@@ -1451,26 +1526,30 @@ structure UpToFlag (c : Ctx) (d : Data) (m m10 : Machine) : Prop where
   md : m10.ram.get! c.md = c.r.ram.get! c.md
   mario : (q5 (m10.ram.get! c.v) (m10.ram.get! c.fF) (m10.ram.get! c.ff) (m10.ram.get! c.abs) (m10.ram.get! c.coll), m10.ram.get! c.tm) ∈ d.Q
 
+/-- the cover of a stage that has one place to end at: the next stage is the one after it -/
+theorem Checked.covL {c : Ctx} {d : Data} (hC : Checked c d) {j : Nat} (hj : j < 13) (h1 : j ≠ 1) (h3 : j ≠ 3) :
+    ∀ f m, AtL c.E f (d.B j) m → ∀ r ∈ refsOf c j, Quiet r m → ∃ m', Next (cutsOf c.sy j) m m' ∧ AtL c.E f (d.B (j + 1)) m' := by
+  intro f m a r hr q
+  obtain ⟨m', n, a0⟩ := hC.cov j (Or.inl hj) f m a r hr q
+  have a' : AtL c.E f (d.B (nextIdx c.sy j m'.pc)) m' := a0
+  have h14 : j ≠ 14 := by omega
+  have e : nextIdx c.sy j m'.pc = j + 1 := by
+    unfold nextIdx
+    simp [h1, h3, h14]
+  rw [e] at a'
+  exact ⟨m', n, a'⟩
+
 variable {c : Ctx} {d : Data} in
-theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL c.E m.frame (d.B 0) m0) (hr : m0.ram = m.ram) (hf : m0.frame = m.frame) (he : EndsAt m0 e) :
+/-- the stages 4 to 9, from the timers to the star flag's routine, from a machine at the timers whose bytes of the rule are those of `m` -/
+theorem upToFlag (hC : Checked c d) {m m4 e : Machine} (hm : Ok c d m) (a4 : AtL c.E m.frame (d.B 4) m4) (k4 : ∀ b ∈ c.ruled, m4.ram.get! b = m.ram.get! b)
+    (hf : m4.frame = m.frame) (he : EndsAt m4 e) :
     ∃ m10, EndsAt m10 e ∧ m10.frame = m.frame ∧ UpToFlag c d m m10 := by
   have R := ruled_mem c
   obtain ⟨Rph, Rw, Ry, Rt, Rd0, Rd1, Rd2, Rv, RF, Rf, RA, RC, Rtm, Rrs, Rmd⟩ := R
   have tk3 : m.ram.get! c.task = 2 ∨ m.ram.get! c.task = 3 ∨ m.ram.get! c.task = 4 := hm.task
-  -- the screen, the sound, the pad
-  obtain ⟨m1, n1, a1⟩ := hC.cov 0 (by decide) _ m0 a0 [] (List.mem_singleton.2 rfl) qn
-  obtain ⟨m2, n2, a2⟩ := hC.cov 1 (by decide) _ m1 a1 [] (List.mem_singleton.2 rfl) qn
-  obtain ⟨m3, n3, a3⟩ := hC.cov 2 (by decide) _ m2 a2 [] (List.mem_singleton.2 rfl) qn
-  obtain ⟨m4, n4, a4⟩ := hC.cov 3 (by decide) _ m3 a3 [] (List.mem_singleton.2 rfl) qn
-  have k4 : ∀ b ∈ c.ruled, m4.ram.get! b = m.ram.get! b := by
-    intro b hb
-    rw [hC.keep 3 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m3 a3 qn m4 n4,
-      hC.keep 2 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m2 a2 qn m3 n3,
-      hC.keep 1 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m1 a1 qn m2 n2,
-      hC.keep 0 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m0 a0 qn m1 n1, hr]
   -- the timers
-  obtain ⟨m5, n5, a5⟩ := hC.cov 4 (by decide) _ m4 a4 [] (List.mem_singleton.2 rfl) qn
-  have F4 : ∀ f ∈ phFacts c ++ wFacts c ++ tmFacts c, FactP c.E (cutOf c.sy 4) (d.B 4) f := hC.fact 4 (by decide) _ (List.mem_singleton.2 rfl)
+  obtain ⟨m5, n5, a5⟩ := hC.covL (j := 4) (by decide) (by decide) (by decide) _ m4 a4 [] (List.mem_singleton.2 rfl) qn
+  have F4 : ∀ f ∈ phFacts c ++ wFacts c ++ tmFacts c, FactP c.E (cutsOf c.sy 4) (d.B 4) f := hC.fact 4 (by decide) _ (List.mem_singleton.2 rfl)
   have K4 : ∀ b ∈ [c.y, c.task] ++ c.digits ++ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md], m5.ram.get! b = m4.ram.get! b := fun b hb =>
     hC.keep 4 (by decide) _ List.mem_cons_self b hb _ m4 a4 qn m5 n5
   have ph5 : m5.ram.get! c.ph = (((m.ram.get! c.ph).toNat + 20) % 21).toUInt8 := by
@@ -1495,7 +1574,7 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
       have := hC.keep 4 (by decide) _ hmem c.w (List.mem_singleton.2 rfl) _ m4 a4 (qc (by rw [k4 _ Rph, ← hu, tt]) qn) m5 n5
       rw [this, k4 _ Rw]
   -- the sprites
-  obtain ⟨m6, n6, a6⟩ := hC.cov 5 (by decide) _ m5 a5 [] (List.mem_singleton.2 rfl) qn
+  obtain ⟨m6, n6, a6⟩ := hC.covL (j := 5) (by decide) (by decide) (by decide) _ m5 a5 [] (List.mem_singleton.2 rfl) qn
   have k6 : ∀ b ∈ c.ruled, m6.ram.get! b = m5.ram.get! b := fun b hb => hC.keep 5 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m5 a5 qn m6 n6
   have ht := hm.mario
   obtain ⟨o, x, hl, ht1, ht0, ht16, hv6, hx, hxQ⟩ := marioOK_spec (hC.mario _ ht)
@@ -1510,7 +1589,7 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
     rw [k6 _ hr, K4 _ (List.mem_append_right _ hb), k4 _ hr]
   have bq := byteN_q5 (m.ram.get! c.v) (m.ram.get! c.fF) (m.ram.get! c.ff) (m.ram.get! c.abs) (m.ram.get! c.coll)
   -- the move
-  obtain ⟨m7, n7, a7⟩ := hC.cov 6 (by decide) _ m6 a6 [] (List.mem_singleton.2 rfl) qn
+  obtain ⟨m7, n7, a7⟩ := hC.covL (j := 6) (by decide) (by decide) (by decide) _ m6 a6 [] (List.mem_singleton.2 rfl) qn
   have M7 := fact1 (h := hC.fact 6 (by decide) _ (List.mem_singleton.2 rfl) _ (List.mem_map.2 ⟨_, mem_of_lookup hl, rfl⟩)) a6
     (by
       simp only [moveIn]
@@ -1530,7 +1609,7 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
     have h1 : (m.ram.get! c.tm).toNat ≠ 1 := fun e => ht1 (UInt8.toNat_inj.1 (by rw [e]; rfl))
     omega
   have tm7 : m7.ram.get! c.tm = ((m.ram.get! c.tm).toNat - 1).toUInt8 := by rw [K6 _ (by simp), tm6]
-  obtain ⟨m8, n8, a8⟩ := hC.cov 7 (by decide) _ m7 a7 [(c.tm, ((m.ram.get! c.tm).toNat - 2 + 1).toUInt8)]
+  obtain ⟨m8, n8, a8⟩ := hC.covL (j := 7) (by decide) (by decide) (by decide) _ m7 a7 [(c.tm, ((m.ram.get! c.tm).toNat - 2 + 1).toUInt8)]
     (List.mem_map.2 ⟨_, List.mem_range.2 (by omega), rfl⟩) (qc (by rw [tm7]; congr 1; omega) qn)
   have K7 : ∀ b ∈ c.ruled ++ [c.x, c.pg], m8.ram.get! b = m7.ram.get! b := fun b hb =>
     hC.keep 7 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m7 a7 qn m8 n8
@@ -1544,7 +1623,7 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
     · exact Or.inr h
     · exact Or.inl h
   have hxm : byteN o 4 ∈ [c.x0, c.x0 + 1] := by rcases hxa with h | h <;> rw [h] <;> simp
-  obtain ⟨m9, n9, a9⟩ := hC.cov 8 (by decide) _ m8 a8 [(c.x, byteN o 4), (c.pg, c.pg0)] (List.mem_map.2 ⟨_, hxm, rfl⟩) (qc x8 (qc pg8 qn))
+  obtain ⟨m9, n9, a9⟩ := hC.covL (j := 8) (by decide) (by decide) (by decide) _ m8 a8 [(c.x, byteN o 4), (c.pg, c.pg0)] (List.mem_map.2 ⟨_, hxm, rfl⟩) (qc x8 (qc pg8 qn))
   have M9 := fact1 (h := hC.fact 8 (by decide) _ (List.mem_singleton.2 rfl) _ (List.mem_map.2 ⟨_, hxm, rfl⟩)) a8 (qc x8 (qc pg8 qn)) n9
   have hk8 : (([] : List Nat), [(c.x, byteN o 4), (c.pg, c.pg0)], c.ruled) ∈ keepSpec c 8 := by
     rcases hxa with h | h
@@ -1570,12 +1649,12 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
   have md9 : m9.ram.get! c.md = c.r.ram.get! c.md := by rw [K8 _ Rmd, K7 _ (List.mem_append_left _ Rmd)]; exact qget (v := c.r.ram.get! c.md) M7 (by simp [moveOut])
   have htk : m.ram.get! c.task ∈ ([2, 3, 4] : List UInt8) := by rcases tk3 with h | h | h <;> rw [h] <;> simp
   -- the collision
-  have last : ∃ m10, Next (cutOf c.sy 9) m9 m10 ∧ AtL c.E m.frame (d.B 10) m10 ∧ UpToFlag c d m m10 := by
+  have last : ∃ m10, Next (cutsOf c.sy 9) m9 m10 ∧ AtL c.E m.frame (d.B 10) m10 ∧ UpToFlag c d m m10 := by
     have hp : ((m.ram.get! c.ph).toNat + 20) % 21 < 256 := by omega
     rcases nextMario_spec hx with ⟨hB, hxB⟩ | ⟨hA, hxA⟩
     · have q9 : Quiet [(c.task, m.ram.get! c.task), (c.x, c.x0 + 1), (c.pg, c.pg0), (c.v, (byteN o 0).toNat.toUInt8)] m9 :=
         qc task9 (qc (x9.trans hB) (qc pg9 (qc (by rw [v9, tt]) qn)))
-      obtain ⟨m10, n10, a10⟩ := hC.cov 9 (by decide) _ m9 a9 _
+      obtain ⟨m10, n10, a10⟩ := hC.covL (j := 9) (by decide) (by decide) (by decide) _ m9 a9 _
         (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_of_mem _ (List.mem_map.2 ⟨(byteN o 0).toNat, List.mem_range.2 (by omega), rfl⟩)⟩) q9
       have M10 := fact1 (h := hC.fact 9 (by decide) _ (List.mem_singleton.2 rfl) _
         (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_of_mem _ (List.mem_map.2 ⟨(byteN o 0).toNat, List.mem_range.2 (by omega), rfl⟩)⟩)) a9 q9 n10
@@ -1596,7 +1675,7 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
           qget (v := c.sy.SideTimerBump.toUInt8) M10 (by simp), F9, f9, A9]
         exact hxQ
     · have q9 : Quiet [(c.task, m.ram.get! c.task), (c.x, c.x0), (c.pg, c.pg0)] m9 := qc task9 (qc (x9.trans hA) (qc pg9 qn))
-      obtain ⟨m10, n10, a10⟩ := hC.cov 9 (by decide) _ m9 a9 _ (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_self⟩) q9
+      obtain ⟨m10, n10, a10⟩ := hC.covL (j := 9) (by decide) (by decide) (by decide) _ m9 a9 _ (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_self⟩) q9
       have M10 := fact1 (h := hC.fact 9 (by decide) _ (List.mem_singleton.2 rfl) _ (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_self⟩)) a9 q9 n10
       have K9 : ∀ b ∈ [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.tm, c.rs, c.md] ++ c.digits, m10.ram.get! b = m9.ram.get! b := fun b hb =>
         hC.keep 9 (by decide) _ (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_self⟩) b hb _ m9 a9 q9 m10 n10
@@ -1614,10 +1693,10 @@ theorem upToFlag (hC : Checked c d) {m m0 e : Machine} (hm : Ok c d m) (a0 : AtL
         rw [K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), qget (v := c.sy.CollisionInit.toUInt8) M10 (by simp), K9 _ (by simp), v9, F9, f9, A9, tm9]
         exact hxQ
   obtain ⟨m10, n10, a10, U⟩ := last
-  have hE := ((((((((((he.next n1 (atL_fdot a1)).next n2 (atL_fdot a2)).next n3 (atL_fdot a3)).next n4 (atL_fdot a4)).next n5 (atL_fdot a5)).next n6 (atL_fdot a6)).next n7
+  have hE := ((((((he.next n5 (atL_fdot a5)).next n6 (atL_fdot a6)).next n7
     (atL_fdot a7)).next n8 (atL_fdot a8)).next n9 (atL_fdot a9)).next n10 (atL_fdot a10))
   refine ⟨m10, hE, ?_, U⟩
-  rw [n10.frame, n9.frame, n8.frame, n7.frame, n6.frame, n5.frame, n4.frame, n3.frame, n2.frame, n1.frame, hf]
+  rw [n10.frame, n9.frame, n8.frame, n7.frame, n6.frame, n5.frame, hf]
 
 
 
@@ -1672,7 +1751,7 @@ structure AfterFlag (c : Ctx) (d : Data) (m m11 : Machine) : Prop where
 
 variable {c : Ctx} {d : Data} in
 theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpToFlag c d m m10) :
-    ∃ m11, Next (cutOf c.sy 10) m10 m11 ∧ AtL c.E m.frame (d.B 11) m11 ∧ AfterFlag c d m m11 := by
+    ∃ m11, Next (cutsOf c.sy 10) m10 m11 ∧ AtL c.E m.frame (d.B 11) m11 ∧ AfterFlag c d m m11 := by
   have hp : ((m.ram.get! c.ph).toNat + 20) % 21 < 21 := Nat.mod_lt _ (by decide)
   have hw : (m10.ram.get! c.w).toNat = (cnt c m).tick := by
     rw [U.w, tick_eq]
@@ -1680,8 +1759,8 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
   obtain ⟨t, htm, hq⟩ := hm.digits
   have hT : (cnt c m).t = t := timer_ds hq (Nat.le_trans htm hC.tmax)
   have q10 : Quiet (c.ds t) m10 := ds_of U.d0 U.d1 U.d2 hq
-  have F10 : ∀ f ∈ digitFacts c, FactP c.E (cutOf c.sy 10) (d.B 10) f := hC.fact 10 (by decide) _ List.mem_cons_self
-  have G10 : ∀ f ∈ yFacts c ++ upFacts c ++ lastFacts c, FactP c.E (cutOf c.sy 10) (d.B 10) f :=
+  have F10 : ∀ f ∈ digitFacts c, FactP c.E (cutsOf c.sy 10) (d.B 10) f := hC.fact 10 (by decide) _ List.mem_cons_self
+  have G10 : ∀ f ∈ yFacts c ++ upFacts c ++ lastFacts c, FactP c.E (cutsOf c.sy 10) (d.B 10) f :=
     hC.fact 10 (by decide) _ (List.mem_cons_of_mem _ List.mem_cons_self)
   have mario' : ∀ m11 : Machine, (∀ b ∈ [c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md], m11.ram.get! b = m10.ram.get! b) →
       (q5 (m11.ram.get! c.v) (m11.ram.get! c.fF) (m11.ram.get! c.ff) (m11.ram.get! c.abs) (m11.ram.get! c.coll), m11.ram.get! c.tm) ∈ d.Q ∧
@@ -1692,7 +1771,7 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
   rcases hm.task with h2 | h3 | h4
   · -- the digits count down
     have r10 : Quiet [(c.task, 2)] m10 := qc (U.task.trans h2) qn
-    obtain ⟨m11, n11, a11⟩ := hC.cov 10 (by decide) _ m10 U.at10 [(c.task, 2)] List.mem_cons_self r10
+    obtain ⟨m11, n11, a11⟩ := hC.covL (j := 10) (by decide) (by decide) (by decide) _ m10 U.at10 [(c.task, 2)] List.mem_cons_self r10
     refine ⟨m11, n11, a11, ?_⟩
     have M := fact1 (h := F10 _ (List.mem_map.2 ⟨t, List.mem_range.2 (by omega), rfl⟩)) U.at10 (qc (U.task.trans h2) q10) n11
     have K : ∀ b ∈ [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md], m11.ram.get! b = m10.ram.get! b := fun b hb =>
@@ -1723,7 +1802,7 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
       rcases tk' with h | h <;> rw [h] at h4 <;> cases h4
   · -- the flag rises
     have r10 : Quiet [(c.task, 3)] m10 := qc (U.task.trans h3) qn
-    obtain ⟨m11, n11, a11⟩ := hC.cov 10 (by decide) _ m10 U.at10 [(c.task, 3)] (List.mem_cons_of_mem _ List.mem_cons_self) r10
+    obtain ⟨m11, n11, a11⟩ := hC.covL (j := 10) (by decide) (by decide) (by decide) _ m10 U.at10 [(c.task, 3)] (List.mem_cons_of_mem _ List.mem_cons_self) r10
     refine ⟨m11, n11, a11, ?_⟩
     have K : ∀ b ∈ [c.ph, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md] ++ c.digits, m11.ram.get! b = m10.ram.get! b := fun b hb =>
       hC.keep 10 (by decide) _ (List.mem_cons_of_mem _ List.mem_cons_self) b hb _ m10 U.at10 r10 m11 n11
@@ -1797,7 +1876,7 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
           rw [tk] at h; cases h
   · -- the last wait
     have r10 : Quiet [(c.task, 4)] m10 := qc (U.task.trans h4) qn
-    obtain ⟨m11, n11, a11⟩ := hC.cov 10 (by decide) _ m10 U.at10 [(c.task, 4)] (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)) r10
+    obtain ⟨m11, n11, a11⟩ := hC.covL (j := 10) (by decide) (by decide) (by decide) _ m10 U.at10 [(c.task, 4)] (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)) r10
     refine ⟨m11, n11, a11, ?_⟩
     have K : ∀ b ∈ [c.ph, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md] ++ c.digits, m11.ram.get! b = m10.ram.get! b := fun b hb =>
       hC.keep 10 (by decide) _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)) b hb _ m10 U.at10 r10 m11 n11
@@ -1880,44 +1959,134 @@ theorem quiet_start {c : Ctx} {d : Data} (hC : Checked c d) {E : Env} {f : Nat} 
   obtain ⟨S, hS, hs⟩ := h
   exact quiet_of_knows hs hC.knownI (hC.known S hS)
 
-/-- **One frame after the castle entry.** From a machine in the condition, a frame with no Start: the frame ends, the level has not changed, the counters follow the
-rule of one frame, and either the flag's task is 5 or the condition holds again. -/
-theorem frame_step {c : Ctx} {d : Data} (hC : Checked c d) {m : Machine} (hm : Good c d m) {i : UInt8} (hi : noStart i = true) :
+/-- the game is paused: the bit 0 of the pause status -/
+def paused (c : Ctx) (m : Machine) : Bool := bit0 c.gps m
+
+theorem nextIdx_one (sy : Syms) (pc : UInt16) : nextIdx sy 1 pc = 14 ∨ nextIdx sy 1 pc = 2 := by
+  unfold nextIdx
+  split
+  · exact Or.inl rfl
+  · right
+    simp
+
+theorem nextIdx_three (sy : Syms) (pc : UInt16) : nextIdx sy 3 pc = 15 ∨ nextIdx sy 3 pc = 4 := by
+  unfold nextIdx
+  split
+  · rename_i h
+    simp at h
+  · split
+    · exact Or.inl rfl
+    · right
+      simp
+
+theorem nextIdx_14 (sy : Syms) (pc : UInt16) : nextIdx sy 14 pc = 3 := by
+  unfold nextIdx
+  simp
+
+variable {c : Ctx} {d : Data} in
+/-- the stages 0 to 2 and 14: the screen and the sound (the music, or the sound of the pause), up to the pad. The bytes of the rule do not change. -/
+theorem toPad (hC : Checked c d) {m0 e : Machine} (a0 : AtL c.E m0.frame (d.B 0) m0) (he : EndsAt m0 e) :
+    ∃ m3, EndsAt m3 e ∧ m3.frame = m0.frame ∧ AtL c.E m0.frame (d.B 3) m3 ∧ ∀ b ∈ c.ruled, m3.ram.get! b = m0.ram.get! b := by
+  obtain ⟨m1, n1, a1⟩ := hC.covL (j := 0) (by decide) (by decide) (by decide) _ m0 a0 [] (List.mem_singleton.2 rfl) qn
+  obtain ⟨m2, n2, a2⟩ := hC.cov 1 (by decide) _ m1 a1 [] (List.mem_singleton.2 rfl) qn
+  have k2 : ∀ b ∈ c.ruled, m2.ram.get! b = m0.ram.get! b := by
+    intro b hb
+    rw [hC.keep 1 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m1 a1 qn m2 n2,
+      hC.keep 0 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m0 a0 qn m1 n1]
+  have he2 := (he.next n1 (atL_fdot a1)).next n2 (atL_fdot a2)
+  have hf2 : m2.frame = m0.frame := by rw [n2.frame, n1.frame]
+  have a2' : AtL c.E m0.frame (d.B (nextIdx c.sy 1 m2.pc)) m2 := a2
+  rcases nextIdx_one c.sy m2.pc with h | h <;> rw [h] at a2'
+  · obtain ⟨m3, n3, a3'⟩ := hC.cov 14 (by decide) _ m2 a2' [] (List.mem_singleton.2 rfl) qn
+    have a3 : AtL c.E m0.frame (d.B (nextIdx c.sy 14 m3.pc)) m3 := a3'
+    rw [nextIdx_14] at a3
+    refine ⟨m3, he2.next n3 (atL_fdot a3), by rw [n3.frame, hf2], a3, fun b hb => ?_⟩
+    rw [hC.keep 14 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m2 a2' qn m3 n3, k2 b hb]
+  · obtain ⟨m3, n3, a3⟩ := hC.covL (j := 2) (by decide) (by decide) (by decide) _ m2 a2' [] (List.mem_singleton.2 rfl) qn
+    refine ⟨m3, he2.next n3 (atL_fdot a3), by rw [n3.frame, hf2], a3, fun b hb => ?_⟩
+    rw [hC.keep 2 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m2 a2' qn m3 n3, k2 b hb]
+
+/-- the machine with any pad, from a state where the pad is not known -/
+theorem sim_pad {c : Ctx} (hp : c.E.pad = AB.top) {F : Nat × UInt8} {S : AS} {m : Machine} (p : UInt8) (hs : Sim { c.E with pad := AB.top } F S m) :
+    Sim c.E F S { m with pad := p } := by
+  refine ⟨hs.a, hs.x, hs.y, hs.p, hs.s, hs.pc, hs.prg, hs.mask, hs.ppuCtrl, hs.ppuMask, hs.vb, hs.nmi, hs.s0, hs.lo, hs.hi, hs.lim, ?_, hs.padShift, hs.strobe, hs.halted, hs.trk, hs.size, hs.ram, hs.dg, hs.szR, hs.szK, hs.fr, hs.rkv⟩
+  rw [hp]
+  exact mem_top _
+
+/-- **One frame after the castle entry.** From a machine in the condition, a frame with any input: the frame ends and the level has not changed. If the frame
+ends paused, the counters are the same and the condition holds again. Otherwise the counters follow the rule of one frame, and either the flag's task is 5 or
+the condition holds again. -/
+theorem frame_step {c : Ctx} {d : Data} (hC : Checked c d) {m : Machine} (hm : Good c d m) (i : UInt8) :
     (frame m i).frame = m.frame + 1 ∧ CastleToLevel.level c.sy m = false ∧ CastleToLevel.level c.sy (frame m i) = false ∧
-    CastleToLevel.FlagRun c.lim c.w0 (CastleToLevel.flagOf c.sy c.nm m) (CastleToLevel.flagOf c.sy c.nm (frame m i)) ∧
-    ((CastleToLevel.flagOf c.sy c.nm (frame m i)).task = 5 ∨ Good c d (frame m i)) := by
+    (if paused c (frame m i) then CastleToLevel.flagOf c.sy c.nm (frame m i) = CastleToLevel.flagOf c.sy c.nm m ∧ Good c d (frame m i)
+     else CastleToLevel.FlagRun c.lim c.w0 (CastleToLevel.flagOf c.sy c.nm m) (CastleToLevel.flagOf c.sy c.nm (frame m i)) ∧
+      ((CastleToLevel.flagOf c.sy c.nm (frame m i)).task = 5 ∨ Good c d (frame m i))) := by
   obtain ⟨S, hS, hs⟩ := hm.at0
   have q0 : Quiet (startFacts c) m := quiet_start hC hm.at0
-  have a0 : AtL c.E m.frame (d.B 0) { m with pad := smbToPad i } := atL_coarse hC.start ⟨S, hS, sim_noStart hC.pad hs hi⟩
+  have a0 : AtL c.E m.frame (d.B 0) { m with pad := smbToPad i } := atL_coarse hC.start ⟨S, hS, sim_pad hC.pad _ hs⟩
   have he : EndsAt { m with pad := smbToPad i } (frame m i) :=
     ⟨fuelPerFrame, by have : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
                       omega, PipeTransitionAll.frame_eq m i⟩
-  obtain ⟨m10, hE10, hf10, U⟩ := upToFlag hC hm.ok a0 rfl rfl he
-  obtain ⟨m11, n11, a11, AF⟩ := flagStage hC hm.ok U
-  obtain ⟨m12, n12, a12⟩ := hC.cov 11 (by decide) _ m11 a11 [] (List.mem_singleton.2 rfl) qn
-  obtain ⟨m13, n13, a13⟩ := hC.cov 12 (by decide) _ m12 a12 [] (List.mem_singleton.2 rfl) qn
-  have hE13 := ((hE10.next n11 (atL_fdot a11)).next n12 (atL_fdot a12)).next n13 (atL_fdot a13)
-  have hf13 : m13.frame = m.frame := by rw [n13.frame, n12.frame, n11.frame, hf10]
-  have a13' : AtL c.E m13.frame (d.B 13) m13 := by rw [hf13]; exact a13
-  obtain ⟨hfr, ae⟩ := hC.endCov m13 a13' (frame m i) hE13
-  have same : ∀ b ∈ c.ruled, (frame m i).ram.get! b = m11.ram.get! b := by
-    intro b hb
-    rw [hC.endKeep b hb m13 a13' _ hE13, hC.keep 12 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m12 a12 qn m13 n13,
-      hC.keep 11 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m11 a11 qn m12 n12]
-  have q1 : Quiet (startFacts c) (frame m i) := quiet_start hC ae
-  have hfr' : (frame m i).frame = m.frame + 1 := by rw [hfr, hf13]
-  refine ⟨hfr', level_false q0, level_false q1, ?_, ?_⟩
-  · rw [flagOf_cnt q0, flagOf_cnt q1, cnt_same same]
-    exact AF.run
-  · rcases AF.ok with h5 | ok
-    · left
-      rw [flagOf_cnt q1]
-      show ((frame m i).ram.get! c.task).toNat = 5
-      rw [same _ (ruled_mem c).2.2.2.1, h5]
-      rfl
-    · right
-      obtain ⟨S', hS', hs'⟩ := ae
-      exact ⟨⟨S', hS', by rw [hfr, hf13] at *; exact sim_anyPad hs'⟩, ok_same same ok⟩
+  obtain ⟨m3, he3, hf3, a3, k3⟩ := toPad hC a0 he
+  -- the pad: the timers, or a paused frame
+  obtain ⟨m4, n4, a4⟩ := hC.cov 3 (by decide) _ m3 a3 [] (List.mem_singleton.2 rfl) qn
+  have k4 : ∀ b ∈ c.ruled, m4.ram.get! b = m.ram.get! b := fun b hb => by
+    rw [hC.keep 3 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m3 a3 qn m4 n4, k3 b hb]
+  have he4 := he3.next n4 (atL_fdot a4)
+  have hf4 : m4.frame = m.frame := by rw [n4.frame, hf3]
+  have a4'' : AtL c.E m.frame (d.B (nextIdx c.sy 3 m4.pc)) m4 := a4
+  rcases nextIdx_three c.sy m4.pc with h | h <;> rw [h] at a4''
+  · -- a paused frame
+    have a4' : AtL c.E m4.frame (d.B 15) m4 := by rw [hf4]; exact a4''
+    obtain ⟨hfr, ae, hp⟩ := hC.pauseCov m4 a4' (frame m i) he4
+    have same : ∀ b ∈ c.ruled, (frame m i).ram.get! b = m.ram.get! b := fun b hb => by
+      rw [hC.pauseKeep b hb m4 a4' _ he4, k4 b hb]
+    have q1 : Quiet (startFacts c) (frame m i) := quiet_start hC ae
+    have hfr' : (frame m i).frame = m.frame + 1 := by rw [hfr, hf4]
+    refine ⟨hfr', level_false q0, level_false q1, ?_⟩
+    have hp' : paused c (frame m i) = true := hp
+    rw [if_pos hp']
+    refine ⟨by rw [flagOf_cnt q0, flagOf_cnt q1, cnt_same same], ?_, ok_same same hm.ok⟩
+    obtain ⟨S', hS', hs'⟩ := ae
+    exact ⟨S', hS', by rw [hfr, hf4] at *; exact sim_anyPad hs'⟩
+  · -- the timers and the rest of the frame
+    obtain ⟨m10, hE10, hf10, U⟩ := upToFlag hC hm.ok a4'' k4 hf4 he4
+    obtain ⟨m11, n11, a11, AF⟩ := flagStage hC hm.ok U
+    obtain ⟨m12, n12, a12⟩ := hC.covL (j := 11) (by decide) (by decide) (by decide) _ m11 a11 [] (List.mem_singleton.2 rfl) qn
+    obtain ⟨m13, n13, a13⟩ := hC.covL (j := 12) (by decide) (by decide) (by decide) _ m12 a12 [] (List.mem_singleton.2 rfl) qn
+    have hE13 := ((hE10.next n11 (atL_fdot a11)).next n12 (atL_fdot a12)).next n13 (atL_fdot a13)
+    have hf13 : m13.frame = m.frame := by rw [n13.frame, n12.frame, n11.frame, hf10]
+    have a13' : AtL c.E m13.frame (d.B 13) m13 := by rw [hf13]; exact a13
+    obtain ⟨hfr, ae, hp⟩ := hC.endCov m13 a13' (frame m i) hE13
+    have same : ∀ b ∈ c.ruled, (frame m i).ram.get! b = m11.ram.get! b := by
+      intro b hb
+      rw [hC.endKeep b hb m13 a13' _ hE13, hC.keep 12 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m12 a12 qn m13 n13,
+        hC.keep 11 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m11 a11 qn m12 n12]
+    have q1 : Quiet (startFacts c) (frame m i) := quiet_start hC ae
+    have hfr' : (frame m i).frame = m.frame + 1 := by rw [hfr, hf13]
+    refine ⟨hfr', level_false q0, level_false q1, ?_⟩
+    have hp' : paused c (frame m i) = false := hp
+    rw [if_neg (by rw [hp']; decide)]
+    refine ⟨?_, ?_⟩
+    · rw [flagOf_cnt q0, flagOf_cnt q1, cnt_same same]
+      exact AF.run
+    · rcases AF.ok with h5 | ok
+      · left
+        rw [flagOf_cnt q1]
+        show ((frame m i).ram.get! c.task).toNat = 5
+        rw [same _ (ruled_mem c).2.2.2.1, h5]
+        rfl
+      · right
+        obtain ⟨S', hS', hs'⟩ := ae
+        exact ⟨⟨S', hS', by rw [hfr, hf13] at *; exact sim_anyPad hs'⟩, ok_same same ok⟩
+
+/-- the next frame is in the condition, or begins with task 5 -/
+theorem frame_next {c : Ctx} {d : Data} (hC : Checked c d) {m : Machine} (hm : Good c d m) (i : UInt8) :
+    (CastleToLevel.flagOf c.sy c.nm (frame m i)).task = 5 ∨ Good c d (frame m i) := by
+  have h := (frame_step hC hm i).2.2.2
+  split at h
+  · exact Or.inr h.2
+  · exact h.2
 
 /-! ## The frames after the castle entry -/
 
@@ -1932,8 +2101,6 @@ structure After (c : Ctx) (seq : Nat → Machine) (inp : Nat → UInt8) (E T ph 
   t_E : CastleToLevel.timerOf c.nm (seq (E + 1)) = T
   ph_E : CastleToLevel.phaseOf c.nm (seq (E + 1)) = ph
   after : E < L
-  /-- no Start on the frames after the castle entry -/
-  noStart : ∀ n, E < n → n ≤ L → noStart (inp n) = true
   /-- the level has changed when frame `L + 1` begins -/
   level : CastleToLevel.level c.sy (seq (L + 1)) = true
 
@@ -1970,7 +2137,7 @@ theorem held_inv (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (s
       · left
         rw [show E + 1 + (k + 1) = E + 1 + k + 1 by omega, held_five (by omega) h5]
         exact h5
-      · obtain ⟨_, _, _, _, hr⟩ := frame_step hC hg (A.noStart (E + 1 + k) (by omega) (by omega))
+      · have hr := frame_next hC hg (inp (E + 1 + k))
         rw [show E + 1 + (k + 1) = E + 1 + k + 1 by omega, held_run h5, hn]
         rcases hr with h | h
         · exact Or.inl h
@@ -1981,12 +2148,12 @@ theorem held_inv' (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (
   have := held_inv hC hn A (n - (E + 1)) (by omega)
   rwa [show E + 1 + (n - (E + 1)) = n by omega] at this
 
-/-- **The rule on every frame after the castle entry.** From the condition at `E + 1`, with no Start on the frames after `E`, the counters of the real machines follow
-`FlagStep` up to the level change, and the frame of the level change begins with task 5. The frames from the first frame of task 5 on are counted as frames that
-do not run: the counters are held there. -/
+/-- **The rule on every frame after the castle entry.** From the condition at `E + 1`, with any inputs, the counters of the real machines follow `FlagStep` up to
+the level change, and the frame of the level change begins with task 5. A frame that ends paused is a `lag` frame: it keeps the counters. The frames from the first
+frame of task 5 on are counted as frames that do not run: the counters are held there. -/
 def flagOf_after (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (seq n) (inp n)) (A : After c seq inp E T ph L) :
     CastleToLevel.Flag c.lim c.w0 E T ph L where
-  lag n := decide (E < n ∧ (CastleToLevel.flagOf c.sy c.nm (held c seq E n)).task = 5)
+  lag n := decide (E < n ∧ ((CastleToLevel.flagOf c.sy c.nm (held c seq E n)).task = 5 ∨ paused c (seq (n + 1)) = true))
   x n := CastleToLevel.flagOf c.sy c.nm (held c seq E n)
   t_E := by rw [held_E]; exact A.t_E
   ph_E := by rw [held_E]; exact A.ph_E
@@ -2007,18 +2174,25 @@ def flagOf_after (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (s
     unfold CastleToLevel.FlagStep
     by_cases h5 : (CastleToLevel.flagOf c.sy c.nm (held c seq E n)).task = 5
     · rw [if_pos (by simp [h1, h5]), held_five h1 h5]
-    · rw [if_neg (by simp [h5]), held_run h5]
+    · rw [held_run h5]
       rcases held_inv' hC hn A h1 (by omega) with h | ⟨he, hg⟩
       · exact absurd h h5
-      · rw [hn, he]
-        exact (frame_step hC hg (A.noStart n h1 (by omega))).2.2.2.1
+      · have F := (frame_step hC hg (inp n)).2.2.2
+        rw [← hn] at F
+        by_cases hp : paused c (seq (n + 1)) = true
+        · rw [if_pos (by simp [h1, hp]), he]
+          rw [if_pos hp] at F
+          exact F.1
+        · rw [if_neg (by simp [h5, hp]), he]
+          rw [if_neg hp] at F
+          exact F.1
   task_L := by
     show (CastleToLevel.flagOf c.sy c.nm (held c seq E L)).task = 5
     rcases held_inv' hC hn A A.after (by omega) with h | ⟨he, hg⟩
     · exact h
     · by_cases h5 : (CastleToLevel.flagOf c.sy c.nm (held c seq E L)).task = 5
       · exact h5
-      · have hl := (frame_step hC hg (A.noStart L A.after (Nat.le_refl _))).2.2.1
+      · have hl := (frame_step hC hg (inp L)).2.2.1
         rw [← hn, A.level] at hl
         cases hl
 
@@ -2063,6 +2237,6 @@ def knownOf (nm : Names) : List Nat :=
 
 /-- the context of the check: `r` is a machine at the castle entry, `tmax` the largest value of the timer -/
 def ctxOf (sy : Syms) (nm : Names) (r : Machine) (tmax : Nat) : Ctx :=
-  { E := { prg := r.prg, mask := r.prgMask, pad := noStartPad, D := [], splits := [(((nm.ad "FrameCounter") &&& 0x7FF).toNat, 7)] }, sy, nm, r, K := knownOf nm, tmax }
+  { E := { prg := r.prg, mask := r.prgMask, pad := AB.top, D := [], splits := [(((nm.ad "FrameCounter") &&& 0x7FF).toNat, 7), (((nm.ad "GamePauseStatus") &&& 0x7FF).toNat, 0x81)] }, sy, nm, r, K := knownOf nm, tmax }
 
 end Smbrta.FlagRule

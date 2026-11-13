@@ -133,6 +133,9 @@ structure Syms where
   HandleTriangleMusic : UInt16
   HandleNoiseMusic : UInt16
   SkipSoundSubroutines : UInt16
+  PauseSfxValue : UInt16
+  UnpauseSfxValue : UInt16
+  PauseSfxLength : UInt16
   ReadPortBits : UInt16
   GameEngine : UInt16
   ProcELoop : UInt16
@@ -321,6 +324,9 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("HandleTriangleMusic", fun s => s.HandleTriangleMusic),
   ("HandleNoiseMusic", fun s => s.HandleNoiseMusic),
   ("SkipSoundSubroutines", fun s => s.SkipSoundSubroutines),
+  ("PauseSfxValue", fun s => s.PauseSfxValue),
+  ("UnpauseSfxValue", fun s => s.UnpauseSfxValue),
+  ("PauseSfxLength", fun s => s.PauseSfxLength),
   ("ReadPortBits", fun s => s.ReadPortBits),
   ("GameEngine", fun s => s.GameEngine),
   ("ProcELoop", fun s => s.ProcELoop),
@@ -518,6 +524,9 @@ def Syms.parse (text : String) : Except String Syms := do
     HandleTriangleMusic := ← get "HandleTriangleMusic"
     HandleNoiseMusic := ← get "HandleNoiseMusic"
     SkipSoundSubroutines := ← get "SkipSoundSubroutines"
+    PauseSfxValue := ← get "PauseSfxValue"
+    UnpauseSfxValue := ← get "UnpauseSfxValue"
+    PauseSfxLength := ← get "PauseSfxLength"
     ReadPortBits := ← get "ReadPortBits"
     GameEngine := ← get "GameEngine"
     ProcELoop := ← get "ProcELoop"

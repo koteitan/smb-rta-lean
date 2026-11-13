@@ -81,7 +81,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-a-5-4 The bound on the opening's position (`openP`, `openB` gone)
       - ✅ 1-1-a-5-4-1 No bound up to frame N is needed (position at control, top speed)
       - ✅ 1-1-a-5-4-2 The bound at the end of frame N (if each frame is a model step)
-      - 🚨 1-1-a-5-4-3 The first 32 frames are steps of the model (`opening`; holds 1-1-a-5-6, 1-1-a-5-7)
+      - 🚨 1-1-a-5-4-3 The first 32 frames are steps of the model
+        - ✅ 1-1-a-5-4-3-1 `hstep` and the 16·v move (`move_model`, walk of `CtrlKeep`; `opening` gone)
+        - ✅ 1-1-a-5-4-3-2 Air frames read from the player's state (`air` gone)
+        - 🚨 1-1-a-5-4-3-3 Conditions on single frames (`cleanK`, `spare`, `st`, `spring`, `page`, `longer`, `after`)
+        - 🚨 1-1-a-5-4-3-4 Flat ground (`flat`, 1-1-a-5-6) and jump lengths (`jump`, 1-1-a-5-7)
     - 🚨 1-1-a-5-5 The frames after: read from the machines (`own`, `lags`)
       - ✅ 1-1-a-5-5-1 The frames follow each other, with the top speed (`next`, `speed` are theorems)
       - ✅ 1-1-a-5-5-2 The speed at control is 0 (`still` removed; from `title`)
@@ -93,7 +97,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
           - ✅ 1-1-a-5-5-3-2-3 Stores before the call do not touch the speed and the position (`lags.store` removed; the walk knows each store's target)
         - 🚨 1-1-a-5-5-3-3 Frames not counted do not call the routine (`lags.game` gone)
           - ✅ 1-1-a-5-5-3-3-1 A frame that ends paused does not call it (two walks)
-          - 🚨 1-1-a-5-5-3-3-2 Frames not counted end paused and do not write the pause byte through an index (`lags.paused`, `lags.keeps`)
+          - 🚨 1-1-a-5-5-3-3-2 Frames not counted do not write the pause byte through an index (`lags.keeps`; `lags.paused` gone: counted = ends not paused)
     - 🚨 1-1-a-5-6 Open flat ground, in the air only during a jump
     - 🚨 1-1-a-5-7 A jump's length depends only on the takeoff speed
     - 🚨 1-1-a-5-8 The gain bound of the relaxed model (`GainBound`)
@@ -136,13 +140,14 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`): from the change's rows
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
-    - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_long`, `stand_row`, `vfall`, `floor_at`, `vframes`, `low_at`; `vframes` only before the entry, on frames with no head's collision)
+    - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_long`, `stand_row`, `vfall`, `floor_at`, `vfloor`, `low_at`, `halt`, `prevA`)
+      - ✅ 1-1-c-7-5-1 A jump's first 8 frames follow `vstep` (the air part of `vframes`: two walks of the room's frames)
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
     - 🚨 1-1-c-7-7 Takeoff and landing (`Approach`)
     - 🚨 1-1-c-7-8 The ways off the block (`Off`)
     - 🚨 1-1-c-7-9 A jump over the whole block (`Over`)
     - ✅ 1-1-c-7-10 He does not bump his head: no frame of the room comes to the head's two places (`RoomMap`)
-    - 🚨 1-1-c-7-11 Only the takeoff speed links the vertical motion to the horizontal
+    - 🚨 1-1-c-7-11 Only the takeoff speed links the vertical motion to the horizontal: proved on a jump's first 8 frames (`vert_air`)
     - 🚨 1-1-c-7-12 The block map: bits that are 0 in the map stay 0 on every frame (proved, `RoomMap`); the 1 bits and the numbers of the other fields assumed
     - 🚨 1-1-c-7-13 Standing during the fall (`facing`, `stand_fast`, `stand_P`)
     - 🚨 1-1-c-7-14 No run jumps from the wall and clears the block with no landing (`way`)
@@ -166,8 +171,9 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-d-3-1 `change₂` proved from `chg`
     - 🚨 1-1-d-3-2 A `lag` frame ends paused (`chg.paused₂`); that it keeps `left` is proved
     - 🚨 1-1-d-3-3 No pause after the pipe (`chg.noStart₂`)
-    - 🚨 1-1-d-3-4 No pause sound at the exit (`chg.quiet₂`)
+    - 🚨 1-1-d-3-4 At the exit the pause sound is silent, the unpause sound, or just unpaused (`chg.quiet₂`, `QuietK`)
       - ✅ 1-1-d-3-4-1 One CPU step writes only where its instruction stores (`StepWrites`; a walk carries the sound's bytes in a table)
+      - ✅ 1-1-d-3-4-2 Rows that carry the sound's bytes in tables (`SideChangeSound`; `Quiet` weakened to `QuietK`)
     - 🚨 1-1-d-3-5 The game timer is not 000 at the exit (`chg.time₂`; the sound's pause flag is proved); `left` not 0 before control is proved; `b₂` is the first control by definition
   - 🚨 1-1-d-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-d-4-1 The same for every input (`GMerge`)
@@ -192,9 +198,12 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
           - ✅ 1-1-e-2-8-2-2-1 It comes to the routine (`arrive` gone; from `unpaused` and the walk)
           - ✅ 1-1-e-2-8-2-2-2 Frames not counted keep the 25 bytes (`lag` gone; from `lagPaused` and the walks)
           - 🚨 1-1-e-2-8-2-2-3 The values at the end of the frame before (`state`; area type, swimming, change of size from the walk of the whole frame)
-          - 🚨 1-1-e-2-8-2-2-4 After the scroll handler (`after`, `longer`, `far`)
-          - 🚨 1-1-e-2-8-2-2-5 A counted frame ends not paused, a frame not counted ends paused (`unpaused`, `lagPaused`; `lagNo` a theorem)
-          - 🚨 1-1-e-2-8-2-2-6 Stores through an index do not write 4 bytes (`spare`)
+          - 🚨 1-1-e-2-8-2-2-4 After the scroll handler (`after`; `longer`, `far` are theorems)
+            - ✅ 1-1-e-2-8-2-2-4-1 The frame does not end during the movement (`longer` gone; from the walks and the time of `CleanK`)
+            - ✅ 1-1-e-2-8-2-2-4-2 The position is far from the ends of its range (`far` gone; from the frames before and the position at control)
+            - 🚨 1-1-e-2-8-2-2-4-3 After the scroll handler (`after`)
+          - ✅ 1-1-e-2-8-2-2-5 A counted frame ends not paused, a frame not counted ends paused (`unpaused`, `lagPaused` gone: the definition of the counted frames)
+          - ✅ 1-1-e-2-8-2-2-6 Stores through an index do not write 4 bytes (`spare` gone: a part of `keep.cleanF`, 1-1-f-6-21)
       - ✅ 1-1-e-2-8-3 Frames whose pressed side is masked (`move_masked`, `one_of_movesM`)
     - 🚨 1-1-e-2-9 Frames 1 to 8 are `vstep` and the machine at control
       - ✅ 1-1-e-2-9-1 The movement routine is `vstep` (`vert_model`, `vert_of`)
@@ -233,7 +242,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-f-6-20-1 Each frame starts in control (`start` removed; from the walk and `ctl`)
       - 🚨 1-1-f-6-20-2 The frames before the touch write no routine, mode or task byte by its address (`noStore`, the `lag` frames too; ending in control is the theorem `Frames.ctlAll`)
       - ✅ 1-1-f-6-20-3 The link of the frames, and the `lag` frames (`ends`, `lag`, `lagStart` removed; from the list of all frames and the walk)
-    - 🚨 1-1-f-6-21 Each instruction of those frames (`keep.clean`, `CleanK`, the `lag` frames too)
+    - 🚨 1-1-f-6-21 Each instruction of those frames (`keep.cleanF`, `CleanK` with 4 more bytes, the `lag` frames too)
 - 🚨 1-1-g From the castle to 1-2 (1218 → 1748)
   - ✅ 1-1-g-1 The timer and the grid
   - 🚨 1-1-g-2 Assumptions of part g
@@ -241,7 +250,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-g-2-2 The condition at the entry (`Good`, task 2, flag height)
     - 🚨 1-1-g-2-3 The same for every input (`GMerge`)
     - ✅ 1-1-g-2-4 The level changes on a frame with task 5 (`task_L`)
-    - 🚨 1-1-g-2-5 No pause after the castle entry (`flag.noStart`)
+    - ✅ 1-1-g-2-5 The pause after the castle entry (`flag.noStart` is gone: a frame that ends paused keeps the counters)
 - 🚨 0-0-0 Common
   - ✅ 0-0-0-1 The top speed bound
   - ✅ 0-0-0-2 Reach

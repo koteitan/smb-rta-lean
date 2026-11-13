@@ -340,6 +340,25 @@ def afterCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
   let CA := afterOf sy m0 v q
   ctrlCheck1 (cfgPA sy m0 v q CA) && CA.t.all (FrameKeep.walkK CA FrameKeep.fuelK)
 
+/-! ### A and B of the frame before: a search, no part of the proof
+
+The game engine copies `A_B_Buttons` into `PreviousA_B_Buttons` at its end (`SaveAB`), and the player's routine writes `A_B_Buttons` from `SavedJoypadBits` only. A walk after
+the cut with bit 7 of `SavedJoypadBits` known to be `b`, the three bytes protected, and bit 7 of A and B of this frame and of the frame before watched at the frame's end
+would show `CtlState.prevA`. The program `ctrl-prev-check` runs its search. -/
+
+/-- A and B of this frame and of the frame before, and the pad's bits -/
+def abI (sy : Syms) : List Nat := [(sy.A_B_Buttons &&& 0x7FF).toNat, (sy.PreviousA_B_Buttons &&& 0x7FF).toNat, (sy.SavedJoypadBits &&& 0x7FF).toNat]
+
+/-- bit 7 = `b` -/
+def bit7 (b : Bool) : UInt8 := if b then 0x80 else 0
+
+/-- what the walk after the cut watches: those of `watchA`, and bit 7 of A and B of this frame and of the frame before -/
+def watchP (sy : Syms) (m0 : Machine) (v : UInt8) (b : Bool) : List FrameKeep.Watch :=
+  watchA sy m0 v ++ [((sy.A_B_Buttons &&& 0x7FF).toNat, 0x80, bit7 b), ((sy.PreviousA_B_Buttons &&& 0x7FF).toNat, 0x80, bit7 b)]
+
+/-- what is set at the cut: those of `valA`, and bit 7 of `SavedJoypadBits` -/
+def valP (sy : Syms) (v : UInt8) (b : Bool) : List FrameKeep.Watch := valA sy v ++ [((sy.SavedJoypadBits &&& 0x7FF).toNat, 0x80, bit7 b)]
+
 /-! ## The walk covers the frame up to the cut -/
 
 section

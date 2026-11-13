@@ -3,8 +3,8 @@
 # 操作から土管までの各フレームはアイドルループで始まる
 
 **主張.** タイトルで Start を押したことから、操作できるときの機械は、アイドルループで、操作できる状態でフレームを始めます。そこから縦の土管に入るまでの各フレームも、
-数えるフレームでも数えないフレームでも、同じように始まります。ただし、数えるフレームが操作できる状態で終わり、数えないフレームがポーズで終わり、各命令が `Clean` を
-満たす（数えないフレームでは、添字やポインタを通ってポーズのバイトを書かない）ときです。数えないフレームはモードのルーチンを呼ばないので
+数えるフレームでも数えないフレームでも、同じように始まります。ただし、数えるフレームが操作できる状態で終わり、各命令が `Clean` を満たす（数えないフレームでは、
+添字やポインタを通ってポーズのバイトを書かない）ときです。数えないフレームは、数えるフレームの定義からポーズで終わります（[LagPause](a-5-5-3-3-LagPause-ja.md)）。数えないフレームはモードのルーチンを呼ばないので
 （[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）、操作できる状態で終わることは [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) の確認から出ます。なので次のものは、もう仮定しません。
 
 * `Pipe.start`（項目 1-1-a-5-2-1）: 入るフレームはアイドルループで、操作できる状態で始まる。
@@ -14,7 +14,7 @@
 いまは `LagFrames` の確認が証明します。残りは、操作から入るまでのどのフレームにも、その全部の命令について求めます（`lags.clean`）。
 
 記号. `seq(n)` は全部のフレームを数えたときのフレーム `n` の始まりの機械、`sin(n)` はその入力で、`seq(n + 1) = frame(seq n, sin n)` です。数えるフレーム `t` はフレーム `ix(t)` で、
-`fm(t) = seq(ix t)` です。`tr_n(k)` はフレーム `n` の `k` 命令あとの機械です。`c` はモードのルーチンの呼び出しです。`V = (v, f, P)` は速さ、端数、位置で、`vfp` はその 5 バイトです。
+`fm(t) = seq(ix t)` です。`ix(t + 1)` は `ix(t)` のあとでポーズでなく終わる最初のフレーム、`ix(0) = 0` です。`tr_n(k)` はフレーム `n` の `k` 命令あとの機械です。`c` はモードのルーチンの呼び出しです。`V = (v, f, P)` は速さ、端数、位置で、`vfp` はその 5 バイトです。
 
 ```
 ctl(m)            :=  OperMode(m) = ゲーム  ∧  OperMode_Task(m) = ゲームコア  ∧  GameEngineSubroutine(m) = PlayerCtrl
@@ -39,20 +39,21 @@ Begin.hs₁      :  同じ前提   →   startHS(seq 1) = startHS(m₀)       �
 
 Lags           :  ix t < ix(t + 1),  fm t = seq(ix t),  そして
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                      （数えるフレーム）
-                    clean :  ∀ n ∈ [ix 1, ix E),  ∀ k,  Clean(tr_n(k))
-                    paused, keeps :  数えないフレームはポーズで終わり、添字やポインタを通ってポーズのバイトを書かない   （LagPause）
-Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ E,  n ∈ [ix 1, ix E),  FrameStart(seq n)   →   ctl(seq(n + 1))
-Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)
+                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr_n(k))
+                    keeps :  数えないフレームは添字やポインタを通ってポーズのバイトを書かない   （LagPause。ポーズで終わることは定義から）
+Lags.known_end :  lagCheck,  pauseCheck,  Lags,  n ∈ [1, ix E),  FrameStart(seq n)   →   ctl(seq(n + 1))
+Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(seq 1)   →   ∀ n ∈ [1, ix E],  FrameStart(seq n)
 Lags.lagStart  :  同じもの   →   数えないフレームで FrameStart(seq n)          （前のフィールド lags.start）
-Pipe.startE    :  lagCheck,  walkCheck,  pauseCheck,  FrameStart(fm 1)   →   FrameStart(fm E)    （前のフィールド Pipe.start）
-Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(pipe.fm 1)        （Run のフィールド title と定理 pipeAt を使う）
-Run.pipePos    :  title_check,  title_pos_check   →   P(pipe.fm 1) = P(m₀)
-Run.pipeHS     :  title_check,  title_pos_check   →   startHS(pipe.fm 1) = startHS(m₀)
+Pipe.startE    :  lagCheck,  walkCheck,  pauseCheck,  1 ≤ E,  FrameStart(seq 1)   →   FrameStart(fm E)    （前のフィールド Pipe.start）
+Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(seq 1)            （Run のフィールド title を使う）
+Run.pipeKeep₁  :  確認,  1 ≤ E   →   fm 1 の LagFrames.lagI の 17 バイトは seq 1 のもの     （数えるフレーム 1 の前のフレームはポーズで終わる）
+Run.pipePos    :  確認,  title_pos_check,  1 ≤ E   →   P(pipe.fm 1) = P(m₀)
+Run.pipeHS     :  確認,  title_pos_check,  1 ≤ E   →   startHS(pipe.fm 1) = startHS(m₀)
 ```
 
 `walkCheck` と `titleCheck` は ROM での確認で、非公開の `walk_check` と `title_ctl_check` が `native_decide` で示します（証明のビルドで 2 つ合わせて約 4 秒）。
-`titlePosCheck` は `titleCheck` と同じようにフレーム 0 を追い、操作できる終わりのそれぞれで、位置と横の状態のバイトが `m₀` の値でわかっていることを確かめます
-（非公開の `title_pos_check`、ネイティブで約 1.6 秒）。
+`titlePosCheck` は `titleCheck` と同じようにフレーム 0 を追い、操作できる終わりのそれぞれで、位置、横の状態のバイト、`stI` の 6 バイトが `m₀` の値で
+わかっていることを確かめます（非公開の `title_pos_check`、ネイティブで約 2.2 秒）。
 `lagCheck` は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) の確認で、非公開の `lag_check` が示します。
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。`#print axioms route_1_1` に `sorryAx` はありません。
 
@@ -67,10 +68,10 @@ Lean: `Theorems/StartRun.lean`、`Theorems/PipeFrames.lean` の `Lags`、`Lags.k
   最後のものには、そのフレームが操作できる状態で始まることが要ります。なので帰納法は、フレーム `n` の終わりのわかっているバイトを、フレーム `n` がそう始まるときだけ求めます
   （`starts_dep`）。ここでは歩きのガードを `PipeWrites` のもの（`guardOf`）にし、見張るビットも移動のルーチンの場所もなしにしました（`walkCheck`）。なので 1 命令の条件は
   `Clean` そのものです。641,723 段、分かれ 65,610、失敗 0、表は 43,259 状態です。ネイティブで探索 1.5 秒、確認 2.2 秒です。
-* **数えないフレーム.** 歩きはポーズのバイトを知りません。なのでポーズのフレームは歩きの道の 1 つです。帰納法は `ix 1` から `ix E` までの `seq` の全部のフレームを、
-  数えるものも数えないものもたどります。
+* **数えないフレーム.** 歩きはポーズのバイトを知りません。なのでポーズのフレームは歩きの道の 1 つです。帰納法はフレーム 1 から `ix E` までの `seq` の全部のフレームを、
+  数えるものも数えないものもたどります。数えるフレーム 1 より前のフレームも数えないフレームです。
 * **操作できるときの機械.** `TitleStart` は、フレーム 0 がその集合の近い状態か止まった状態で始まることを示します。`titleCheck`（`TitleStart.frame0Check`）はその状態からフレーム 0 を
-  Start も含めてどの入力でももう一度追い、操作できる終わりはフレームの始まりであることを確かめます。`Run.pipeStart₁` は定理 `Run.pipeAt` を通してこれを `pipe.fm 1` で読みます。
+  Start も含めてどの入力でももう一度追い、操作できる終わりはフレームの始まりであることを確かめます。`Run.pipeStart₁` はこれを `base` のフレーム 1 で読みます。帰納法がそれを `pipe.fm 1` まで運びます。
 * **`one_le`.** 入るフレームはフレーム 1 以降でなければなりません。これはいまは定理です（`Pipe.one_le`、`Route.Run.pipeOne`）。`fm 0` は走りのフレーム 0 で、フレーム 0 は操作できる状態で終わり（`title`）、入るフレームは土管のルーチンで終わります（`Enters`）。2 つのルーチンは違います（`EntryKeep.KeepOK.ne`）。
 
 ## 本物のフレームで確かめたこと
@@ -94,12 +95,13 @@ Lean: `Theorems/StartRun.lean`、`Theorems/PipeFrames.lean` の `Lags`、`Lags.k
 ## 前提（Lean では証明していない）
 
 * **`lags.ctl`**: 操作から入るまでの数えるフレームは、どれも操作できる状態で終わる。各フレームの 1 つの状態についての条件です。大きくなる、けが、死ぬでは成り立ちません。
-  数えないフレームが操作できる状態で終わることは確認から出ます。ポーズで終わる（`lags.paused`）ので、モードのルーチンを呼ばないからです。
+  数えないフレームが操作できる状態で終わることは確認から出ます。ポーズで終わる（`ix` の定義から）ので、モードのルーチンを呼ばないからです。
 * **`lags.clean`**: そのフレームの各命令は `Clean`。同じフレームについての `chg.upClean₁`（パート b）と同じ種類の条件で、守るバイトは少ないです。地上の `FrameKeep.Frames.clean` とも同じ種類です。
-* **`lags.game` はもう仮定しません**（この回）: かわりに `lags.paused` と `lags.keeps` です（[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。
+* **`lags.game` はもう仮定しません**: かわりに `lags.keeps` と数えるフレームの定義です（[ポーズで終わるフレームはモードのルーチンを呼ばない](a-5-5-3-3-LagPause-ja.md)）。
 * `lags.store` はもう仮定しません。`LagFrames` の確認が証明します。
 * `one_le` はもう仮定ではありません。`Pipe.one_le` が証明します。
-* **この項目でないもの.** `Run.pipeStart₁` は `Run.pipeAt`（`pipe.fm 1 = base.seq 1`、パート 0）を使います。これは定理です。`pipe` のフレームは `base` のフレームで、数えるフレーム 1 はフレーム 1 です。
+* **`Run.pipeAt` はなくなりました.** `pipe` の数えるフレーム 1 は、もう定義からフレーム 1 ではありません。フレーム 1 から先でポーズでなく終わる最初のフレームです。
+  操作のときの値はフレーム 1 で読み、その前のフレームが変えないことで運びます（`Run.pipeKeep₁`）。
 
 `StartRun.starts` と `Begin.start₁` はガードについて一般です。パート b の `Run.upStart₁` は同じ帰納法を `base.seq` で `EntryKeep` の中で行います。2 つは 1 つの補題にまとめられます。
 

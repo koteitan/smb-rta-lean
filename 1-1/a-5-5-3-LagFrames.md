@@ -2,8 +2,8 @@
 
 # Frames not counted, up to the pipe
 
-**Claim.** A frame that starts in the idle loop in control either calls the routine of the mode, or it ends with the speed, the subspeed, the position, the routine, the mode
-and the task it began with. This holds if each of its instructions before that call meets `Clean`. A paused frame skips the call. So, up to the vertical pipe, the end of a
+**Claim.** A frame that starts in the idle loop in control either calls the routine of the mode, or it ends with the speed, the subspeed, the position, the routine, the mode,
+the task and nine more bytes as it began. This holds if each of its instructions before that call meets `Clean`. A paused frame skips the call. So, up to the vertical pipe, the end of a
 counted frame is read from its own machine. The frames not counted between two counted frames keep the three values, from conditions on single frames. What `Reads` of
 [The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md) assumed is now a theorem from these conditions.
 
@@ -14,27 +14,31 @@ gone too: a frame not counted ends paused, and such a frame does not call the ro
 Notation. `fm(t)` and `inp(t)` are the machine and the input of counted frame `t`. `seq(n)` and `sin(n)` are the machine and the input of frame `n`, every frame counted.
 Counted frame `t` is frame `ix(t)`. `tr(m, i, k)` is the machine after `k` instructions of the frame of `m` with the input `i`, and `frame(m, i)` is the machine at its end.
 `c` is the call of the mode's routine: the instruction before `SkipMainOper`. `V(m) = (v(m), f(m), P(m))` are the speed, the subspeed and the position (five bytes).
-`K(m)` are the routine, the mode and the task (three bytes), and `ctl(m)` says that they are those of control.
+`K(m)` are the routine, the mode and the task (three bytes), and `ctl(m)` says that they are those of control. `W(m)` are nine more bytes: the facing and moving directions,
+the running speed, the stored speed, the collision bits, the area's type, the swimming flag, the change of size and the player's state. [The opening on real frames](a-5-4-OpenFrames.md) needs them.
 `FrameStart(m)` is `PipeWrites.FrameStart` of `guardOf`: `m` is in the idle loop with its stack pointer, at the frame's start, with the NMI on, and `ctl(m)`.
 `Clean` is the `Clean` of `PipeWrites.guardOf`: a store with a target not known does not touch the bytes of its `prot`. The five bytes of `V` are not among them.
 
 ```
 keeps_frame    :  lagCheck,  FrameStart(m),
                   (∀ k,  frame(tr k) = frame(m)  ∧  (∀ j ≤ k,  pc(tr j) ≠ c)   →   Clean(tr k))
-                  →   (∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c)   ∨   (V(frame(m, i)) = V(m)  ∧  K(frame(m, i)) = K(m))
+                  →   (∃ k,  frame(tr k) = frame(m)  ∧  pc(tr k) = c)   ∨   (V, K, W)(frame(m, i)) = (V, K, W)(m)
 known_of_keep  :  FrameStart(m),  K(m') = K(m)   →   ctl(m')
 
-Lags           :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,   ix t < ix(t + 1),  and
+Lags           :  seq(n + 1) = frame(seq n, sin n),   seq(ix t) = fm t,   sin(ix t) = inp t,
+                  ix(0) = 0,  ix(t + 1) = the first frame after ix(t) that ends not paused (looking at dP frames),   and
                     ctl   :  ∀ t ∈ [1, E),  ctl(seq(ix t + 1))                     (each counted frame before the entry ends in control)
-                    clean :  ∀ n ∈ [ix 1, ix E),  ∀ k,  Clean(tr(seq n, sin n, k))
-                  and for a frame not counted,  1 ≤ t < E,  ix t < n < ix(t + 1)  (LagPause):
-                    paused :  bit₀(seq(n + 1)) = 1                                   (it ends paused)
+                    resume:  ∀ t < E,  ix(t + 1) < ix t + 1 + dP                     (no pause before the entry lasts dP frames)
+                    clean :  ∀ n ∈ [1, ix E),  ∀ k,  Clean(tr(seq n, sin n, k))
+                  and for a frame not counted,  t < E,  ix t < n < ix(t + 1)  (LagPause):
                     keeps  :  ∀ k,  KeepsPause(tr(seq n, sin n, k))                  (no store through an index or a pointer to the pause byte)
+Lags.paused    :  t < E,  ix t < n < ix(t + 1)   →   bit₀(seq(n + 1)) = 1               (it ends paused: by the definition of ix)
 
 Lags.no_call   :  pauseCheck,  Lags,  FrameStart(seq n)   →   a frame not counted does not call c
-Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ E,  ix 1 ≤ n < ix E,  FrameStart(seq n)   →   ctl(seq(n + 1))
+Lags.known_end :  lagCheck,  pauseCheck,  Lags,  1 ≤ n < ix E,  FrameStart(seq n)   →   ctl(seq(n + 1))
 Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  1 ≤ E,  FrameStart(fm 1)   →   ∀ n ∈ [ix 1, ix E],  FrameStart(seq n)      (StartRun)
-lags_keep      :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
+lags_keepI     :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(fm 1)   →   ∀ t ∈ [1, E),   (V, K, W)(fm(t + 1)) = (V, K, W)(frame(fm t, inp t))
+lags_keep      :  the same   →   ∀ t ∈ [1, E),   V(fm(t + 1)) = V(frame(fm t, inp t))
 ReadsOwn       :  ∀ t ∈ [1, E],  the start of fr(t) is V(fm t);   ∀ t ∈ [1, E),  the end of fr(t) is V(frame(fm t, inp t))
 reads_of_lags  :  lagCheck,  walkCheck,  pauseCheck,  ReadsOwn,  Lags,  FrameStart(fm 1)   →   Reads
 Pipe.reads     :  the old field reads, a theorem (Route)
@@ -42,16 +46,16 @@ Pipe.reads     :  the old field reads, a theorem (Route)
 
 `lagCheck` is a check on the ROM, by `native_decide` in the private `lag_check`; `pauseCheck` is that of `pause_check` ([LagPause](a-5-5-3-3-LagPause.md)). The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
-Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.starts`, `lags_keep`, `reads_of_lags` in `Theorems/PipeFrames.lean`; `Pipe.own`, `Pipe.lags`,
+Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.starts`, `lags_keepI`, `lags_keep`, `reads_of_lags` in `Theorems/PipeFrames.lean`; `Pipe.own`, `Pipe.lags`,
 `Pipe.reads` in `Theorems/Route.lean`; private `Proof/PipeWrites.lean`.
 
 ## How it works
 
 * **The walk.** It is the abstract machine of `TaintRun`, as in [One whole frame](a-5-2-PipeWrites.md). It starts in the idle loop with the routine, the mode and the task known,
   and every other byte of RAM not known. One byte is followed as the counter of `TaintRun` (`Env.rkI`). The walk fails on any write to it. At the frame's end the byte is still
-  followed, so it has the value it began with. There is one walk for each of the 8 bytes of `V` and `K`.
+  followed, so it has the value it began with. There is one walk for each of the 17 bytes of `V`, `K` and `W`.
 * **The cut.** The walk stops at the call `c`. The pause byte is not known, so the walk follows the paused path and the path that is not paused. The path that is not paused
-  reaches `c`. A paused frame skips `c` and ends: the screen, the sound, the pad and the pause run, and none of them writes the 8 bytes.
+  reaches `c`. A paused frame skips `c` and ends: the screen, the sound, the pad and the pause run, and none of them writes the 17 bytes.
 * **Stores with a target not known.** `Clean.store` says such a store does not touch the bytes of `prot`. The five bytes of `V` are not in `prot`. So at such a store the walk
   forgets the followed byte, and then it fails at the frame's end. The walk does not fail: on every path that does not reach `c`, the walk knows the target of each store.
   The stores before `c` go through an index (the screen's buffer, the timers, the random bits). The index comes from the program or from a table of the ROM. To keep it, the
@@ -63,8 +67,8 @@ Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.sta
   call `c` (`Lags.no_call`: it ends paused, `paused`, `keeps`).
   The induction `Lags.starts` asks `ctl` at the end of each frame from control to the entry: `ctl` gives it for a counted frame, and `keeps_frame` (with `K`) for a frame not
   counted (`Lags.known_end`).
-* **Numbers.** For each of the 8 bytes: 108,633 steps, 7,157 forks, 0 failures, a table of 7,846 states; 3 paths reach `c`, 6 end the frame. The search takes about 0.17 s and the
-  check about 0.25 s natively, for each byte.
+* **Numbers.** For each of the 17 bytes: 108,633 steps, 7,157 forks, 0 failures, a table of 7,846 states; 3 paths reach `c`, 6 end the frame. The search takes about 0.17 s and the
+  check about 0.3 s natively, for each byte; the whole check about 6 s.
 
 ## Checked on real frames
 
@@ -89,9 +93,9 @@ before the call, whether the frame calls `c`, whether `V` changes, and whether i
 
 * **`lags.store` is no longer assumed**: the check proves that no store before the call, on a frame that does not call it, touches the five bytes.
 * **`lags.ctl`**, now only for the counted frames before the entry: each ends in control. A frame not counted that does not call `c` ends in control by the check.
-* **`game` is no longer assumed** (this round): a frame not counted does not call the mode's routine. It ends paused (`paused`), and a frame that ends paused does not call it
-  ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). What stays assumed there is `paused` and `keeps`. Which frames are not counted (`gap`)
-  is still not tied to the interval timer.
+* **`game` is no longer assumed**: a frame not counted does not call the mode's routine. It ends paused (`Lags.paused`), and a frame that ends paused does not call it
+  ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). What stays assumed there is `keeps`. Which frames are counted is read from the
+  pause byte (`ixP`), so `paused` is no longer assumed; that these are the frames on which the interval timer moves is the count of `chg.ha₁`, as before.
 * **Not in this item.** That the counted frames are those of `clock` (only the frame numbers join them, as before). That each counted frame is a `Frame` (item 0-0-0-3-1).
 
 **Files.** `Theorems/LagFrames.lean`, `Theorems/PipeFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`, private `Proof/PipeWrites.lean`.
