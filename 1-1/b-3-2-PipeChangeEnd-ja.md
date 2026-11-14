@@ -9,8 +9,10 @@
 **入るときの条件.** `Entry(M)` は、入るフレームの終わりの状態 `M` についての条件です。
 
 * フレームは待ちの繰り返しの中で終わっています。[地上への切り替えのはじめのフレーム](d-2-2-SideChangeBound-ja.md)と同じです。プログラムカウンタとスタックポインタは `E` と同じです。ドットは 9 以下です。vblank と NMI のフラグはドットに合っています。スプライト 0 のフラグは立っています。PPU 制御で NMI はオンです。コントローラはストローブ中ではありません。
-* 115 バイトの `K` は `E` と同じ値です。下に挙げます。
-* 13 バイトは、マスクのビットが `E` と同じです。下に挙げます。
+* 97 バイトの `K` は `E` と同じ値です。下に挙げます。
+* 12 バイトは、マスクのビットが `E` と同じです。下に挙げます。
+
+12 回目: 19 バイトが `K` とマスクから出ました（前は 115 と 13）。土管のフレームの歩きがそれらを使わないからです（`PipeChangeEnd.entryDropped`）。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
 * `timer(M) ≥ 48`。
 
 ほかのバイトは何でもかまいません。マリオの位置、速さ、大きさ、スコア、コイン、ゲームタイマーの数字、フレームカウンタ、乱数、曲、スプライト、画面のバッファ、面のパーサー、スロットにいる敵です。
@@ -20,14 +22,13 @@
 | まとまり | バイト |
 |---|---|
 | ゲーム | `WorldNumber`、`PrimaryHardMode` |
-| モード | `OperMode`（2）、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`JoypadOverride`、`WorldSelectNumber+2` … `+4` |
-| 面 | `AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`WarpZoneControl`、`CurrentPlayer`、`AreaType`、`LoopCommand`、`CloudTypeOverride`、`BackgroundColorCtrl`、`ScrollThirtyTwo+1`、`VerticalScroll` |
-| タイマー | `GameTimerExpiredFlag`、`FetchNewGameTimerFlag`、`StarInvincibleTimer`、`ScreenTimer`、`WorldEndTimer`、`DemoTimer` |
-| 入力 | `Up_Down_Buttons`、`Left_Right_Buttons` |
-| マリオ | `Player_State` |
-| 空のままのスロット | `Enemy_Flag+4` … `+6`、`Enemy_ID+3` … `+6`、`Enemy_State+4`、`+5`、`Fireball_State`（2）、`Block_State`（4）、`Block_RepFlag`（2）、`Misc_State`（9）、`Misc_Y_Position+7`、`Misc_Collision_Flag+10` … `+12`、`FloateyNum_Control`（7）、`FirebarSpinSpeed+14`、`+15`、`MaximumRightSpeed+18`、`+19`、`SprDataOffset_Ctrl+1`、`Cannon_Offset`、`Cannon_PageLoc`（6）、`Cannon_X_Position`（6）、`Cannon_Y_Position`（5）、`FireballCounter`、`DuplicateObj_Offset`、`VineFlagOffset`、`VineHeight`、`FlagpoleFNum_Y_Pos`、`FlagpoleFNum_YMFDummy`、`FlagpoleScore` |
-| 敵のデータ | `EnemyData`、`EnemyDataHigh`、`EnemyObjectPageLoc`、`EnemyObjectPageSel`、`EnemyFrenzyBuffer`、`EnemyFrenzyQueue`、`SecondaryHardMode` |
-| 音 | `NoiseSoundBuffer`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`NoiseSoundQueue`、`Square2SoundQueue`、`Square1SoundQueue+1` |
+| モード | `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`JoypadOverride` |
+| 面 | `AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`WarpZoneControl`、`CurrentPlayer`、`AreaType`、`CloudTypeOverride`、`ScrollThirtyTwo+1`、`VerticalScroll` |
+| タイマー | `GameTimerExpiredFlag`、`StarInvincibleTimer`、`WorldEndTimer` |
+| 入力 | `Left_Right_Buttons` |
+| 空のままのスロット | `Enemy_Flag+4` … `+6`、`Enemy_ID+3` … `+6`、`Enemy_State+4`、`Fireball_State`（2）、`Block_State`（4）、`Block_RepFlag`（2）、`Misc_State`（9）、`Misc_Y_Position+7`、`Misc_Collision_Flag+10` … `+12`、`FloateyNum_Control`（7）、`FirebarSpinSpeed+14`、`+15`、`MaximumRightSpeed+18`、`+19`、`SprDataOffset_Ctrl+1`、`Cannon_PageLoc`（6）、`Cannon_X_Position`（6）、`Cannon_Y_Position`（5）、`FireballCounter`、`VineFlagOffset`、`FlagpoleFNum_YMFDummy`、`FlagpoleScore` |
+| 敵のデータ | `EnemyData`、`EnemyDataHigh`、`EnemyObjectPageSel`、`EnemyFrenzyBuffer`、`EnemyFrenzyQueue`、`SecondaryHardMode` |
+| 音 | `NoiseSoundBuffer`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`NoiseSoundQueue`、`Square1SoundQueue+1` |
 
 **マスクつきのバイト.**
 
@@ -35,7 +36,6 @@
 |---|---|---|
 | `Enemy_ID`（はじめの 3 スロット） | ビット 1、2 | いくつかの敵の種類 |
 | `Enemy_State`（はじめの 4 スロット） | ビット 0 | |
-| `Misc_Y_Position+8` | ビット 0、1、5、6 | |
 | `Square1SoundQueue` | ビット 4 | 1 つの音 |
 | `SprDataOffset_Ctrl` | ビット 0 | |
 | `PlayerStatus` | ビット 0 | 小さいマリオか大きいマリオ。ファイアマリオは `Entry` を満たしません |
@@ -166,7 +166,7 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 
 ## 仮定（Lean では証明していない）
 
-* 本物の走りの入る状態で `Entry`。項目 1-1-b-3-4。もうフィールドではありません。`Run.entry₁` が、タイトルで Start を押したこと、操作できるときから入るまでのフレーム（`upClean₁`。各フレームが操作中に始まることは証明、`Run.upStart₁`）、`Rest`（`entryRest₁`: 128 バイトのうち 56。土管のタイマーは証明）から出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
+* 本物の走りの入る状態で `Entry`。項目 1-1-b-3-4。もうフィールドではありません。`Run.entry₁` が、タイトルで Start を押したこと、操作できるときから入るまでのフレーム（`upClean₁`。各フレームが操作中に始まることは証明、`Run.upStart₁`）、`Rest`（`entryRest₁`: 12 回目から 109 バイトのうち 36。土管のタイマーは証明）から出します。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
 * 土管のフレームのすべてのステップで `Places`（`chg.places₁`）。行は少しの走りのフレームから作りました。敵が読み込まれる走りや、行にない列をパーサーが扱う走りは外れます。項目 1-1-b-3-5:
   * `ColorRotation` の場所は `VRAM_Buffer1_Offset` の 256 の値すべてを許し、上限もないので、走りに何も求めません。状態はそこでこのオフセットで分かれ、確認にはそれが要ります。
   * `ProcELoop`、`FlagpoleRoutine`、`BlockObjMT_Updater`、`ColorRotation` にはドットの上限 50,000 がありました。これらはなくなりました。5 つの上限（`UpdScrollVar` とこの 4 つ）のうちどの 4 つを外しても確認は成り立ち、5 つすべてを外すと成り立ちません。だから上限は 1 つ、パーサーの場所に残します。14 個の入る状態と 3 種類の入力では、土管の 1,974 フレームは、どれもドット 37,603 以下でパーサーの場所に着きます。

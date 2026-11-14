@@ -51,7 +51,7 @@ in the room a paused frame is a `lag` frame, `roomLag`, so `room` finds its fram
 The two changes of area are proved here from the same sequence (`Changes`): `Run.change₁` from a condition on the state at the entry and conditions at places of the pipe's frames (`PipeChangeEnd`),
 the condition at the entry from the press of Start on the title, the frames from control to the entry and a part of the condition that stays assumed (`Run.entry₁`, `EntryKeep`),
 `Run.change₂` from `SideChangeBound` and `SideChangeEnd`. A `lag` frame takes nothing off the number of frames left. In the first change this follows from `paused₁`: a `lag` frame is a paused frame.
-In both changes `left` is not 0 before control: this follows from the time at the exit (`time₁`, `time₂`) and the first control (`ctlFirst₁`, `ctlFirst₂`).
+In both changes `left` is not 0 before control: this follows from the time at the vertical pipe's exit (`time₁`), at the side pipe's entry (`time₂`), and the first control (`ctlFirst₁`, `ctlFirst₂`).
 Above ground the kinds of `clock` are not tied to the machines. When each frame from `b₂` to `E` is a `lag` frame exactly when it ends paused (`Run.LagUp`, not a field), the
 castle entry `E` of `clock` is the counted frame `c` of `pole` (`Run.castle_join`); page `1-1/0-5-2-1-CastleJoin.md`. `LagUp` follows from the phase of `clock` being the
 machine's on each frame above ground (`Run.PhaseUp`) and the machine's rule of the phase on each frame (`Run.lagUp_of`); that rule is proved on the frames up to the touch's
@@ -96,8 +96,10 @@ structure Pipe (sy : Syms) (m0 : Machine) (g : Nat) (N : Nat) (D : Int) (S : Fra
   /-- the first `N` counted frames, on single frames, their instructions and their starts (`OpenFrames.Real`): the instructions of each meet `CleanK` of
   `FrameKeep.guardF`, the instructions of every frame up to the counted frame `N` meet `OpenMap.MapOK` (the read of the block buffer routine in the first buffer), from
   the scroll handler on it changes no horizontal byte and leaves the stored speed `|v|` and the collision bits all 1, the page is not 255 when the counted frame `N + 1`
-  begins; a counted frame that begins on the ground begins at the ground's height with no vertical speed (`ground`); the lengths of the jumps, read from the player's state.
-  The flat ground (the old field `flat`) is a theorem (`OpenFrames.Real.flat`, the walks of `OpenFlat`).
+  begins; from the return of the collision routine on the vertical bytes do not change (`afterV`); a counted frame in the air or with a jump is followed by one whose
+  vertical bytes are the step of the opening's vertical model (`vert`, up to the landing of the jump in the air at the counted frame `N + 1`). The flat ground (the old
+  field `flat`) is a theorem (`OpenFrames.Real.flat`, the walks of `OpenFlat`); so are the lengths of the jumps (the old field `jump`, `OpenFrames.Real.jumpV`, the search
+  of `OpenJump`) and the ground's height of every counted frame on the ground (the old field `ground`, `OpenFrames.Real.ground_all`).
   The player's state 0, 1 or 2 and no jumpspring when each frame begins are a theorem (`OpenFrames.Real.stSpring`). That a frame does not end during the movement is a theorem
   (`FrameModel.trace_inFrame` with `CleanK.time`), and so is the page at the ends of the frames before frame `N` (the search of `OpenLeft`). That each of them is a step of the opening's model (the old field
   `opening`, `OpenFrames.OpenRun`) is a theorem (`OpenFrames.Real.toRun`): the movement by `FrameModel.move_model`, the state at the player's routine by the walk of
@@ -287,9 +289,9 @@ structure ChangesBase (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeCha
   paused₂ : ∀ n, B.a₂ sy nmS m0 ≤ n → n < B.b₂ sy nmS m0 → kind n = .lag → SideChangeEnd.Paused nx₂ (B.seq (n + 1))
   /-- no Start on the frames of the game core after the pipe -/
   noStart₂ : ∀ n, B.a₂ sy nmS m0 ≤ n → n < B.b₂ sy nmS m0 → SideChangeEnd.coreFrame sy sy.EngSidePipe (B.seq n) = true → SideChangeEnd.noStart (B.inp n) = true
-  /-- at the exit, the game timer is not 000: the time is not up on the way -/
-  time₂ : ∀ n, B.a₂ sy nmS m0 ≤ n → n ≤ B.b₂ sy nmS m0 → SideChangeBound.ExitAt (SideChangeBound.exitBytes sy nm₂ (SideChangeEnd.refExit (SideTransition.entry m0) 160)) (B.seq n) →
-    SideChangeEnd.TimerOK nx₂ (B.seq n)
+  /-- at the side pipe's entry, the game timer is not 000. The pipe's frames do not store to its digits, so it is not 000 at the exit either
+  (`SidePause.PipeQ.step`); before, this field asked it at the exit. -/
+  time₂ : SideChangeEnd.TimerOK nx₂ (B.seq (B.a₂ sy nmS m0))
 
 /-- **The two changes of area, as `Run` asks them.** At the room's first control bits 1 to 6 of the pause byte are 0: the rows of the first change know them
 (`ChangesK.pauseBits₂`). With it the room's frames give the condition on the pause at the side pipe's entry (`ChangesK.pause₂`): the pause is silent, or the unpause
@@ -500,7 +502,7 @@ theorem ChangesK.entryRest₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
   exact RoomMusic.entryRest_of hM (RoomMusic.music_run hM hR.facts.rt B.next C.roomOrder (C.roomAt hR he) ((C.run₁ he).inRowsT hR.pipe C.ctlFirst₁) C.ctl₁
     C.roomSites C.roomStay (fun h => hR.facts.ne (by rw [← h]; exact C.rt₂ hR))) C.entry₂
 
-/-- the second change as `SidePause.EndRunQ`: the condition on the pause at the entry, and the timer not 000 at the exit -/
+/-- the second change as `SidePause.EndRunQ`: the condition on the pause at the entry, and the timer not 000 at the entry -/
 def ChangesK.run₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃)
     (he : PipeChangeEnd.EntryV sy d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) : SidePause.EndRunQ sy nm₂ nx₂ (SideTransition.entry m0) 160 where
   seq := B.seq
@@ -518,7 +520,7 @@ def ChangesK.run₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C : Chan
   atCtl := C.ctl₂
   lagPaused := C.paused₂
   noStart := C.noStart₂
-  time := C.time₂
+  timeE := C.time₂
 
 
 /-- **The change out of the side pipe takes at least 282 frames**, from the single frames. `hS` and `hT` are what the checks on the ROM give, `rt` the place of the sound
@@ -723,17 +725,33 @@ theorem Run.pipeHS (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂
   rw [(OpenFrames.keep_parts (v := 0) (R.pipeKeep₁ hc hk hp hB hT hE)).1]
   exact StartRun.Begin.hs₁ hB hP R.title (R.base.next 0)
 
-/-- **The state at control holds what the first frames need** (`OpenFrames.Held`) and he is on the ground: the bytes of the title's check (`StartRun.Begin.bytesAll₁`) are
-those of `m0`, `m0` holds them (`hm`), and the frames up to the counted frame 1 keep them (`Run.pipeKeep₁`). `hc`, `hk`, `hp`, `hB`, `hP`, `hT` are checks on the ROM. -/
+/-- **The state at control holds what the first frames need** (`OpenFrames.Held`) and he is on the ground, at the ground's height: the bytes of the title's check
+(`StartRun.Begin.bytesAll₁`) are those of `m0`, `m0` holds them (`hm`), and the frames up to the counted frame 1 keep them (`Run.pipeKeep₁`). `hc`, `hk`, `hp`, `hB`, `hP`,
+`hT` are checks on the ROM. -/
 theorem Run.pipeHeld (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true)
     (hp : LagPause.pauseCheck sy m0 tc.gps = true) (hB : TitleStart.check sy tc t0 = true) (hP : StartRun.titlePosCheck sy tc m0 = true)
-    (hT : StartRun.titleCheck sy tc (PipeWrites.guardOf sy m0) m0 = true) (hE : 1 ≤ R.pipe.E) {v : UInt8} (hm : OpenFrames.Held sy v m0 ∧ peek m0 sy.Player_State = 0) :
-    OpenFrames.Held sy v (R.pipe.fm 1) ∧ peek (R.pipe.fm 1) sy.Player_State = 0 := by
+    (hT : StartRun.titleCheck sy tc (PipeWrites.guardOf sy m0) m0 = true) (hE : 1 ≤ R.pipe.E) {v : UInt8}
+    (hm : OpenFrames.Held sy v m0 ∧ peek m0 sy.Player_State = 0 ∧ OpenFlat.GroundAt sy m0 m0) :
+    OpenFrames.Held sy v (R.pipe.fm 1) ∧ peek (R.pipe.fm 1) sy.Player_State = 0 ∧ OpenFlat.GroundAt sy m0 (R.pipe.fm 1) := by
   have h₀ := OpenFrames.held_of_bytes (StartRun.Begin.bytesAll₁ hB hP R.title (R.base.next 0)) hm
   have hk₁ := R.pipeKeep₁ hc hk hp hB hT hE
-  refine ⟨(OpenFrames.keep_parts hk₁).2.2 h₀.1, ?_⟩
+  refine ⟨(OpenFrames.keep_parts hk₁).2.2 h₀.1, ?_, OpenFrames.ground_keep hk₁ h₀.2.2⟩
   rw [OpenFrames.peek_keep hk₁ (x := sy.Player_State) (by simp)]
-  exact h₀.2
+  exact h₀.2.1
+
+/-- **The speed of each counted frame up to the entry is at most the top speed**: the frames are read from the machines (`Pipe.reads`), the speed is 0 at control
+(`Run.still`), and a frame changes the speed by at most the top speed's bound (`PipeFrames.speed_of_reads`). `hc`, `hk`, `hp`, `hB`, `hT`, `h16` are checks on the ROM. -/
+theorem Run.pipeSpeed (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true)
+    (hp : LagPause.pauseCheck sy m0 tc.gps = true) (hB : TitleStart.check sy tc t0 = true) (hT : StartRun.titleCheck sy tc (PipeWrites.guardOf sy m0) m0 = true)
+    (h16 : 16 ≤ TopSpeed.top sy) (hE : 1 ≤ R.pipe.E) :
+    ∀ t, 1 ≤ t → t ≤ R.pipe.E → (sbyte (peek (R.pipe.fm t) sy.Player_X_Speed)).natAbs ≤ TopSpeed.top sy := by
+  intro t h1 h2
+  have hR := R.pipe.reads hc hk hp (R.pipeStart₁ hB hT)
+  obtain ⟨n, rfl⟩ : ∃ n, t = n + 1 := ⟨t - 1, by omega⟩
+  have h := PipeFrames.speed_of_reads (top := (TopSpeed.top sy : Int)) (by omega) hR (R.still hc hk hp hB hT hE) n h2
+  rw [hR.v (n + 1) (by omega) h2] at h
+  show (SurfaceFrames.vOf sy (R.pipe.fm (n + 1))).natAbs ≤ TopSpeed.top sy
+  omega
 
 /-- **Each of the first `N` counted frames is a step of the opening's model** (the old field `opening`): from the conditions on single frames (`pipe.opening`,
 `OpenFrames.Real.toRun`). The position at the end of a frame is exact by the bounds of the model: `hopt` (`Opening`: no input gets past `D` in `N` frames) and `hL`
@@ -747,7 +765,7 @@ def Run.pipeOpening {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hE : 1 ≤ R.pipe.E) :
     OpenFrames.OpenRun sy m0 (Opening.jumpLens sy m0) N R.pipe.E R.pipe.fm :=
   R.pipe.opening.toRun hc hk hp C hM (R.pipeStart₁ hB hT) (OpenMap.Begin.map₁ hB hTM R.title (R.base.next 0)).1 (R.pipeHeld hc hk hp hB hP hT hE C.start).1
-    (R.pipeHeld hc hk hp hB hP hT hE C.start).2
+    (R.pipeHeld hc hk hp hB hP hT hE C.start).2.1 (R.pipeHeld hc hk hp hB hP hT hE C.start).2.2 (R.pipeSpeed hc hk hp hB hT C.top16 hE)
     (R.pipeHS hc hk hp hB hP hT hE) (R.pipePos hc hk hp hB hP hT hE) hopt hL.1 hL.2
     (R.pipe.opening.stSpring hc hp hM (R.pipeStart₁ hB hT) (OpenMap.Begin.map₁ hB hTM R.title (R.base.next 0)).1)
 
@@ -1115,6 +1133,45 @@ theorem Run.roomVert {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
   rw [R.base.next] at hstay
   exact RoomVert.air_arc hV hI hcond hsites hAt (fun j hj => late_of (hsites j) hj) hd hp hu ht hvy hstay
 
+/-- **Every frame of `room` in the air before the entering frame follows `vstep` up to the landing**, on the real machines: `RoomFall.jump_room` on the frames of `base`
+in the room, as `Run.roomVert`. The frame starts in the room's condition (`RoomMap.cond_of_rows`), its instructions meet `SiteOK` (`roomSites`), it ends in the player's
+routine (`roomStay`), and at its start the player's state is 0, 1 or 2 (`RoomPair.quad_run`), so 1 or 2. `hV`, `hF` are the checks of `RoomVert` and `RoomFall`. -/
+theorem Run.roomAir {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hF : RoomFall.FChecks sy nmS m0 rN.h) (hI : FrameModel.idleAt (FrameModel.Rom.of m0) (ScreenPage.placesR sy nmS m0).idle = true)
+    (hQ : RoomPair.QuadWalks sy nmS m0) (hP : RoomPair.Checks sy nmS m0 nm₁ d₁)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
+    {n : Nat} (hC : R.room.C ≤ n) (hE : n + 1 < R.room.E) (hst0 : peek (R.room.fm n) sy.Player_State ≠ 0) {k : Nat}
+    (hAt : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k))
+    (hd : peek (R.room.fm n) sy.Player_State = 1 → peek (R.room.fm n) sy.DiffToHaltJump = 1)
+    (hp : peek (R.room.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (R.room.fm n) sy.A_B_Buttons &&& 0x80) :
+    ((RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)).st = 1 ∨
+     (RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)).st = 2) ∧
+    (VertModel.vsOf sy (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) =
+       RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) ∨
+     (Jump.falling (RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)) = true ∧
+      VertModel.vsOf sy (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) =
+        VertAir.land (RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)))) := by
+  obtain ⟨hk0, hk1⟩ := R.roomIdx hC (show n < R.room.E by omega)
+  obtain ⟨_, hk2⟩ := R.roomIdx (n := n + 1) (by omega) hE
+  have hm := R.roomMany
+  have hlt := R.room.ix_lt (k := n + 1 - R.room.C) (by omega)
+  have h1 := (R.room.ix_at (k := n + 1 - R.room.C) (by omega) (by omega)).1
+  rw [show n + 1 + 1 - R.room.C = n + 1 - R.room.C + 1 by omega] at hk2
+  have hk : R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1 < R.base.a₂ sy nmS m0 := by omega
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have hcond := RoomMap.cond_of_rows hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1
+  have hsites := R.chg.roomSites _ hk0 hk1
+  have hstay := R.chg.roomStay (R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1) (by omega) hk
+  rw [R.base.next] at hstay
+  have hq := RoomPair.quad_run hQ hP hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1
+  have hst : peek (R.room.fm n) sy.Player_State = 1 ∨ peek (R.room.fm n) sy.Player_State = 2 := by
+    rcases hq.st with e | e | e
+    · exact absurd e hst0
+    · exact Or.inl e
+    · exact Or.inr e
+  exact RoomFall.jump_room hV hF hI hcond hsites hAt (fun j hj => late_of (hsites j) hj) hst hd hp hstay
+
 /-- **At the end of each frame of `room` before the entry, in a jump the jump's halt value is 1, and bit 7 of A of the frame before is bit 7 of A**, on the real machines:
 `RoomPair.pair_run` on the frames of `base` in the room. The room's frame `n + 1` begins at frame `b₁ + ix (n + 1 − C) − 1` of `base`, before `a₂`
 (`Run.roomIdx`); the rows of the change give both at the
@@ -1184,6 +1241,7 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     R.room.InRoom :=
   ⟨R.roomMany, R.roomKeep hT₁ hM hS hV.vert hB hK, R.roomMouthE hT₁ hM hS hF hEnd hRest hR hB hK, R.roomBump hT₁ hM hS hB hK,
     fun _ hC hE _ hAt hd hp hu ht hvy => R.roomVert hT₁ hM hS hV.vert hV.idle hB hK hC hE hAt hd hp hu ht hvy,
+    fun _ hC hE hst _ hAt hd hp => R.roomAir hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hB hK hC hE hst hAt hd hp,
     R.roomPair hT₁ hM hS hV.pair hB hK, R.room_le, ⟨_, hV.idle, R.roomTime⟩, R.roomArrive hT₁ hM hS hV.vert hB hK,
     R.roomReach hT₁ hM hS hV.vert hB hK, R.roomCut hT₁ hM hS hF hV.vert hV.quad hV.pair hB hK, R.roomBefore hT₁ hM hS hV.vert hB hK⟩
 

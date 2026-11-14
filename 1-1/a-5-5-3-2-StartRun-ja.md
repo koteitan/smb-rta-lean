@@ -47,13 +47,13 @@ Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(seq 1)  
 Lags.lagStart  :  同じもの   →   数えないフレームで FrameStart(seq n)          （前のフィールド lags.start）
 Pipe.startE    :  lagCheck,  walkCheck,  pauseCheck,  1 ≤ E,  FrameStart(seq 1)   →   FrameStart(fm E)    （前のフィールド Pipe.start）
 Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(seq 1)            （Run のフィールド title を使う）
-Run.pipeKeep₁  :  確認,  1 ≤ E   →   fm 1 の LagFrames.lagI の 17 バイトは seq 1 のもの     （数えるフレーム 1 の前のフレームはポーズで終わる）
+Run.pipeKeep₁  :  確認,  1 ≤ E   →   fm 1 の LagFrames.lagI の 21 バイトは seq 1 のもの     （数えるフレーム 1 の前のフレームはポーズで終わる）
 Run.pipePos    :  確認,  title_pos_check,  1 ≤ E   →   P(pipe.fm 1) = P(m₀)
 Run.pipeHS     :  確認,  title_pos_check,  1 ≤ E   →   startHS(pipe.fm 1) = startHS(m₀)
 ```
 
 `walkCheck` と `titleCheck` は ROM での確認で、非公開の `walk_check` と `title_ctl_check` が `native_decide` で示します（証明のビルドで 2 つ合わせて約 4 秒）。
-`titlePosCheck` は `titleCheck` と同じようにフレーム 0 を追い、操作できる終わりのそれぞれで、位置、横の状態のバイト、`stI` の 6 バイトが `m₀` の値で
+`titlePosCheck` は `titleCheck` と同じようにフレーム 0 を追い、操作できる終わりのそれぞれで、位置、横の状態のバイト、`stI` の 10 バイトが `m₀` の値で
 わかっていることを確かめます（非公開の `title_pos_check`、ネイティブで約 2.2 秒）。
 `lagCheck` は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) の確認で、非公開の `lag_check` が示します。
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。`#print axioms route_1_1` に `sorryAx` はありません。

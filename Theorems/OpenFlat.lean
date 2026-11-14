@@ -170,6 +170,52 @@ partial def searchQ (R : Rd1) (keepAt : UInt16 → Bool) (temps extra : List Nat
       X := runQ R keepAt temps extra S G E Q key ops fin X A
   return X
 
+/-- the search of a walk of `FrameKeep` (the steps `kstep`) that keeps the bytes `extra` too (`normF`), and keeps the states at the frame's end: no part of the proof -/
+partial def runKF (extra : List Nat) (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (ops : Array (TaintRun.AM Unit)) (fin : AS → Bool)
+    (X0 : SG × Array AS) (A0 : AS) : SG × Array AS := Id.run do
+  let mut X := X0.1
+  let mut ends := X0.2
+  let mut cur := A0
+  let mut run := 0
+  while true do
+    let rs := (FrameKeep.preK S G cur).flatMap (FrameKeep.kstep S G E ops)
+    X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
+    let bad := rs.any fun r => match r with
+      | none => true
+      | some B => B.k != cur.k && !(FrameKeep.watchOK W B && fin B)
+    if bad then
+      X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur, failPcs := X.failPcs.insert cur.pc.toNat (X.failPcs.getD cur.pc.toNat 0 + 1) }
+    for r in rs do
+      match r with
+      | some B => if B.k != cur.k then ends := ends.push B
+      | none => pure ()
+    let good := (rs.filterMap id).filter fun b => b.k == cur.k
+    match good with
+    | [b] =>
+      if (X.leaders[b.pc.toNat]?).isNone && run < 64 && b.pc != G.je && b.pc != S.entry &&
+          (b.pc.toNat == cur.pc.toNat + 1 || b.pc.toNat == cur.pc.toNat + 2 || b.pc.toNat == cur.pc.toNat + 3) then
+        cur := b
+        run := run + 1
+        continue
+      else pure ()
+    | _ => pure ()
+    for b in good do
+      X := { X with leaders := X.leaders.insert b.pc.toNat () }
+      X := routeF (fun _ => false) [] extra S G key X b
+    break
+  return (X, ends)
+
+partial def searchKF (extra : List Nat) (S : Spot) (G : Guard) (E : Env) (W : List Watch) (key : AS → Nat) (ops : Array (TaintRun.AM Unit)) (fin : AS → Bool)
+    (X0 : SG) : SG × Array AS := Id.run do
+  let mut X := (X0, #[])
+  while true do
+    match X.1.pending.minEntry? with
+    | none => break
+    | some (k, A) =>
+      X := ({ X.1 with pending := X.1.pending.erase k }, X.2)
+      X := runKF extra S G E W key ops fin X A
+  return X
+
 /-! ## The steps follow the machine -/
 
 section
@@ -390,10 +436,10 @@ theorem to_stop {Fu' : Nat} (ht : C.t.all (walkQ R C Q after Fu) = true) (hkl : 
     (hT : 2 ≤ F.2.toNat) {m : Machine} {i : UInt8} {k : Nat} {A : AS}
     (hw : walkQ R C Q after Fu' A = true) (hs : Sim C.E F A (trace m i k)) (hf : (trace m i k).frame = m.frame) (hd : m.fdot + 3 * k ≤ (trace m i k).fdot)
     (hcl : ∀ j, CleanK C.G C.S.store (trace m i j)) (hr : ∀ j, (trace m i j).frame = m.frame → RdOK1 R (trace m i j)) :
-    (∃ k', (trace m i k').pc = Q ∧ (trace m i k').frame = m.frame ∧ m.fdot + 3 * k' ≤ (trace m i k').fdot ∧ ∃ B, after B = true ∧ Sim C.E F B (trace m i k')) ∨
+    (∃ k', k ≤ k' ∧ (trace m i k').pc = Q ∧ (trace m i k').frame = m.frame ∧ m.fdot + 3 * k' ≤ (trace m i k').fdot ∧ ∃ B, after B = true ∧ Sim C.E F B (trace m i k')) ∨
     ∃ B, FrameKeep.watchOK C.W B = true ∧ FrameKeep.endOK C.G B = true ∧ C.fin B = true ∧ Sim C.E F B (frame m i) := by
   have key : ∀ d, (∃ A, LiveQ R C Q after F A (trace m i (k + d)) ∧ (trace m i (k + d)).frame = m.frame ∧ m.fdot + 3 * (k + d) ≤ (trace m i (k + d)).fdot) ∨
-      (∃ k', (trace m i k').pc = Q ∧ (trace m i k').frame = m.frame ∧ m.fdot + 3 * k' ≤ (trace m i k').fdot ∧ ∃ B, after B = true ∧ Sim C.E F B (trace m i k')) ∨
+      (∃ k', k ≤ k' ∧ (trace m i k').pc = Q ∧ (trace m i k').frame = m.frame ∧ m.fdot + 3 * k' ≤ (trace m i k').fdot ∧ ∃ B, after B = true ∧ Sim C.E F B (trace m i k')) ∨
       ((trace m i (k + d)).frame = m.frame + 1 ∧ ∃ B, FrameKeep.watchOK C.W B = true ∧ FrameKeep.endOK C.G B = true ∧ C.fin B = true ∧
         Sim C.E F B (trace m i (k + d))) := by
     intro d
@@ -410,7 +456,7 @@ theorem to_stop {Fu' : Nat} (ht : C.t.all (walkQ R C Q after Fu) = true) (hkl : 
         · rw [← e] at a1 a3 a4
           exact Or.inl ⟨A', a1, by rw [a3, h2], by omega⟩
         · rw [← e] at a1 a2 a3 b3
-          exact Or.inr (Or.inl ⟨k + (d + 1), a2, by rw [a1, h2], by omega, B, b1, b3⟩)
+          exact Or.inr (Or.inl ⟨k + (d + 1), by omega, a2, by rw [a1, h2], by omega, B, b1, b3⟩)
         · rw [← e] at a1 a3
           exact Or.inr (Or.inr ⟨by rw [a1, h2], B, a2, a2', a2'', a3⟩)
       · exact Or.inr (Or.inl h)
@@ -537,6 +583,15 @@ def finF (sy : Syms) (B : AS) : Bool :=
     FrameKeep.excl (B.getK (sy.OperMode_Task &&& 0x7FF).toNat) sy.Task_GameCore.toUInt8 ||
     FrameKeep.excl (B.getK (sy.OperMode &&& 0x7FF).toNat) sy.GameModeValue.toUInt8
 
+/-- the frame's end out of control: the routine, the task or the mode is known not to be that of control -/
+def finX (sy : Syms) (B : AS) : Bool :=
+  FrameKeep.excl (B.getK (sy.GameEngineSubroutine &&& 0x7FF).toNat) sy.Eng_PlayerCtrl.toUInt8 ||
+    FrameKeep.excl (B.getK (sy.OperMode_Task &&& 0x7FF).toNat) sy.Task_GameCore.toUInt8 ||
+    FrameKeep.excl (B.getK (sy.OperMode &&& 0x7FF).toNat) sy.GameModeValue.toUInt8
+
+/-- at the return of the collision routine: on the ground at the height of `m0` (the state 0, the height, its high byte 1, the vertical speed and its fraction 0) -/
+def groundOK (sy : Syms) (m0 : Machine) (B : AS) : Bool := FrameKeep.watchOK (groundW sy (peek m0 sy.Player_Y_Position)) B
+
 /-! ## The check on the ROM -/
 
 /-- the states at the cut, for each case of the input -/
@@ -552,7 +607,7 @@ def searchB (sy : Syms) (m0 : Machine) (v : UInt8) : SG × Array AS :=
   let G := guardQ sy m0
   let key := keyF sy S G (bboxOf sy m0) (gbOf sy m0)
   let E := PipeEntryRule.envOf m0
-  searchQ (rdOf sy m0) (OpenMap.inColl sy) OpenMap.tempsC (List.range 2048) S G E (collRet sy m0) key (TaintRun.aRows E).toArray (finF sy)
+  searchQ (rdOf sy m0) (OpenMap.inColl sy) OpenMap.tempsC (List.range 2048) S G E (collRet sy m0) key (TaintRun.aRows E).toArray (finX sy)
     ((startsF sy m0 v (peek m0 sy.Player_Y_Position) cuts).foldl (routeF (OpenMap.inColl sy) OpenMap.tempsC (List.range 2048) S G key) {})
 
 /-- the walk up to the return, with the table of the search `X` -/
@@ -563,7 +618,7 @@ def cfgBOf (sy : Syms) (m0 : Machine) (v : UInt8) (X : SG × Array AS) : CfgK :=
   let E := PipeEntryRule.envOf m0
   let qB := FrameKeep.tableOfKW key X.1
   { E := E, ops := (TaintRun.aRows E).toArray, S := S, G := G, W := watchF sy m0 v, t := qB.1, kl := qB.1.map knownOf, idx := qB.2.1, cut := qB.2.2, key := key,
-    fin := finF sy }
+    fin := finX sy }
 
 /-- the walk of `FrameKeep` after the return, with a table from a search from the states that `X` reaches there -/
 def cfgCOf (sy : Syms) (m0 : Machine) (v : UInt8) (X : SG × Array AS) : CfgK :=
@@ -579,7 +634,7 @@ def cfgCOf (sy : Syms) (m0 : Machine) (v : UInt8) (X : SG × Array AS) : CfgK :=
 (`CC`) succeeds -/
 @[irreducible] def hookF (sy : Syms) (m0 : Machine) (v : UInt8) (CB CC : CfgK) (B : AS) : Bool :=
   [true, false].all fun a =>
-    walkQ (rdOf sy m0) CB (collRet sy m0) (fun B' => FrameKeep.walkK CC FrameKeep.fuelK B') FrameKeep.fuelK
+    walkQ (rdOf sy m0) CB (collRet sy m0) (fun B' => groundOK sy m0 B' && FrameKeep.walkK CC FrameKeep.fuelK B') FrameKeep.fuelK
       (CtrlKeep.toA (watchF sy m0 v) (valF sy v (peek m0 sy.Player_Y_Position) a) B)
 
 /-- the walk of the pause bit of `CtrlKeep` up to the player's routine, with `hookF` there -/
@@ -587,7 +642,8 @@ def cfgPF (sy : Syms) (m0 : Machine) (v : UInt8) (CB CC : CfgK) : CtrlKeep.CfgR 
 
 /-- the check with the walks `CB` and `CC` -/
 def flatCheckWith (sy : Syms) (m0 : Machine) (v : UInt8) (CB CC : CfgK) : Bool :=
-  CtrlKeep.ctrlCheck1 (cfgPF sy m0 v CB CC) && CB.t.all (walkQ (rdOf sy m0) CB (collRet sy m0) (fun B => FrameKeep.walkK CC FrameKeep.fuelK B) FrameKeep.fuelK) &&
+  CtrlKeep.ctrlCheck1 (cfgPF sy m0 v CB CC) &&
+    CB.t.all (walkQ (rdOf sy m0) CB (collRet sy m0) (fun B => groundOK sy m0 B && FrameKeep.walkK CC FrameKeep.fuelK B) FrameKeep.fuelK) &&
     CC.t.all (FrameKeep.walkK CC FrameKeep.fuelK) &&
     CtrlKeep.ctrlCheck1 (CtrlKeep.cfgOf sy m0 (CtrlKeep.cutTable sy m0 false) (I sy.Player_Y_HighPos) false)
 
@@ -604,9 +660,49 @@ def flatCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
 def GroundAt (sy : Syms) (m0 m : Machine) : Prop :=
   peek m sy.Player_Y_Position = peek m0 sy.Player_Y_Position ∧ peek m sy.Player_Y_HighPos = 1 ∧ peek m sy.Player_Y_Speed = 0 ∧ peek m sy.Player_Y_MoveForce = 0
 
+instance (sy : Syms) (m0 m : Machine) : Decidable (GroundAt sy m0 m) := by unfold GroundAt; infer_instance
+
+/-- the four vertical bytes of `GroundAt`: the height, its high byte, the vertical speed and its fraction -/
+def vertA (sy : Syms) : List UInt16 := [sy.Player_Y_Position, sy.Player_Y_HighPos, sy.Player_Y_Speed, sy.Player_Y_MoveForce]
+
+/-- **From the return of the collision routine to the frame's end the vertical bytes do not change**, on the frame from `m` with the input `i`: at every arrival at the
+return after the first arrival at the player's routine, the four bytes of `vertA` are those of the frame's end -/
+def AfterV (sy : Syms) (m0 m : Machine) (i : UInt8) : Prop :=
+  ∀ k, CtrlKeep.arrAt sy m i ≤ k → (trace m i k).pc = collRet sy m0 → ∀ x ∈ vertA sy, peek (frame m i) x = peek (trace m i k) x
+
+/-- `GroundAt` is read from the four bytes of `vertA` -/
+theorem groundAt_congr {sy : Syms} {m0 m m' : Machine} (h : ∀ x ∈ vertA sy, peek m' x = peek m x) (hg : GroundAt sy m0 m) : GroundAt sy m0 m' := by
+  obtain ⟨g1, g2, g3, g4⟩ := hg
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [h _ (by simp [vertA])]; exact g1
+  · rw [h _ (by simp [vertA])]; exact g2
+  · rw [h _ (by simp [vertA])]; exact g3
+  · rw [h _ (by simp [vertA])]; exact g4
+
+/-- the watched bytes of `groundW` give `GroundAt` and the state 0 -/
+theorem groundAt_of {sy : Syms} {m0 m : Machine} (h : FrameKeep.Watched (groundW sy (peek m0 sy.Player_Y_Position)) m) :
+    GroundAt sy m0 m ∧ peek m sy.Player_State = 0 := by
+  have e : ∀ (a : UInt16) (c : UInt8), ((I a, (0xFF : UInt8), c) : Watch) ∈ groundW sy (peek m0 sy.Player_Y_Position) → peek m a = c := by
+    intro a c hm
+    have := h _ hm
+    rw [FrameKeep.and_ff, FrameKeep.and_ff] at this
+    exact this
+  exact ⟨⟨e _ _ (by simp [groundW]), e _ _ (by simp [groundW]), e _ _ (by simp [groundW]), e _ _ (by simp [groundW])⟩, e _ _ (by simp [groundW])⟩
+
+theorem finF_of_finX {sy : Syms} {B : AS} (h : finX sy B = true) : finF sy B = true := by
+  unfold finF
+  unfold finX at h
+  dsimp only
+  revert h
+  generalize FrameKeep.excl (B.getK (sy.GameEngineSubroutine &&& 0x7FF).toNat) sy.Eng_PlayerCtrl.toUInt8 = a
+  generalize FrameKeep.excl (B.getK (sy.OperMode_Task &&& 0x7FF).toNat) sy.Task_GameCore.toUInt8 = b
+  generalize FrameKeep.excl (B.getK (sy.OperMode &&& 0x7FF).toNat) sy.GameModeValue.toUInt8 = c
+  intro h
+  cases a <;> cases b <;> cases c <;> simp_all
+
 theorem flatCheck_parts {sy : Syms} {m0 : Machine} {v : UInt8} {CB CC : CfgK} (h : flatCheckWith sy m0 v CB CC = true) :
     CtrlKeep.ctrlCheck1 (cfgPF sy m0 v CB CC) = true ∧
-    CB.t.all (walkQ (rdOf sy m0) CB (collRet sy m0) (fun B => FrameKeep.walkK CC FrameKeep.fuelK B) FrameKeep.fuelK) = true ∧
+    CB.t.all (walkQ (rdOf sy m0) CB (collRet sy m0) (fun B => groundOK sy m0 B && FrameKeep.walkK CC FrameKeep.fuelK B) FrameKeep.fuelK) = true ∧
     CC.t.all (FrameKeep.walkK CC FrameKeep.fuelK) = true ∧
     CtrlKeep.ctrlCheck1 (CtrlKeep.cfgOf sy m0 (CtrlKeep.cutTable sy m0 false) (I sy.Player_Y_HighPos) false) = true := by
   unfold flatCheckWith at h
@@ -646,8 +742,8 @@ theorem flat_endW {sy : Syms} {m0 : Machine} {v : UInt8} {X : SG × Array AS} (h
     (h0 : FrameKeep.StartK sy m0 m) (hcl : ∀ n, CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hcq : ∀ n, CleanK (guardQ sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hr : ∀ n, (trace m i n).frame = m.frame → RdOK1 (rdOf sy m0) (trace m i n))
     (hu : CtrlKeep.Unpaused sy m0 (frame m i)) (hv : CtrlKeep.AreaOK sy v m) (hg : peek m sy.Player_State = 0) (hG : GroundAt sy m0 m)
-    (hj : peek m sy.JumpspringAnimCtrl = 0) (hjump : (FrameModel.readIn sy (trace m i (CtrlKeep.arrAt sy m i))).jump = false) :
-    ∃ B, finF sy B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) := by
+    (hj : peek m sy.JumpspringAnimCtrl = 0) (hjump : (FrameModel.readIn sy (trace m i (CtrlKeep.arrAt sy m i))).jump = false) (hA : AfterV sy m0 m i) :
+    ∃ B, finF sy B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) ∧ (finX sy B = true ∨ GroundAt sy m0 (frame m i)) := by
   obtain ⟨hT1, hTB, hTC, hHP⟩ := flatCheck_parts hF
   obtain ⟨ha1, ha2, ha3⟩ := CtrlKeep.arrive_at hc h0 hcl hu
   generalize hk0 : CtrlKeep.arrAt sy m i = k₀ at ha1 ha2 ha3 hjump
@@ -692,17 +788,19 @@ theorem flat_endW {sy : Syms} {m0 : Machine} {v : UInt8} {X : SG × Array AS} (h
       · exact wff _ _ ((hkp _ (by simp [CtrlKeep.keepA])).trans hG.2.2.2)
       · exact wff _ _ ((hkp _ (by simp [CtrlKeep.keepA])).trans hj)
     -- the walk up to the return, then the walk after it
-    have run : ∀ a, walkQ (rdOf sy m0) (cfgBOf sy m0 v X) (collRet sy m0) (fun B' => FrameKeep.walkK (cfgCOf sy m0 v X) FrameKeep.fuelK B')
+    have run : ∀ a, walkQ (rdOf sy m0) (cfgBOf sy m0 v X) (collRet sy m0) (fun B' => groundOK sy m0 B' && FrameKeep.walkK (cfgCOf sy m0 v X) FrameKeep.fuelK B')
         FrameKeep.fuelK (CtrlKeep.toA (watchF sy m0 v) (valF sy v (peek m0 sy.Player_Y_Position) a) B) = true →
         FrameKeep.Watched (valF sy v (peek m0 sy.Player_Y_Position) a) (trace m i k) →
-        ∃ B, finF sy B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) := by
+        ∃ B, finF sy B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) ∧ (finX sy B = true ∨ GroundAt sy m0 (frame m i)) := by
       intro a hwa hV
       have hsA := CtrlKeep.sim_toA (W := watchF sy m0 v) hs (CtrlKeep.watchA_lt v) hV
       rcases to_stop (C := cfgBOf sy m0 v X) hTB rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) hwa hsA h2 h5 hcq hr with
-        ⟨k', _, b2, b3, B', b4, b5⟩ | ⟨B', _, _, b3, b4⟩
-      · obtain ⟨B'', _, _, c3, c4⟩ := after_endK (CA := cfgCOf sy m0 v X) hTC rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) b4 b5 b2 b3 hcq
-        exact ⟨B'', c3, c4⟩
-      · exact ⟨B', b3, b4⟩
+        ⟨k', hkk, b1, b2, b3, B', b4, b5⟩ | ⟨B', _, _, b3, b4⟩
+      · simp only [Bool.and_eq_true] at b4
+        obtain ⟨B'', _, _, c3, c4⟩ := after_endK (CA := cfgCOf sy m0 v X) hTC rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) b4.2 b5 b2 b3 hcq
+        have hQ := (groundAt_of (FrameKeep.watched_of b4.1 b5)).1
+        exact ⟨B'', c3, c4, Or.inr (groundAt_congr (hA k' (by rw [hk0]; exact hkk) b1) hQ)⟩
+      · exact ⟨B', finF_of_finX b3, b4, Or.inl b3⟩
     rcases hcase with hc1 | ⟨hc1, hc2⟩
     · refine run true (List.all_eq_true.1 hw true (by simp)) ?_
       intro w hwm
@@ -731,9 +829,9 @@ theorem flat_end {sy : Syms} {m0 : Machine} {v : UInt8} (hc : CtrlKeep.ctrlCheck
     (h0 : FrameKeep.StartK sy m0 m) (hcl : ∀ n, CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hcq : ∀ n, CleanK (guardQ sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hr : ∀ n, (trace m i n).frame = m.frame → RdOK1 (rdOf sy m0) (trace m i n))
     (hu : CtrlKeep.Unpaused sy m0 (frame m i)) (hv : CtrlKeep.AreaOK sy v m) (hg : peek m sy.Player_State = 0) (hG : GroundAt sy m0 m)
-    (hj : peek m sy.JumpspringAnimCtrl = 0) (hjump : (FrameModel.readIn sy (trace m i (CtrlKeep.arrAt sy m i))).jump = false) :
-    ∃ B, finF sy B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) :=
-  flat_endW (X := searchB sy m0 v) hc hF h0 hcl hcq hr hu hv hg hG hj hjump
+    (hj : peek m sy.JumpspringAnimCtrl = 0) (hjump : (FrameModel.readIn sy (trace m i (CtrlKeep.arrAt sy m i))).jump = false) (hA : AfterV sy m0 m i) :
+    ∃ B, finF sy B = true ∧ Sim (PipeEntryRule.envOf m0) (m.frame, 2) B (frame m i) ∧ (finX sy B = true ∨ GroundAt sy m0 (frame m i)) :=
+  flat_endW (X := searchB sy m0 v) hc hF h0 hcl hcq hr hu hv hg hG hj hjump hA
 
 /-! ## The conditions on one instruction, from those of the opening -/
 

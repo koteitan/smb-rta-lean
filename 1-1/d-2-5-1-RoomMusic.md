@@ -65,6 +65,26 @@ Real runs (`room-music-real FM2 5 R`): the runs of [The pause through the room's
 
 With `R` = 7, three first controls have no music at all (every byte of the table 0). In each of these runs `quiet₁` of the first change fails at the vertical pipe's exit, so the run is outside the rows of the first change, and the theorem does not speak of it. On the movie every frame in the room is in the table, and at the entry (movie frame 764) `EntryRestM` and `EntryRest` hold.
 
+## Round 12: why the other 11 bytes stay (measured)
+
+A program, not a theorem (`entry-bytes-check`, about 51 s). It reads what the rows of the time of the change into the room know at control (14,224 states with control), and what the room's walk of [The screen's page in the room](d-2-4-ScreenPage.md) knows at its frame ends.
+
+The room's walk has 14 frame ends: 2 with the side pipe's routine, 6 with the player's control, 2 with the routine of losing a life (`PlayerLoseLife`, after a fall into a hole), and 4 with the routines of the injury or of death and `GameTimerExpiredFlag` set (the time-up, `TimeUpOn`). At the 2 ends with the side pipe's routine the walk knows the player's high byte, `VRAM_Buffer_AddrCtrl`, `GameTimerExpiredFlag` and all bits but one of the area music's buffer. It knows none of the 11 bytes.
+
+| byte | at the room's first control | why it stays | what would give it |
+|---|---|---|---|
+| `GameEngineSubroutine` | known | it says that the first frame that leaves the player's routine enters the side pipe. The walk also leaves by a fall into a hole and by the time-up | the player's height in the room, and the timer |
+| `Player_Y_Position` | known (the height where he drops in) | the walk does not follow the height. Part c's walk of the entering frame (`SideFrame`) knows the row of the side read, not the height at the frame's end | a walk of the entering frame that keeps the height (part c) |
+| `VRAM_Buffer1_Offset`, `VRAM_Buffer1` (+0, +1, +2, +7) | known | erasing a coin (`RemoveCoin_Axe`) sets `VRAM_Buffer_AddrCtrl` so that the next frame's screen update clears the second buffer, not the first: the first keeps the coin's records. A coin on the entering frame adds records too | no coin on the entering frame and the frame before: the position on two frames (part c) |
+| `AreaMusicBuffer` | known | the table has states where it is 0: the hurry-up music, and songs read from the queue that the hole's code stores | no hurry-up music in the room (the timer), no fall into a hole (the height) |
+| `EventMusicQueue` | the hurry-up music queued in 7,112 states; in the other 7,112 all bits but the hurry-up bit known 0 | in the table it is 0, the hurry-up music, or not known. The sound routine keeps the music queues while the pause sound plays (`SkipSoundSubroutines`), so the hurry-up music queued on a frame of the unpause sound is still queued at the entry. The hole's code stores the death music with `DeathMusicLoaded + 1`, which the room's condition does not know | the timer, and the height |
+| `NoteLengthTblAdder` | not known | the rows of the change into the room do not know it: the condition at the vertical pipe's entry does not have it. Also, after the hurry-up music the area music starts again (`MusicLoopBack`) with this byte still set: with the table built from it known to be 0 at control (`entry-bytes-check nlta`, about 96 s), 64 states, and 2 of the 6 with the reference's area music buffer have it 8 | part b's rows, and the timer |
+| `AreaNumber` | not known | the rows do not know it (part b). It cannot leave `Entry2`: after the exit the area parser reads it (`VerticalPipe`, whether a pipe gets a piranha plant) | part b's rows |
+
+So 8 of the 11 bytes wait on two facts that no walk of the room knows: the game timer (the hurry-up music and the time-up, [The runs with the hurry-up music](0-6-4-HurryMusic.md)) and the player's height (no fall below the screen in the room). The screen's buffer waits on the position on two frames; `NoteLengthTblAdder` and `AreaNumber` on the rows of part b.
+
+The game timer at the room's first control: no state with control knows a bit of the three digits, and none has `dg` (see [The game timer at the side pipe](d-3-5-1-SideTime.md)).
+
 ## What changed in the route
 
 * `entry₂` asks 11 bytes (`RoomMusic.EntryRestM`). The theorem `ChangesK.entryRest₂` gives the 16 bytes of `EntryRest`, and `ChangesK.run₂` uses it.

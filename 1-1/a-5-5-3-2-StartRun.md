@@ -48,13 +48,13 @@ Lags.starts    :  lagCheck,  walkCheck,  pauseCheck,  Lags,  FrameStart(seq 1)  
 Lags.lagStart  :  the same   →   FrameStart(seq n) for a frame not counted          (the old field lags.start)
 Pipe.startE    :  lagCheck,  walkCheck,  pauseCheck,  1 ≤ E,  FrameStart(seq 1)   →   FrameStart(fm E)       (the old field Pipe.start)
 Run.pipeStart₁ :  title_check,  title_ctl_check   →   FrameStart(seq 1)                  (with the field title)
-Run.pipeKeep₁  :  the checks,  1 ≤ E   →   the 17 bytes of LagFrames.lagI of fm 1 are those of seq 1     (the frames before the counted frame 1 end paused)
+Run.pipeKeep₁  :  the checks,  1 ≤ E   →   the 21 bytes of LagFrames.lagI of fm 1 are those of seq 1     (the frames before the counted frame 1 end paused)
 Run.pipePos    :  the checks,  title_pos_check,  1 ≤ E   →   P(pipe.fm 1) = P(m₀)
 Run.pipeHS     :  the checks,  title_pos_check,  1 ≤ E   →   startHS(pipe.fm 1) = startHS(m₀)
 ```
 
 `walkCheck` and `titleCheck` are checks on the ROM, by `native_decide` in the private `walk_check` and `title_ctl_check` (about 4 s together in the proof build).
-`titlePosCheck` walks frame 0 as `titleCheck` does, and asks at each end with control that the bytes of the position, of the horizontal state and the six bytes of `stI` are
+`titlePosCheck` walks frame 0 as `titleCheck` does, and asks at each end with control that the bytes of the position, of the horizontal state and the ten bytes of `stI` are
 known, with the values of `m₀` (the private `title_pos_check`, about 2.2 s natively).
 `lagCheck` is the check of [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md), in the private `lag_check`.
 The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`. `#print axioms route_1_1` shows no `sorryAx`.

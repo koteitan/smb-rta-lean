@@ -17,7 +17,8 @@ the entry:
 The frame of the entry ends in the idle loop (`IdleAt`) with the pipe's timer at least its first value (`timerOK`): the walk shows this too. The bytes of `endNames` are not kept,
 but the walk of the entry frame knows them at its end. What stays assumed at the entry is `Rest`: the condition of `Entry` on the bytes of `restNames` only. The bytes of
 `restNames` are those that change on the way on real runs; those that frame 0 does not know; those that a frame may write when nothing on the screen is known (a new object, the
-music of an event, a new area, a warp pipe); and those that real frames store to through an index.
+music of an event, a new area, a warp pipe); and those that real frames store to through an index. The walks of the pipe's frames need each of them
+(`PipeChangeEnd.entryDropped` lists the bytes that left `Entry` in round 12, because they do not).
 
 The searches are no part of the proof: the checks walk every state of their tables. There is no game data in this file. Page: `1-1/b-3-4-EntryKeep.md`.
 -/
@@ -33,25 +34,25 @@ open FrameKeep (Watch watchOK Watched Spot CleanK kstep preK normK keyK startK)
 
 /-! ## The bytes -/
 
-/-- **The bytes of the condition at the entry that are not proved here**: a name, an offset, a number of bytes. Each byte was measured alone, and fails one of these:
-* another value on some real frame from control to the entry: the buttons up and down, the routine, the enemies' page (2), the screen's timer, the states and flags of blocks 0 and 1,
-  misc object 8 (2), scores 0 to 2, Mario's state, the states of enemy slots 0 to 2, the state, the flag and the kind of enemy slot 5 (the power-up's), the two sound effects;
-* not known at frame 0 (no near state of `TitleStart` knows them): the demo's timer, three bytes after the world's number in the menu, the byte after the mode, the saved song;
+/-- **The bytes of the condition at the entry that are not proved here**: a name, an offset, a number of bytes. Each byte was measured alone. The walks of the pipe's frames
+need each of them (with the byte not known at the entry, `PipeChangeEnd.zcheck` and `pcheck` fail, or for the two music queues the search does not end in 10 minutes:
+`entry-need`), but the first square's effect queue: without it the tables of `pcheck` grow from about 100,000 states to 300,000, so it stays. Each fails one of these:
+* another value on some real frame from control to the entry: the routine, the enemies' page select, the states and flags of blocks 0 and 1, misc object 8's state, scores 0 to 2,
+  the states of enemy slots 0 to 2, the flag and the kind of enemy slot 5 (the power-up's), the first square's effect queue;
+* not known at frame 0 (no near state of `TitleStart` knows them): the saved song;
 * written by the walk of a frame that ends with the player's routine, since it knows nothing of the objects, the area's data or the sound: the flag of enemy slot 4, the music
-  and the noise, the flagpole's number, the vine, the first cannon's offset, the frenzy, the duplicate, the warp zone, the colours, the loop, the next area, the star, the world and
-  the flag of a new game timer (a warp pipe);
+  and the noise, the vine's flag offset, the frenzy, the warp zone, the next area (2), the star, the world;
 * stored through an index on real frames: the kinds of enemy slots 0 to 2, score 5.
-The pause byte's bits 1 to 6 are no longer here: the near states of `TitleStart` know the pause byte, and the frames keep these bits. -/
+The pause byte's bits 1 to 6 left in round 11: the near states of `TitleStart` know the pause byte, and the frames keep these bits. In round 12 the 19 bytes of
+`PipeChangeEnd.entryDropped` left: the pipe's frames do not need them, so `Entry` no longer asks them. -/
 def restNames : List (String × Nat × Nat) :=
-  [("Up_Down_Buttons", 0, 1), ("GameEngineSubroutine", 0, 1), ("EnemyObjectPageLoc", 0, 1), ("EnemyObjectPageSel", 0, 1), ("ScreenTimer", 0, 1), ("DemoTimer", 0, 1),
-   ("WorldSelectNumber", 2, 3), ("OperMode", 1, 1), ("AreaMusicBuffer_Alt", 0, 1),
-   ("Block_State", 0, 2), ("Block_RepFlag", 0, 2), ("Misc_State", 8, 1), ("Misc_Y_Position", 8, 1), ("FloateyNum_Control", 0, 3), ("FloateyNum_Control", 5, 1),
-   ("Player_State", 0, 1), ("Enemy_State", 0, 3), ("Enemy_State", 5, 1), ("Square1SoundQueue", 0, 1), ("Square2SoundQueue", 0, 1),
+  [("GameEngineSubroutine", 0, 1), ("EnemyObjectPageSel", 0, 1), ("AreaMusicBuffer_Alt", 0, 1),
+   ("Block_State", 0, 2), ("Block_RepFlag", 0, 2), ("Misc_State", 8, 1), ("FloateyNum_Control", 0, 3), ("FloateyNum_Control", 5, 1),
+   ("Enemy_State", 0, 3), ("Square1SoundQueue", 0, 1),
    ("Enemy_Flag", 4, 2), ("Enemy_ID", 0, 3), ("Enemy_ID", 5, 1), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1),
-   ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("FlagpoleFNum_Y_Pos", 0, 1), ("VineFlagOffset", 0, 1), ("VineHeight", 0, 1),
-   ("Cannon_Offset", 0, 1), ("EnemyFrenzyBuffer", 0, 1), ("EnemyFrenzyQueue", 0, 1),
-   ("DuplicateObj_Offset", 0, 1), ("WarpZoneControl", 0, 1), ("BackgroundColorCtrl", 0, 1), ("LoopCommand", 0, 1), ("AreaPointer", 0, 1), ("EntrancePage", 0, 1),
-   ("StarInvincibleTimer", 0, 1), ("WorldNumber", 0, 1), ("FetchNewGameTimerFlag", 0, 1)]
+   ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("VineFlagOffset", 0, 1),
+   ("EnemyFrenzyBuffer", 0, 1), ("EnemyFrenzyQueue", 0, 1), ("WarpZoneControl", 0, 1), ("AreaPointer", 0, 1), ("EntrancePage", 0, 1),
+   ("StarInvincibleTimer", 0, 1), ("WorldNumber", 0, 1)]
 
 /-- these bytes as RAM indices -/
 def restIdx (nx : Names) : List Nat := SideChangeBound.bytesOf nx restNames

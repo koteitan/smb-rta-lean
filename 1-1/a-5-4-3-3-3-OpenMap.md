@@ -90,10 +90,10 @@ Program `open-map-check FM2 300`. From the machine at control it runs each frame
   the first buffer); neither happens on these frames. This round the read is asked to be in the first buffer (it was: in either buffer), and the frame of the counted
   frame `N` is included: [The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md) needs both.
 * **No longer assumed**: `st` and `spring` (item 1-1-a-5-4-3-3-3).
-* **No longer assumed**: `flat` (item 1-1-a-5-4-3-4-1): a walk that reads the tiles by the known bits of the address sees the ground under the feet, with the new field
-  `ground` ([The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md)).
-* **Not proved**: `jump` (item 1-1-a-5-7): the height in the air is not followed from frame to frame (`vstep` and the arcs of [The height of a jump](c-2-Jump.md) would
-  give it, as part c did for the first 8 frames of a jump).
+* **No longer assumed**: `flat` (item 1-1-a-5-4-3-4-1): a walk that reads the tiles by the known bits of the address sees the ground under the feet
+  ([The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md)).
+* **No longer assumed**: `jump` and `ground` (item 1-1-a-5-7): from the field `vert` on single frames and the search of every jump of the opening's vertical model
+  ([The jumps of the opening](a-5-7-OpenJump.md)). That the real frames follow the model (`vert`) is not proved.
 
 **Files.** `Theorems/OpenMap.lean`, `Theorems/OpenFrames.lean`, `Theorems/Route.lean`, private `Proof/OpenMap.lean`.
 

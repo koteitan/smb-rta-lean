@@ -1353,19 +1353,30 @@ def quietA : List (String × Nat × Nat) :=
   [("PauseSoundBuffer", 0, 1), ("PauseSoundQueue", 0, 1), ("Square1SoundBuffer", 0, 1), ("Square2SoundBuffer", 0, 1)]
 
 /-- **The bytes that the state at the entry knows**, besides the bytes of the exit. The values come from the reference entry. They are the bytes that no frame of the pipe's routine changes, and that the frames need:
-the routine and the task, the objects' slots that stay empty, the sound's queues, the area, the scroll's other bytes. Found by a search, and checked on real entries. -/
+the routine and the task, the objects' slots that stay empty, the sound's queues, the area, the scroll's other bytes. Found by a search, and checked on real entries. Round 12 took out
+the bytes of `entryDropped`. -/
 def entryNames : List (String × Nat × Nat) :=
-  [("Up_Down_Buttons", 0, 1), ("Left_Right_Buttons", 0, 1), ("GameEngineSubroutine", 0, 1), ("Enemy_Flag", 4, 3), ("Enemy_ID", 3, 4), ("Player_State", 0, 1), ("Enemy_State", 4, 2), ("Fireball_State", 0, 2), ("Block_State", 0, 4), ("Misc_State", 0, 9), ("Misc_Y_Position", 7, 1), ("EnemyData", 0, 1), ("EnemyDataHigh", 0, 1), ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1), ("Square2SoundQueue", 0, 1), ("Square1SoundQueue", 1, 1), ("FlagpoleFNum_Y_Pos", 0, 1), ("FlagpoleFNum_YMFDummy", 0, 1), ("FlagpoleScore", 0, 1), ("FloateyNum_Control", 0, 7), ("FirebarSpinSpeed", 14, 2), ("VineFlagOffset", 0, 1), ("VineHeight", 0, 1), ("Block_RepFlag", 0, 2), ("SprDataOffset_Ctrl", 1, 1), ("MaximumRightSpeed", 18, 2), ("Cannon_Offset", 0, 1), ("Cannon_PageLoc", 0, 6), ("Cannon_X_Position", 0, 6), ("Cannon_Y_Position", 0, 5), ("Misc_Collision_Flag", 10, 3), ("EnemyFrenzyBuffer", 0, 1), ("SecondaryHardMode", 0, 1), ("EnemyFrenzyQueue", 0, 1), ("FireballCounter", 0, 1), ("DuplicateObj_Offset", 0, 1), ("WarpZoneControl", 0, 1), ("EnemyObjectPageLoc", 0, 1), ("EnemyObjectPageSel", 0, 1), ("ScreenRoutineTask", 0, 1), ("ScrollThirtyTwo", 1, 1), ("VerticalScroll", 0, 1), ("CloudTypeOverride", 0, 1), ("BackgroundColorCtrl", 0, 1), ("LoopCommand", 0, 1), ("AreaType", 0, 1), ("FetchNewGameTimerFlag", 0, 1), ("JoypadOverride", 0, 1), ("WorldSelectNumber", 2, 3), ("OperMode", 0, 2), ("OperMode_Task", 0, 1), ("DisableScreenFlag", 0, 1), ("StarInvincibleTimer", 0, 1), ("ScreenTimer", 0, 1), ("WorldEndTimer", 0, 1), ("DemoTimer", 0, 1)]
+  [("Left_Right_Buttons", 0, 1), ("GameEngineSubroutine", 0, 1), ("Enemy_Flag", 4, 3), ("Enemy_ID", 3, 4), ("Enemy_State", 4, 1), ("Fireball_State", 0, 2), ("Block_State", 0, 4), ("Misc_State", 0, 9), ("Misc_Y_Position", 7, 1), ("EnemyData", 0, 1), ("EnemyDataHigh", 0, 1), ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1), ("Square1SoundQueue", 1, 1), ("FlagpoleFNum_YMFDummy", 0, 1), ("FlagpoleScore", 0, 1), ("FloateyNum_Control", 0, 7), ("FirebarSpinSpeed", 14, 2), ("VineFlagOffset", 0, 1), ("Block_RepFlag", 0, 2), ("SprDataOffset_Ctrl", 1, 1), ("MaximumRightSpeed", 18, 2), ("Cannon_PageLoc", 0, 6), ("Cannon_X_Position", 0, 6), ("Cannon_Y_Position", 0, 5), ("Misc_Collision_Flag", 10, 3), ("EnemyFrenzyBuffer", 0, 1), ("SecondaryHardMode", 0, 1), ("EnemyFrenzyQueue", 0, 1), ("FireballCounter", 0, 1), ("WarpZoneControl", 0, 1), ("EnemyObjectPageSel", 0, 1), ("ScreenRoutineTask", 0, 1), ("ScrollThirtyTwo", 1, 1), ("VerticalScroll", 0, 1), ("CloudTypeOverride", 0, 1), ("AreaType", 0, 1), ("JoypadOverride", 0, 1), ("OperMode", 0, 1), ("OperMode_Task", 0, 1), ("DisableScreenFlag", 0, 1), ("StarInvincibleTimer", 0, 1), ("WorldEndTimer", 0, 1)]
 
 /-- the bytes that the state at the entry knows by a mask of bits: the objects' kinds and states as on a real entry, Mario's status below the fire flower, the pause bits other than the low bit and the top bit -/
 def entryMasks : List (String × Nat × UInt8) :=
-  [("Enemy_ID", 0, 249), ("Enemy_ID", 1, 249), ("Enemy_ID", 2, 249), ("Enemy_State", 0, 254), ("Enemy_State", 1, 254), ("Enemy_State", 2, 254), ("Enemy_State", 3, 254), ("Misc_Y_Position", 8, 156),
+  [("Enemy_ID", 0, 249), ("Enemy_ID", 1, 249), ("Enemy_ID", 2, 249), ("Enemy_State", 0, 254), ("Enemy_State", 1, 254), ("Enemy_State", 2, 254), ("Enemy_State", 3, 254),
    ("Square1SoundQueue", 0, 239), ("SprDataOffset_Ctrl", 0, 254), ("PlayerStatus", 0, 254), ("GamePauseStatus", 0, 126), ("AreaMusicBuffer_Alt", 0, 251)]
 
-/-- the known bytes of the entry as RAM indices: the list, and the bytes of the exit -/
+/-- **The bytes that the entry no longer asks** (round 12): with each alone not known at the entry, and with all of them together, both walks of the pipe's frames
+(`zcheck`, `pcheck`) and `leftCheck` still pass (`entry-need`). The buttons up and down, the enemies' page, the screen's timer, the demo's timer, three bytes after the world's
+number in the menu, the byte after the mode, the height of misc object 8, Mario's state, the state of enemy slot 5, the second square's effect queue (the sound routine clears it
+on every frame, so the exit still knows it), the flagpole's number, the vine's height, the first cannon's offset, the duplicate, the colours, the loop, the flag of a new game timer. -/
+def entryDropped : List (String × Nat × Nat) :=
+  [("Up_Down_Buttons", 0, 1), ("EnemyObjectPageLoc", 0, 1), ("ScreenTimer", 0, 1), ("DemoTimer", 0, 1), ("WorldSelectNumber", 2, 3), ("OperMode", 1, 1),
+   ("Misc_Y_Position", 8, 1), ("Player_State", 0, 1), ("Enemy_State", 5, 1), ("Square2SoundQueue", 0, 1), ("FlagpoleFNum_Y_Pos", 0, 1), ("VineHeight", 0, 1),
+   ("Cannon_Offset", 0, 1), ("DuplicateObj_Offset", 0, 1), ("BackgroundColorCtrl", 0, 1), ("LoopCommand", 0, 1), ("FetchNewGameTimerFlag", 0, 1)]
+
+/-- the known bytes of the entry as RAM indices: the list, and the bytes of the exit, but those of `entryDropped` -/
 def entryKnown (nx : Names) : List Nat :=
   let masked := entryMasks.map fun p => adI nx p.1 + p.2.1
-  ((bytesOf nx entryNames ++ bytesOf nx exitNames).eraseDups).filter fun i => !masked.contains i
+  let dropped := bytesOf nx entryDropped
+  ((bytesOf nx entryNames ++ bytesOf nx exitNames).eraseDups).filter fun i => !masked.contains i && !dropped.contains i
 
 /-- the masks as RAM indices -/
 def entryBits (nx : Names) : List (Nat × UInt8) := entryMasks.map fun p => (adI nx p.1 + p.2.1, p.2.2)
@@ -1373,7 +1384,7 @@ def entryBits (nx : Names) : List (Nat × UInt8) := entryMasks.map fun p => (adI
 /-- the names this file needs -/
 def namesOf (text : String) : Names :=
   let ls := text.splitOn "\n"
-  let l := ((exitNames ++ quietP ++ songNames ++ entryNames).map (·.1)) ++ entryMasks.map (·.1) ++ exitMasks.map (·.1) ++ ["PlayerStatus", "Player_X_Scroll", partName, "SprShuffleAmtOffset", "SprDataOffset", "Misc_SprDataOffset", "AreaData", "AreaDataHigh", "VRAM_Buffer2_Offset", "VRAM_Buffer2", "BlockBufferColumnPos", "CurrentPageLoc", "CurrentColumnPos", "TerrainControl", "BackloadingFlag", "AreaObjectPageLoc", "AreaDataOffset", "ForegroundScenery", "BackgroundScenery", "AreaType", "MetatileBuffer", "AreaObjectLength", "AreaObjOffsetBuffer", "AreaStyle", "AreaParserTaskNum", "ScrollThirtyTwo", "VRAM_Buffer_AddrCtrl", "VRAM_Buffer1", "VRAM_Buffer1_Offset", "EnemyDataOffset", "ObjectOffset", "MusicOffset_Square2", "MusicOffset_Noise", "Squ2_NoteLenCounter", "MusicOffset_Triangle"] ++
+  let l := ((exitNames ++ quietP ++ songNames ++ entryNames ++ entryDropped).map (·.1)) ++ entryMasks.map (·.1) ++ exitMasks.map (·.1) ++ ["PlayerStatus", "Player_X_Scroll", partName, "SprShuffleAmtOffset", "SprDataOffset", "Misc_SprDataOffset", "AreaData", "AreaDataHigh", "VRAM_Buffer2_Offset", "VRAM_Buffer2", "BlockBufferColumnPos", "CurrentPageLoc", "CurrentColumnPos", "TerrainControl", "BackloadingFlag", "AreaObjectPageLoc", "AreaDataOffset", "ForegroundScenery", "BackgroundScenery", "AreaType", "MetatileBuffer", "AreaObjectLength", "AreaObjOffsetBuffer", "AreaStyle", "AreaParserTaskNum", "ScrollThirtyTwo", "VRAM_Buffer_AddrCtrl", "VRAM_Buffer1", "VRAM_Buffer1_Offset", "EnemyDataOffset", "ObjectOffset", "MusicOffset_Square2", "MusicOffset_Noise", "Squ2_NoteLenCounter", "MusicOffset_Triangle"] ++
     SoundWalk.soundNames.map (·.1)
   SideChangeEnd.namesOf text ++ (l.eraseDups.filterMap fun n => (asmValue ls n).map (n, ·))
 

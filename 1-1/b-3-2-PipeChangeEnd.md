@@ -9,8 +9,10 @@
 **The condition at the entry.** `Entry(M)` is a condition on the state `M` at the end of the entry frame.
 
 * The frame has ended in the idle loop, as in [the side pipe's first frames](d-2-2-SideChangeBound.md): the program counter and the stack pointer are those of `E`, the dot is at most 9, the vblank and NMI flags fit the dot, the sprite-0 flag is set, NMI is on in the PPU control, the controller is not strobed.
-* The 115 bytes `K` have the values of `E`. They are listed below.
-* 13 bytes have the bits of `E` under a mask, below.
+* The 97 bytes `K` have the values of `E`. They are listed below.
+* 12 bytes have the bits of `E` under a mask, below.
+
+Round 12: 19 bytes left `K` and the masks (115 and 13 before), because the walks of the pipe's frames do not need them (`PipeChangeEnd.entryDropped`): see [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
 * `timer(M) ≥ 48`.
 
 All other bytes are free: Mario's position, speed and size, the score, the coins, the digits of the game timer, the frame counter, the random bytes, the song, the sprites, the screen buffers, the area parser, the enemies in their slots.
@@ -20,14 +22,13 @@ All other bytes are free: Mario's position, speed and size, the score, the coins
 | group | bytes |
 |---|---|
 | game | `WorldNumber`, `PrimaryHardMode` |
-| mode | `OperMode` (2), `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `JoypadOverride`, `WorldSelectNumber+2` … `+4` |
-| area | `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `WarpZoneControl`, `CurrentPlayer`, `AreaType`, `LoopCommand`, `CloudTypeOverride`, `BackgroundColorCtrl`, `ScrollThirtyTwo+1`, `VerticalScroll` |
-| timers | `GameTimerExpiredFlag`, `FetchNewGameTimerFlag`, `StarInvincibleTimer`, `ScreenTimer`, `WorldEndTimer`, `DemoTimer` |
-| input | `Up_Down_Buttons`, `Left_Right_Buttons` |
-| Mario | `Player_State` |
-| slots that stay empty | `Enemy_Flag+4` … `+6`, `Enemy_ID+3` … `+6`, `Enemy_State+4`, `+5`, `Fireball_State` (2), `Block_State` (4), `Block_RepFlag` (2), `Misc_State` (9), `Misc_Y_Position+7`, `Misc_Collision_Flag+10` … `+12`, `FloateyNum_Control` (7), `FirebarSpinSpeed+14`, `+15`, `MaximumRightSpeed+18`, `+19`, `SprDataOffset_Ctrl+1`, `Cannon_Offset`, `Cannon_PageLoc` (6), `Cannon_X_Position` (6), `Cannon_Y_Position` (5), `FireballCounter`, `DuplicateObj_Offset`, `VineFlagOffset`, `VineHeight`, `FlagpoleFNum_Y_Pos`, `FlagpoleFNum_YMFDummy`, `FlagpoleScore` |
-| enemy data | `EnemyData`, `EnemyDataHigh`, `EnemyObjectPageLoc`, `EnemyObjectPageSel`, `EnemyFrenzyBuffer`, `EnemyFrenzyQueue`, `SecondaryHardMode` |
-| sound | `NoiseSoundBuffer`, `AreaMusicBuffer`, `EventMusicBuffer`, `AreaMusicQueue`, `EventMusicQueue`, `NoiseSoundQueue`, `Square2SoundQueue`, `Square1SoundQueue+1` |
+| mode | `OperMode`, `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `JoypadOverride` |
+| area | `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `WarpZoneControl`, `CurrentPlayer`, `AreaType`, `CloudTypeOverride`, `ScrollThirtyTwo+1`, `VerticalScroll` |
+| timers | `GameTimerExpiredFlag`, `StarInvincibleTimer`, `WorldEndTimer` |
+| input | `Left_Right_Buttons` |
+| slots that stay empty | `Enemy_Flag+4` … `+6`, `Enemy_ID+3` … `+6`, `Enemy_State+4`, `Fireball_State` (2), `Block_State` (4), `Block_RepFlag` (2), `Misc_State` (9), `Misc_Y_Position+7`, `Misc_Collision_Flag+10` … `+12`, `FloateyNum_Control` (7), `FirebarSpinSpeed+14`, `+15`, `MaximumRightSpeed+18`, `+19`, `SprDataOffset_Ctrl+1`, `Cannon_PageLoc` (6), `Cannon_X_Position` (6), `Cannon_Y_Position` (5), `FireballCounter`, `VineFlagOffset`, `FlagpoleFNum_YMFDummy`, `FlagpoleScore` |
+| enemy data | `EnemyData`, `EnemyDataHigh`, `EnemyObjectPageSel`, `EnemyFrenzyBuffer`, `EnemyFrenzyQueue`, `SecondaryHardMode` |
+| sound | `NoiseSoundBuffer`, `AreaMusicBuffer`, `EventMusicBuffer`, `AreaMusicQueue`, `EventMusicQueue`, `NoiseSoundQueue`, `Square1SoundQueue+1` |
 
 **The bytes with a mask.**
 
@@ -35,7 +36,6 @@ All other bytes are free: Mario's position, speed and size, the score, the coins
 |---|---|---|
 | `Enemy_ID` (first 3 slots) | bits 1, 2 | some kinds of enemy |
 | `Enemy_State` (first 4 slots) | bit 0 | |
-| `Misc_Y_Position+8` | bits 0, 1, 5, 6 | |
 | `Square1SoundQueue` | bit 4 | one sound |
 | `SprDataOffset_Ctrl` | bit 0 | |
 | `PlayerStatus` | bit 0 | small or big Mario. Fire Mario does not meet `Entry` |
@@ -166,7 +166,7 @@ Entries: `E`, the TAS entry, the 13 real entries, and 422 entries of runs of my 
 
 ## Assumptions (not proved in Lean)
 
-* `Entry` on the state at the entry of a real run. Item 1-1-b-3-4. It is no longer a field: `Run.entry₁` proves it from the press of Start on the title, the frames from control to the entry (`upClean₁`; that each starts in control is proved, `Run.upStart₁`) and `Rest` (`entryRest₁`: 56 of the 128 bytes; the pipe's timer is proved). See [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
+* `Entry` on the state at the entry of a real run. Item 1-1-b-3-4. It is no longer a field: `Run.entry₁` proves it from the press of Start on the title, the frames from control to the entry (`upClean₁`; that each starts in control is proved, `Run.upStart₁`) and `Rest` (`entryRest₁`: 36 of the 109 bytes since round 12; the pipe's timer is proved). See [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
 * `Places` on every step of the pipe's frames (`chg.places₁`). The rows come from the frames of a few runs. A run where an enemy is loaded, or where the parser has a column not in the rows, is outside. Item 1-1-b-3-5:
   * With all 256 values of `VRAM_Buffer1_Offset` and no bound, the place `ColorRotation` asks nothing of a run. The state splits there by the offset, and the check needs that.
   * `ProcELoop`, `FlagpoleRoutine`, `BlockObjMT_Updater` and `ColorRotation` had a bound of 50,000 on the dot. They are gone. The check holds with any 4 of the 5 bounds dropped (`UpdScrollVar` and these 4), and it fails with all 5 dropped. So one bound stays, at the parser's place. On 14 entries with the three kinds of inputs, the 1,974 frames of the pipe come to the parser's place at dot 37,603 at most.

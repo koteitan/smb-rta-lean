@@ -748,10 +748,21 @@ structure Report where
   posBad : Nat := 0
   tPos : Nat := 0
   tPosN : Nat := 0
+  /-- the edge store in frames in control: at the screen's left edge (the index 0), at its right edge (1); right stores that did not move him left; the largest
+  position after a left store -/
+  edgeLeft : Nat := 0
+  edgeRight : Nat := 0
+  rightNotLeft : Nat := 0
+  leftMax : Nat := 0
+  /-- side reads in frames in control whose byte is not the byte at that place when the frame began; frames in control that begin with a pole tile in the block
+  buffers outside the pole's column; that begin with one in the column with the page two or more before the pole's -/
+  readChanged : Nat := 0
+  startOff : Nat := 0
+  startEarly : Nat := 0
   deriving Inhabited
 
 def Report.show (r : Report) : String :=
-  s!"frames {r.frames}, in control {r.ctl} (not StartK {r.startBad}), instructions {r.instrs} (not CleanK {r.cleanBad}), side reads {r.reads} (TileRead fails {r.tileBad}, outside the block buffers {r.outside}), frames at the edge store or the head's routine {r.cutFrames}; at a place of again {r.agains} (after the edge store {r.edgeN}, after the head's routine {r.headN}; at or right of the range {r.againRight}, largest {r.againMax}, moved into the range from the end of the move {r.intoRange}, after the head's routine not at the end of the move's position {r.headMoved}; the head's routine near the pole (metatile, height, position) {r.headNear.eraseDups.take 24}); touches {r.touches} (not StartK {r.tStart}, not CleanK {r.tClean}, TileRead fails {r.tTile}, at the edge store or the head's routine {r.tCut}, in the range at a place of again but not at the end of the move {r.tAgain}, not one arrival at the end of the move {r.subsN}, left of the range there {r.leftBad}, moved {r.movedBad}, a store to the position not PosAt before the write {r.tPos}, stores to the position before the write {r.tPosN}), positions {r.pxs.eraseDups.mergeSort}; stores to the position through an index in control {r.posN} (not PosAt {r.posBad})"
+  s!"frames {r.frames}, in control {r.ctl} (not StartK {r.startBad}), instructions {r.instrs} (not CleanK {r.cleanBad}), side reads {r.reads} (TileRead fails {r.tileBad}, outside the block buffers {r.outside}), frames at the edge store or the head's routine {r.cutFrames}; at a place of again {r.agains} (after the edge store {r.edgeN}, after the head's routine {r.headN}; at or right of the range {r.againRight}, largest {r.againMax}, moved into the range from the end of the move {r.intoRange}, after the head's routine not at the end of the move's position {r.headMoved}; the head's routine near the pole (metatile, height, position) {r.headNear.eraseDups.take 24}); touches {r.touches} (not StartK {r.tStart}, not CleanK {r.tClean}, TileRead fails {r.tTile}, at the edge store or the head's routine {r.tCut}, in the range at a place of again but not at the end of the move {r.tAgain}, not one arrival at the end of the move {r.subsN}, left of the range there {r.leftBad}, moved {r.movedBad}, a store to the position not PosAt before the write {r.tPos}, stores to the position before the write {r.tPosN}), positions {r.pxs.eraseDups.mergeSort}; stores to the position through an index in control {r.posN} (not PosAt {r.posBad}); edge stores: left {r.edgeLeft} (largest position after it {r.leftMax}), right {r.edgeRight} (not moving him left {r.rightNotLeft}); side reads not the byte at the frame's start {r.readChanged}; frames in control beginning with a pole tile off the column {r.startOff}, in the column too early {r.startEarly}"
 
 def Report.bad (r : Report) : Nat := r.startBad + r.cleanBad + r.tileBad + r.tStart + r.tClean + r.tTile + r.tAgain + r.intoRange + r.subsN + r.leftBad + r.movedBad + r.tPos
 
@@ -776,8 +787,13 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
   let t := m.frame + 1
   let mut c : Machine := { m with pad }
   let ctl := controllable sy m
+  let isTile := fun (b : UInt8) => b == Q.ball || b == Q.shaft
+  let offCol := (List.range Q.bufBytes).any fun k => isTile (m.ram.get! (Q.bufLo + k)) && !onCol Q (Q.bufLo + k)
+  let early := (List.range Q.bufBytes).any fun k => isTile (m.ram.get! (Q.bufLo + k)) && onCol Q (Q.bufLo + k) && decide ((m.ram.get! Q.pI).toNat + 1 < Q.pg)
   let startOk := PipeWrites.startB G E c
   let mut r := { r0 with frames := r0.frames + 1, ctl := r0.ctl + (if ctl then 1 else 0), startBad := r0.startBad + (if ctl && !startOk then 1 else 0) }
+  r := { r with startOff := r.startOff + (if ctl && offCol then 1 else 0), startEarly := r.startEarly + (if ctl && early then 1 else 0) }
+  let mut pxSubs := 0
   let mut clean := true
   let mut tiles := true
   let mut cutSeen := false
@@ -793,6 +809,11 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
       if cuts.contains c.pc then cutSeen := true
       if c.pc == sy.PlayerSubs then subs := c :: subs
     if c.pc == sy.PlayerSubs then lastSubs := some (px Q c)
+    if c.pc == sy.PlayerSubs then pxSubs := px Q c
+    if ctl && (again sy m0).contains c.pc then
+      let p := px Q c
+      if c.y == 0 then r := { r with edgeLeft := r.edgeLeft + 1, leftMax := Nat.max r.leftMax p }
+      else r := { r with edgeRight := r.edgeRight + 1, rightNotLeft := r.rightNotLeft + (if p < pxSubs then 0 else 1) }
     if ctl && c.pc == PipeWrites.headAt sy m0 && Q.pg ≤ (c.ram.get! Q.pI).toNat + 1 && r.headNear.length < 400 then
       r := { r with headNear := (c.a, c.ram.get! (sy.Player_Y_Position &&& 0x7FF).toNat, px Q c) :: r.headNear }
     if ctl && ag.contains c.pc then
@@ -816,6 +837,7 @@ def scanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : Repor
       let i := readAt Q c
       let inBuf : Bool := decide (Q.bufLo ≤ i) && decide (i < Q.bufLo + Q.bufBytes)
       if ctl then r := { r with reads := r.reads + 1, tileBad := r.tileBad + (if x then 0 else 1), outside := r.outside + (if inBuf then 0 else 1) }
+      if ctl then r := { r with readChanged := r.readChanged + (if c.a == m.ram.get! i then 0 else 1) }
       if !x && !touched then tiles := false
     let before := rt sy c
     c := (go step c).2

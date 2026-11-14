@@ -1,4 +1,5 @@
 import Theorems.RoomVert
+import Theorems.RoomFall
 import Theorems.RoomStart
 
 /-!
@@ -535,6 +536,8 @@ theorem quad_run (hQ : QuadWalks sy nmS m0) (hP : Checks sy nmS m0 nm d) (hF : R
 /-- the checks of the room's walks: those of `RoomVert` and those of this file, and that the room's idle loop is a `JMP` to itself -/
 structure RoomWalks (sy : Syms) (nmS : Names) (m0 : Machine) (h k : Nat) (nm : Names) (d : Data) : Prop where
   vert : RoomVert.VChecks sy nmS m0 h k
+  /-- the walk from the scroll handler falling, and every state of the jumps from the floor (`RoomFall`) -/
+  fall : RoomFall.FChecks sy nmS m0 h
   pair : Checks sy nmS m0 nm d
   quad : QuadWalks sy nmS m0
   idle : FrameModel.idleAt (FrameModel.Rom.of m0) (placesR sy nmS m0).idle = true

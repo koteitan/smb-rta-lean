@@ -10,6 +10,8 @@ The pause has a timer (`GamePauseTimer`): a press of Start counts only when it i
 pause sound plays, Start does nothing, and the timer is one more than the sound's counter. The pipe's frames are split by classes of the six bytes of the pause
 (`classesP`): the queue, the buffer, the flag and the counter of the pause sound, the timer, and the pause byte. Each class is a start state of the pipe's frames with
 these bytes. The check walks every frame from every class and ends in a class, or at the exit in one of the kinds of `QuietK` (`kindsX`).
+The walk also has the game timer's three digits as its bytes `D`, with `dg` (the timer is not 000) in every class and every kind: no path of the pipe's frames
+stores to the digits (the timer runs only in the player's routines). So the route asks the timer not 000 at the entry (`EndRunQ.timeE`), not at the exit.
 
 There is no game data in this file. Page: `1-1/d-3-4-3-SidePause.md`.
 -/
@@ -85,22 +87,35 @@ def startsC (sy : Syms) (ix : PauseIdx) (pb : PauseBytes) (starts : List AS) : L
 def baseX (sy : Syms) (ix : PauseIdx) (x : Machine) (base : List AS) : List AS :=
   base.flatMap fun S => (kindsX sy ix x).map fun t => withClass t S
 
-/-- **The state during the pipe, with the pause in a class** -/
-abbrev During2C (sy : Syms) (nm nx : Names) (e : Machine) : Machine → Prop :=
-  InvAt (sideEnv nm e) (startsC sy (pauseIdx nx) (pauseBytesOf nx) (startsOf (refs2 nm nx e)))
+/-- the environment of the pipe's frames with the game timer's three digits as the bytes `D` of the walk: `dg` says that the timer is not 000 -/
+def sideEnvT (nm nx : Names) (e : Machine) : Env := { sideEnv nm e with D := SideChangeEnd.digitsOf nx }
 
-/-- **the check on the ROM**: the pipe's frames from every class end in a class, or at the exit in a kind; a class and a kind only add known bytes -/
+/-- the state `S` with `dg`: the game timer is not 000 -/
+def withT (S : AS) : AS := { S with dg := true }
+
+/-- the start states of the pipe's frames, split by the classes, with the timer not 000 -/
+def startsCT (sy : Syms) (ix : PauseIdx) (pb : PauseBytes) (starts : List AS) : List AS := (startsC sy ix pb starts).map withT
+
+/-- the states at the exit, split by the kinds, with the timer not 000 -/
+def baseXT (sy : Syms) (ix : PauseIdx) (x : Machine) (base : List AS) : List AS := (baseX sy ix x base).map withT
+
+/-- **The state during the pipe, with the pause in a class and the game timer not 000** -/
+abbrev During2C (sy : Syms) (nm nx : Names) (e : Machine) : Machine → Prop :=
+  InvAt (sideEnvT nm nx e) (startsCT sy (pauseIdx nx) (pauseBytesOf nx) (startsOf (refs2 nm nx e)))
+
+/-- **the check on the ROM**: the pipe's frames from every class end in a class, or at the exit in a kind; a class and a kind only add known bytes. The walk
+has the game timer's digits as its bytes `D`, and `dg` in its start states and in its states at the exit: no path of the pipe's frames stores to the digits. -/
 def pipeCheck (sy : Syms) (nm nx : Names) (e : Machine) (A : Nat) : Bool :=
   let ix := pauseIdx nx
   let pb := pauseBytesOf nx
   let x := refExit e A
   let st0 := startsOf (refs2 nm nx e)
   let base := SideChangeSound.baseK nx e A
-  let E := sideEnv nm e
+  let E := sideEnvT nm nx e
   decide (2 ≤ A) && decide (sy.PauseSfxLength.toNat < 256) && SideChangeBound.startsOK (refs2 nm nx e) &&
-    st0.all (fun S => (classesP sy ix pb).all fun t => (withClass t S).le S && (toOne E (withClass t S)).le (toOne E S)) &&
-    base.all (fun S => (kindsX sy ix x).all fun t => (withClass t S).le S && soundLe (withClass t S) t) &&
-    duringCheck E (exitSplits nm nx e) sy (keepOf nm ++ pauseKeep ix pb) (keep2 nm nx ++ pauseKeep ix pb) (startsC sy ix pb st0) (baseX sy ix x base) [] (exitBytes sy nm x)
+    st0.all (fun S => !S.dg && (classesP sy ix pb).all fun t => (withT (withClass t S)).le S && (toOne E (withT (withClass t S))).le (toOne E S)) &&
+    base.all (fun S => !S.dg && (kindsX sy ix x).all fun t => (withT (withClass t S)).le S && soundLe (withT (withClass t S)) t) &&
+    duringCheck E (exitSplits nm nx e) sy (keepOf nm ++ pauseKeep ix pb) (keep2 nm nx ++ pauseKeep ix pb) (startsCT sy ix pb st0) (baseXT sy ix x base) [] (exitBytes sy nm x)
 
 /-! ## The classes and the kinds of real machines -/
 
@@ -185,6 +200,29 @@ theorem quietK_of_kind (hL : sy.PauseSfxLength.toNat < 256) {x m : Machine} {t :
   · exact Or.inr (Or.inr ⟨eq_of_mem_known (hm (ix.q, AB.known sy.UnpauseSfxValue.toUInt8) (by simp)),
       eq_of_mem_known (hm (ix.b, AB.known (x.ram.get! ix.b)) (by simp)), eq_of_mem_known (hm (ix.f, AB.known sy.PauseSfxValue.toUInt8) (by simp))⟩)
 
+/-- a machine whose timer is not 000 is under the state with `dg`, in the environment with the digits -/
+theorem sim_withT {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E F A m) {D : List Nat} (hd : D.any (fun i => m.ram.get! i != 0) = true) :
+    Sim { E with D := D } F (withT A) m :=
+  ⟨hs.a, hs.x, hs.y, hs.p, hs.s, hs.pc, hs.prg, hs.mask, hs.ppuCtrl, hs.ppuMask, hs.vb, hs.nmi, hs.s0, hs.lo, hs.hi, hs.lim, hs.pad, hs.padShift, hs.strobe, hs.halted, hs.trk, hs.size, hs.ram,
+    fun _ => hd, hs.szR, hs.szK, hs.fr, hs.rkv⟩
+
+/-- the timer not 000, as `dg` reads it -/
+theorem any_of_timerOK {nx : Names} {m : Machine} (h : TimerOK nx m) : (SideChangeEnd.digitsOf nx).any (fun i => m.ram.get! i != 0) = true := by
+  obtain ⟨j, hj, hne⟩ := h
+  exact List.any_eq_true.2 ⟨j, hj, by simpa using hne⟩
+
+/-- `dg` in the environment with the digits gives the timer not 000 -/
+theorem timerOK_of_sim {nm nx : Names} {e : Machine} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim (sideEnvT nm nx e) F A m) (hd : A.dg = true) : TimerOK nx m := by
+  obtain ⟨j, hj, hne⟩ := List.any_eq_true.1 (hs.dg hd)
+  exact ⟨j, hj, by simpa using hne⟩
+
+/-- a state without `dg` in the environment with the digits is a state of the pipe's walk without them -/
+theorem sim_of_simT {nm nx : Names} {e : Machine} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim (sideEnvT nm nx e) F A m) (hd : A.dg = false) :
+    Sim (sideEnv nm e) F A m :=
+  SideChangeEnd.sim_D (D := []) hs hd
+
+theorem toOne_dg (E : Env) (S : AS) : (toOne E S).dg = S.dg := rfl
+
 theorem sim_withClass {E : Env} {F : Nat × UInt8} {m : Machine} : ∀ (t : SState) {A : AS}, Sim E F A m → SIn t m → Sim E F (withClass t A) m := by
   intro t
   induction t with
@@ -202,15 +240,14 @@ variable {sy : Syms} {nm nx : Names} {e : Machine} {A B : Nat} {R : Rt}
 
 /-- what the check gives on the pipe's frames, with the rows of `SideChangeSound` after them -/
 structure PipeQ (sy : Syms) (nm nx : Names) (e : Machine) (A B : Nat) (R : Rt) : Prop where
-  /-- an entry with the condition on the pause is in a class -/
-  during : ∀ M, Entry2 nm nx e A M → PauseE sy (pauseIdx nx) (pauseBytesOf nx) M → During2C sy nm nx e M
+  /-- an entry with the condition on the pause and the game timer not 000 is in a class -/
+  during : ∀ M, Entry2 nm nx e A M → PauseE sy (pauseIdx nx) (pauseBytesOf nx) M → TimerOK nx M → During2C sy nm nx e M
   /-- a class is in the state during the pipe of `SideChangeEnd` -/
   toDuring2 : ∀ m, During2C sy nm nx e m → During2 nm nx e m
-  /-- **one frame of the pipe, for any input**: the machine stays in a class, or this is the exit; there the pause sound is as `QuietK` says, and with the timer not
-  000 the machine is in the rows -/
+  /-- **one frame of the pipe, for any input**: the machine stays in a class, or this is the exit; there the pause sound is as `QuietK` says, the timer is still
+  not 000, and the machine is in the rows -/
   step : ∀ m, During2C sy nm nx e m → ∀ i, During2C sy nm nx e (frame m i) ∨
-    (ExitAt (exitBytes sy nm (refExit e A)) (frame m i) ∧ QuietK sy (pauseIdx nx) (refExit e A) (frame m i) ∧
-      (TimerOK nx (frame m i) → InRowsK sy nm nx e A B R (frame m i)))
+    (ExitAt (exitBytes sy nm (refExit e A)) (frame m i) ∧ QuietK sy (pauseIdx nx) (refExit e A) (frame m i) ∧ InRowsK sy nm nx e A B R (frame m i))
 
 /-- the start of the rows from a state at the exit, as in `SideChangeSound.endStatementK_of_check` -/
 theorem inRows_of_base (hk : endCheckK sy nm nx e A B R = true) {D : AS} (hD : D ∈ SideChangeSound.baseK nx e A) {m : Machine}
@@ -230,18 +267,19 @@ theorem inRows_of_base (hk : endCheckK sy nm nx e A B R = true) {D : AS} (hD : D
     (SideChangeSound.sIn_append (sIn_of_le hs hbD.2) hkm)
 
 theorem pipeQ_of_check (hp : pipeCheck sy nm nx e A = true) (hk : endCheckK sy nm nx e A B R = true) : PipeQ sy nm nx e A B R := by
-  simp only [pipeCheck, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hp
+  simp only [pipeCheck, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, Bool.not_eq_true'] at hp
   obtain ⟨⟨⟨⟨⟨hA, hL⟩, hV⟩, hC⟩, hX⟩, hD⟩ := hp
   have hDOK := SideChangeEnd.duringOK_of_check hD
   have hE : (sideEnv nm e).pad = AB.top := rfl
+  have hET : (sideEnvT nm nx e).pad = AB.top := rfl
   refine ⟨?_, ?_, ?_⟩
-  · intro M hM hP
+  · intro M hM hP hT
     obtain ⟨S, hS, hcase⟩ := SideChangeBound.inv_of_entry hV hE hA hM
     obtain ⟨t, ht, htm⟩ := class_of_pauseE hP
-    have hS' : withClass t S ∈ startsC sy (pauseIdx nx) (pauseBytesOf nx) (startsOf (refs2 nm nx e)) :=
-      List.mem_flatMap.2 ⟨S, hS, List.mem_map.2 ⟨t, ht, rfl⟩⟩
+    have hS' : withT (withClass t S) ∈ startsCT sy (pauseIdx nx) (pauseBytesOf nx) (startsOf (refs2 nm nx e)) :=
+      List.mem_map.2 ⟨withClass t S, List.mem_flatMap.2 ⟨S, hS, List.mem_map.2 ⟨t, ht, rfl⟩⟩, rfl⟩
     rcases hcase with ⟨h2, hs⟩ | ⟨h1, _⟩
-    · exact ⟨_, hS', Or.inl ⟨h2, sim_withClass t hs htm⟩⟩
+    · exact ⟨_, hS', Or.inl ⟨h2, sim_withT (sim_withClass t hs htm) (any_of_timerOK hT)⟩⟩
     · exfalso
       have := hM.timer
       have h1' : (tm (sideEnv nm e) M).toNat = 1 := by rw [h1]; rfl
@@ -249,21 +287,26 @@ theorem pipeQ_of_check (hp : pipeCheck sy nm nx e A = true) (hk : endCheckK sy n
       omega
   · intro m hm
     obtain ⟨S', hS', hcase⟩ := hm
-    obtain ⟨S, hS, hS2⟩ := List.mem_flatMap.1 hS'
+    obtain ⟨S1, hS1, rfl⟩ := List.mem_map.1 hS'
+    obtain ⟨S, hS, hS2⟩ := List.mem_flatMap.1 hS1
     obtain ⟨t, ht, rfl⟩ := List.mem_map.1 hS2
-    have hle := hC S hS t ht
+    obtain ⟨hd, hcl⟩ := hC S hS
+    have hle := hcl t ht
     rcases hcase with ⟨h2, hs⟩ | ⟨h1, hs⟩
-    · exact ⟨S, hS, Or.inl ⟨h2, sim_le hle.1 hs⟩⟩
-    · exact ⟨S, hS, Or.inr ⟨h1, sim_le hle.2 hs⟩⟩
+    · exact ⟨S, hS, Or.inl ⟨h2, sim_of_simT (sim_le hle.1 hs) hd⟩⟩
+    · exact ⟨S, hS, Or.inr ⟨h1, sim_of_simT (sim_le hle.2 hs) (by rw [toOne_dg]; exact hd)⟩⟩
   · intro m hm i
-    rcases SideChangeEnd.during_step hDOK hE hm i with g | ⟨_, g1, g2⟩
+    rcases SideChangeEnd.during_step hDOK hET hm i with g | ⟨_, g1, g2⟩
     · exact Or.inl g
     · obtain ⟨D, hD1, hs⟩ := g2 (fun q hq => by cases hq)
-      obtain ⟨S, hS, hS2⟩ := List.mem_flatMap.1 hD1
+      obtain ⟨D1, hD2, rfl⟩ := List.mem_map.1 hD1
+      obtain ⟨S, hS, hS2⟩ := List.mem_flatMap.1 hD2
       obtain ⟨t, ht, rfl⟩ := List.mem_map.1 hS2
-      have hle := hX S hS t ht
+      obtain ⟨hd, hkd⟩ := hX S hS
+      have hle := hkd t ht
+      have hT : TimerOK nx (frame m i) := timerOK_of_sim hs rfl
       have hq := quietK_of_kind hL ht (sIn_of_le hs hle.2)
-      exact Or.inr ⟨g1, hq, fun hT => inRows_of_base hk hS (sim_le hle.1 hs) hq hT⟩
+      exact Or.inr ⟨g1, hq, inRows_of_base hk hS (sim_of_simT (sim_le hle.1 hs) hd) hq hT⟩
 
 end
 
@@ -294,36 +337,34 @@ structure EndRunQ (sy : Syms) (nm nx : Names) (e : Machine) (A : Nat) where
   lagPaused : ∀ n, a ≤ n → n < b → lag n → Paused nx (seq (n + 1))
   /-- no Start on the frames of the game core after the pipe -/
   noStart : ∀ n, a ≤ n → n < b → SideChangeEnd.coreFrame sy sy.EngSidePipe (seq n) = true → SideChangeEnd.noStart (inp n) = true
-  /-- at the exit, the game timer is not 000 -/
-  time : ∀ n, a ≤ n → n ≤ b → ExitAt (exitBytes sy nm (refExit e A)) (seq n) → TimerOK nx (seq n)
+  /-- at the entry, the game timer is not 000. The pipe's frames do not store to its digits, so it is not 000 at the exit (`PipeQ.step`). -/
+  timeE : TimerOK nx (seq a)
 
 /-- in a class during the pipe, or in the rows -/
 def StQ (sy : Syms) (nm nx : Names) (e : Machine) (A B : Nat) (R : Rt) (m : Machine) : Prop := During2C sy nm nx e m ∨ InRowsK sy nm nx e A B R m
 
 /-- one frame -/
 theorem st_stepQ (S : Statement sy nm e es A B) (T : EndStatementK sy nm nx e A B R) (Q : PipeQ sy nm nx e A B R) {m : Machine} {i : UInt8}
-    (h : StQ sy nm nx e A B R m) (hi : SideChangeEnd.coreFrame sy sy.EngSidePipe m = true → SideChangeEnd.noStart i = true)
-    (ht : ExitAt (exitBytes sy nm (refExit e A)) (frame m i) → TimerOK nx (frame m i)) :
+    (h : StQ sy nm nx e A B R m) (hi : SideChangeEnd.coreFrame sy sy.EngSidePipe m = true → SideChangeEnd.noStart i = true) :
     leftAt sy nm e A B m = 0 ∨ (StQ sy nm nx e A B R (frame m i) ∧ leftAt sy nm e A B m ≤ leftAt sy nm e A B (frame m i) + 1) := by
   rcases h with h | h
   · right
     refine ⟨?_, S.fall _ (T.toDuring _ (Q.toDuring2 _ h)) _⟩
-    rcases Q.step m h i with g | ⟨g1, _, g3⟩
+    rcases Q.step m h i with g | ⟨_, _, g3⟩
     · exact Or.inl g
-    · exact Or.inr (g3 (ht g1))
+    · exact Or.inr g3
   · rcases T.rows m h i hi with g | ⟨g1, g2⟩
     · exact Or.inl g
     · exact Or.inr ⟨Or.inr g1, g2⟩
 
 /-- one frame that ends paused: it takes nothing off `left` -/
 theorem st_step_pausedQ (T : EndStatementK sy nm nx e A B R) (Q : PipeQ sy nm nx e A B R) {m : Machine} {i : UInt8} (h : StQ sy nm nx e A B R m)
-    (hi : SideChangeEnd.coreFrame sy sy.EngSidePipe m = true → SideChangeEnd.noStart i = true)
-    (ht : ExitAt (exitBytes sy nm (refExit e A)) (frame m i) → TimerOK nx (frame m i)) (hp : Paused nx (frame m i)) :
+    (hi : SideChangeEnd.coreFrame sy sy.EngSidePipe m = true → SideChangeEnd.noStart i = true) (hp : Paused nx (frame m i)) :
     leftAt sy nm e A B m = 0 ∨ (StQ sy nm nx e A B R (frame m i) ∧ leftAt sy nm e A B m ≤ leftAt sy nm e A B (frame m i)) := by
   rcases h with h | h
-  · rcases Q.step m h i with g | ⟨g1, _, g3⟩
+  · rcases Q.step m h i with g | ⟨_, _, g3⟩
     · exact Or.inr ⟨Or.inl g, T.pauseKeeps m (Q.toDuring2 _ h) i hp (Q.toDuring2 _ g)⟩
-    · exact absurd hp (T.rowsNotPaused _ (g3 (ht g1)))
+    · exact absurd hp (T.rowsNotPaused _ g3)
   · rcases T.rows m h i hi with g | ⟨g1, _⟩
     · exact Or.inl g
     · exact absurd hp (T.rowsNotPaused _ g1)
@@ -331,13 +372,6 @@ theorem st_step_pausedQ (T : EndStatementK sy nm nx e A B R) (Q : PipeQ sy nm nx
 theorem EndRunQ.cnt_mono (R' : EndRunQ sy nm nx e A) (n : Nat) : R'.cnt n ≤ R'.cnt (n + 1) := by
   rw [R'.hcnt n]
   omega
-
-/-- the timer at the exit of a run, on the frame after `n` -/
-theorem EndRunQ.timeAt (R' : EndRunQ sy nm nx e A) {n : Nat} (h1 : R'.a ≤ n) (h2 : n < R'.b) :
-    ExitAt (exitBytes sy nm (refExit e A)) (frame (R'.seq n) (R'.inp n)) → TimerOK nx (frame (R'.seq n) (R'.inp n)) := by
-  intro hx
-  rw [← R'.next n] at hx ⊢
-  exact R'.time _ (by omega) (by omega) hx
 
 /-- **The bound on the change**: `change₂` of `Route`, with `A + B = 282`. -/
 theorem EndRunQ.bound (S : Statement sy nm e es A B) (T : EndStatementK sy nm nx e A B R) (Q : PipeQ sy nm nx e A B R) (R' : EndRunQ sy nm nx e A) :
@@ -349,7 +383,7 @@ theorem EndRunQ.bound (S : Statement sy nm e es A B) (T : EndStatementK sy nm nx
     | zero =>
       intro _
       right
-      refine ⟨Or.inl (Q.during _ R'.entry R'.pause), ?_⟩
+      refine ⟨Or.inl (Q.during _ R'.entry R'.pause R'.timeE), ?_⟩
       have := S.atEntry _ (T.entry _ R'.entry)
       simp only [Nat.add_zero]
       omega
@@ -363,20 +397,19 @@ theorem EndRunQ.bound (S : Statement sy nm e es A B) (T : EndStatementK sy nm nx
         have := R'.cnt_mono (R'.a + d)
         omega
       · have hi := R'.noStart (R'.a + d) (by omega) (by omega)
-        have ht := R'.timeAt (n := R'.a + d) (by omega) (by omega)
         have hc := R'.hcnt (R'.a + d)
         by_cases hl : R'.lag (R'.a + d)
         · rw [@if_pos _ (R'.dec _) hl] at hc
           have hp := R'.lagPaused (R'.a + d) (by omega) (by omega) hl
           rw [hn] at hp
-          rcases st_step_pausedQ T Q h1 hi ht hp with g | ⟨g1, g2⟩
+          rcases st_step_pausedQ T Q h1 hi hp with g | ⟨g1, g2⟩
           · left
             omega
           · right
             rw [hn]
             exact ⟨g1, by omega⟩
         · rw [@if_neg _ (R'.dec _) hl] at hc
-          rcases st_stepQ S T Q h1 hi ht with g | ⟨g1, g2⟩
+          rcases st_stepQ S T Q h1 hi with g | ⟨g1, g2⟩
           · left
             omega
           · right
@@ -395,12 +428,12 @@ theorem EndRunQ.way (S : Statement sy nm e es A B) (T : EndStatementK sy nm nx e
     (hc : ∀ n, R'.a ≤ n → n < R'.b → controllable sy (R'.seq n) = false) : ∀ d, R'.a + d ≤ R'.b → StQ sy nm nx e A B R (R'.seq (R'.a + d)) := by
   intro d
   induction d with
-  | zero => exact fun _ => Or.inl (Q.during _ R'.entry R'.pause)
+  | zero => exact fun _ => Or.inl (Q.during _ R'.entry R'.pause R'.timeE)
   | succ d ih =>
     intro hd
     have e1 : R'.a + (d + 1) = R'.a + d + 1 := rfl
     rw [e1, R'.next (R'.a + d)]
-    rcases st_stepQ S T Q (ih (by omega)) (R'.noStart (R'.a + d) (by omega) (by omega)) (R'.timeAt (n := R'.a + d) (by omega) (by omega)) with g | ⟨g1, _⟩
+    rcases st_stepQ S T Q (ih (by omega)) (R'.noStart (R'.a + d) (by omega) (by omega)) with g | ⟨g1, _⟩
     · rcases ih (by omega) with h | h
       · exact absurd g (T.duringLeft _ (Q.toDuring2 _ h))
       · have := T.zero _ h g
@@ -438,7 +471,7 @@ theorem EndRunQ.last (S : Statement sy nm e es A B) (T : EndStatementK sy nm nx 
   have h0 := S.atControl _ R'.atCtl
   have hab : R'.a + 1 ≤ R'.b := by
     refine Nat.lt_of_le_of_ne R'.order fun heq => ?_
-    have hd := T.duringLeft _ (Q.toDuring2 _ (Q.during _ R'.entry R'.pause))
+    have hd := T.duringLeft _ (Q.toDuring2 _ (Q.during _ R'.entry R'.pause R'.timeE))
     rw [heq] at hd
     exact hd h0
   have e1 : R'.a + (R'.b - 1 - R'.a) = R'.b - 1 := by omega

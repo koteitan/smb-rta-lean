@@ -6,8 +6,9 @@ import Theorems.RoomPause
 `ScreenPage.EntryRest` (the field `entry₂` of the route) asks 16 bytes at the side pipe's entry to have the values of a reference. Eight of them are bytes of the music.
 Here the walk of one frame in the room of `RoomPause` carries the music bytes in a table outside the abstract state, as it carries the six bytes of the pause: at the
 call of the sound routine the state is split by the table, the routine is walked with the bytes known, and after the pause routine they must be in a state of the table and
-are forgotten (but for the bits that the room's condition knows, `RoomPause.Reg.keepB`). The room's condition is taken with two more bytes: the event music's queue
-(all but bit 6: the hurry-up music may be queued) and the noise effect's queue. With them the table stays small: the music of the room, and the hurry-up music.
+are forgotten (but for the bits that the room's condition knows, `RoomPause.Reg.keepB`). The room's condition is taken with one more byte, the noise effect's queue.
+The event music's queue is a byte of the table, not of the room's condition: the code of a fall into a hole stores it with a value that the walk does not know. The table
+has 62 states: the music of the room, the hurry-up music, and songs read from that queue.
 
 From the room's first control, where the rows of the time of the change into the room know these bytes, the bytes at the side pipe's entry are in a state of the table
 (`music_run`). Every state of the table that admits the reference's `AreaMusicBuffer` knows five other bytes with the reference's values (`deriveCheck`). So `entry₂`

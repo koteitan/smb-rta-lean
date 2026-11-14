@@ -653,10 +653,12 @@ def startKnown (c : Ctx) : List Nat :=
     (List.range 80).map (c.i "VRAM_Buffer1" + ·) ++ (List.range 6).map (c.i "Enemy_ID" + ·) ++ (List.range 6).map (c.i "Enemy_Flag" + ·)
 
 /-- what the seeds know of the bytes that the screen's position has, and of the pause: the status is 0, 1, 0x80 or 0x81, the pause's sound queue and mode 0 to 3,
-the pause timer any value -/
+the pause timer any value. The height of the flagpole's floating number may have any value and the number of its score is below 8: both are set by the height of the
+touch, so the castle entries after touches at other heights are in the states too. -/
 def partials (c : Ctx) : List (Nat × AB) :=
   [(c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0xC0⟩), (c.i "ScreenRight_X_Pos", ⟨0, 0xC0⟩), (c.i "VRAM_Buffer1", AB.known 0), (c.i "Square2SoundQueue", AB.known 0),
-   (c.gps, ⟨0, 0x7E⟩), (c.i "GamePauseTimer", AB.top), (c.i "PauseModeFlag", ⟨0, 0xFC⟩), (c.i "PauseSoundQueue", ⟨0, 0xFC⟩)]
+   (c.gps, ⟨0, 0x7E⟩), (c.i "GamePauseTimer", AB.top), (c.i "PauseModeFlag", ⟨0, 0xFC⟩), (c.i "PauseSoundQueue", ⟨0, 0xFC⟩),
+   (c.i "FlagpoleFNum_Y_Pos", AB.top), (c.i "FlagpoleScore", ⟨0, 0xF8⟩)]
 
 /-- the states a frame can start from, before any frame -/
 def seeds (c : Ctx) : List AS :=

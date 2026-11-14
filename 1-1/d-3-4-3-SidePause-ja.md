@@ -4,6 +4,8 @@
 
 **主張.** 横の土管の入口で、ポーズの音が鳴っていない、またはポーズを解く音が鳴っていてポーズのタイマーがその数より 1 多い、またはそのフレームでポーズを解いた、とします（`PauseE`）。すると土管のフレームでは、Start も含めてどの入力でも、ポーズの 6 つのバイトは 90 のクラスのどれかにとどまり、出口ではポーズの音は `QuietK` のとおりです。これは ROM の確認つきで証明しました。なので道筋はもう出口の `QuietK` を仮定しません。`chg.quiet₂` はなくなり、`chg.pause₂`（入口の条件 `PauseE`）が新しく入りました（1-1-d-3-4）。Start をでたらめに押す実際の走りでは、636 の入口すべてで `PauseE` が成り立ち、土管の 205,016 フレームはすべてクラスに入り（90 のクラスのうち 89 が現れました）、636 の出口すべてで `QuietK` が成り立ちました。入口の `PauseE` は、いまは部屋で最初に操作できるときから証明しています（[部屋のフレームを通るポーズ](d-3-4-4-RoomPause-ja.md)）。`chg.pause₂` は定理になり、道筋はそこでポーズのバイトのビット 1 から 6 が 0 であることだけを求めます（`chg.pauseBits₂`）。
 
+**12 回目の新しいこと：ゲームタイマー.** 同じ歩きが「ゲームタイマーが 000 でない」（`TimerOK`）を入口から出口まで運びます。土管のフレームのどの道もタイマーの桁に書き込みません。なので `chg.time₂`（1-1-d-3-5）は、出口ではなく入口 `seq(a₂)` で `TimerOK` を求めます（[横の土管でのゲームタイマー](d-3-5-1-SideTime-ja.md)）。
+
 `m[i]` は `m` の RAM のバイト `i` です。`frame(m, i)` は `m` の入力 `i` での 1 フレームです。`Entry2`、`During2`、`Exit`、`TimerOK` は [地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) のものです。`QuietK`、`InRowsK`、`EndStatementK`、`EndRunK` は [地上への切り替えを、音のバイトを表にして](d-3-4-2-SideChangeSound-ja.md) のものです。
 
 ## ポーズの 6 つのバイト
@@ -42,16 +44,18 @@ PauseE(m)  :=  ( m[g] ∈ {0, 0x80}  ∧  m[q] = 0  ∧  m[b] = 0 )
 
 ## 命題
 
-`During2C(m)`：`m` は、土管のフレームの始めの状態に、あるクラスの 6 つのバイトを入れたもので覆われます（`During2` と同じく土管のタイマーを追います）。`PipeQ` は次のフィールドを持ちます。確認 `pipeCheck` と行の確認 `endCheckK` がそれを出します（`pipeQ_of_check`）。
+`During2C(m)`：`m` は、土管のフレームの始めの状態に、あるクラスの 6 つのバイトと `dg` を入れたもので覆われます（`During2` と同じく土管のタイマーを追います）。`dg` はゲームタイマーが 000 でないことです：`TimerOK(m) := ∃ i ∈ digits, m[i] ≠ 0`。`digits` は `GameTimerDisplay` の 3 バイトです。`PipeQ` は次のフィールドを持ちます。確認 `pipeCheck` と行の確認 `endCheckK` がそれを出します（`pipeQ_of_check`）。
 
 ```
-during    :  ∀ M,  Entry2(M) ∧ PauseE(M) → During2C(M)
+during    :  ∀ M,  Entry2(M) ∧ PauseE(M) ∧ TimerOK(M) → During2C(M)
 toDuring2 :  ∀ m,  During2C(m) → During2(m)
 step      :  ∀ m, During2C(m) → ∀ i :  During2C(frame(m, i))
-               ∨  ( Exit(frame(m, i))  ∧  QuietK(frame(m, i))  ∧  ( TimerOK(frame(m, i)) → InRowsK(frame(m, i)) ) )
+               ∨  ( Exit(frame(m, i))  ∧  QuietK(frame(m, i))  ∧  InRowsK(frame(m, i)) )
 ```
 
-**走り.** `EndRunQ` は `EndRunK` のフィールドで、出口の `quiet` のかわりに入口の `pause : PauseE(seq a)` を持ちます。`b` は入口 `a` のあとの最初の操作です（`hc`）。定理は `EndRunK` のものに、引数 `PipeQ` を 1 つ加えたものです：
+12 回目より前は、`during` は `TimerOK(M)` を求めず、`step` は出口の `TimerOK` のもとでだけ `InRowsK` を出しました。
+
+**走り.** `EndRunQ` は `EndRunK` のフィールドで、出口の `quiet` のかわりに入口の `pause : PauseE(seq a)` を、出口の `time` のかわりに入口の `timeE : TimerOK(seq a)` を持ちます。`b` は入口 `a` のあとの最初の操作です（`hc`）。定理は `EndRunK` のものに、引数 `PipeQ` を 1 つ加えたものです：
 
 ```
 EndRunQ.bound  :  cnt(a) + 282 ≤ cnt(b)
@@ -62,11 +66,13 @@ EndRunQ.atCtl' :  hc  ∧  ctlCheckK    →  AtCtl(seq b)
 EndRunQ.last   :  hc  →  a + 1 ≤ b  ∧  seq(b − 1) は行にある  ∧  left(seq(b − 1)) = 1
 ```
 
-Lean：`Theorems/SidePause.lean`（`PauseBytes`、`pauseBytesOf`、`classesP`、`PauseE`、`kindsX`、`withClass`、`pauseKeep`、`startsC`、`baseX`、`During2C`、`pipeCheck`、`class_of_pauseE`、`quietK_of_kind`、`sim_withClass`、`PipeQ`、`inRows_of_base`、`pipeQ_of_check`、`EndRunQ`、`StQ`、`st_stepQ`、`st_step_pausedQ`、`EndRunQ.bound`、`EndRunQ.way`、`EndRunQ.first`、`EndRunQ.inRows`、`EndRunQ.last`、`EndRunQ.start`、`EndRunQ.atCtl'`）、private の `side_pause_check`（`native_decide`、`Proof/SidePause.lean`）、`side_pause`（`Proof/Route.lean`）。公開のファイルにゲームのデータはありません。
+Lean：`Theorems/SidePause.lean`（`PauseBytes`、`pauseBytesOf`、`classesP`、`PauseE`、`kindsX`、`withClass`、`pauseKeep`、`startsC`、`baseX`、`sideEnvT`、`withT`、`startsCT`、`baseXT`、`During2C`、`pipeCheck`、`class_of_pauseE`、`quietK_of_kind`、`sim_withT`、`any_of_timerOK`、`timerOK_of_sim`、`sim_of_simT`、`toOne_dg`、`sim_withClass`、`PipeQ`、`inRows_of_base`、`pipeQ_of_check`、`EndRunQ`、`StQ`、`st_stepQ`、`st_step_pausedQ`、`EndRunQ.bound`、`EndRunQ.way`、`EndRunQ.first`、`EndRunQ.inRows`、`EndRunQ.last`、`EndRunQ.start`、`EndRunQ.atCtl'`）、private の `side_pause_check`（`native_decide`、`Proof/SidePause.lean`）、`side_pause`（`Proof/Route.lean`）。公開のファイルにゲームのデータはありません。
 
 ## しくみ
 
 **クラスを始めの状態にする.** `SideChangeEnd` の土管のフレームは 4 つの状態（参照の機械 2 つ、ドットの 2 種類）から始まります。ここではその各々に、各クラスの 6 つのバイトを入れます。始めの状態は 360 です。探索は 6 つのバイトを分けておきます。`SideChangeEnd` の確認 `duringCheck` をそのまま使います。始めの状態からの各フレームは始めの状態で終わるか、土管のタイマーが切れるフレームでは出口で終わります。出口の状態は `QuietK` の 44 の種類で分けます（`kindsX`）。なので出口で歩きが終わると、ある種類のバイトを持ちます。クラスや種類は状態に知っているバイトを足すだけです（`withClass(t, S) ≤ S`、確認つき）。なので `During2C` から `During2` が出て、`SideChangeEnd` と `SideChangeSound` が `During2` について証明したことはそのまま使えます。
+
+**歩きの中のゲームタイマー.** 歩きの環境は、ゲームタイマーの 3 つの桁を `D` のバイトにします（`sideEnvT`）。始めの状態と出口の状態はすべて `dg` を持ちます（`withT`）。[知らないバイトのある走り](b-2-3-TaintRun-ja.md) の抽象機械では、`D` のバイトへの書き込みは `dg` を消し、`B` が `dg` を持つなら `A ≤ B` には `A` の `dg` が要ります。なので、土管のフレームのどの道も桁に書き込まないときだけ確認が通ります。確認は通ります。ゲームタイマーはプレイヤーのルーチンでだけ進みます（ルーチンが横の土管のものの間、`RunGameTimer` はすぐ抜けます）。入口では `TimerOK` から `dg` が出ます（`sim_withT`）。出口では `dg` から `TimerOK` が出ます（`timerOK_of_sim`）。`SideChangeEnd` の始めの状態は `dg` を持たないので（確認つき）、`During2C` から `During2` が出ます（`sim_of_simT`）。
 
 **なぜタイマーをクラスに入れるか.** `t` がないと、ポーズを解く音が鳴っている間に Start が効く道が歩きに入ります。すると `b = U` の間にポーズし、ポーズの音は始まらず、ポーズを解く音が終わるとき、ポーズ中なのに `f` が 0 になります。ポーズ中に曲が進んでしまいます。クラスで `t = c + 1` とすれば、これは起きません。
 
@@ -74,7 +80,7 @@ Lean：`Theorems/SidePause.lean`（`PauseBytes`、`pauseBytesOf`、`classesP`、
 
 **なぜ表でなくクラスか.** [`StepWrites`](d-3-4-1-StepWrites-ja.md) の表は、抽象状態のビット `spent` を使います。土管のフレームは同じビットで土管のタイマーを追います（`rk`）。なのでここでは 6 つのバイトを状態の知っているバイトにします。
 
-**確認の大きさ.** クラス 90、始めの状態 360、フレームの表の状態 211,898 です。確認 `pipeCheck` はプログラムで約 45 秒かかります。数秒より長いです。
+**確認の大きさ.** クラス 90、始めの状態 360、フレームの表の状態 211,898 です。確認 `pipeCheck` はプログラムで約 66 秒かかります（桁なしでは 62 秒、この回に測りました）。数秒より長いです。
 
 ## 測ったこと（定理ではない）
 
@@ -95,12 +101,13 @@ TAS（`changes-check FM2`、および 380、416、450、545、575、730、845 �
 ## 仮定（Lean で証明していない）
 
 * 入口の `PauseE` はもう仮定しません。[部屋のフレームを通るポーズ](d-3-4-4-RoomPause-ja.md) が部屋で最初に操作できるときから証明します。そこでポーズのバイトのビット 1 から 6 が 0 であることは定理です（`ChangesK.pauseBits₂`、1-1-b-3-10）。
-* ほかは [地上への切り替えを、音のバイトを表にして](d-3-4-2-SideChangeSound-ja.md) のとおりです：`Entry2`、`lagPaused`、土管のあとの `NoStart`、`TimerOK`。
+* `TimerOK` は入口で求めます（`EndRunQ.timeE`、`chg.time₂`）。もう出口では求めません。
+* ほかは [地上への切り替えを、音のバイトを表にして](d-3-4-2-SideChangeSound-ja.md) のとおりです：`Entry2`、`lagPaused`、土管のあとの `NoStart`。
 
 **ファイル.** `Theorems/SidePause.lean`。private の確認は `Proof/SidePause.lean`（`Main.lean` の `genSidePause`）、`side_pause` は `Proof/Route.lean` にあります。名前 `GamePauseTimer` を `SideChangeEnd.namesOf` に加えました。
 
 **再現.**
 ```
-.lake/build/bin/smbrta side-pause-check            # 確認をプログラムで、約 47 秒
+.lake/build/bin/smbrta side-pause-check            # 確認をプログラムで、約 66 秒
 .lake/build/bin/smbrta side-pause-real FM2 5 20    # 実際の走りのクラス、約 30 秒（7 と 60 でも）
 ```

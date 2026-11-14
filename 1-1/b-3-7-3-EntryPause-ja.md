@@ -65,7 +65,7 @@ chg.upClean₁ :  1 ≤ n < a₁  →  ∀ j, Clean_G(trace(seq n, inp n, j))   
 ## 仮定（Lean で証明していないもの）
 
 * `upClean₁`: 操作できるときから入るまでのフレームの各命令が `Clean` であること。添字やポインタを通した書き込みは、ポーズの 6 バイトにも触れません。
-* `entryRest₁`: 入るときの `Rest`。いまは 55 バイトです。操作できるときからのフレームがポーズのバイトのビット 1〜6 を保つので、今回それは一覧から出ました（[1-1-b-3-4](b-3-4-EntryKeep-ja.md)）。
+* `entryRest₁`: 入るときの `Rest`。11 回目は 55 バイトでした（操作できるときからのフレームがポーズのバイトのビット 1〜6 を保つので、それは一覧から出ました）。12 回目から 36 バイトです（土管のフレームが使わない 19 バイトが `Entry` から出ました）（[1-1-b-3-4](b-3-4-EntryKeep-ja.md)）。
 
 **ファイル.** `Theorems/EntryKeep.lean`（`pauseSix`、`guardOf`、`outOK`、`vsuccs`、`coverV`、`walkV`、`keyV`、`routeV`、`runV`、`searchV`、`finV`、`cfgV`、`pauseCheck`、`nearPauseCheck`、`Checks`、`tab_of`、`keep_of_outOK`、`s_vsuccs`、`LiveV`、`cover_liveV`、`live_stepV`、`frame_of_walkV`、`PauseOK`、`pauseOK_of_check`、`pause_frame`、`low7_all`、`low7_cases`、`pauseV_of_class`、`Begin.pauseClass`、`class_up`、`pause_entry`、`entryV_of_title`）、`Theorems/PipeChangeEnd.lean`（`EntryV`）、`Theorems/Route.lean`（`ChangesK.run₁`、`Run.entry₁`）、`Theorems/HurryStart.lean`（`Chg₁`）。非公開の確認は `Proof/EntryKeep.lean` の `entry_pause_near` と `entry_pause` です。公開のファイルにゲームのデータはありません。
 

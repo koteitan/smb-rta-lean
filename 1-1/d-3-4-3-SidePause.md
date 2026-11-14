@@ -4,6 +4,8 @@
 
 **Claim.** Suppose that at the side pipe's entry the pause is silent, or the unpause sound plays with the pause timer one more than its counter, or the unpause was pressed on that frame (`PauseE`). Then on the frames of the pipe, for any input, Start included, the six bytes of the pause stay in one of 90 classes, and at the exit the pause sound is as `QuietK` says. This is proved, with a check on the ROM. So the route no longer assumes `QuietK` at the exit: `chg.quiet₂` is gone, and `chg.pause₂` (the condition `PauseE` at the entry) is new (1-1-d-3-4). On real runs with Start at random, `PauseE` held at all 636 entries, every one of 205,016 frames of the pipe was in a class (89 of the 90 classes were seen), and `QuietK` held at all 636 exits. `PauseE` at the entry is now proved from the room's first control ([The pause through the room's frames](d-3-4-4-RoomPause.md)): `chg.pause₂` is a theorem, and the route asks only that bits 1 to 6 of the pause byte are 0 there (`chg.pauseBits₂`).
 
+**New in round 12: the game timer.** The same walk also carries "the game timer is not 000" (`TimerOK`) from the entry to the exit: no path of the pipe's frames stores to the timer's digits. So `chg.time₂` (1-1-d-3-5) now asks `TimerOK` at the entry `seq(a₂)`, not at the exit ([The game timer at the side pipe](d-3-5-1-SideTime.md)).
+
 `m[i]` is the RAM byte `i` of `m`. `frame(m, i)` is one frame of `m` with the input `i`. `Entry2`, `During2`, `Exit` and `TimerOK` are those of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). `QuietK`, `InRowsK`, `EndStatementK` and `EndRunK` are those of [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md).
 
 ## The six bytes of the pause
@@ -42,16 +44,18 @@ At the exit the frame is not paused, so the machine is in one of the first three
 
 ## The statement
 
-`During2C(m)`: `m` is covered by a start state of the pipe's frames with the six bytes of a class (as `During2`, with the pipe's timer followed). `PipeQ` has these fields; the check `pipeCheck` and the check `endCheckK` of the rows give them (`pipeQ_of_check`).
+`During2C(m)`: `m` is covered by a start state of the pipe's frames with the six bytes of a class and with `dg` (as `During2`, with the pipe's timer followed). `dg` says that the game timer is not 000: `TimerOK(m) := ∃ i ∈ digits, m[i] ≠ 0`, with `digits` the three bytes of `GameTimerDisplay`. `PipeQ` has these fields; the check `pipeCheck` and the check `endCheckK` of the rows give them (`pipeQ_of_check`).
 
 ```
-during    :  ∀ M,  Entry2(M) ∧ PauseE(M) → During2C(M)
+during    :  ∀ M,  Entry2(M) ∧ PauseE(M) ∧ TimerOK(M) → During2C(M)
 toDuring2 :  ∀ m,  During2C(m) → During2(m)
 step      :  ∀ m, During2C(m) → ∀ i :  During2C(frame(m, i))
-               ∨  ( Exit(frame(m, i))  ∧  QuietK(frame(m, i))  ∧  ( TimerOK(frame(m, i)) → InRowsK(frame(m, i)) ) )
+               ∨  ( Exit(frame(m, i))  ∧  QuietK(frame(m, i))  ∧  InRowsK(frame(m, i)) )
 ```
 
-**A run.** `EndRunQ` has the fields of `EndRunK`, with `pause : PauseE(seq a)` at the entry in place of `quiet` at the exit. `b` is the first control after the entry `a` (`hc`). The theorems are those of `EndRunK`, with `PipeQ` as one more argument:
+Before round 12, `during` did not ask `TimerOK(M)`, and `step` gave `InRowsK` only under `TimerOK` at the exit.
+
+**A run.** `EndRunQ` has the fields of `EndRunK`, with `pause : PauseE(seq a)` at the entry in place of `quiet` at the exit, and `timeE : TimerOK(seq a)` at the entry in place of `time` at the exit. `b` is the first control after the entry `a` (`hc`). The theorems are those of `EndRunK`, with `PipeQ` as one more argument:
 
 ```
 EndRunQ.bound  :  cnt(a) + 282 ≤ cnt(b)
@@ -62,11 +66,13 @@ EndRunQ.atCtl' :  hc  ∧  ctlCheckK    →  AtCtl(seq b)
 EndRunQ.last   :  hc  →  a + 1 ≤ b  ∧  seq(b − 1) is in the rows  ∧  left(seq(b − 1)) = 1
 ```
 
-Lean: `Theorems/SidePause.lean` (`PauseBytes`, `pauseBytesOf`, `classesP`, `PauseE`, `kindsX`, `withClass`, `pauseKeep`, `startsC`, `baseX`, `During2C`, `pipeCheck`, `class_of_pauseE`, `quietK_of_kind`, `sim_withClass`, `PipeQ`, `inRows_of_base`, `pipeQ_of_check`, `EndRunQ`, `StQ`, `st_stepQ`, `st_step_pausedQ`, `EndRunQ.bound`, `EndRunQ.way`, `EndRunQ.first`, `EndRunQ.inRows`, `EndRunQ.last`, `EndRunQ.start`, `EndRunQ.atCtl'`), private `side_pause_check` (`native_decide`, in `Proof/SidePause.lean`), `side_pause` (in `Proof/Route.lean`). There is no game data in the public file.
+Lean: `Theorems/SidePause.lean` (`PauseBytes`, `pauseBytesOf`, `classesP`, `PauseE`, `kindsX`, `withClass`, `pauseKeep`, `startsC`, `baseX`, `sideEnvT`, `withT`, `startsCT`, `baseXT`, `During2C`, `pipeCheck`, `class_of_pauseE`, `quietK_of_kind`, `sim_withT`, `any_of_timerOK`, `timerOK_of_sim`, `sim_of_simT`, `toOne_dg`, `sim_withClass`, `PipeQ`, `inRows_of_base`, `pipeQ_of_check`, `EndRunQ`, `StQ`, `st_stepQ`, `st_step_pausedQ`, `EndRunQ.bound`, `EndRunQ.way`, `EndRunQ.first`, `EndRunQ.inRows`, `EndRunQ.last`, `EndRunQ.start`, `EndRunQ.atCtl'`), private `side_pause_check` (`native_decide`, in `Proof/SidePause.lean`), `side_pause` (in `Proof/Route.lean`). There is no game data in the public file.
 
 ## How it works
 
 **The classes as start states.** The pipe's frames of `SideChangeEnd` start from 4 states (two reference machines, two kinds of dots). Here each of them is taken with the six bytes of each class: 360 start states. The search keeps the six bytes apart. The check `duringCheck` of `SideChangeEnd` is used as it is: every frame from a start state ends in a start state, or, on the frame where the pipe's timer runs out, at the exit. The states at the exit are split by the 44 kinds of `QuietK` (`kindsX`), so the end of the walk at the exit has the bytes of a kind. A class and a kind only add known bytes to a state (`withClass(t, S) ≤ S`, checked), so `During2C` gives `During2`, and what `SideChangeEnd` and `SideChangeSound` prove of `During2` still holds.
+
+**The game timer in the walk.** The walk's environment has the three digits of the game timer as its bytes `D` (`sideEnvT`), and every start state and every state at the exit has `dg` (`withT`). In the abstract machine of [A run with unknown bytes](b-2-3-TaintRun.md) a store to a byte of `D` clears `dg`, and `A ≤ B` needs `dg` in `A` when `B` has it. So the check passes only if no path of the pipe's frames stores to a digit. It passes: the game timer runs only in the player's routines (`RunGameTimer` leaves at once while the routine is the side pipe's). At the entry `TimerOK` gives `dg` (`sim_withT`); at the exit `dg` gives `TimerOK` (`timerOK_of_sim`). The start states of `SideChangeEnd` have no `dg` (checked), so `During2C` still gives `During2` (`sim_of_simT`).
 
 **Why the timer is in the classes.** Without `t`, the walk lets Start count while the unpause sound plays. Then the pause comes while `b = U`, the pause sound does not start, and when the unpause sound ends `f` becomes 0 while the game is paused: the song would run during the pause. With `t = c + 1` in the class this does not happen.
 
@@ -74,7 +80,7 @@ Lean: `Theorems/SidePause.lean` (`PauseBytes`, `pauseBytesOf`, `classesP`, `Paus
 
 **Why classes and not tables.** The tables of [`StepWrites`](d-3-4-1-StepWrites.md) use the bit `spent` of the abstract state. The pipe's frames follow the pipe's timer with the same bit (`rk`). So the six bytes are known bytes of the states here.
 
-**The size of the check.** 90 classes, 360 start states, 211,898 states in the table of the frames. The check `pipeCheck` takes about 45 s in a program. This is more than a few seconds.
+**The size of the check.** 90 classes, 360 start states, 211,898 states in the table of the frames. The check `pipeCheck` takes about 66 s in a program (62 s without the digits, measured this round). This is more than a few seconds.
 
 ## Measured, not a theorem
 
@@ -95,12 +101,13 @@ On the movie (`changes-check FM2`, and with a pause of 60 frames at 380, 416, 45
 ## Assumptions (not proved in Lean)
 
 * `PauseE` at the entry is no longer assumed. [The pause through the room's frames](d-3-4-4-RoomPause.md) proves it from the room's first control, where bits 1 to 6 of the pause byte are 0 by a theorem (`ChangesK.pauseBits₂`, 1-1-b-3-10).
-* The others are as on [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md): `Entry2`, `lagPaused`, `NoStart` after the pipe, `TimerOK`.
+* `TimerOK` is asked at the entry (`EndRunQ.timeE`, `chg.time₂`), no longer at the exit.
+* The others are as on [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md): `Entry2`, `lagPaused`, `NoStart` after the pipe.
 
 **Files.** `Theorems/SidePause.lean`; the private check is in `Proof/SidePause.lean` (`genSidePause` in `Main.lean`), and `side_pause` in `Proof/Route.lean`. The name `GamePauseTimer` was added to `SideChangeEnd.namesOf`.
 
 **To reproduce.**
 ```
-.lake/build/bin/smbrta side-pause-check            # the check as a program, about 47 s
+.lake/build/bin/smbrta side-pause-check            # the check as a program, about 66 s
 .lake/build/bin/smbrta side-pause-real FM2 5 20    # the classes on real runs, about 30 s (also with 7 and 60)
 ```

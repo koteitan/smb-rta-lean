@@ -42,10 +42,16 @@ def vTagsA (sy : Syms) (m : Machine) (c : VCase) : List (Nat × Tag) :=
 /-- the cases in the air -/
 def vCasesA : List VCase := vCases.filter fun c => c.st == 1 || c.st == 2
 
+/-- at the return, in the air: `goalV`, and the state is known, the same on the two machines, and 1 or 2 -/
+def goalVA (sy : Syms) (S : UInt8) (Q : TS) : Bool :=
+  goalV sy S Q && (match (Q.ram (I sy.Player_State)).same with
+    | some v => v == 1 || v == 2
+    | none => false)
+
 /-- a case of the movement routine in the air, on the two machines -/
 def caseOKA (sy : Syms) (m0 : Machine) (S : UInt8) (c : VCase) : Bool :=
   let E := Rom.of m0
-  FrameModel.tagsOK S (vTagsA sy (vmach sy m0 S) c) && walkD E (detours sy E S) (stopV E S) (goalV sy S) fuelV (leafQS sy.PlayerMovementSubs (S - 2) (vTagsA sy (vmach sy m0 S) c))
+  FrameModel.tagsOK S (vTagsA sy (vmach sy m0 S) c) && walkD E (detours sy E S) (stopV E S) (goalVA sy S) fuelV (leafQS sy.PlayerMovementSubs (S - 2) (vTagsA sy (vmach sy m0 S) c))
 
 /-- **The check on the ROM**: `VertModel.vertOK`, and the cases in the air with the stored speed 0 -/
 def vertAirOK (sy : Syms) (m0 : Machine) (S : UInt8) : Bool := vertOK sy m0 S && vCasesA.all (caseOKA sy m0 S)
@@ -55,13 +61,16 @@ section proof
 variable {sy : Syms} {m0 : Machine}
 
 /-- **The vertical movement of a real frame in the air.** From the player's routine to the scroll handler, the vertical bytes read from the machine follow `vstep` on the
-machine `vmach`, with A of this frame and the stored speed 0. The conditions at the player's routine are those of `vert_model` but the stored speed. -/
+machine `vmach`, with A of this frame and the stored speed 0, and he stays in the air (the state 1 or 2). The conditions at the player's routine are those of `vert_model` but
+the stored speed. -/
 theorem vert_air {S : UInt8} {R : Machine} (hOK : vertAirOK sy m0 S = true) (h : AtV sy (Rom.of m0) S R)
     (hst : peek R sy.Player_State = 1 ∨ peek R sy.Player_State = 2)
     (hd : peek R sy.Player_State = 1 → peek R sy.DiffToHaltJump = 1)
     (hp : peek R sy.PreviousA_B_Buttons &&& 0x80 = peek R sy.A_B_Buttons &&& 0x80) :
     ∃ k, k ≤ FrameModel.moveLen ∧ Good (Rom.of m0) (stepN k R) ∧ (stepN k R).pc = sy.PlayerSubs ∧ (stepN k R).s = S ∧
-      vsOf sy (stepN k R) = vstepV sy m0 S (vsOf sy R) (peek R sy.SavedJoypadBits &&& 0x80 != 0) 0 ∧ FrameModel.InFrameN (Rom.of m0) R k := by
+      vsOf sy (stepN k R) = vstepV sy m0 S (vsOf sy R) (peek R sy.SavedJoypadBits &&& 0x80 != 0) 0 ∧
+      ((vstepV sy m0 S (vsOf sy R) (peek R sy.SavedJoypadBits &&& 0x80 != 0) 0).st = 1 ∨ (vstepV sy m0 S (vsOf sy R) (peek R sy.SavedJoypadBits &&& 0x80 != 0) 0).st = 2) ∧
+      FrameModel.InFrameN (Rom.of m0) R k := by
   have hOK' := hOK
   simp only [vertAirOK, Bool.and_eq_true, List.all_eq_true] at hOK'
   have F := vfacts_of hOK'.1
@@ -210,15 +219,15 @@ theorem vert_air {S : UInt8} {R : Machine} (hOK : vertAirOK sy m0 S = true) (h :
     simp only [stopV, isRts, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, Bool.not_eq_true'] at hQ
     obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hQ
     exact ⟨h1, by rw [h2]; exact FrameModel.lookup_rts, h3, h4⟩
-  have hgoal : ∀ Q, goalV sy S Q = true → Q.w (stkI (vH sy m0 S s0 a ab).s) = false ∧ Q.w (stkI ((vH sy m0 S s0 a ab).s - 1)) = false := by
+  have hgoal : ∀ Q, goalVA sy S Q = true → Q.w (stkI (vH sy m0 S s0 a ab).s) = false ∧ Q.w (stkI ((vH sy m0 S s0 a ab).s - 1)) = false := by
     intro Q hQ
     rw [hHs]
-    simp only [goalV, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hQ
-    exact ⟨hQ.1.2 (stkI S) (.tail _ (.head _)), hQ.1.2 (stkI (S - 1)) (.tail _ (.tail _ (.head _)))⟩
+    simp only [goalVA, goalV, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hQ
+    exact ⟨hQ.1.1.2 (stkI S) (.tail _ (.head _)), hQ.1.1.2 (stkI (S - 1)) (.tail _ (.tail _ (.head _)))⟩
   obtain ⟨k, Q, hk, hs, hg, gX', pcX', sX', rel, fix, IX⟩ :=
     FrameModel.leafD_spec (ain := 0) F.ds hc (by decide) hstop hgoal AP.good (by rw [AP.pc, hPpc]) (by rw [AP.s, hPs]) gH (by rw [hHs]) hL
-  simp only [goalV, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hg
-  obtain ⟨⟨⟨_, heq⟩, hw⟩, hdt⟩ := hg
+  simp only [goalVA, goalV, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hg
+  obtain ⟨⟨⟨⟨_, heq⟩, hw⟩, _⟩, hst2⟩ := hg
   have veq : ∀ i ∈ I sy.Player_State :: vIds sy, (stepN k X).ram.get! i = (vRun sy m0 S s0 a ab).ram.get! i := by
     intro i hi
     have hi2 : i < 2048 := by
@@ -254,21 +263,8 @@ theorem vert_air {S : UInt8} {R : Machine} (hOK : vertAirOK sy m0 S = true) (h :
     rw [WL i hi hl, y3]
   have eZ : stepN (kP + (k + (1 + kL))) R = stepN kL (stepN 1 (stepN k X)) := by
     rw [FrameModel.stepN_add, hX, FrameModel.stepN_add, FrameModel.stepN_add]
-  refine ⟨kP + (k + (1 + kL)), ?_, ?_, ?_, ?_, ?_, FrameModel.InFrameN.add' IP' hX (FrameModel.InFrameN.add' IX rfl (FrameModel.InFrameN.add' I1 rfl IL'))⟩
-  · have e1 : FrameModel.moveLen = 728 := rfl
-    have e2 : fuelP = 60 := rfl
-    have e3 : fuelV = 600 := rfl
-    rw [e1]
-    rw [e2] at fP
-    rw [e3] at hk
-    omega
-  · rw [eZ]
-    exact AL.good
-  · rw [eZ]
-    exact AL.pc
-  · rw [eZ]
-    exact AL.s
-  · rw [eZ, vstepV_eq]
+  have hfin : vsOf sy (stepN (kP + (k + (1 + kL))) R) = vstepV sy m0 S (vsOf sy R) (peek R sy.SavedJoypadBits &&& 0x80 != 0) 0 := by
+    rw [eZ, vstepV_eq]
     have wv : ∀ u : UInt16, I u ∈ I sy.Player_State :: vIds sy →
         peek (stepN kL (stepN 1 (stepN k X))) u = peek (vRun sy m0 S s0 a ab) u := by
       intro u hu
@@ -287,6 +283,33 @@ theorem vert_air {S : UInt8} {R : Machine} (hOK : vertAirOK sy m0 S = true) (h :
     rw [wv sy.Player_Y_Position (.tail _ (.head _)), wv sy.Player_Y_MoveForce (.tail _ (.tail _ (.head _))), wv sy.Player_Y_Speed (.tail _ (.tail _ (.tail _ (.head _)))),
       wv sy.Player_YMF_Dummy (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))), wv sy.VerticalForce (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))), wv sy.VerticalForceDown (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))),
       wv sy.JumpOrigin_Y_Position (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))), wv sy.Player_State (.head _), wab, a80]
+  refine ⟨kP + (k + (1 + kL)), ?_, ?_, ?_, ?_, hfin, ?_, FrameModel.InFrameN.add' IP' hX (FrameModel.InFrameN.add' IX rfl (FrameModel.InFrameN.add' I1 rfl IL'))⟩
+  · have e1 : FrameModel.moveLen = 728 := rfl
+    have e2 : fuelP = 60 := rfl
+    have e3 : fuelV = 600 := rfl
+    rw [e1]
+    rw [e2] at fP
+    rw [e3] at hk
+    omega
+  · rw [eZ]
+    exact AL.good
+  · rw [eZ]
+    exact AL.pc
+  · rw [eZ]
+    exact AL.s
+  · -- the state at the return is known and 1 or 2
+    rw [← hfin]
+    show peek (stepN (kP + (k + (1 + kL))) R) sy.Player_State = 1 ∨ peek (stepN (kP + (k + (1 + kL))) R) sy.Player_State = 2
+    rw [eZ, peek_I, wZ (I sy.Player_State) (List.mem_append_right _ (.head _)) (FrameModel.I_lt _)]
+    cases hq : (Q.ram (I sy.Player_State)).same with
+    | none =>
+      rw [hq] at hst2
+      cases hst2
+    | some v =>
+      rw [hq] at hst2
+      rw [(FrameModel.Tag.same_spec hq (rel _ (FrameModel.I_lt _))).1]
+      simp only [Bool.or_eq_true, beq_iff_eq] at hst2
+      exact hst2
 
 end proof
 
@@ -332,6 +355,68 @@ theorem bridge_of {sy : Syms} {m0 : Machine} {S : UInt8} {h k : Nat} (hb : bridg
   cases a
   · exact h3
   · exact h2
+
+/-- **The landing**: the height's low four bits 0, the vertical speed and its fraction 0, the state 0; the other vertical bytes stay (`RoomFall.after_QC`) -/
+def land (s : Jump.VS) : Jump.VS := { s with y := s.y &&& 0xF0, vy := 0, mf := 0, st := 0 }
+
+/-! ## Every frame of the jumps: the machine of `vstep` does not matter up to the ground
+
+`bridgeOK` looks at the first `k` frames of the jumps from the floor. `bridgeAll` looks at every state of every jump from a height `y0`, up to the state where `Jump.arcSucc`
+stops (falling, at or below the ground's height): there the state is 1 or 2, and before it the two machines give the same, and the jump is not longer than
+`Jump.arcFrames` frames. -/
+
+/-- a state of a jump: in the air; and at or below the ground falling, or the two machines give the same and the jump is younger than `arcFrames` -/
+def bridgeAllP (sy : Syms) (m0 : Machine) (S : UInt8) (u : Arc) : Bool :=
+  (u.s.st == 1 || u.s.st == 2) && ((Jump.falling u.s && decide (groundY sy ≤ u.s.y.toNat)) ||
+    ([true, false].all (fun a => VertModel.vstepV sy m0 S u.s a 0 == Jump.vstep sy m0 u.s a 0) && decide (u.k + 1 < Jump.arcFrames)))
+
+/-- **The check on the ROM**: `bridgeAllP` on every state of every jump from the height `y0`, up to `arcFrames` frames -/
+def bridgeAll (sy : Syms) (m0 : Machine) (S : UInt8) (y0 h : Nat) : Bool := Jump.arcCheck sy m0 y0 h (bridgeAllP sy m0 S)
+
+theorem arcSucc_ne {sy : Syms} {m : Machine} {h : Nat} {u : Arc} (hn : arcSucc sy m h u ≠ []) :
+    (Jump.falling u.s && decide (groundY sy ≤ u.s.y.toNat)) = false := by
+  unfold arcSucc at hn
+  split at hn
+  · exact absurd rfl hn
+  · rename_i hc
+    simpa using hc
+
+/-- **Every state of a jump from `y0`, but the last at the ground, gives the same on the two machines**, and every state is in the air -/
+theorem bridgeAll_of {sy : Syms} {m0 : Machine} {S : UInt8} {y0 h : Nat} (hb : bridgeAll sy m0 S y0 h = true) {x u : Arc} {n : Nat}
+    (hx : x ∈ arcStart sy m0 y0 h) (hr : Cert.Reach (arcSucc sy m0 h) x n u) :
+    (u.s.st = 1 ∨ u.s.st = 2) ∧ (arcSucc sy m0 h u ≠ [] → ∀ a, VertModel.vstepV sy m0 S u.s a 0 = Jump.vstep sy m0 u.s a 0) := by
+  have spec := Jump.arc_spec hb x hx
+  have hk0 := Jump.arcStart_k hx
+  -- the jump is not longer than `arcFrames`
+  have hn : n ≤ Jump.arcFrames := by
+    rcases Nat.lt_or_ge Jump.arcFrames n with hlt | hle
+    · exfalso
+      obtain ⟨w, h1, h2⟩ := Cert.Reach.split Jump.arcFrames (n - Jump.arcFrames) (by rw [show Jump.arcFrames + (n - Jump.arcFrames) = n by omega]; exact hr)
+      have hP := spec Jump.arcFrames w (Nat.le_refl _) h1
+      have hwk := (Jump.arc_k h1).1
+      rw [hk0] at hwk
+      simp only [bridgeAllP, Bool.and_eq_true, Bool.or_eq_true, beq_iff_eq, decide_eq_true_eq] at hP
+      rcases hP.2 with e | ⟨_, e⟩
+      · obtain ⟨d, hd⟩ : ∃ d, n - Jump.arcFrames = d + 1 := ⟨n - Jump.arcFrames - 1, by omega⟩
+        rw [hd] at h2
+        cases h2 with
+        | step h3 _ =>
+          unfold arcSucc at h3
+          rw [if_pos (by simpa using e)] at h3
+          cases h3
+      · omega
+    · exact hle
+  have hP := spec n u hn hr
+  simp only [bridgeAllP, Bool.and_eq_true, Bool.or_eq_true, beq_iff_eq, decide_eq_true_eq, List.all_eq_true, List.mem_cons, List.not_mem_nil,
+    or_false, forall_eq_or_imp, forall_eq] at hP
+  refine ⟨hP.1, fun hne a => ?_⟩
+  have hc := arcSucc_ne hne
+  rcases hP.2 with e | ⟨⟨e1, e2⟩, _⟩
+  · rw [show (Jump.falling u.s && decide (groundY sy ≤ u.s.y.toNat)) = true by simpa using e] at hc
+    cases hc
+  · cases a
+    · exact e2
+    · exact e1
 
 end
 

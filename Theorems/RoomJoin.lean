@@ -27,7 +27,8 @@ mouth (`RoomRun.mouth_of`, `InRoom.mouthE`: `SideEntryEnd`, `SideEntryRest`).
 The heights of the floor frames after the fall (`RoomRun.vfloor`) are asked only of frames that do not come to the head's collision with a block; `RoomMap` proves that no
 frame of the room before the entry comes there (`InRoom.bump`). The frames of a jump's first frames follow `vstep` (`RoomCore.varc`, `RoomRun.varc_of`): the walks of `RoomVert`
 give it on the real machines (`InRoom.vert`), with two relations on the machine at each frame's end that `RoomPair` proves (`InRoom.pair`): in a jump the jump's halt value
-is 1, and A of the frame before is A. A on a frame is read from the vertical state (`Frames.a`).
+is 1, and A of the frame before is A. A on a frame is read from the vertical state (`Frames.a`). Every frame in the air follows `vstep` up to the landing (`InRoom.air`,
+`RoomRun.vair_of`, `RoomRun.varc_all`: the walk of `RoomFall`), and so a landing is on a whole row with no speed (`RoomRun.stand_row_of`, once the field `stand_row`).
 
 The case split, all by `cases` and `by_cases`:
 * over the block in one jump (no landing): impossible, `no_landing`;
@@ -279,6 +280,10 @@ inductive Way (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 E : Nat) 
 def OnArc (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (T n : Nat) : Prop :=
   T + 1 ≤ n ∧ ∃ x u, x ∈ arcStart sy m (groundY sy) N.h ∧ Cert.Reach (arcSucc sy m N.h) x (n - (T + 1)) u ∧ fr.vs n = u.s
 
+/-- `vstep` on the machine of the player's routine in the room (`VertModel.vmach`: the jump's halt value 1), with the stored speed 0: what a frame in the air does to
+the vertical bytes up to the landing (`InRoom.air`). On the jumps from the floor it is `vstep` on `m` (`VertAir.bridgeAll`) -/
+abbrev vstepR (sy : Syms) (m : Machine) (s : VS) (a : Bool) : VS := VertModel.vstepV sy m (FrameModel.ctrlStack sy m) s a 0
+
 /-- what a real run in the room gives, apart from the frames' link to `hstep` -/
 structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   fr : Frames
@@ -309,9 +314,6 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   /-- before a stand in the fall he moves left fast, and he is near the wall -/
   stand_fast : ∀ n, C ≤ n → n + 1 < C + N.fall → (fr.vs (n + 1)).st = 0 → N.standV ≤ -V (fr.hs n)
   stand_P : ∀ n, C ≤ n → n + 1 < C + N.fall → (fr.vs (n + 1)).st = 0 → fr.P n ≤ N.standP
-  /-- landing: on a whole row, with no speed -/
-  stand_row : ∀ n, C ≤ n → n + 1 < C + N.standF → (fr.vs n).st ≠ 0 → (fr.vs (n + 1)).st = 0 →
-    (fr.vs (n + 1)).y.toNat % 16 = 0 ∧ VW (fr.vs (n + 1)) = 0
   /-- a frame with no jump, from a state that is not in a jump -/
   vfall : ∀ n, C ≤ n → n + 1 < C + N.standF → (fr.vs n).st ≠ 1 → (fr.inp (n + 1)).jump = false → VDrop (fr.vs n) (fr.vs (n + 1))
   /-- with no wall, the fall ends on the floor -/
@@ -326,6 +328,9 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m 
   vfloor : NoWall sy m N fr C → ∀ n, C + N.fall ≤ n → n < C + N.fall + N.lastG + 1 + N.rise → n < E → OnFloor sy (fr.vs n) → VFrame sy m N fr n
   /-- a frame on the first frames of a jump from the floor follows `vstep` -/
   varc : ∀ T n, C ≤ n → n < t0 → n + 1 < E → OnArc sy m N fr T n → n + 1 - (T + 1) ≤ N.rise → fr.vs (n + 1) = vstep sy m (fr.vs n) (fr.a (n + 1)) 0
+  /-- landing: on a whole row, with no speed. Once a field of `RoomRun` (before `standF`); now `RoomRun.stand_row_of` proves it before `t0` from the room's walks -/
+  stand_row : ∀ n, C ≤ n → n + 1 < t0 → (fr.vs n).st ≠ 0 → (fr.vs (n + 1)).st = 0 →
+    (fr.vs (n + 1)).y.toNat % 16 = 0 ∧ VW (fr.vs (n + 1)) = 0
   /-- the state at first control -/
   start : fr.hs C = (room sy N).s0
   startP0 : (room sy N).P0 ≤ fr.P C
@@ -1200,6 +1205,29 @@ theorem arc_step (H : Checks sy m N) {fr : Frames} {T n : Nat} (h : OnArc sy m N
     unfold arcSucc
     rw [← hu, hfall]
     simp only [Bool.false_and, if_false, Bool.false_eq_true]
+    rw [hu]
+    cases ha : fr.a (n + 1) with
+    | true => simp [y, ha]
+    | false => simp [y, ha]
+  have hr' : Cert.Reach (arcSucc sy m N.h) x (n + 1 - (T + 1)) y := by
+    rw [show n + 1 - (T + 1) = n - (T + 1) + 1 by omega]
+    exact reach_snoc hr hy
+  refine ⟨by omega, x, y, hx, hr', ?_⟩
+  rw [hv, hu]
+
+/-- **`arc_step` on every frame of a jump**: a frame on a jump from the floor that does not start at or below the ground falling, and that follows `vstep`, is on the jump -/
+theorem arc_step_all {fr : Frames} {T n : Nat} (h : OnArc sy m N fr T n) (hg : (falling (fr.vs n) && decide (groundY sy ≤ (fr.vs n).y.toNat)) = false)
+    (hv : fr.vs (n + 1) = vstep sy m (fr.vs n) (fr.a (n + 1)) 0) : OnArc sy m N fr T (n + 1) := by
+  have hT := h.1
+  obtain ⟨_, x, u, hx, hr, hu⟩ := h
+  let y : Arc :=
+    { s := vstep sy m u.s (fr.a (n + 1)) 0, k := u.k + 1,
+      low := if cornerY sy N.h ≤ (vstep sy m u.s (fr.a (n + 1)) 0).y.toNat then u.k + 1 else u.low,
+      above := if (vstep sy m u.s (fr.a (n + 1)) 0).y.toNat < standY sy N.h then 0 else u.above + 1, fast := u.fast }
+  have hy : y ∈ arcSucc sy m N.h u := by
+    unfold arcSucc
+    rw [← hu, hg]
+    simp only [if_false, Bool.false_eq_true]
     rw [hu]
     cases ha : fr.a (n + 1) with
     | true => simp [y, ha]
@@ -2975,6 +3003,20 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
     (vstep sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) 0).vy &&& 0x80 = 0x80 →
     VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) =
       vstep sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) 0
+  /-- a frame of the room before the entering frame that starts in the air and comes to the player's routine at `k` in the state `VertAir.AtV` follows `vstep` on the
+  machine of the player's routine (`vstepR`) up to the landing: `t` is in the air, and the vertical bytes at the frame's end are `t`, or `t` falls and they are its
+  landing (`RoomFall.jump_room`: the three walks of the room's frames, and the movement routine in the air) -/
+  air : ∀ n, r.C ≤ n → n + 1 < r.E → peek (r.fm n) sy.Player_State ≠ 0 → ∀ k,
+    VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) k) →
+    (peek (r.fm n) sy.Player_State = 1 → peek (r.fm n) sy.DiffToHaltJump = 1) →
+    peek (r.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (r.fm n) sy.A_B_Buttons &&& 0x80 →
+    ((vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)).st = 1 ∨
+     (vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)).st = 2) ∧
+    (VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) =
+       vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) ∨
+     (falling (vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)) = true ∧
+      VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) =
+        VertAir.land (vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0))))
   /-- at the end of each frame of the room before the entry, in a jump the jump's halt value is 1, and bit 7 of A of the frame before is bit 7 of A (`RoomPair.pair_run`:
   the rows of the change at first control, and two walks of the room's frames). Once the fields `halt` and `prevA` -/
   pair : ∀ n, r.C ≤ n → n < r.E → (peek (r.fm n) sy.Player_State = 1 → peek (r.fm n) sy.DiffToHaltJump = 1) ∧
@@ -3352,11 +3394,78 @@ theorem varc_of (H : Checks sy m N) (hr : r.InRoom) {T n : Nat} (hC : r.C ≤ n)
     rfl
   rw [hA, hv1, e, hv0]
 
+/-- **Every frame of the room in the air follows `vstep` up to the landing**: a frame before `t0` and before the entering frame that starts in the air is `vstepR` of the
+frame before, with A of the frame, or `vstepR` falls and the frame is its landing; and `vstepR` stays in the air. From the reading of the vertical state, the frame at the
+player's routine (`clean`), and the walks of the room's frames (`InRoom.air`, `InRoom.pair`) -/
+theorem vair_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) (hE : n + 1 < r.E) (hst : (r.fr.vs n).st ≠ 0) :
+    ((vstepR sy m (r.fr.vs n) (r.fr.a (n + 1))).st = 1 ∨ (vstepR sy m (r.fr.vs n) (r.fr.a (n + 1))).st = 2) ∧
+    (r.fr.vs (n + 1) = vstepR sy m (r.fr.vs n) (r.fr.a (n + 1)) ∨
+     (falling (vstepR sy m (r.fr.vs n) (r.fr.a (n + 1))) = true ∧ r.fr.vs (n + 1) = VertAir.land (vstepR sy m (r.fr.vs n) (r.fr.a (n + 1))))) := by
+  have hcl := r.atV_of H hr hC ht
+  have hv0 : r.fr.vs n = VertModel.vsOf sy (r.fm n) := r.vs_fm hr hC (by omega) (by omega)
+  have hv1 : r.fr.vs (n + 1) = VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) := by
+    rw [r.vs_fe (n := n + 1) (by omega) (by omega), r.next hC (r.ups_lt hr hC (by omega))]
+  have hst' : peek (r.fm n) sy.Player_State ≠ 0 := by
+    have e : (VertModel.vsOf sy (r.fm n)).st = peek (r.fm n) sy.Player_State := rfl
+    rw [← e, ← hv0]
+    exact hst
+  have e := hr.air n hC hE hst' (r.arr n) hcl (hr.pair n hC (by omega)).1 (hr.pair n hC (by omega)).2
+  have hA : r.fr.a (n + 1) = (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) sy.SavedJoypadBits &&& 0x80 != 0) := by
+    show (r.fr.vs (n + 1)).prevA = _
+    rw [hv1]
+    rcases e.2 with e1 | ⟨_, e1⟩ <;> rw [e1] <;> rfl
+  rw [hA, hv1, hv0]
+  exact e
+
+theorem hi_row : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0xF0).toNat % 16 = 0 := by decide +kernel
+
+/-- **`stand_row`**: from the air to standing, his height is a whole row and his vertical speed is 0, on each frame before `t0`. A frame in the air follows `vstepR`, which
+stays in the air, or lands (`vair_of`); the entering frame is not before `t0` (`t0_le_E`) -/
+theorem stand_row_of (H : Checks sy m N) (hr : r.InRoom) : ∀ n, r.C ≤ n → n + 1 < r.t0 → (r.fr.vs n).st ≠ 0 → (r.fr.vs (n + 1)).st = 0 →
+    (r.fr.vs (n + 1)).y.toNat % 16 = 0 ∧ VW (r.fr.vs (n + 1)) = 0 := by
+  intro n hC ht hst h0
+  have hE := r.t0_le_E H hr
+  obtain ⟨h1, h2⟩ := r.vair_of H hr hC (by omega) (by omega) hst
+  rcases h2 with e | ⟨_, e⟩
+  · rw [e] at h0
+    rcases h1 with e1 | e1 <;> rw [e1] at h0 <;> exact absurd h0 (by decide)
+  · rw [e]
+    refine ⟨?_, by simp [VW, VertAir.land]⟩
+    show ((vstepR sy m (r.fr.vs n) (r.fr.a (n + 1))).y &&& 0xF0).toNat % 16 = 0
+    generalize (vstepR sy m (r.fr.vs n) (r.fr.a (n + 1))).y = x
+    have := hi_row ⟨x.toNat, x.toNat_lt⟩
+    simpa using this
+
+/-- **Every frame of a jump from the floor follows `vstep` up to the landing**: a frame before `t0` and before the entering frame, on a jump from the floor (`OnArc`), that
+does not start at or below the ground falling, is `vstep` of the frame before with A of the frame, or `vstep` falls and the frame is its landing. `vair_of`, and on the
+jumps from the floor `vstepR` is `vstep` on `m` (`hb`: `VertAir.bridgeAll`, every state of every jump from the floor up to the ground) -/
+theorem varc_all (H : Checks sy m N) (hr : r.InRoom) (hb : VertAir.bridgeAll sy m (FrameModel.ctrlStack sy m) (groundY sy) N.h = true) {T n : Nat}
+    (hC : r.C ≤ n) (ht : n < r.t0) (hE : n + 1 < r.E) (ha : OnArc sy m N r.fr T n)
+    (hg : (falling (r.fr.vs n) && decide (groundY sy ≤ (r.fr.vs n).y.toNat)) = false) :
+    r.fr.vs (n + 1) = vstep sy m (r.fr.vs n) (r.fr.a (n + 1)) 0 ∨
+    (falling (vstep sy m (r.fr.vs n) (r.fr.a (n + 1)) 0) = true ∧ r.fr.vs (n + 1) = VertAir.land (vstep sy m (r.fr.vs n) (r.fr.a (n + 1)) 0)) := by
+  obtain ⟨_, x, u, hx, hru, hu⟩ := ha
+  obtain ⟨b1, b2⟩ := VertAir.bridgeAll_of hb hx hru
+  have hne : arcSucc sy m N.h u ≠ [] := by
+    unfold arcSucc
+    rw [← hu, hg]
+    simp
+  have hst : (r.fr.vs n).st ≠ 0 := by
+    rw [hu]
+    rcases b1 with e | e <;> rw [e] <;> decide
+  have e := (r.vair_of H hr hC ht hE hst).2
+  have hbr := b2 hne (r.fr.a (n + 1))
+  rw [← hu] at hbr
+  simp only [vstepR] at e
+  rw [hbr] at e
+  exact e
+
 /-- the frames as numbers -/
 def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : RoomCore sy m N :=
   { r.toRoomFields with
     vfloor := fun hw n h1 h2 hE hfl => r.vfloor hw n h1 h2 hE (hr.bump n (by omega) hE) hfl
     varc := fun _ _ hC ht hE ha hk => r.varc_of H hr hC ht hE ha hk
+    stand_row := r.stand_row_of H hr
     start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
     frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr }
 

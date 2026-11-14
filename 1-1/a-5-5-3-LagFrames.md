@@ -3,7 +3,7 @@
 # Frames not counted, up to the pipe
 
 **Claim.** A frame that starts in the idle loop in control either calls the routine of the mode, or it ends with the speed, the subspeed, the position, the routine, the mode,
-the task and nine more bytes as it began. This holds if each of its instructions before that call meets `Clean`. A paused frame skips the call. So, up to the vertical pipe, the end of a
+the task and thirteen more bytes as it began. This holds if each of its instructions before that call meets `Clean`. A paused frame skips the call. So, up to the vertical pipe, the end of a
 counted frame is read from its own machine. The frames not counted between two counted frames keep the three values, from conditions on single frames. What `Reads` of
 [The frames up to the pipe, read from the machines](a-5-5-PipeFrames.md) assumed is now a theorem from these conditions.
 
@@ -14,8 +14,9 @@ gone too: a frame not counted ends paused, and such a frame does not call the ro
 Notation. `fm(t)` and `inp(t)` are the machine and the input of counted frame `t`. `seq(n)` and `sin(n)` are the machine and the input of frame `n`, every frame counted.
 Counted frame `t` is frame `ix(t)`. `tr(m, i, k)` is the machine after `k` instructions of the frame of `m` with the input `i`, and `frame(m, i)` is the machine at its end.
 `c` is the call of the mode's routine: the instruction before `SkipMainOper`. `V(m) = (v(m), f(m), P(m))` are the speed, the subspeed and the position (five bytes).
-`K(m)` are the routine, the mode and the task (three bytes), and `ctl(m)` says that they are those of control. `W(m)` are nine more bytes: the facing and moving directions,
-the running speed, the stored speed, the collision bits, the area's type, the swimming flag, the change of size and the player's state. [The opening on real frames](a-5-4-OpenFrames.md) needs them.
+`K(m)` are the routine, the mode and the task (three bytes), and `ctl(m)` says that they are those of control. `W(m)` are thirteen more bytes: the facing and moving directions,
+the running speed, the stored speed, the collision bits, the area's type, the swimming flag, the change of size, the player's state, and the height, its high byte, the
+vertical speed and its fraction (the four bytes of `OpenFlat.vertA`, added in round 12). [The opening on real frames](a-5-4-OpenFrames.md) needs them.
 `FrameStart(m)` is `PipeWrites.FrameStart` of `guardOf`: `m` is in the idle loop with its stack pointer, at the frame's start, with the NMI on, and `ctl(m)`.
 `Clean` is the `Clean` of `PipeWrites.guardOf`: a store with a target not known does not touch the bytes of its `prot`. The five bytes of `V` are not among them.
 
@@ -53,9 +54,9 @@ Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.sta
 
 * **The walk.** It is the abstract machine of `TaintRun`, as in [One whole frame](a-5-2-PipeWrites.md). It starts in the idle loop with the routine, the mode and the task known,
   and every other byte of RAM not known. One byte is followed as the counter of `TaintRun` (`Env.rkI`). The walk fails on any write to it. At the frame's end the byte is still
-  followed, so it has the value it began with. There is one walk for each of the 17 bytes of `V`, `K` and `W`.
+  followed, so it has the value it began with. There is one walk for each of the 21 bytes of `V`, `K` and `W`.
 * **The cut.** The walk stops at the call `c`. The pause byte is not known, so the walk follows the paused path and the path that is not paused. The path that is not paused
-  reaches `c`. A paused frame skips `c` and ends: the screen, the sound, the pad and the pause run, and none of them writes the 17 bytes.
+  reaches `c`. A paused frame skips `c` and ends: the screen, the sound, the pad and the pause run, and none of them writes the 21 bytes.
 * **Stores with a target not known.** `Clean.store` says such a store does not touch the bytes of `prot`. The five bytes of `V` are not in `prot`. So at such a store the walk
   forgets the followed byte, and then it fails at the frame's end. The walk does not fail: on every path that does not reach `c`, the walk knows the target of each store.
   The stores before `c` go through an index (the screen's buffer, the timers, the random bits). The index comes from the program or from a table of the ROM. To keep it, the
@@ -67,8 +68,8 @@ Lean: `Theorems/LagFrames.lean`; `ReadsOwn`, `Lags`, `Lags.known_end`, `Lags.sta
   call `c` (`Lags.no_call`: it ends paused, `paused`, `keeps`).
   The induction `Lags.starts` asks `ctl` at the end of each frame from control to the entry: `ctl` gives it for a counted frame, and `keeps_frame` (with `K`) for a frame not
   counted (`Lags.known_end`).
-* **Numbers.** For each of the 17 bytes: 108,633 steps, 7,157 forks, 0 failures, a table of 7,846 states; 3 paths reach `c`, 6 end the frame. The search takes about 0.17 s and the
-  check about 0.3 s natively, for each byte; the whole check about 6 s.
+* **Numbers.** For each of the 21 bytes: 108,633 steps, 7,157 forks, 0 failures, a table of 7,846 states; 3 paths reach `c`, 6 end the frame. The search takes about 0.2 s and the
+  check about 0.3 s natively, for each byte; the whole check about 7 s.
 
 ## Checked on real frames
 

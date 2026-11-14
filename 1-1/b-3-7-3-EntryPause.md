@@ -65,7 +65,7 @@ The theorems of `Route` that took `Entry(seq a₁)` take `EntryV(seq a₁)`. `Hu
 ## Assumptions (not proved in Lean)
 
 * `upClean₁`: each instruction of the frames from control to the entry is `Clean`. A store through an index or a pointer now does not touch the six bytes of the pause either.
-* `entryRest₁`: `Rest` at the entry, now 55 bytes: bits 1 to 6 of the pause byte left it in this round, because the frames from control keep them ([1-1-b-3-4](b-3-4-EntryKeep.md)).
+* `entryRest₁`: `Rest` at the entry: 55 bytes in round 11 (bits 1 to 6 of the pause byte left it, because the frames from control keep them), 36 bytes since round 12 (19 bytes that the pipe's frames do not need left `Entry`) ([1-1-b-3-4](b-3-4-EntryKeep.md)).
 
 **Files.** `Theorems/EntryKeep.lean` (`pauseSix`, `guardOf`, `outOK`, `vsuccs`, `coverV`, `walkV`, `keyV`, `routeV`, `runV`, `searchV`, `finV`, `cfgV`, `pauseCheck`, `nearPauseCheck`, `Checks`, `tab_of`, `keep_of_outOK`, `s_vsuccs`, `LiveV`, `cover_liveV`, `live_stepV`, `frame_of_walkV`, `PauseOK`, `pauseOK_of_check`, `pause_frame`, `low7_all`, `low7_cases`, `pauseV_of_class`, `Begin.pauseClass`, `class_up`, `pause_entry`, `entryV_of_title`), `Theorems/PipeChangeEnd.lean` (`EntryV`), `Theorems/Route.lean` (`ChangesK.run₁`, `Run.entry₁`), `Theorems/HurryStart.lean` (`Chg₁`). The private checks are `entry_pause_near` and `entry_pause` in `Proof/EntryKeep.lean`. There is no game data in the public files.
 

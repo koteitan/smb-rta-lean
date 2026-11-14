@@ -5,6 +5,7 @@ import Theorems.VertModel
 import Theorems.CtrlKeep
 import Theorems.AfterKeep
 import Theorems.GuardE
+import Theorems.CollKeep
 import Theorems.SurfaceRead
 
 /-!
@@ -36,8 +37,11 @@ they can come between `seq j` and the frame `j + 1`, and they change none of the
   `vert_of`, one frame of `Jump.vstep` (the movement routine by `VertModel.vert_model`, the part before it by the walk of `CtrlKeep` (`vBefore`), the part after it by `OnFrames.vAfter`), and a small search (`vCheck`).
   The pixel comes from the distance bound (`dist_abs`).
 * `frOf`: the frames as `TopSpeed.Frame`s are a definition on the machines: a frame before the touch is `SurfaceRead.frameE` of the real frame, the touch's frame
-  `SurfaceRead.frameH`. From conditions on one frame or one machine (`OnFrames.state`, `coll`, `collide`, `farLate`) each one is read from its machines
-  (`OnFrames.reads`: `Reads`, the old field `reads`), so they follow each other by the definition (`next_of_reads`).
+  `SurfaceRead.frameH`. From conditions on one frame or one machine (`OnFrames.state`, `collide`) each one is read from its machines
+  (`OnFrames.reads`: `Reads`, the old field `reads`), so they follow each other by the definition (`next_of_reads`). The collision bits are one of the four values of
+  `TopSpeed.collBits` at each frame's start (`OnFrames.collAll`: the walk of `CollKeep`, with the condition `spareC` on each instruction; the old field `coll`). The
+  position is away from the ends of its range on the first `farN` frames (`OnFrames.readAll`), so these theorems ask that the touch is not later (`g ≤ farN`); a later
+  touch is a case of its own of the route (`SurfaceLate`), so the old field `farLate` is gone.
 * The frames are those of `FrameKeep.Frames` (the field `keep` of `PoleJoin.Run`): `OnFrames` takes their starts, inputs and ends from it.
 
 `surface_of_frames` derives `model`, `hit`, `stop`, and that no hit comes before `J`, from these, with no search: it is the arithmetic of `go` and `hdist`.
@@ -336,7 +340,7 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     CtrlKeep.afterCheck sy m0 (peek c sy.AreaType) && [(1 : UInt8), 2, 3].contains (peek c sy.AreaType) && peek c sy.SwimmingFlag == 0 &&
     peek c sy.PlayerChangeSizeFlag == 0 && FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop &&
     PrevKeep.prevCheck sy m0 (peek c sy.AreaType) && PrevKeep.prevOKB sy c && AfterKeep.hCheck sy m0 (peek c sy.AreaType) &&
-    FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0)
+    FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) && CollKeep.collCheckAll sy m0 (peek c sy.AreaType)
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -371,11 +375,13 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   keepH : AfterKeep.hCheck sy m0 (peek B.m sy.AreaType) = true
   /-- the walks of the stored speed up to the scroll handler (`FrameModel.stored_path`) -/
   storedW : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true
+  /-- the walk of the whole frame for the collision bits (`CollKeep.coll_end`), with the area's type of `B.m`, and that the bytes under the mask `FC` are the four values -/
+  coll : CollKeep.collCheckAll sy m0 (peek B.m sy.AreaType) = true
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, PrevKeep.prevOKB, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩ := h
-  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩ := h
+  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19⟩
 
 theorem absB_natAbs (v : UInt8) : (absB v).toNat = (sbyte v).natAbs := by
   have h1 := v.toNat_lt
@@ -904,22 +910,20 @@ def farN (sy : Syms) (m : Machine) : Nat :=
 is counted when it ends not paused (`FrameKeep.Frames`). The frames not counted end paused (`FrameKeep.Frames.down`), so they do not come to the player's routine
 (`OnFrames.lagNo`, by the walk of the whole frame `area_endF`), and they keep the bytes the routine needs (`OnFrames.lagKeep`). Every frame keeps the area's type, the
 swimming flag and the change of size (`OnFrames.areaAll`).
-The frames as `TopSpeed.Frame`s are a definition on these machines (`frOf`), no longer data with a field `reads`: from `state`, `coll`, `collide` and `farLate` each
-frame up to the touch is read from its machines (`OnFrames.reads`). -/
+The frames as `TopSpeed.Frame`s are a definition on these machines (`frOf`), no longer data with a field `reads`: from `state`, `spareC` and `collide` each
+frame up to the touch is read from its machines (`OnFrames.reads`), when the touch is not later than `farN` frames after control. -/
 structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat → Machine)
     {S : FrameKeep.RealRun} {a : Nat} (K : FrameKeep.Frames sy m0 S a g seq) where
   /-- the values at the end of the frame before, on every frame up to the touch: the player's state is 0, 1 or 2, and no jumpspring (the old `Moves.state`, which was
   asked on the frames from a clean state up to `T`) -/
   state : ∀ j, 1 ≤ j → j ≤ g → CtlState sy (seq (j - 1))
-  /-- the collision bits at the end of the frame before, on every frame up to the touch, are one of the four values of `TopSpeed.collBits` -/
-  coll : ∀ j, 1 ≤ j → j ≤ g → bitsOf sy (seq (j - 1)) ∈ TopSpeed.collBits sy
+  /-- each instruction of each frame before the touch's frame, counted or not, meets `CollKeep.SpareC`: no store through an index or a pointer writes the collision
+  bits. With it the collision bits at the end of each frame are one of the four values of `TopSpeed.collBits` (`OnFrames.collAll`; the old field `coll`). -/
+  spareC : ∀ n, n + 1 < K.ix g → ∀ k, CollKeep.SpareC sy (PipeEntryRule.trace (K.all n) (K.inp n) k)
   /-- each frame before the touch, from the scroll handler on: the collision routine and the rest of the frame keep the subspeed, keep the speed or set it to 0, and keep
   the position, take 1 px off it, or push him right but not past 1 px right of the frame's start when he moves left or not at all (`SurfaceRead.CollideE`) -/
   collide : ∀ j, 1 ≤ j → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
     SurfaceRead.CollideE sy (seq (j - 1)) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (seq j)
-  /-- the frames that start later than `farN` frames after control, up to the touch: the position is away from both ends of its range. For the frames before, it follows
-  from the position at control and the frames before them (`OnFrames.readAll`) -/
-  farLate : ∀ j, 1 ≤ j → j ≤ g → farN sy B.m ≤ j - 1 → SurfaceRead.Far sy (seq (j - 1))
   /-- a frame from a clean state: the parts outside the movement -/
   moves : ∀ j, 1 ≤ j → j ≤ T → j < g → Clean sy (seq (j - 1)) → Moves sy m0 (seq (j - 1)) (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))
   /-- the frames before `J`, from the scroll handler on: the rest of the frame leaves these bytes as they are there; he does not land on these frames -/
@@ -938,6 +942,10 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   all : ∀ n, n < K.ix g → CtrlKeep.AreaOK sy v (K.all n)
   /-- the check of the walks from the scroll handler to the frame's end (`AfterKeep.keepH`) -/
   keep : AfterKeep.hCheck sy m0 v = true
+  /-- every frame up to the touch's frame starts with the collision bits under the mask `FC` (a theorem: `OnFrames.collAll`) -/
+  bits : ∀ n, n < K.ix g → CollKeep.CollOK sy (K.all n)
+  /-- the bytes under the mask `FC` are the four values of `TopSpeed.collBits` -/
+  cb : CollKeep.collBitsOK sy = true
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
 routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
@@ -1075,6 +1083,41 @@ theorem OnFrames.prevAll (hck : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hp
     intro hn
     rw [K.next n]
     exact GuardE.prev_endE hck hp (hst n (by omega)) (K.cleanE n (by show n < K.ix g; omega)) (K.noStore n hn) (Ar.all n (by omega)) (ih (by omega))
+
+/-- **Every frame up to the touch's frame starts with the collision bits under the mask `FC`**, counted or not, from the machine at control: each frame keeps them
+(`CollKeep.coll_end`: the walk after the player's routine with `X` split at `ImpedePlayerMove` and the stores to the routine, the mode and the task cut,
+`FrameKeep.Frames.noStore`; its condition on each instruction is `FrameKeep.Frames.cleanE` and `spareC`). It was the field `coll`. -/
+theorem OnFrames.collAll (hck : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hp : CollKeep.collCheck sy m0 v = true) (hA : ∀ n, n < K.ix g → CtrlKeep.AreaOK sy v (K.all n))
+    (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) (h0 : CollKeep.CollOK sy (seq 0)) :
+    ∀ n, n < K.ix g → CollKeep.CollOK sy (K.all n) := by
+  intro n
+  induction n with
+  | zero =>
+    intro _
+    have e : K.all 0 = seq 0 := K.seq0.symm
+    rw [e]
+    exact h0
+  | succ n ih =>
+    intro hn
+    rw [K.next n]
+    exact CollKeep.coll_end hck hp (hst n (by omega)) (K.cleanE n (by show n < K.ix g; omega)) (O.spareC n hn) (K.noStore n hn) (hA n (by omega)) (ih (by omega))
+
+theorem collCheckAll_parts {v : UInt8} (h : CollKeep.collCheckAll sy m0 v = true) : CollKeep.collCheck sy m0 v = true ∧ CollKeep.collBitsOK sy = true := by
+  unfold CollKeep.collCheckAll at h
+  simp only [Bool.and_eq_true] at h
+  exact h
+
+/-- **The facts of the area's values and of the collision bits on the frames of `K`**, from the numbers of the machine at control (`Numbers`) and the state of the real
+machine there (`Start`): `OnFrames.areaAll` and `OnFrames.collAll` -/
+theorem OnFrames.areaRun {J' : Nat} (Nm : Numbers sy m0 B J') (O : OnFrames sy m0 B T J g seq K) (st : Start sy B (seq 0))
+    (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) : AreaRun sy m0 K (peek B.m sy.AreaType) := by
+  have hall := O.areaAll Nm.ctrl Nm.after hst ⟨st.area, st.swim.trans Nm.swim0, st.size.trans Nm.size0⟩
+  obtain ⟨hcc, hcb⟩ := collCheckAll_parts Nm.coll
+  have h0 : CollKeep.CollOK sy (seq 0) := by
+    unfold CollKeep.CollOK
+    rw [st.bits, Nm.bits]
+    rfl
+  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb⟩
 
 /-- **The frames not counted before the counted frame `j` keep the bytes of `CtrlKeep.keepA`**: each starts in control and does not come to the player's routine
 (`OnFrames.lagNo`), and the walk of `CtrlKeep` shows that such a frame writes none of these bytes (`CtrlKeep.keep_of_noCut`). -/
@@ -1244,7 +1287,9 @@ theorem OnFrames.readH (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel
     rw [K.at_ix (j - 1) (by omega)]
     exact Ar.all _ (by omega)
   have hS : SurfaceRead.Same sy (seq (j - 1)) (K.fm j) := fun x hx => hlag x (keepA_mem (Or.inl hx))
-  have hc := O.coll j h1 h3
+  have hc : bitsOf sy (seq (j - 1)) ∈ TopSpeed.collBits sy := by
+    rw [K.at_ix (j - 1) (by omega)]
+    exact CollKeep.mem_of_collOK Ar.cb (Ar.bits _ (by omega))
   have hs := O.state j h1 h3
   refine ⟨⟨hOK, hfr, ⟨A.good, harr.1, A.s, A.eng, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, fun x hx => A.keep x (keepA_mem (Or.inl hx)),
     ⟨hidle, harr.2.1, fun n hn => (K.cleanAt j h1 h3 n).time hn⟩, ⟨by rw [hS.P]; exact hfar.1, by rw [hS.P]; exact hfar.2⟩⟩, hS⟩
@@ -1310,12 +1355,12 @@ theorem far_of_range {P0 Pm : Int} {t d : Nat}
 
 /-- **Each frame before the touch starts with a speed of at most the top**, and within the first `farN` frames the position stays within `(16·top + 256)·d` left and
 `16·top·d` right of the machine at control: each frame before it is read as a `TopSpeed.Frame` (`OnFrames.readE`, `SurfaceRead.frameE_end`), which keeps the speed at most
-the top (`Frame.bound`), moves him at most `16·top` right, and at most `16·top + 256` left (the move and `CollideE`). Past `farN` frames the position's range is `farLate`.
-`hv0`, `hP0`: the speed 0 and the position of `B.m` at control. -/
+the top (`Frame.bound`), moves him at most `16·top` right, and at most `16·top + 256` left (the move and `CollideE`). `hg`: the touch is not later than `farN` frames
+after control, so every frame before it is one of the first `farN` (a later touch is `SurfaceLate`). `hv0`, `hP0`: the speed 0 and the position of `B.m` at control. -/
 theorem OnFrames.readAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
     (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v)
-    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) :
+    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) (hg : g ≤ farN sy B.m) :
     ∀ d, d < g → TopSpeed.inSpeed sy (peek (seq d) sy.Player_X_Speed) = true ∧
       (d < farN sy B.m → posP sy B.m - (16 * (top sy : Int) + 256) * (d : Int) ≤ posP sy (seq d) ∧ posP sy (seq d) ≤ posP sy B.m + 16 * (top sy : Int) * (d : Int)) := by
   have h16 : (16 : Int) ≤ (top sy : Int) := by
@@ -1332,10 +1377,8 @@ theorem OnFrames.readAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMod
   | succ d ih =>
     intro hd
     obtain ⟨hsp, hr⟩ := ih (by omega)
-    have hfar : SurfaceRead.Far sy (seq d) := by
-      by_cases hn : d < farN sy B.m
-      · exact far_of_range hn (hr hn)
-      · simpa using O.farLate (d + 1) (by omega) (by omega) (by simp; omega)
+    have hn : d < farN sy B.m := by omega
+    have hfar : SurfaceRead.Far sy (seq d) := far_of_range hn (hr hn)
     obtain ⟨hR, hS⟩ := O.readE hck hOK hfr hidle hst Ar (j := d + 1) (by omega) hd (by simpa using hsp) (by simpa using hfar)
     have ev := SurfaceRead.frameE_v (sy := sy) m0 (seq (d + 1 - 1)) (K.fm (d + 1)) (K.pad (d + 1)) (CtrlKeep.arrAt sy (K.fm (d + 1)) (K.pad (d + 1)))
     have eP := SurfaceRead.frameE_P (sy := sy) m0 (seq (d + 1 - 1)) (K.fm (d + 1)) (K.pad (d + 1)) (CtrlKeep.arrAt sy (K.fm (d + 1)) (K.pad (d + 1)))
@@ -1361,18 +1404,16 @@ theorem OnFrames.readAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMod
     omega
 
 /-- **A counted frame before the touch is read** (`SurfaceRead.ReadE`): the speed at its start is at most the top and its position away from the ends of its range
-(`OnFrames.readAll`, `farLate`) -/
+(`OnFrames.readAll`, with the touch not later than `farN` frames after control) -/
 theorem OnFrames.readE_at (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
     (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v)
-    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j ≤ g) :
+    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) (hg : g ≤ farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j ≤ g) :
     SurfaceRead.ReadH sy m0 (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j)) ∧ SurfaceRead.Same sy (seq (j - 1)) (K.fm j) ∧
       (j < g → SurfaceRead.ReadE sy m0 (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))) := by
-  obtain ⟨hsp, hr⟩ := O.readAll hck hOK hfr hidle hst Ar hv0 hP0 (j - 1) (by omega)
-  have hfar : SurfaceRead.Far sy (seq (j - 1)) := by
-    by_cases hn : j - 1 < farN sy B.m
-    · exact far_of_range hn (hr hn)
-    · exact O.farLate j h1 h3 (by omega)
+  obtain ⟨hsp, hr⟩ := O.readAll hck hOK hfr hidle hst Ar hv0 hP0 hg (j - 1) (by omega)
+  have hn : j - 1 < farN sy B.m := by omega
+  have hfar : SurfaceRead.Far sy (seq (j - 1)) := far_of_range hn (hr hn)
   obtain ⟨hR, hS⟩ := O.readH hck hOK hfr hidle hst Ar h1 h3 hsp hfar
   exact ⟨hR, hS, fun hj => (O.readE hck hOK hfr hidle hst Ar h1 hj hsp hfar).1⟩
 
@@ -1381,10 +1422,10 @@ ends with those of `seq j` (`OnFrames.readE_at`, `SurfaceRead.frameE_end`, `K.en
 theorem OnFrames.reads (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
     (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v)
-    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) : Reads sy g seq (frOf sy m0 K) := by
+    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) (hg : g ≤ farN sy B.m) : Reads sy g seq (frOf sy m0 K) := by
   have hend : ∀ j, 1 ≤ j → j < g → (frOf sy m0 K j).v' = vOf sy (seq j) ∧ (frOf sy m0 K j).f' = fOf sy (seq j) ∧ (frOf sy m0 K j).P' = posP sy (seq j) := by
     intro j h1 h3
-    obtain ⟨_, hS, hE⟩ := O.readE_at hck hOK hfr hidle hst Ar hv0 hP0 h1 (by omega)
+    obtain ⟨_, hS, hE⟩ := O.readE_at hck hOK hfr hidle hst Ar hv0 hP0 hg h1 (by omega)
     obtain ⟨e1, e2, e3, _⟩ := SurfaceRead.frameE_end (hE h3) hS
     have he := K.ends j h1 (by omega)
     unfold frOf
@@ -1397,10 +1438,10 @@ theorem OnFrames.reads (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel
 theorem OnFrames.touchMove (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
     (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v)
-    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) (hg : 1 ≤ g) :
+    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) (hgN : g ≤ farN sy B.m) (hg : 1 ≤ g) :
     ∃ k, CtrlKeep.arrAt sy (K.fm g) (K.pad g) ≤ k ∧ (PipeEntryRule.trace (K.fm g) (K.pad g) k).pc = sy.PlayerSubs ∧
       (frOf sy m0 K g).P₂ = posP sy (PipeEntryRule.trace (K.fm g) (K.pad g) k) ∧ (frOf sy m0 K g).v₂ = vOf sy (PipeEntryRule.trace (K.fm g) (K.pad g) k) := by
-  obtain ⟨hR, hS, _⟩ := O.readE_at hck hOK hfr hidle hst Ar hv0 hP0 hg (Nat.le_refl g)
+  obtain ⟨hR, hS, _⟩ := O.readE_at hck hOK hfr hidle hst Ar hv0 hP0 hgN hg (Nat.le_refl g)
   obtain ⟨k, hk, hpc, e1, e2⟩ := SurfaceRead.frameH_move hR hS
   refine ⟨k, hk, hpc, ?_, ?_⟩
   · unfold frOf
@@ -1565,7 +1606,7 @@ where
       unfold Masked
       rw [hb', ff_and]
       exact fun h => h rfl
-    have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := ⟨Nm.after, Nm.area3, O.areaAll Nm.ctrl Nm.after hst ⟨st.area, st.swim.trans Nm.swim0, st.size.trans Nm.size0⟩, Nm.keepH⟩
+    have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := O.areaRun Nm st hst
     have hfd : 2048 ≤ posP sy (seq (d + 1 - 1)) ∧ posP sy (seq (d + 1 - 1)) + 2048 < 0x1000000 := by
       simpa using far_of_follow F.pot Nm st hfar (fun j => inAt_mem Nm.model _ _ _) (d := d) (by omega) hf
     have hmv := O.movesAt Nm.ctrl Nm.model hfr Nm.storedW hst Ar (j := d + 1) (by omega) (by omega) h2 hc' hfd Nm.idle
@@ -1678,11 +1719,11 @@ theorem start_v0 (hn : numbersCheck sy m0 B Jn = true) (st : Start sy B (seq 0))
 follow `hstep` into a clean state. -/
 theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy = true) (hn : numbersCheck sy m0 B Jn = true) (hfr : TopSpeed.frictionCheck sy m0 = true) (hJT : Jn ≤ T)
     (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000)
-    (O : OnFrames sy m0 B T Jn g seq K) (st : Start sy B (seq 0)) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) :
+    (O : OnFrames sy m0 B T Jn g seq K) (st : Start sy B (seq 0)) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) (hg : g ≤ farN sy B.m) :
     ∃ w h, Surface sy m0 (posP sy B.m) T Jn g (frOf sy m0 K) w h := by
   have Nm := numbers_of_check hn
-  have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := ⟨Nm.after, Nm.area3, O.areaAll Nm.ctrl Nm.after hst ⟨st.area, st.swim.trans Nm.swim0, st.size.trans Nm.size0⟩, Nm.keepH⟩
-  have Rd := O.reads Nm.ctrl Nm.model hfr Nm.idle hst Ar (start_v0 hn st) st.P
+  have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := O.areaRun Nm st hst
+  have Rd := O.reads Nm.ctrl Nm.model hfr Nm.idle hst Ar (start_v0 hn st) st.P hg
   have hd0 : startHS sy (seq 0) = startHS sy m0 := by rw [st.hs, Nm.hs]
   have hin : ∀ j, O.inp j ∈ inputs := fun j => inAt_mem Nm.model _ _ _
   let FC : Nat → Prop := fun j => Follow sy m0 (O.inp j) (seq (j - 1)) (seq j) ∧ Clean sy (seq j)

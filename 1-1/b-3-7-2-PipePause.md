@@ -105,6 +105,14 @@ Program: `pipe-pause-real FM2 3 7`. 334 entries: the reference, the movie's, 26 
 
 **The pause at the entry.** In round 10 the walk of [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md) knew none of the six bytes, so `chg.pause₁` was a new condition on one state. In round 11 the class is carried beside that walk too, and frame 0 gives a class at control: `PauseV` at the entry is proved ([1-1-b-3-7-3](b-3-7-3-EntryPause.md)).
 
+## What the exit still asks, measured in round 12
+
+The pause at the entry is now proved, so the pipe's frames give `QuietV` at the exit for any run. Each part of `QuietRest` was measured against the classes and the rows with tables. None of them follows; each stays, for these reasons.
+
+* `m[q] = x[q]`: the classes allow `q = U` at the exit (the unpause pressed on the exit's frame). This happens on real runs (41 of 1,002 exits above), and then the room's condition `Room` fails at control, because the new song has not started (see [b-3-7-1](b-3-7-1-SoundRows.md)). So it stays as long as `Room` asks the area music's queue.
+* `m[b] = x[b] → m[s₁] = x[s₁] ∧ m[s₂] = x[s₂]` (the two squares' effects when silent): no class knows them. The rows need them. With the first table of the rows without `s₁`, without `s₂`, or without both, the search of the first frame after the exit passes its limit of 8,000,000 steps; with both known it ends in 4.8 s with 1,111 states (`pipe-rows-fx none`, `s1`, `s2`, `both`). In the silent case the sound routine plays the effects and the song on that frame, so each value of an effect goes with each of the 1,607 rows of the song.
+* `m[b] = x[b] → SongAt(song, m)` (the song's row when silent): no class knows the song, and the first frame after the exit plays it. A summary of the sound routine for any values of the song's bytes is false (round 6). The condition at the places (`chg.places₁`) gives a row of the song where the music handler starts on each frame of the pipe. To use it, a walk of the pipe's frames would have to carry the song's bytes after the music handler, as the pause's class is carried, and to count frames: when the unpause sound ends on the exit's frame, that frame does not run the music. The last frame that does is then the frame where the pause was pressed, a frame of the pipe, unless the unpause sound began before the entry; the pause timer shows that such a sound ends at most `L + 1` frames after the entry, fewer than the pipe's 48 counted frames. The walk of the pipe's frames does not count frames. Also a row asks the part's byte (`GroundMusicHeaderOfs`) only on a frame that ends a part, and the walk does not know it after the step. Not done.
+
 ## Assumptions (not proved in Lean)
 
 * `PauseV` at the entry (`chg.pause₁`) is no longer assumed: [1-1-b-3-7-3](b-3-7-3-EntryPause.md) proves it, under `upClean₁` with the six bytes in the guard.
@@ -118,4 +126,5 @@ Program: `pipe-pause-real FM2 3 7`. 334 entries: the reference, the movie's, 26 
 .lake/build/bin/smbrta pipe-pause-check              # the walk with the class beside it as a program, about 50 s; "old" also runs the old walk
 .lake/build/bin/smbrta pipe-pause-real FM2 3 7       # the classes on real runs, about 2 min
 .lake/build/bin/smbrta changes-check FM2 pause 416 60   # the fields on the TAS with a pause of 60 frames at 416
+.lake/build/bin/smbrta pipe-rows-fx both              # the rows after the exit with the effects known (none, s1, s2: without them), about 1 min
 ```

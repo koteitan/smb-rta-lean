@@ -406,10 +406,11 @@ def finB (P : Places) (r : Machine) (B : AS) : Bool :=
 
 /-! ## Finding the table: a search, no part of the proof -/
 
-/-- the key: that of `RoomMap`'s search, and with the bit, the state -/
+/-- the key: that of `RoomMap`'s search, and with the bit, the state. A list of two or more entries puts its second one in the key (`RoomFall`'s height bits) -/
 def keyV (sy : Syms) (Z : Aids) (E : Env) (A : AS) : Nat :=
   let num := fun (b : AB) => b.k.toNat * 256 + (b.v &&& b.k).toNat
   let n := Z.key E A * 4 + A.log.length + (if A.log == [1] then 2 else 0)
+  let n := if A.log.length ≥ 2 then n * 256 + A.log.getD 1 0 % 256 else n
   if A.spent then n * 65536 + num (A.getK (I sy.Player_State)) else n
 
 def routeV (sy : Syms) (P : Places) (Z : Aids) (E : Env) (X : SearchS) (B0 : AS) : SearchS :=
@@ -1298,7 +1299,7 @@ theorem air_frame {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env}
   have hvs : VertModel.vsOf sy (trace M i k) = VertModel.vsOf sy M :=
     vsOf_eq_of (fun x hx => hkeep x (List.mem_append_left _ hx))
   have est : peek (trace M i k) sy.Player_State = peek M sy.Player_State := eq _ (by simp [vKeepA, vKeep])
-  obtain ⟨kk, _, _, hpc, _, hv, hIn⟩ := vert_air hV hR (by rw [est]; exact hst)
+  obtain ⟨kk, _, _, hpc, _, hv, _, hIn⟩ := vert_air hV hR (by rw [est]; exact hst)
     (by rw [est, eq sy.DiffToHaltJump (by simp [vKeepA])]; exact hd)
     (by rw [eq sy.PreviousA_B_Buttons (by simp [vKeepA]), eq sy.A_B_Buttons (by simp [vKeepA, vKeep])]; exact hp)
   rw [hvs] at hv

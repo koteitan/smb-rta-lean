@@ -22,7 +22,10 @@ theorem too, from conditions on single frames, on their instructions and on thei
 first comes to the player's routine, and `in(t) = readIn(tr(t, n₀(t)))` the input that the routine reads. `hs(m) = startHS(m)` is the horizontal state (the speed, the
 subspeed, the facing and moving directions, the running speed), `P(m)` the position, `v(m)` the signed speed, `st(m)` the player's state, `ab(m)` the stored speed and
 `bits(m)` the collision bits. `ground(t)` is `st(fm t) = 0`. `E` is the frame that enters. `lens(|v|) = (L_tap, L_hold)` are the lengths of a jump from its start to its
-landing frame, for a one-frame A and a held A, measured on the emulator for each speed at the takeoff. `Zb = 128` is above every length.
+landing frame, for a one-frame A and a held A, measured on the emulator for each speed at the takeoff. `Zb = 128` is above every length. `V(m)` are the height, its high byte, the vertical speed and its fraction,
+`Q` the return of the collision routine in the player's routine, and `GroundAt(m)` says that `V(m)` is that of the ground: the height of `m₀`, 1, 0, 0. `VS(m)` are the
+vertical bytes of `vstep`, `hi(m)` the high byte of the height, `a(t)` A of the counted frame `t` as the player's routine reads it, `vstepO` and `ground0` the opening's
+vertical model of [The jumps of the opening](a-5-7-OpenJump.md).
 
 ```
 OpenRun(air)  :  air(1) = 0,  and for each t ∈ [1, N] with t < E,  ∃ i ∈ inputsN:
@@ -34,8 +37,11 @@ Real  (for each t ∈ [1, N] with t < E):
   cleanK    :  ∀ k,  CleanK_F(tr(t, k))                   (PipeWrites.Clean, with the castle flag, the position's fraction, the pause byte, the area's type, the
                                                           swimming flag and the change of size protected, but the move routine's own store; the old cleanK and spare)
   after     :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = PlayerSubs  →  the 8 bytes of hs and P of b(t) are those of tr(t, k),  ab(b t) = |v(b t)|,  bits(b t) = FF
-  ground    :  ground(t)  →  GroundAt(fm t)                (the height of m₀, the high byte of the height 1, the vertical speed and its fraction 0)
-  jump      :  ground(t)  ∧  jump(in t)    →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  ¬ground(t + d) for 1 ≤ d < n,  ground(t + n)
+  afterV    :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = Q  →  V(b t) = V(tr(t, k))       (from the return Q of the collision routine on, the height, its high byte, the vertical
+                                                          speed and its fraction do not change)
+and for each t ∈ [1, N + 80) in the air or with a jump, with the frames from N + 1 to t in the air  (OpenJump):
+  vert      :  hi(fm(t + 1)) = 1,  and  VS(fm(t + 1)) = vstepO(ground0, A, abs(fm t))  at a takeoff,  VS(fm(t + 1)) = vstepO(VS(fm t), a(t), 0)  in the air
+                                                          (the step of the opening's vertical model; replaces the old fields ground and jump)
 and once:
   page      :  N < E  →  page(fm(N + 1)) ≠ 255
 and on each instruction of each frame n, counted or not, with 1 ≤ n ≤ ix(N), n < ix(E)  (OpenMap):
@@ -43,7 +49,12 @@ and on each instruction of each frame n, counted or not, with 1 ≤ n ≤ ix(N),
                                                           the read of the block buffer routine is in the first buffer)
 
 Real.stSpring :  the checks,  Real,  FrameStart(seq 1),  MapAt(seq 1)   →   st(fm t) ∈ {0, 1, 2}  ∧  JumpspringAnimCtrl(fm t) = 0     (the old fields st, spring)
-Real.flat     :  the checks,  Real,  FrameStart(seq 1),  MapAt(seq 1),  Held(fm t),  ground(t),  ¬jump(in t)   →   ground(t + 1)       (the old field flat; OpenFlat)
+Real.flat     :  the checks,  Real,  FrameStart(seq 1),  MapAt(seq 1),  Held(fm t),  ground(t),  GroundAt(fm t),  ¬jump(in t)
+                 →   ground(t + 1)  ∧  GroundAt(fm(t + 1))                                                (the old field flat; OpenFlat)
+Real.jumpV    :  the checks,  Real,  t ∈ [1, N],  Held(fm t),  |v(fm t)| ≤ top,  ground(t),  jump(in t)
+                 →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  ¬ground(t + d) for 1 ≤ d < n,  ground(t + n),  GroundAt(fm(t + n))   (the old field jump; OpenJump)
+Real.ground_all: the checks,  Real,  Held(fm t), StSpring, |v(fm t)| ≤ top for each t,  ground(1),  GroundAt(fm 1)   →   ground(t)  →  GroundAt(fm t)
+                                                                                                          (the old field ground; OpenFlat, OpenJump)
 
 air(t)        :=  j − t,   j the first counted frame in [t, N + Zb) with ground(j),  else  N + Zb
 Held(m)       :=  ab(m) = |v(m)|  ∧  bits(m) = FF  ∧  AreaType(m) = v₀  ∧  SwimmingFlag(m) = 0  ∧  PlayerChangeSizeFlag(m) = 0
@@ -56,13 +67,15 @@ move_mod       :  modelOK,  AtCtrl(tr n₀),  the 8 bytes unchanged up to n₀, 
                   →   hs(frame m i) = hstep(hs m, readIn(tr n₀))  ∧  (P(frame m i) − P(m) − 16·v(frame m i)) mod 2²⁴ = 0
 Real.frame_step:  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm t)
                   →   hs(b t) = hstep(hs(fm t), in t)  ∧  (P(b t) − P(fm t) − 16·v(b t)) mod 2²⁴ = 0  ∧  Held(b t)  ∧  st(tr(t, n₀)) = st(fm t)
-lags_keepI     :  the frames not counted keep 17 bytes, among them hs, P, ab, bits, st, the area's three bytes      (LagFrames)
-Real.toRunM    :  lagCheck, walkCheck, pauseCheck,  Checks,  FrameStart(seq 1),  Held(fm 1),  ground(1),  Real   →   OpenRunM(air)
+lags_keepI     :  the frames not counted keep 21 bytes, among them hs, P, ab, bits, st, the area's three bytes, V      (LagFrames)
+Real.toRunM    :  lagCheck, walkCheck, pauseCheck,  Checks,  FrameStart(seq 1),  Held(fm 1),  ground(1),  GroundAt(fm 1),  |v(fm t)| ≤ top for t ≤ E,  Real
+                  →   OpenRunM(air)
 OpenRunM.next  :  OpenRunM(air),  P(fm 1) = P(m₀),  hopt,  hlow,  htop,  page,  k < N,  1 + k < E,  Reach(start, k, st(1 + k))
                   →   P(fm(k + 2)) = P(fm(k + 1)) + 16·v(fm(k + 2))  ∧  Reach(start, k + 1, st(k + 2))
 OpenRunM.toRun :  OpenRunM(air),  hs(fm 1) = hs(m₀),  P(fm 1) = P(m₀),  hopt,  hlow,  htop,  page   →   OpenRun(air)
 Real.toRun     :  Real.toRunM, then OpenRunM.toRun
-Run.pipeHeld   :  Held(fm 1)  ∧  ground(1)                     (title_check, title_pos_check, m₀ holds them: open_checks; the frames before fm 1 keep them: Run.pipeKeep₁)
+Run.pipeHeld   :  Held(fm 1)  ∧  ground(1)  ∧  GroundAt(fm 1)   (title_check, title_pos_check, m₀ holds them: open_checks; the frames before fm 1 keep them: Run.pipeKeep₁)
+Run.pipeSpeed  :  ∀ t ∈ [1, E],  |v(fm t)| ≤ top                (PipeFrames.speed_of_reads, from Pipe.reads and Run.still)
 Run.pipeOpening:  OpenRun(air)                                 (the field opening, and the checks)
 Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              (Run.pipeOpening, and the private opening)
 ```
@@ -71,12 +84,14 @@ Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              (Run.pipeOpe
 
 `Checks` are checks on the ROM: `modelOK` (the movement), `ctrlCheck` (the walk up to the player's routine), `afterCheck` (the walk of the whole frame, with the area's type
 `v₀` of `m₀`), `normIdem`, every length of `lens` below `Zb`, `Held(m₀) ∧ st(m₀) = 0`, that the pause byte the NMI tests is `g`, that the idle loop is a `JMP` to itself,
-and the walks of a frame on the ground (`OpenFlat.flatCheck`, the private `open_flat_check`, about 3 s natively). The private
-`open_checks` gives them: the first three and the idle loop are those of part e (`pole_numbers`), and the area's type above ground is that of `m₀`. `title_pos_check` now also asks the six bytes `ab`, `bits`, `st` and the area's three bytes at control, with
-the values of `m₀` (about 2.2 s natively). `lag_check` now follows 17 bytes (about 6 s natively). The theorems without the ROM use only the axioms `propext`,
+the walks of a frame on the ground (`OpenFlat.flatCheck`, the private `open_flat_check`, about 3 s natively), `16 ≤ top`, and the search of the jumps of the
+opening's vertical model (`OpenJump.arcCheck`, the private `open_jump_check`, about 2.4 s natively). The private
+`open_checks` gives them: the first three and the idle loop are those of part e (`pole_numbers`), and the area's type above ground is that of `m₀`; `m₀` is on the ground at
+its height (`GroundAt(m₀)`, in `start`). `title_pos_check` also asks the ten bytes `ab`, `bits`, `st`, the area's three bytes and the four of `V` at control, with
+the values of `m₀` (about 2.2 s natively). `lag_check` now follows 21 bytes (about 7 s natively). The theorems without the ROM use only the axioms `propext`,
 `Classical.choice`, `Quot.sound`.
 
-Lean: `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean` (`Real.stSpring` uses it), `Theorems/OpenFlat.lean` (`Real.flat` uses it); `lags_keepI` in `Theorems/PipeFrames.lean`; `moreI`, `lagI` in `Theorems/LagFrames.lean`; `stI`, `titlePosCheck`, `Begin.bytesAll₁` in
+Lean: `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean` (`Real.stSpring` uses it), `Theorems/OpenFlat.lean` (`Real.flat` uses it), `Theorems/OpenJump.lean` (`Real.jumpV` uses it); `lags_keepI` in `Theorems/PipeFrames.lean`; `moreI`, `lagI` in `Theorems/LagFrames.lean`; `stI`, `titlePosCheck`, `Begin.bytesAll₁` in
 `Theorems/StartRun.lean`; `Pipe.opening`, `Run.pipeKeep₁`, `Run.pipeHeld`, `Run.pipeOpening`, `Run.pipeOpenB` in `Theorems/Route.lean`; private `Proof/OpenFrames.lean` (`open_checks`, `open_left`), `Proof/OpenFlat.lean`,
 `Proof/LagPause.lean`, `Proof/Opening.lean`, `Proof/PipeWrites.lean`.
 
@@ -95,18 +110,21 @@ Lean: `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.le
   pointer and known bytes). It ends not paused (`Lags.unpaused`: a counted frame is a frame that ends not paused), so it comes to the player's routine (`CtrlKeep.arrive_at`), and there the 25 bytes of `keepA` are those of its start
   (`CtrlKeep.ctrl_keep`). With the player's state and the jumpspring byte of `Real.stSpring` and `Held` this is `FrameModel.AtCtrl`. The input's state and jump bits come from `st(fm t)`.
 * **From frame to frame.** `after` gives `ab` and `bits` at the frame's end; the walk of the whole frame with `cleanK` gives the area's bytes (`SurfaceFrames.area_endF`). The frames
-  not counted keep these bytes and `hs`, `P` (`lags_keepI`: the walk of `LagFrames` follows 9 more bytes). So `Held` holds at every counted frame, by induction from control.
+  not counted keep these bytes and `hs`, `P` (`lags_keepI`: the walk of `LagFrames` follows 13 more bytes). So `Held` holds at every counted frame, by induction from control.
 * **The air.** `air(t) = 0` exactly when `ground(t)`. In the air, `air(t + 1) = air(t) − 1` by the definition. On the ground with no jump start, `Real.flat` ([The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md)) gives `air(t + 1) = 0`.
-  At a jump start, `jump` gives the landing `t + n`, so `air(t + 1) = n − 1 ∈ [L_tap − 1, L_hold − 1]`. The model's input is `norm(in t)`: it has the same state and jump bits,
+  It needs `GroundAt(fm t)`, which holds at every counted frame on the ground (`Real.ground_all`): by induction, from `GroundAt(fm 1)`, `Real.flat` itself, and
+  `Real.jumpV` after a landing.
+  At a jump start, `Real.jumpV` gives the landing `t + n`, so `air(t + 1) = n − 1 ∈ [L_tap − 1, L_hold − 1]`. It comes from the field `vert` and the search of the
+  model's jumps ([The jumps of the opening](a-5-7-OpenJump.md)); the speed at the takeoff is at most the top speed (`Run.pipeSpeed`). The model's input is `norm(in t)`: it has the same state and jump bits,
   and `hstep` on it is the same (`normIdem`).
-* **At control.** `title_pos_check` walks frame 0 from every near state of the title's set, with any input, and asks the position, the horizontal state and the six bytes of
+* **At control.** `title_pos_check` walks frame 0 from every near state of the title's set, with any input, and asks the position, the horizontal state and the ten bytes of
   `stI` known with the values of `m₀` at each end with control.
 
 ## Checked on real frames
 
 A program (`open-real-check`). From the machine at control it runs the first 32 counted frames (a frame on which the interval timers' phase does not move is not counted). It
 runs each counted frame instruction by instruction and checks each field of `Real`, what the proof derives (`Held` at the frame's start, `keepA` at the player's routine,
-`hstep` and `16·v` at the frame's end and at the next counted frame), and that the frames not counted keep the 17 bytes.
+`hstep` and `16·v` at the frame's end and at the next counted frame), and that the frames not counted keep the 21 bytes.
 
 | run | counted frames | frames not counted between them | jump starts | a field of `Real` fails | not a step of the model |
 |---|---|---|---|---|---|
@@ -114,13 +132,15 @@ runs each counted frame instruction by instruction and checks each field of `Rea
 | own inputs from control, with Start (300) | 9,600 | 9,600 | 528 | 0 | 0 |
 | a pause on one of the first 4 frames in control for 43 to 82 frames, then the TAS's inputs (60; 58 unpause) | 1,856 | 5,814 | 116 | 0 | 0 |
 
-* On the TAS the 6 bytes of `stI`, the position and the horizontal state at control are those of `m₀`.
+* On the TAS the 10 bytes of `stI`, the position and the horizontal state at control are those of `m₀`.
+* `vert` is checked on every counted frame in the air or with a jump, up to `N` and after it up to the landing of the jump in the air at the counted frame `N + 1`:
+  42, 11,839 and 2,571 frames in the three rows, 0 failures. `afterV` holds on every counted frame (0 failures).
 * **`far` of part e is false here**: the own runs that press A with B and Left on their first frame and hold B and Left after begin the counted frame 33 at `P = 320`
   (1.25 px), with no edge of the screen. `page` holds on all of them.
 * **Start on the first frame in control**: that frame ends paused and the timers' phase does not move, so the clock does not count it. Before this round `PipeFrames.Lags`
   made frame 1 of the run the counted frame 1, so on such a run `unpaused` failed at `t = 1` and the run was not covered. Now the counted frames are read from the pause byte
   (`PipeFrames.ixP`, [LagPause](a-5-5-3-3-LagPause.md)): the counted frame 1 is the first frame from frame 1 on that ends not paused, and the state at control is carried to it
-  (`Run.pipeKeep₁`). The runs of the third row pause on the first frames; the frames before their counted frame 1 keep the 17 bytes. On these runs the program also runs
+  (`Run.pipeKeep₁`). The runs of the third row pause on the first frames; the frames before their counted frame 1 keep the 21 bytes. On these runs the program also runs
   every frame up to the counted frame 32 instruction by instruction (7,728 frames): each instruction is `Clean` (`lags.clean`), and no frame not counted stores to the pause
   byte through an index or a pointer (`lags.keeps`, which now also covers the frames before the counted frame 1).
 * On every frame of these runs, up to the first frame that ends out of control, the timers' phase moves exactly when the frame ends not paused (81,931 frames, no exception).
@@ -129,21 +149,27 @@ runs each counted frame instruction by instruction and checks each field of `Rea
 
 ## Assumed (not proved in Lean)
 
-* The fields of `Real`: `cleanK`, `map`, `after`, `ground`, `jump`, and `page` at the start of the counted frame `N + 1` only. They are
+* The fields of `Real`: `cleanK`, `map`, `after`, `afterV`, `vert`, and `page` at the start of the counted frame `N + 1` only. They are
   conditions on single frames, on their instructions and on their starts. `after` says that from the scroll handler on nothing moves him and the collision routine finds nothing (no wall, no edge of the screen):
-  the horizontal half of item 1-1-a-5-6. `ground` says that a counted frame that begins on the ground begins at the ground's height with no vertical speed. `jump` is item 1-1-a-5-7.
-* No longer assumed (this round): `flat` (he does not fall off the ground). It is a theorem (`Real.flat`) from the walks of
+  the horizontal half of item 1-1-a-5-6. `afterV` (new) says that from the return of the collision routine on `V` does not change: its vertical half on the ground.
+  `vert` (new) says that a counted frame in the air or with a jump is a step of the opening's vertical model ([The jumps of the opening](a-5-7-OpenJump.md)).
+* No longer assumed (this round): `ground` (`Real.ground_all`: at the counted frame 1 from the title, after a counted frame on the ground with no jump by the walks of
+  [The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md), after a landing by `Real.jumpV`). The walk up to the return of the collision routine checks `V` there; the
+  walk after it cannot follow `V`, hence the new field `afterV`.
+* No longer assumed (this round): `jump` (item 1-1-a-5-7, a condition on many frames). It is a theorem (`Real.jumpV`) from the field `vert` (on single frames) and the
+  search of every jump of the model (`OpenJump.lands`).
+* No longer assumed (round 11): `flat` (he does not fall off the ground). It is a theorem (`Real.flat`) from the walks of
   [The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md) and the new field `ground`. The read of `map` is asked to be in the first block buffer, and `map` covers the
   frame of the counted frame `N` too.
-* No longer assumed (this round): `longer`, and `page` at the starts of the counted frames 1 to `N`.
-* No longer assumed (this round): `st` and `spring`. They are a theorem (`Real.stSpring`) from the walk of
+* No longer assumed (earlier rounds): `longer`, and `page` at the starts of the counted frames 1 to `N`.
+* No longer assumed (earlier rounds): `st` and `spring`. They are a theorem (`Real.stSpring`) from the walk of
   [The block buffers, the jumpspring and the player's state on the first frames](a-5-4-3-3-3-OpenMap.md), with the new field `map` on each instruction. `spare` is now
   part of `cleanK` (the bytes it protects are protected by the guard of `cleanK`, `FrameKeep.guardF`, as part f did).
 * No longer assumed: that each frame is a step of the model (`hstep`, the move by `16·v`, the input of the model, `valid`), and the sequence `air`. That each counted frame
   ends not paused is a theorem (`PipeFrames.Lags.unpaused`): the counted frames are the frames that end not paused, found within `dP` frames (`lags.resume`).
 * **Not proved:** that frame 368 is reached (as before).
 
-**Files.** `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean`, `Theorems/OpenFlat.lean`, `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`, private `Proof/OpenFrames.lean`,
+**Files.** `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean`, `Theorems/OpenFlat.lean`, `Theorems/OpenJump.lean`, `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`, private `Proof/OpenFrames.lean`,
 `Proof/OpenFlat.lean`, `Proof/LagPause.lean`, `Proof/Opening.lean`.
 
 **Reproduce.**

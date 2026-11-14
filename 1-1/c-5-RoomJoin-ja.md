@@ -183,14 +183,14 @@ P(t₀) ≤ P_w + capRamp(Φ_s, k + 1) + capDist(98 − (j + k + 1)) < G_P      
 * `fall_long`（1 フレーム）: `C + 34` より前は床にいない。
 * `facing`（1 フレーム）: `C + 34` より前で、空中のフレームと跳ぶフレームは向きを変えない。
 * `stand_fast`、`stand_P`（1 フレーム）: `C + 34` より前で立つとき、その前のフレームでは `−V ≥ 256·14`、`P ≤ P_s`。`P_s` は足が壁の列に入る位置に、しきい値より遅い 1 フレーム分を足した位置です。足が壁の列に入るには、外から速く来るしかないからです。
-* `stand_row`（1 フレーム）: 空中から立つと、高さは段ちょうどで、下向きの速さは 0。
+* `stand_row` はもう仮定ではありません（項目 1-1-c-7-5-3）。空中から立つと、高さは段ちょうどで、下向きの速さは 0。[部屋でのジャンプの各フレーム](c-7-11-1-RoomFall-ja.md) が `t₀` より前のフレームで証明します（`RoomRun.stand_row_of`）。証明が使うのはそこだけです（`RoomCore.stand_row`、落下のフレーム）。
 * `vfall`（1 フレーム）: `C + 51` より前で、ジャンプの状態でなく跳ばないフレームは `Y' ≤ Y + W`、`W' ≤ W + f`。`f` は変わらず、次もジャンプの状態ではない。
 * `floor_at`: 壁に触らなければ、`C + 34` で床にいる。
 * `vfloor`（1 フレーム）: 壁に触らなければ、`C + 34` から `C + 49` までの、床から始まる入る前のフレームは、頭がブロックに当たる場所（下の `headAt`、`bumpAt`）に来ないなら `VFrame`（立つか跳ぶ）。床のフレームでの前のフィールド `vframes` です。空中の部分は定理です（下の項目 1-1-c-7-5-1）。
 * `halt`、`prevA` はもう仮定ではありません（項目 1-1-c-7-5-2）: 入るより前の各フレームの終わりで、ジャンプ中ならジャンプを止める値は 1、前のフレームの A は A と同じ。[ジャンプを止める値と前のフレームの A](c-7-5-2-RoomPair-ja.md) が両方を証明します（`InRoom.pair`、`Route.Run.roomPair`）。[部屋でのジャンプの最初のフレーム](c-7-5-1-RoomVert-ja.md) がこれらを使います。
 * `low_at`（1 フレーム）: `C + 37` から `C + 43` までで足が低いフレームは `LowAt`。当たり判定のルーチンの事実で、ルーチンから導いてはいません。
 * `ab_early`（1 フレーム）: `C + 37` より前で、モデルに従わないフレームが読む覚えている速さは `v_A` より小さい。そういうフレームは壁にぶつかるフレームか、そのすぐあとでぶつかる前の覚えている速さを読むフレームです。本物のフレームでは、`C + 37` より前の覚えている速さは 21 以下でした。`v_A` は 25 です（`room-ab-check`。TAS と、最初の操作からの自分の入力の走り 2800 回で、そういうフレームは 10,184 個。モデルに従うフレームでは、読む覚えている速さはどれも `|v|` で、前のフレームが残したものです）。
-* `enters`、`read_PE`（1 フレーム）: フレーム `E` は本物の機械で横の土管に入る。`P(E)` はフレームの終わりの位置。`read_PE` は `read_P` と同じ読みです。欄 `movedE`（`P(E)` は移動の終わりの位置）はなくなりました（項目 1-1-c-7-18-2）。[入るフレームの終わりの位置](c-7-18-2-SideEntryEnd-ja.md) を、切り替えの機械（`Route.Changes`）の上で証明し、定理 `Route.Run.roomEnter` が、フレーム `E` がそのフレームの 1 つであると言います。`InRoom` は今 `mouthE`、`bump`、`vert`、`pair`、`le`、`time`、`arrive`、`reach`、`cut`、`before` です（`RoomRun.InRoom`、`Route.Run.inRoom`）。
+* `enters`、`read_PE`（1 フレーム）: フレーム `E` は本物の機械で横の土管に入る。`P(E)` はフレームの終わりの位置。`read_PE` は `read_P` と同じ読みです。欄 `movedE`（`P(E)` は移動の終わりの位置）はなくなりました（項目 1-1-c-7-18-2）。[入るフレームの終わりの位置](c-7-18-2-SideEntryEnd-ja.md) を、切り替えの機械（`Route.Changes`）の上で証明し、定理 `Route.Run.roomEnter` が、フレーム `E` がそのフレームの 1 つであると言います。`InRoom` は今 `mouthE`、`bump`、`vert`、`air`、`pair`、`le`、`time`、`arrive`、`reach`、`cut`、`before` です（`RoomRun.InRoom`、`Route.Run.inRoom`）。
 * `Approach`: 壁に触らず stop がないときだけ求めます。跳ぶフレームは床（`T1_floor`）、ジャンプ、着地は `vstep` のフレーム（`Cert.Reach`、`x_vs`）、空中のフレームは空中、`low` は低いフレームでの当たり判定、`x_ab`（1 フレーム）は跳ぶフレームが覚えている速さを読むこと。
 * `Off`: かたまりからのジャンプは `F` まで `vstep` のフレーム。`F` は、何にも止められなければそのジャンプが床に届くフレームです。`F ≤ E` は、途中で止められたり着地したりしても床が遅くなるだけ、という仮定です。土管の上への着地が実際に起きます。
   * `slowJ`: `F = E` なら、遅いジャンプのフレームは `hstep` の空中のフレームか、空中の速さまでしか動かない。
@@ -204,6 +204,8 @@ vfloor（欄）    :  NoWall  →  C + 34 ≤ n < C + 49  →  n < E  →  NoBum
 InRoom.bump     :  ∀ n,  C ≤ n < E  →  NoBump(n)                                （Route.Run.roomBump）
 RoomCore.vfloor :  NoWall  →  C + 34 ≤ n < C + 49  →  n < E  →  OnFloor(vs(n))  →  VFrame(n)       （toCore）
 RoomCore.varc   :  C ≤ n < t0,  n + 1 < E,  OnArc(T, n),  n + 1 − (T + 1) ≤ 8  →  vs(n + 1) = vstep(vs(n), a(n + 1), 0)    （RoomRun.varc_of）
+RoomRun.varc_all:  C ≤ n < t0,  n + 1 < E,  OnArc(T, n),  地面にない  →  vs(n + 1) = vstep(…)  ∨  (落下中  ∧  vs(n + 1) = land(vstep(…)))    （InRoom.air）
+RoomCore.stand_row:  C ≤ n,  n + 1 < t0,  st(n) ≠ 0,  st(n + 1) = 0  →  y(n + 1) mod 16 = 0  ∧  W(n + 1) = 0    （RoomRun.stand_row_of）
 t0_le_E         :  Off  →  t0 ≤ E
 t0_lt_E         :  Off,  vf  →  t0 < E        （vf: 2 ≤ aboveS, 2 ≤ aboveF, 1 ≤ walk, fall + lastG + 1 + rise ≤ standF。数は確かめる）
 land_late       :  Approach  →  T + 1 + 8 < L

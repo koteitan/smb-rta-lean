@@ -78,6 +78,8 @@ A program (`pole-frame-check FM2 1200`, exit 0, bad 0). The runs of [Touching th
 * Every touch (4,665): no edge store and no head's routine before the write, one arrival at `PlayerSubs` before it, the position there at or right of `L` (3158 to 3161 and 3174 to 3177), and the position there is the frame's start moved by the speed there (`P₂ = P + 16·v₂`, `moved`). Before the write each touch has 2 stores through an index to the position, the player's move. So `edge` and `posKeep` hold on every touch.
 * 1,361 frames in control come to the edge store or the head's routine: 1,095 after the edge store (all in the random runs, the largest position there 3050) and 266 after the head's routine. None is in the range there unless it was in the range at the end of the move. The head's routine never changed the position.
 * Near the pole the head's routine came only in the runs with the position overwritten near the pole's column: 264 times, on the pole's page or the one before. 210 of them are in the range, each already in the range at the end of the move. In the movie it came twice, on the page 10. So near the pole the head's routine can be reached from some states. The walk now follows it with the position known, and no hypothesis needs to exclude it.
+* The 1,095 edge stores are all at the screen's left edge (the index 0): the largest position after them is 3050. None is at the right edge.
+* No frame in control begins with a pole tile in the block buffers outside the pole's column, or in the column with the page two or more before the pole's. But 90 side reads (all in the runs with the position overwritten near the column) read a byte that is not the byte that was at that place when the frame began: the block buffers can change inside a frame before a side read.
 
 ## Why `moved` stays (item 1-1-f-6-18)
 
@@ -95,6 +97,24 @@ Part c removed its `movedE`: it reads `P(E)` at the end of the entering frame, a
 | the end of the move is passed more than once | 0 |
 
 `OnFrames.moves` (part e) gives the conditions of a frame only for `j < g`, and `Clean` fails before 18 touches. So `moved` stays a hypothesis: a reading of the model at the end of the move.
+
+## Why `tiles`, `edge` and `posKeep` stay (items 1-1-f-6-17, 1-1-f-6-18)
+
+This round tried to prove `tiles` and `edge` from the walk, and to remove `posKeep`. None of the three worked. Nothing in the proof changed.
+
+**`tiles`.** The walk uses `TileRead` only after a read of a side check, in two cases: the page is two or more before the pole's, or the place read is known and is not in the pole's column. Then `TileRead` says that the byte read is not a pole tile. Near the pole the walk already knows the place of each read: the pixel and the high bits of the height are split. So the address does follow from the position on each path. But `TileRead` is not about the address. It is about the byte at the address: the level as it was drawn into the block buffers. The walk does not know those bytes.
+
+A form at the frame's start would be: when frame `g` begins, the block buffers hold a pole tile only in the pole's column, and only when the page is at most one before the pole's. It holds on every real frame in control (above). The walk cannot use it:
+
+* The walk's RAM is not known at the start, and `Sim` ties an abstract state to one machine. "This byte is still the byte of the frame's start" is not a fact that the walk can carry. It needs a new invariant over the steps.
+* The block buffers change inside a frame before a side read (90 reads above). The head's routine and the removal of a coin write them through a pointer. So the invariant needs a new condition on each instruction, as `PosAt`.
+* The page condition ties the drawing of the level to Mario's page. The area parser draws at the end of each frame, after the player's routine. That is a fact over many frames.
+
+So it would replace one condition by three. `tiles` stays.
+
+**`edge`.** By the code (`ChkPOffscr`, `GetXOffscreenBits`), the store at the left edge puts him at the screen's left edge after the scroll. The store at the right edge puts him a little left of the screen's right edge, and only when he is already closer to that edge than that. When he is right of the right edge by a page or more, the left edge's store is taken. The walk's addition (`TaintRun.aadc`) knows its result only when every bit of both operands is known. So the walk can compare an edge with the position only when both 16-bit numbers are known exactly. Left of `L` there are 3,158 positions, and each edge has 65,536 values. Splitting the edge bytes at the frame's start does not help: the scroll adds the move's amount, which comes from the speed, and the walk does not know the speed. For the right store alone, with the position exact, the right edge's pixel must be exact (256 pieces), and its page exact where the low difference is small enough for that store (16 · 256 pieces). That is about 4,300 pieces for each of the 3,158 positions, 1.4 · 10⁷ pieces in all. The whole walk now has 8.5 · 10⁶ steps. The form on one state (`px < L` right after the store) holds on real frames, but it is a larger hypothesis than `edge`, so it is not used. On real frames every edge store was at the left edge (above). `edge` stays.
+
+**`posKeep` without `PosAt` (a try, not kept).** A version of the walk used, at each store through an index or a pointer, what the state knows of the index and the pointer. It kept the position's bytes when no possible target is one of them, and forgot them otherwise. With no other change the search had 14,751,416 steps and 831,729 failures. The position was forgotten at one place: the head's routine stores through the index `SprDataOffset_Ctrl` (`STA Block_State,X` and others), which the walk does not know. With three more changes (that byte is 0 or 1 at the frame's start and at each load of it, the page's parity is known in the far pieces, the pointer's high byte is kept after a read of the block buffers), the search had 16,997,556 steps, twice the walk now, and still 1,256,685 failures. Two places still forget the position: the score's digits (`STA DisplayDigits,Y`, with an index from the current player and a loop), and the head's store of the blank tile (`STA (pointer),Y`, with the pointer's high byte read from a table at the page's parity). Splitting the index of such table reads took more than 12 GB of memory. So the walk would need more conditions than `PosAt` (on the block objects' offset and the current player) and would be at least twice as long. `posKeep` stays.
 
 ## Hypotheses (not proved in Lean)
 
