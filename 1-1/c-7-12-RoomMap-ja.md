@@ -37,7 +37,7 @@ room_map（非公開）              :  2 つの確認をつけた map_of_rows
 Lean: `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。`Theorems/RoomJoin.lean` に `RoomRun.TilesE`（フレーム `E` の読みでのタイル。`RoomRun.mouth_of` の仮定で、もう欄ではない）。`Theorems/Route.lean` に `Run.roomEnter` と `Run.roomTiles`。
 
 ```
-roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          （定理 Route.Run.roomEnter。k = b₁ + (E − 1 − C)）
+roomEnter       :  ∃ k,  b₁ ≤ k < a₂  ∧  fm(E − 1) = seq(k)  ∧  pad(E) = inp(k)          （定理 Route.Run.roomEnter。k = b₁ + ix(E − C) − 1）
 Run.roomTiles   :  確認,  Run  →  TilesE:  ∀ n j,  WriteStep(n) → j ≤ n → AtRead(tr(j)) → TilesOK(tr(j))
 ```
 
@@ -69,7 +69,7 @@ bump_of_rows       :  map_of_rows の仮定  →  ∀ n ∈ [b, a),  ∀ j,  pc(
 Run.roomCleanE     :  確認,  Run  →  CleanE                       （前の欄 room.cleanE）
 Run.roomHeadE      :  確認,  Run  →  HeadE:  ∀ j,  pc(tr(j)) ≠ h    （前の欄 room.edgeE の一部）
 Run.roomBump       :  確認,  Run  →  ∀ n,  C ≤ n < E  →  ∀ j,  pc(tr_n(j)) ≠ h  ∧  pc(tr_n(j)) ≠ bumpAt
-                      （部屋のフレーム n + 1 は base のフレーム b₁ + (n − C) で、roomEnter より a₂ の前）
+                      （部屋のフレーム n + 1 は base のフレーム b₁ + ix(n + 1 − C) − 1 で始まり、Run.roomIdx より a₂ の前）
 Run.inRoom         :  確認,  Run  →  InRoom:  mouthE ∧ bump          （Run.roomMouthE、Run.roomBump）
 ```
 
@@ -107,7 +107,7 @@ Run.inRoom         :  確認,  Run  →  InRoom:  mouthE ∧ bump          （Ru
 ## 前提（Lean では証明していない）
 
 * **`SiteOK`.** 最初の操作から入るまでのフレームの各命令で。それらの各フレームは操作のルーチンで始まる。これは [部屋の画面のページと、横の土管の長いタイマー](d-2-4-ScreenPage-ja.md) が仮定しているものです（`Route.Changes.roomSites`。`roomStay` は定理）。
-* **`roomEnter` は定理です.** `RoomRun` のフレーム `E`（`fm(E − 1)`、`pad(E)`）は、部屋の中の `Route.Base` のフレームです。部屋の機械は `base` のフレーム `b₁` からのものなので、フレーム `b₁ + (E − 1 − C)` で、`a₂` より前です（`Route.Run.roomEnter`、項目 1-1-0-4）。確認 `RoomChecks` を使います。`RoomRun` の欄 `tiles` はなくなりました。`Run.roomTiles` が `room_map` とこのつなぎから証明します。
+* **`roomEnter` は定理です.** `RoomRun` のフレーム `E`（`fm(E − 1)`、`pad(E)`）は、部屋の中の `Route.Base` のフレームです。部屋の機械は `base` のフレーム `b₁` からのものなので、フレーム `b₁ + ix(E − C) − 1` で（止まった状態で終わるフレームは数えません: [部屋で一時停止する走り](c-7-1-4-RoomLag-ja.md)）、`a₂` より前です（`Route.Run.roomEnter`、項目 1-1-0-4）。確認 `RoomChecks` を使います。`RoomRun` の欄 `tiles` はなくなりました。`Run.roomTiles` が `room_map` とこのつなぎから証明します。
 * **地図の残り**（項目 1-1-c-7-12）. 証明したのは、地図で 0 のビットだけです。レンガ、床、壁がそのまま残ることと、ほかのフィールドの数が地図のものであることは、証明していません。
 
 **ファイル.** `Theorems/RoomMap.lean`、非公開の `Proof/RoomMap.lean`。

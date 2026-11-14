@@ -623,6 +623,19 @@ theorem phase (hp0 : F.ph 0 = 2) : ∀ n, n ≤ E + 1 → (F.ph n + n) % 21 = (2
       simp only [reduceCtorEq, if_false, if_true]
       omega
 
+/-- the phase stays below 21: the rule moves it to `(p + 20) % 21` or keeps it. `hp0`: the phase before frame 0. -/
+theorem ph_lt (hp0 : F.ph 0 < 21) : ∀ n, n ≤ E + 1 → F.ph n < 21
+  | 0, _ => hp0
+  | n + 1, hn => by
+    have ih := ph_lt hp0 n (by omega)
+    have hs := F.step n (by omega)
+    generalize F.kind n = x at hs
+    cases x with
+    | play => have := hs.2; omega
+    | auto => have := hs.2; omega
+    | setup => have := hs.2; omega
+    | lag => have := hs.2; omega
+
 /-- **`hE`.** The castle entry's number: the frames of its count, and the frames of `j`. -/
 theorem hE : E = S.last + F.j := by
   have h := seen_add_lag F.kind E

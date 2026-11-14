@@ -11,6 +11,8 @@
 
 `LagUp` は `Route.Run` のフィールドではありません。定理が引数として取ります。`route_1_1` は変わりません。
 
+`LagUp` は、地上の各フレームで `clock` の位相が機械の位相であること（`PhaseUp`）と、各フレームでの機械の位相の規則から出ます（`Run.lagUp_of`）。その規則は、触るフレームまでのフレームで証明しました（[操作中の 1 フレーム](0-5-2-1-1-PhaseFrame-ja.md)）。
+
 ## なぜ
 
 `pole` は、ポーズでなく終わるフレームを数えます（`FrameKeep.Keep`）。数えるフレーム `j` は `pole.seq j = seq (b₂ + ix j)` で終わります。`ix j` は、`b₂` から数えて `j` 番目の、ポーズでなく終わるフレームです。`clock` は `lag` でないフレームを数えます（`seen`）。地上では 2 つは 1 つの数でしか会いません。`clock` は `E` の前に `Cs + c` フレームを数え（`Segs.last`）、`c` は `pole` の数です。どのフレームが `lag` かは自由です。なので今まで、`clock` の城に入るとき `E`（`flag` が機械を読むところ）が、`pole` の城に入るとき（`atCastle` が城の旗を読むところ）と同じだとは言えませんでした。`LagUp` は 2 つの数え方をフレームごとにつなぎます。
@@ -48,6 +50,39 @@ atCastle_of_flag :  LagUp,  g < c,  fc.sy = sy   ⟹   castle(pole.seq(c))
 * `j_up`: `n = E` と `n = b₂` で `r(n) + #lag(n) = n`（`seen_add_lag`）、そして `c ≤ E + 1 − b₂`（`seen_le_add`）です。
 * `atCastle_of_flag`: `flag.task_E` は、フレーム `E` のあとで星の旗のタスクのバイトが 2 だと言います。`castle(m)` はこのバイトが 0 でないことです。
 
+## 位相から `LagUp` へ
+
+[操作中の 1 フレーム](0-5-2-1-1-PhaseFrame-ja.md) は、触るフレームまでのフレームで、機械の位相の規則（`PhaseRule`: フレームはポーズで終わるときにちょうど位相 `φ` を保ち、そうでなければ `next(φ) = (φ + 20) % 21` に動かす）を証明します。ここでそれを時計とつなぎます。
+
+```
+PhaseAt(n)   :=  clock.ph(n) = phaseOf(seq n)                         (n = 0 では read₀ がこれを言う)
+PhaseUp      :=  ∀ n,  b₂ ≤ n ≤ E + 1  ⟹  PhaseAt(n)
+PhaseName    :=  タイトルの名前の IntervalTimerControl は PhaseFrame のバイト φ        (ROM でのチェック)
+
+not_setup         :  ∀ n,  b₂ ≤ n ≤ E  ⟹  kind(n) ≠ setup
+lag_of_phase      :  PhaseName,  b₂ ≤ n ≤ E,  PhaseAt(n),  PhaseAt(n + 1),  PhaseRule(seq n, seq(n + 1))
+                     ⟹  ( kind(n) = lag  ⟺  seq(n + 1) はポーズで終わる )
+phase_succ_iff    :  PhaseName,  b₂ ≤ n ≤ E,  PhaseAt(n),  PhaseRule(seq n, seq(n + 1))
+                     ⟹  ( PhaseAt(n + 1)  ⟺  ( kind(n) = lag  ⟺  seq(n + 1) はポーズで終わる ) )
+lagUp_of_phase    :  PhaseName,  PhaseUp,  ∀ n ∈ [b₂, E],  PhaseRule(seq n, seq(n + 1))   ⟹   LagUp
+rule_up           :  チェック,  StartK(seq b₂),  Watched(seq b₂),  tc(seq b₂) = 0,  φ(seq b₂) ≤ 20,  触るフレームまでの KeepsPhase
+                     ⟹  ∀ n < ix(g),  PhaseRule(seq(b₂ + n), seq(b₂ + n + 1))
+lagUp_of          :  チェック,  StartK(seq b₂),  Watched(seq b₂),  tc(seq b₂) = 0,  PhaseUp,  触るフレームまでの KeepsPhase,
+                     hA : ∀ n ∈ [b₂ + ix(g), E],  PhaseRule(seq n, seq(n + 1))   ⟹   LagUp
+atCastle_of_phase :  lagUp_of の仮定,  g < c,  fc.sy = sy   ⟹   castle(pole.seq(c))
+```
+
+チェックは `FrameKeep.keepCheckOf`、`PhaseFrame.phaseCheck`、`PhaseFrame.tcCheck`、`TitleStart.check` です。`ix(g)` は `b₂` から数えた触るフレームの終わりです。`b₂` での `StartK` と `Watched` は `Run.atCtl₀` と `PoleJoin.Run.watched₀` から出ます。
+
+証明です。
+
+* `not_setup`: `setup` フレームの数は `z₁` か `z₂` で（`Segs.kind`）、どちらも `Cs` より小さいです。地上では数は `Cs + 1` 以上です（`chg.hb₂`）。
+* `lag_of_phase`: `clock.step` で、`lag` フレームは時計の位相を保ち、遊びのフレームと `auto` のフレームは位相を `next` に動かします。どの `p` でも `next(p) ≠ p` です。両端で `PhaseAt` なら、時計が位相を保つのはちょうど機械が保つときで、`PhaseRule` は、機械が保つのはちょうどフレームがポーズで終わるときだと言います。
+* `phase_succ_iff`: 同じことの逆向きです。
+* `lagUp_of`: `PhaseAt(b₂)` と、時計の位相が 21 より小さいこと（`CastleToLevel.Frames.ph_lt`、`ph(0) = 2` から）から `φ(seq b₂) ≤ 20` です。すると `rule_up` が触るフレームまでの `PhaseRule` を、`hA` がそのあとを与え、`lagUp_of_phase` が `LagUp` を与えます。
+
+なので `phase_succ_iff` は、時計の規則が位相をどこまで運ぶかを言います。フレーム `n` が始まるときに時計の位相が機械の位相なら、フレームが終わるときもそうであるのは、ちょうどフレーム `n` が `LagUp` を満たすときです。フレーム 0 の `read₀` から、時計の種類を機械につなぐものがなければ、規則はそれより後のどのフレームも与えません。
+
 ## 本物の走りで
 
 `castle-join-check FM2` は、[タイマーと格子](g-1-CastleToLevel-ja.md) のチェックと同じく、`clock` の種類を機械から読みます（`CastleToLevel.kindOf`: 位相が動かないフレームが `lag` フレーム）。フレーム `b₂` が始まるときの機械から走らせ、城に入るときで止めます。
@@ -65,13 +100,16 @@ atCastle_of_flag :  LagUp,  g < c,  fc.sy = sy   ⟹   castle(pole.seq(c))
 
 ## 証明していないこと
 
-* `LagUp` そのもの。1 フレームごとの条件で、上で測りましたが、証明していません。`kind` は走りとともに選ぶもので、`LagUp` は地上でのその選び方を言います。`LagUp` は 2 つのことから出ます。`clock` の位相が機械の位相であること（`clock.ph n = phaseOf(seq n)`。今はフレーム 0 と `E` のあとだけ）と、地上のフレームで、位相が動かないのはちょうどポーズで終わるときであること（コード: ポーズのルーチンのあとでポーズのビットが立っているか、`TimerControl` が 0 でないと、タイマーは飛ばされます）です。
-* `LagUp` は `Route.Run` のフィールドではないので、仮定でなくなるものはありません。フィールドにすれば `pole.atCastle` は定理になり（`atCastle_of_flag`）、`flag` の城に入るときと `pole` のそれがつながります。1 つの機械の条件のかわりに地上の全フレームの条件になるので、ここではフィールドにしていません。
+* `LagUp` そのもの。`PhaseUp`、`b₂` での `tc = 0` と操作中の始まり、触るフレームまでの各命令の `KeepsPhase`、`hA` から出ます（`Run.lagUp_of`）。触るフレームまでの機械の部分は証明しました（[操作中の 1 フレーム](0-5-2-1-1-PhaseFrame-ja.md)）。
+* `PhaseUp`: 地上の各フレームで `clock` の位相が機械の位相であること。フレーム 0 では `read₀`、`E` のあとでは `flag` がこれを言います。フィールドからは出ません。地上の `clock` の種類は走りとともに選ぶもので、`lag_of_phase` と `phase_succ_iff` は、フレームごとに `PhaseUp` と `LagUp` が同じことを言うと示します。動画で種類を機械から読むと、1,219 フレームすべてで `PhaseUp` が成り立ちます。
+* `hA`: 触るフレームのあと `E` までのフレームが `PhaseRule` に従うこと。それらのフレームを追う歩きはありません。城までの 388 の走り（70,995 フレーム）で測りました。
+* `pole.atCastle` はフィールドのままです。`PhaseUp` と `hA` をフィールドにすれば定理になります（`atCastle_of_phase`）が、それらは 1 つの機械の条件のかわりに地上の全フレームの条件です。
 * 地下と最初の土管の前では、種類は前と同じつながりだけです。`paused₁`、`paused₂`（切り替えの `lag` フレームはポーズで終わる）、数 `ha₁`、`hb₁`、`ha₂`、`hb₂`、フレーム 0 での `read₀` です。
 
-**ファイル.** `Theorems/Route.lean`（`Run.LagUp`、`Run.seen_up`、`Run.up_E`、`Run.castle_join`、`Run.count_up`、`Run.kind_up`、`Run.j_up`、`Run.atCastle_of_flag`）。
+**ファイル.** `Theorems/Route.lean`（`Run.LagUp`、`Run.seen_up`、`Run.up_E`、`Run.castle_join`、`Run.count_up`、`Run.kind_up`、`Run.j_up`、`Run.atCastle_of_flag`。`Run.PhaseAt`、`Run.PhaseUp`、`PhaseName`、`Run.not_setup`、`Run.lag_of_phase`、`Run.phase_succ_iff`、`Run.lagUp_of_phase`、`Run.rule_up`、`Run.lagUp_of`、`Run.atCastle_of_phase`）、`Theorems/CastleToLevel.lean`（`Frames.ph_lt`）。
 
 **再現.**
 ```
 .lake/build/bin/smbrta castle-join-check FM2      # 上の走り（約 140 秒）
+.lake/build/bin/smbrta phase-frames-check FM2     # 本物の走りでの lagUp_of の条件（約 115 秒）
 ```

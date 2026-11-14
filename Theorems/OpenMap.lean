@@ -30,9 +30,11 @@ open PipeTransitionAll (go go_bind leaf_ppuRead leaf_padRead leaf_tick)
 open TaintRun (StepRel mem_known_self)
 open PipeEntryRule (nxt frame_trace)
 
+/-- the RAM indices of the first block buffer (13 rows of 16 tiles) -/
+def bufI1 (sy : Syms) : List Nat := (List.range 0xD0).map (fun j => (sy.Block_Buffer_1 &&& 0x7FF).toNat + j)
+
 /-- the RAM indices of the two block buffers (13 rows of 16 tiles each) -/
-def bufI (sy : Syms) : List Nat :=
-  (List.range 0xD0).map (fun j => (sy.Block_Buffer_1 &&& 0x7FF).toNat + j) ++ (List.range 0xD0).map (fun j => (sy.Block_Buffer_2 &&& 0x7FF).toNat + j)
+def bufI (sy : Syms) : List Nat := bufI1 sy ++ (List.range 0xD0).map (fun j => (sy.Block_Buffer_2 &&& 0x7FF).toNat + j)
 
 /-- the watched bytes: every byte of the two block buffers, with its value in `m0` -/
 def bufW (sy : Syms) (m0 : Machine) : List Watch := (bufI sy).map fun i => (i, 0xFF, m0.ram.get! i)
@@ -214,17 +216,17 @@ def mapCheck (sy : Syms) (m0 : Machine) : Bool :=
 /-! ## The condition on one instruction -/
 
 /-- **What is asked of one instruction**, besides `Clean` of `guardOf`: a store through an index or a pointer does not write the player's state, the jumpspring byte or the
-block buffers, and the read of the block buffer routine is in the block buffers -/
+block buffers, and the read of the block buffer routine is in the first block buffer (the one of the page he is on) -/
 structure MapOK (sy : Syms) (m0 : Machine) (m : Machine) : Prop where
   store : ∀ t, PipeWrites.wTarget (PipeWrites.opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ∉ keepI sy
-  read : m.pc = (rdOf sy m0).pc → ScreenPage.readAddr m < 0x2000 ∧ (ScreenPage.readAddr m &&& 0x7FF).toNat ∈ bufI sy
+  read : m.pc = (rdOf sy m0).pc → ScreenPage.readAddr m < 0x2000 ∧ (ScreenPage.readAddr m &&& 0x7FF).toNat ∈ bufI1 sy
 
 /-- `MapOK`, for a program -/
 def mapOKB (sy : Syms) (m0 : Machine) (m : Machine) : Bool :=
   (match PipeWrites.wTarget (PipeWrites.opAt m) m with
    | some t => !(decide (t < 0x2000) && (keepI sy).contains (t &&& 0x7FF).toNat)
    | none => true) &&
-  (m.pc != (rdOf sy m0).pc || (decide (ScreenPage.readAddr m < 0x2000) && (bufI sy).contains (ScreenPage.readAddr m &&& 0x7FF).toNat))
+  (m.pc != (rdOf sy m0).pc || (decide (ScreenPage.readAddr m < 0x2000) && (bufI1 sy).contains (ScreenPage.readAddr m &&& 0x7FF).toNat))
 
 /-! ## The read of `LDA (zp),Y` -/
 
@@ -385,37 +387,72 @@ theorem live_stepT (ht : C.t.all (walkT R C Fu) = true) (hkl : C.kl = C.t.map kn
         simp only [Bool.and_eq_true, beq_iff_eq] at hw2
         exact ⟨k2, B, hw2.1.1.2, hw2.1.2, hw2.2, k1, h1⟩
 
+/-- **Each machine of the frame**, step by step: covered by a state from which the walk succeeds, or past the frame's end with the end's conditions -/
+theorem liveT_all (ht : C.t.all (walkT R C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (TaintRun.aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
+    (hp : C.E.pad = AB.top) (hR : R.buf.all (fun p => R.tl.contains p.2) = true)
+    {S : AS} {m : Machine} {i : UInt8} (hw : walkT R C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) (hr : ∀ j, RdOK R (trace m i j)) :
+    ∀ j, (∃ A, LiveT R C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
+      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, FrameKeep.watchOK C.W B = true ∧ FrameKeep.endOK C.G B = true ∧ C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
+  have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact TaintRun.mem_top _ }
+  intro j
+  induction j with
+  | zero => exact Or.inl ⟨S, ⟨hs0, Fu, hw⟩, rfl, rfl, Nat.le_refl _⟩
+  | succ j ih =>
+    have e : trace m i (j + 1) = nxt (m.frame + 1) (trace m i j) := rfl
+    rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h2', h2'', h3, h4⟩
+    · have hh := h1.1.halted
+      have hc : ¬ (((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true) := by
+        simp [h3, hh]
+      have e2 : trace m i (j + 1) = (go step (trace m i j)).2 := by
+        rw [e]
+        simp only [nxt, if_neg hc]
+      rw [e2]
+      rcases live_stepT ht hkl hops hT hR h1 (hk j) (hr j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a2', a2'', a3, a4⟩
+      · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
+      · exact Or.inr ⟨by rw [a1, h3], B, a2, a2', a2'', by rw [a3, h2], a4⟩
+    · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
+        simp [h1]
+      have e2 : trace m i (j + 1) = trace m i j := by
+        rw [e]
+        simp only [nxt, if_pos hc]
+      rw [e2]
+      exact Or.inr ⟨h1, B, h2, h2', h2'', h3, h4⟩
+
+
+/-- **At each read of the block buffer routine the walk knows the buffers**: in a frame that the walk covers, a machine at the read, with no NMI coming, has the bytes
+of `R.buf`. (The walk's step there asks that it knows them.) -/
+theorem reads_of_walkT (ht : C.t.all (walkT R C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (TaintRun.aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
+    (hp : C.E.pad = AB.top) (hR : R.buf.all (fun p => R.tl.contains p.2) = true)
+    {S : AS} {m : Machine} {i : UInt8} (hw : walkT R C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) (hr : ∀ j, RdOK R (trace m i j))
+    {j : Nat} (hf : (trace m i j).frame = m.frame) (hpc : (trace m i j).pc = R.pc) (hn : (trace m i j).nmiPending = false) :
+    ∀ p ∈ R.buf, (trace m i j).ram.get! p.1 = p.2 := by
+  rcases liveT_all ht hkl hops hT hp hR hw hs hk hr j with ⟨A, ⟨hsA, n, hwA⟩, _, _, _⟩ | ⟨h1, _⟩
+  · cases n with
+    | zero => simp [walkT] at hwA
+    | succ n =>
+      obtain ⟨A₁, hA, hs1, _⟩ := FrameKeep.cov_preK (hk j) hsA
+      simp only [walkT, List.all_eq_true] at hwA
+      have hw2 := hwA A₁ hA
+      have hn1 : A₁.nmi = false := by rw [← hs1.nmi]; exact hn
+      have hp1 : A₁.pc = R.pc := by rw [← hs1.pc]; exact hpc
+      have hc : (!A₁.nmi && A₁.pc == R.pc) = true := by simp [hn1, hp1]
+      unfold tstep at hw2
+      rw [if_pos hc] at hw2
+      by_cases h2 : (decide (0x8000 ≤ A₁.pc) && C.E.prg.get! (A₁.pc &&& C.E.mask).toNat == 0xB1 && R.known A₁) = true
+      · simp only [Bool.and_eq_true] at h2
+        intro p hp
+        exact TaintRun.sim_known hs1 (List.all_eq_true.1 h2.2 p hp)
+      · rw [if_neg h2] at hw2
+        simp at hw2
+  · rw [hf] at h1
+    omega
+
 /-- **One frame.** A walk from `S` that succeeds covers the frame of every machine of `S`, for every input, if each instruction meets `CleanK` and `RdOK`. -/
 theorem frame_of_walkT (ht : C.t.all (walkT R C Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (TaintRun.aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
     (hp : C.E.pad = AB.top) (hR : R.buf.all (fun p => R.tl.contains p.2) = true)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkT R C Fu S = true) (hs : Sim C.E F S m) (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) (hr : ∀ j, RdOK R (trace m i j)) :
     (frame m i).frame = m.frame + 1 ∧ ∃ B, FrameKeep.watchOK C.W B = true ∧ FrameKeep.endOK C.G B = true ∧ C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) := by
-  have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact TaintRun.mem_top _ }
-  have key : ∀ j, (∃ A, LiveT R C F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
-      ((trace m i j).frame = m.frame + 1 ∧ ∃ B, FrameKeep.watchOK C.W B = true ∧ FrameKeep.endOK C.G B = true ∧ C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j)) := by
-    intro j
-    induction j with
-    | zero => exact Or.inl ⟨S, ⟨hs0, Fu, hw⟩, rfl, rfl, Nat.le_refl _⟩
-    | succ j ih =>
-      have e : trace m i (j + 1) = nxt (m.frame + 1) (trace m i j) := rfl
-      rcases ih with ⟨A, h1, h2, h3, h4⟩ | ⟨h1, B, h2, h2', h2'', h3, h4⟩
-      · have hh := h1.1.halted
-        have hc : ¬ (((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true) := by
-          simp [h3, hh]
-        have e2 : trace m i (j + 1) = (go step (trace m i j)).2 := by
-          rw [e]
-          simp only [nxt, if_neg hc]
-        rw [e2]
-        rcases live_stepT ht hkl hops hT hR h1 (hk j) (hr j) with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a2', a2'', a3, a4⟩
-        · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
-        · exact Or.inr ⟨by rw [a1, h3], B, a2, a2', a2'', by rw [a3, h2], a4⟩
-      · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
-          simp [h1]
-        have e2 : trace m i (j + 1) = trace m i j := by
-          rw [e]
-          simp only [nxt, if_pos hc]
-        rw [e2]
-        exact Or.inr ⟨h1, B, h2, h2', h2'', h3, h4⟩
+  have key := liveT_all ht hkl hops hT hp hR hw hs hk hr (i := i)
   rw [frame_trace]
   rcases key fuelPerFrame with ⟨A, h1, _, _, h4⟩ | ⟨h1, B, h2, h2', h2'', h3, h4⟩
   · exfalso
@@ -467,6 +504,28 @@ theorem map_frame {sy : Syms} {m0 : Machine} (hc : mapCheck sy m0 = true) {m : M
   have hwalk := List.all_eq_true.1 hs _ hmem
   obtain ⟨_, B, h1, h2, h3, _, h4⟩ := frame_of_walkT (C := cfgM sy m0) (R := rdOf sy m0) (F := (m.frame, 2)) ht rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) rfl hR hwalk hsim hk hr
   exact ⟨B, h1, h2, h3, h4⟩
+
+
+/-- **At each read of the block buffer routine of a frame the buffers are those of `m0`**, under the conditions of `map_frame` -/
+theorem map_reads {sy : Syms} {m0 : Machine} (hc : mapCheck sy m0 = true) {m : Machine} {i : UInt8}
+    (h0 : FrameStart (guardM sy m0) (PipeEntryRule.envOf m0) m) (hw : Watched (mapW sy m0) m) (hst : m.ram.get! (stI sy) ≤ 2)
+    (hk : ∀ j, CleanK (guardM sy m0) StartRun.noSpot.store (trace m i j)) (hr : ∀ j, RdOK (rdOf sy m0) (trace m i j))
+    {j : Nat} (hf : (trace m i j).frame = m.frame) (hpc : (trace m i j).pc = (rdOf sy m0).pc) (hn : (trace m i j).nmiPending = false) :
+    ∀ p ∈ (rdOf sy m0).buf, (trace m i j).ram.get! p.1 = p.2 := by
+  simp only [mapCheck, checkT, Bool.and_eq_true, decide_eq_true_eq] at hc
+  obtain ⟨hR, ⟨⟨⟨_, _⟩, ht⟩, hs⟩⟩ := hc
+  have hw' : Watched (mapW sy m0 ++ [(stI sy, 0xFF, m.ram.get! (stI sy))]) m := by
+    intro w hw2
+    rcases List.mem_append.1 hw2 with h | h
+    · exact hw w h
+    · rw [List.mem_singleton.1 h]
+  obtain ⟨b, hsim⟩ := FrameKeep.sim_startK (E := PipeEntryRule.envOf m0) rfl h0 hw'
+  have hmem : FrameKeep.startK (guardM sy m0) (mapW sy m0 ++ [(stI sy, 0xFF, m.ram.get! (stI sy))]) b ∈ startsM (guardM sy m0) (mapW sy m0) (stI sy) := by
+    unfold startsM
+    refine List.mem_flatMap.2 ⟨m.ram.get! (stI sy), ?_, List.mem_map.2 ⟨b, by cases b <;> simp, rfl⟩⟩
+    rcases le2 hst with h | h | h <;> simp [h]
+  have hwalk := List.all_eq_true.1 hs _ hmem
+  exact reads_of_walkT (C := cfgM sy m0) (R := rdOf sy m0) (F := (m.frame, 2)) ht rfl rfl (show 2 ≤ (2 : UInt8).toNat by decide) rfl hR hwalk hsim hk hr hf hpc hn
 
 /-- **One frame that ends in control** keeps the buffers, the jumpspring byte 0 and the player's state 0, 1 or 2, and ends at the start of a frame -/
 theorem map_frame_start {sy : Syms} {m0 : Machine} (hc : mapCheck sy m0 = true) {m : Machine} {i : UInt8}
@@ -572,7 +631,8 @@ theorem rdOK_of {sy : Syms} {m0 m : Machine} (hm : MapOK sy m0 m) : RdOK (rdOf s
   refine ⟨h1, ?_⟩
   show _ ∈ ((bufI sy).map fun i => (i, m0.ram.get! i)).map Prod.fst
   rw [List.map_map]
-  simpa using h2
+  have h3 : (ScreenPage.readAddr m &&& 0x7FF).toNat ∈ bufI sy := List.mem_append_left _ h2
+  simpa using h3
 
 /-- the guard of `guardOf` and of `guardM` ask the same at a frame's start -/
 theorem start_M {sy : Syms} {m0 m : Machine} {E : Env} (h : FrameStart (guardOf sy m0) E m) : FrameStart (guardM sy m0) E m :=

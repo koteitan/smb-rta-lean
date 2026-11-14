@@ -2,12 +2,14 @@
 
 # The state at the vertical pipe's entry, from the title
 
-**Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 115 bytes and 13 bytes under a mask have the values of the reference entry. Here the idle loop, the pipe's timer and 72 of these 128 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has two fields:
+**Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 115 bytes and 13 bytes under a mask have the values of the reference entry. Here the idle loop, the pipe's timer and 73 of these 128 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has two fields:
 
-* `entryRest₁`: the condition `Entry` on the other 56 bytes only (`Rest`). This is a condition on one state.
-* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 70 bytes of `held` and the pipe's timer among the bytes that a store through an index or a pointer does not touch.
+* `entryRest₁`: the condition `Entry` on the other 55 bytes only (`Rest`). This is a condition on one state.
+* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 71 bytes of `held`, the pipe's timer and the six bytes of the pause among the bytes that a store through an index or a pointer does not touch.
 
 Item 1-1-b-3-4-2 shrank this round from 61 bytes and the timer to 56 bytes: the frames keep 4 more bytes (the kind of enemy slot 4, the place of cannon 0: 3 bytes), and the walk of the entry frame gives one more byte (the buttons left and right) and the timer. Each of the 56 bytes has a measured reason below.
+
+**Round 11.** Two changes. (1) The bits 1 to 6 of the pause byte (`GamePauseStatus`, under the mask `0x7E`) are no longer in `restNames`: the near states of `TitleStart` now know the pause byte (the press condition knows it since round 5), and the walk of a frame from control keeps these bits, because the pause routine writes the byte only with bit 0 flipped and bit 7 set, or with bit 7 cleared. So `Rest` has 55 bytes, `atEntry` 73, `held` 71, `kept` 70. (2) The guard also lists the six bytes of the pause (`pauseSix`), and `Checks` has two more checks, for [the pause at the entry](b-3-7-3-EntryPause.md). The walk of a frame hardly changes: 1,176,671 steps and a table of 53,438 states (53,437 before).
 
 That each of these frames starts in the idle loop in control (`FrameStart`) is proved too (item 1-1-b-3-4-3): by induction from the press of Start, under `upClean₁`. The field `upStart₁` is gone. For this, the entry `a₁` is now the first frame from control on whose machine has no control (as `a₂` and `b₂` are first frames), and `Changes` has the bound `dA` in place of the number `a₁`.
 
@@ -20,12 +22,12 @@ a₁ = upEnd(seq, dA) = the least n with 1 ≤ n ≤ 1 + dA and (¬ctl(seq n) or
 
 ```
 Watched(W, m)  :  ∀ (i, k, v) ∈ W,  m[i] & k = v & k
-atEntry        :  the 128 bytes of Entry but those of restNames          (72)
-held           :  atEntry but OperMode and OperMode_Task                  (70)
-kept           :  held but those of endNames (the buttons left and right) (69)
+atEntry        :  the 128 bytes of Entry but those of restNames          (73)
+held           :  atEntry but OperMode and OperMode_Task                  (71)
+kept           :  held but those of endNames (the buttons left and right) (70)
 rt(m)          :  m[GameEngineSubroutine]
 IdleAt(m)      :  m has ended a frame in the idle loop, with the pc and the stack of e
-Rest(m)        :  Entry's bytes of restNames have the values of e      (56)
+Rest(m)        :  Entry's bytes of restNames have the values of e      (55)
 T(m)           :  48 ≤ m[ChangeAreaTimer]                                (the pipe's timer)
 ```
 
@@ -85,7 +87,7 @@ The search for the table keeps the accumulator apart where it is about to be sto
 
 **Why `a₁` is the first frame without control.** The walk does not ask the mode and the task at the end. If it asks them with the values at control, it fails at one end: the routine is the player's, but the mode is 2 and the task 0. This is the axe at the end of a castle (`HandleAxeMetatile` writes the mode and the task and keeps the routine). The walk knows no map, so it cannot exclude it. So the induction takes control at `seq (n+1)` from the choice of `a₁`, and the walk asks only the idle loop.
 
-**Why 56 bytes stay.** Each byte was measured alone (`entry-widen`, `entry-writers`, `entry-stores`, exit 0): on real frames from control to the entry (the TAS 368 frames, the reference 440, 60 runs of random inputs from control, 25,238 frames), by a search of the walk with the byte kept too, and by a search with the byte asked only at the pipe's end. Every byte below fails at least one of these. A byte that the frames keep must have the value of `e` at the start of every frame, must stay in the walk of a frame, must be known at frame 0, and must not be stored through an index on real frames (else `upClean₁` would fail on them).
+**Why 56 bytes stay** (round 10; in round 11 the pause's bits left the list, see above). Each byte was measured alone (`entry-widen`, `entry-writers`, `entry-stores`, exit 0): on real frames from control to the entry (the TAS 368 frames, the reference 440, 60 runs of random inputs from control, 25,238 frames), by a search of the walk with the byte kept too, and by a search with the byte asked only at the pipe's end. Every byte below fails at least one of these. A byte that the frames keep must have the value of `e` at the start of every frame, must stay in the walk of a frame, must be known at frame 0, and must not be stored through an index on real frames (else `upClean₁` would fail on them).
 
 | group | bytes | why |
 |---|---|---|
@@ -102,7 +104,7 @@ The search for the table keeps the accumulator apart where it is about to be sto
 
 `entry-keep-check FM2` (exit 0):
 
-* The lists: `Entry` has 128 bytes and masks; 72 proved at the entry, 69 kept from control, 56 assumed (`Rest`).
+* The lists: `Entry` has 128 bytes and masks; 73 proved at the entry, 70 kept from control, 55 assumed (`Rest`) (round 11; before 72, 69, 56). The runs below were done again in round 11 with these lists and the six bytes of the pause in the guard, with the same counts and no failure.
 * Start on the title on 100 frames, no other input: 79 runs reach control, all with the kept bytes.
 * The TAS from control to the entry: 368 frames, all `FrameStart`, every instruction `Clean` (1,917,255), the kept bytes on every frame. At the entry `Rest`, `atEntry`, `IdleAt` and `Entry` hold. So on the TAS the first frame without control after control is the entry, and `a₁` is the frame of the entry as before.
 * The reference entry: 440 frames, the same.
@@ -120,7 +122,7 @@ Each byte of `restNames` alone (all exit 0):
 
 ## Assumptions (not proved in Lean)
 
-* `entryRest₁`: `Rest` at the entry: 56 bytes. Before this round it also asked the pipe's timer and 5 more bytes; before that, `entry₁` asked the idle loop, the timer and 128 bytes.
-* `upClean₁`: each instruction of these frames is `Clean`; a store through an index or a pointer does not touch the 70 bytes of `held` and the pipe's timer. A run that fills one of these slots before the entry is outside the theorem: the enemy slots 3 and 6 and the kind and the state of slot 4, the fireballs, the blocks 2 and 3, the misc objects 0 to 7, the cannons 0 to 5, the scores 3, 4 and 6. No real run here does. This round added the kind of slot 4, the place of cannon 0, the buttons left and right and the pipe's timer to these bytes. On real frames no store through an index touches them (`entry-keep-check`).
+* `entryRest₁`: `Rest` at the entry: 55 bytes (56 before round 11, with the pause's bits). Before this round it also asked the pipe's timer and 5 more bytes; before that, `entry₁` asked the idle loop, the timer and 128 bytes.
+* `upClean₁`: each instruction of these frames is `Clean`; a store through an index or a pointer does not touch the 71 bytes of `held`, the pipe's timer and the six bytes of the pause (round 11). A run that fills one of these slots before the entry is outside the theorem: the enemy slots 3 and 6 and the kind and the state of slot 4, the fireballs, the blocks 2 and 3, the misc objects 0 to 7, the cannons 0 to 5, the scores 3, 4 and 6. No real run here does. This round added the kind of slot 4, the place of cannon 0, the buttons left and right and the pipe's timer to these bytes. On real frames no store through an index touches them (`entry-keep-check`).
 
 `upClean₁` is not reduced here. `entry-clean-use` (exit 0) counts the places where the walk leaves an instruction to `Clean`, because its state does not decide it. The bound on the dot (`late`) is used at all 9,068 places that the walk passes. A store through an index or a pointer with a target not known: 710 places, in 324 routines of objects, drawings, the vine, the fireworks, the bridge, the scores and others. `LDA (zp),Y` with a pointer not known: 47 places (the area parser, the enemy data, the music). The jump with an index not known: 1 place. Of the 724 places with such a store, the walk knows the target on every visit at 14 places only. So asking `Clean` only where the walk does not know it would take 14 places off.

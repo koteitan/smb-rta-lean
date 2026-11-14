@@ -36,7 +36,7 @@ Lean: `Theorems/FrameTime.lean`（`InTime`、`CleanR`、`ReadR`、`clean_frameR`
 
 **到着と `before`.** [RoomVert](c-7-5-1-RoomVert-ja.md) のプレイヤーのルーチンへの歩きは、今はフレームの終わりの状態が `R` にないことを求めます（`finR`）。ですから `tr(j)` が `R` にあれば、フレームはそこで終わっていません（`before_R`）。歩きは `R` まで横の 8 バイトも保ちます（今は `vKeepA` に入っています）。フレームが `R` に来るのは 1 回なので、`tr(j)` が `R` にあるどの `j` でも、それらは `M` のものです（`hbytes_at_R`）。歩きの確認は真です（6.4 秒）。`room-vert-check` は、本物の 24,111 フレーム（ムービーと 200 回）で、`R` より前に `vKeepA` のバイトに書くステップを見ませんでした。
 
-**部屋のフレームで.** `InRoom.time`、`InRoom.arrive`、`InRoom.before` は、入るフレーム `E` より前の各フレームで成り立ちます（`Route.Run.roomTime`、`Route.Run.roomArrive`、`Route.Run.roomBefore`: 部屋のフレーム `n` は `base` のフレーム `b₁ + (n − C)` で、`a₂` より前です）。`clean` は `t₀` までのフレームについて述べ、`t₀ ≤ E` です（`t0_le_E`）。入るフレームで口にいて、`t₀` より前はゴールより左で、ゴールは口より左だからです。`InRoom.le` は `C ≤ E` です（`Route.Run.room_le`）。`RoomVert.air_frame` も引数 `hl` の代わりに同じ時間を使います。
+**部屋のフレームで.** `InRoom.time`、`InRoom.arrive`、`InRoom.before` は、入るフレーム `E` より前の各フレームで成り立ちます（`Route.Run.roomTime`、`Route.Run.roomArrive`、`Route.Run.roomBefore`: 部屋のフレーム `n + 1` は `base` のフレーム `b₁ + ix(n + 1 − C) − 1` で始まり、`a₂` より前です: `Route.Run.roomIdx`）。`clean` は `t₀` までのフレームについて述べ、`t₀ ≤ E` です（`t0_le_E`）。入るフレームで口にいて、`t₀` より前はゴールより左で、ゴールは口より左だからです。`InRoom.le` は `C ≤ E` です（`Route.Run.room_le`）。`RoomVert.air_frame` も引数 `hl` の代わりに同じ時間を使います。
 
 ## 本物のフレームで確かめたこと
 
@@ -46,7 +46,7 @@ Lean: `Theorems/FrameTime.lean`（`InTime`、`CleanR`、`ReadR`、`clean_frameR`
 
 * `far` はもうフィールドではありません。8 px から右に 3.5 px 以内で始まるフレームだけの条件 `farNear` から証明します（[部屋のフレーム: 位置は 8 px 以上のまま](c-7-1-3-RoomFar-ja.md)）。
 * 部屋のフレームの各命令の `SiteOK`（`chg.roomSites`、項目 1-1-d-2-4-2）。前と同じです。
-* `CleanR` と `ReadR` の残り: プレイヤーのルーチンで、フレームがモデルに従うかを決める値（覚えている速さ、塞ぎ、当たりのビット）、スクロールの処理からあとのフレームのすること（`after`、`collide`）。そこでのほかの状態と、そこに来ることは今は証明しています。新しいフィールド `unpaused` からです（[部屋のフレーム: プレイヤーのルーチンでの状態](c-7-1-2-RoomCut-ja.md)）。
+* `CleanR` と `ReadR` の残り: プレイヤーのルーチンで、フレームがモデルに従うかを決める値（覚えている速さ、塞ぎ、当たりのビット）、スクロールの処理からあとのフレームのすること（`after`、`collide`）。そこでのほかの状態と、そこに来ることは今は証明しています。部屋のフレームの定義から出ます。部屋のフレームは止まっていない状態で終わります（フィールド `unpaused` はなくなりました: [部屋で一時停止する走り](c-7-1-4-RoomLag-ja.md)。[部屋のフレーム: プレイヤーのルーチンでの状態](c-7-1-2-RoomCut-ja.md)）。
 
 **ファイル.** `Theorems/FrameTime.lean` と上のファイル。
 

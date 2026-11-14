@@ -1,0 +1,85 @@
+[← Back](README-ja.md) | [English](d-2-5-1-RoomMusic.md) | [Japanese](d-2-5-1-RoomMusic-ja.md)
+
+# 部屋のフレームを通る音楽のバイト
+
+**主張.** 横の土管の入口で、音楽の 5 バイトは部屋のフレームから出ます。曲のポインタ（2 バイト）、矩形波 1 の位置、イベント音楽のバッファ、ノイズの効果音のバッファは、エリア音楽のバッファが基準の値なら基準の値です。ROM の確認つきで証明しました。そこで道筋は入口で 16 バイトでなく 11 バイトを求めます（`entry₂`、1-1-d-2-5）。新しい仮定はありません。
+
+`m[i]` は `m` の RAM のバイト `i` です。`frame(m, i)` は入力 `i` での `m` の 1 フレーム、`trₙ(j)` はフレーム `n` の `j` 命令目の機械です。`seq(n)` はフレーム `n` が始まるときの機械です。`rt(m)` はルーチンのバイト、`r` は部屋の基準の機械です。`Room`、`SiteOK`、`EntryRest` とその 16 バイト `R` は [部屋の画面のページ](d-2-4-ScreenPage-ja.md) のものです。`InRowsT` は [部屋への切り替え](b-3-7-1-SoundRows-ja.md) の時間の行です。`SIn(t, m)` は、`m` のバイトが表の状態 `t` のとおりであることです（[CPU の 1 ステップが RAM を書く場所](d-3-4-1-StepWrites-ja.md)）。
+
+## 定理
+
+表 `T` は 9 バイトを持ちます。イベント音楽のバッファ、曲のポインタ（2）、矩形波 1 の位置、ノイズの効果音のバッファ、足す音の長さ、エリア音楽のバッファとその写し、イベント音楽の待ちです。`a` はエリア音楽のバッファです。`D` は出る 5 バイトです。`R'` は `R` から `D` を除いたもの（11 バイト）です。`V` は入口の基準です。
+
+```
+music_run     :  Room(seq c) ∧ InRowsT(seq c) ∧ ctl(seq c),
+                 ∀ n ∈ [c, e):  (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r),     rt(seq e) ≠ rt(r)
+                   →  ∃ t ∈ T,  SIn(t, seq e)
+derive_spec   :  t ∈ T ∧ SIn(t, m) ∧ m[a] = r[a]  →  ∀ i ∈ D,  m[i] = r[i]
+EntryRestM(m) :=  ∃ (v, X) ∈ V,  ∀ i ∈ X ∩ R',  m[i] = v[i]
+entryRest_of  :  (∃ t ∈ T, SIn(t, m)) ∧ EntryRestM(m)  →  EntryRest(m)
+```
+
+`music_run` は確認 `roomCheckM`（歩き）と `startCheckM`（最初の操作）から、`derive_spec` は `deriveCheck` から、`entryRest_of` は `refsCheck`（各基準は `a` を挙げ、`a` と `D` で `r` と同じ値）から出ます。`Facts` がこれらの確認を持ち、`factsOf` が作ります。
+
+道筋では:
+
+```
+entry₂ : EntryRestM(seq a₂)                         （11 バイト。前は EntryRest、16 バイト）
+RoomChecks.music : ∃ T, Facts(T)                     （新しい。ROM の確認）
+ChangesK.entryRest₂ : EntryRest(seq a₂)              （定理。c = b₁、e = a₂ から）
+```
+
+Lean: `Theorems/RoomMusic.lean`（`ix`、`amb`、`emq`、`hurryBit`、`tabIdx`、`derivedIdx`、`extraOf`、`knownM`、`regM`、`cfgM`、`roomCheckM`、`knowsMasked`、`rowM`、`startCheckM`、`startBoth`、`startBoth_parts`、`deriveCheck`、`restIdxM`、`EntryRestM`、`refsCheck`、`masked_of`、`masked_of_knows`、`roomCond_append`、`start_of_invL`、`derive_spec`、`refs_spec`、`Facts`、`factsOf`、`music_run`、`entryRest_of`、`rt_mem`）、`Theorems/Route.lean`（`ChangesBase.entry₂`、`RoomChecks.music`、`ChangesK.entryRest₂`）、非公開の `musicTab`、`room_starts`、`room_music_walk`、`room_music_derive`、`room_music_refs`、`room_music_rt`、`room_music_bit`、`room_music`（`Proof/RoomPause.lean`）。公開のファイルにゲームのデータはありません。
+
+## しくみ
+
+**歩き.** [部屋のフレームを通るポーズ](d-3-4-4-RoomPause-ja.md) の歩きで、表だけが違います。音のルーチンの呼び出しで状態を表で分け、音のルーチン、パッド、ポーズのルーチンを 9 バイトがわかったまま歩き、ポーズのルーチンのあとでバイトは表の状態に入らなければなりません。そこで忘れます。ただしエリア音楽のバッファとその写しのうち、部屋の条件が知るビットは残します（`RoomPause.Reg.keepB`）。部屋を出るフレームは、ポーズのバイトのビット 0 がわかって終わる必要はありません（`RoomPause.Reg.needG`）。区間の外の 1 ステップは 9 バイトを保つか、その一部を書き、そう書いた表の状態がどれも表の状態に入ります（`StepWrites.writeOK`）。部屋の条件にはもう 1 バイト、0 とわかったノイズの効果音の待ちを加えます（`knownM`）。
+
+**区間の外で書くわけ.** プレイヤーが穴に落ちると、コードはイベント音楽の待ちに死の音楽を入れます。歩きはプレイヤーの高さをこれを除けるほど知らず、入れる値も知りません。そこで表には待ちのわからない状態もあります。このフレームはプレイヤーのルーチンにとどまるので、待ちは部屋の条件のバイトにできません。
+
+**最初の操作.** 部屋への切り替えの時間の行は、操作できるときに次を知っています。イベント音楽のバッファは 0、曲のポインタ、矩形波 1 の位置は 0、ノイズの効果音のバッファは 0、エリア音楽のバッファ、その写しの 1 ビットのほか、ノイズの効果音の待ちは 0 です。足す音の長さは知りません。イベント音楽の待ちは 0 か、急ぎの音楽が入っているか、急ぎの音楽のビットだけがわかりません。確認は各状態をそのビットで分けます（`TaintRun.splitBit`）。各断片は表の状態の下にあります。そのビットは逆アセンブルから読みます（`TimeRunningOutMusic`）。
+
+**表.** 見つけるのはプログラムで、確認はそれによりません。62 状態です。待ちが 0、急ぎの音楽が待ちにある、待ちがわからない部屋の音楽。急ぎの音楽。そしてほかの曲です。ほかの曲は待ちがわからないことから来ます。そのとき曲の頭を探すコードは待ちを 1 ビットずつ読み、歩きは各ビットをたどります。これらはどれもエリア音楽のバッファが 0 なので基準の値を許さず、`deriveCheck` はこれらに何も求めません。これらの状態では矩形波 1 の位置を追いません（歩きは音の長さの数を知らないので、急ぎの音楽の位置はすべての値をとるからです）。
+
+**`entry₂` に残るもの.** エリア音楽のバッファ（部屋の音楽を選ぶ）、イベント音楽の待ち（入るフレームで急ぎの音楽が待ちに入ることがある）、足す音の長さ（最初の操作でわからない）、そして音楽でない 8 バイトです。ルーチン、プレイヤーの縦の位置、画面のバッファ（5 バイト）、レベルの番号です。
+
+**確認の大きさ.** 表を見つけるのに約 25 秒かかります（`gen-proofs` で）。`roomCheckM` はプログラムで約 15 秒です。`startBoth` は時間の行を 1 回作って `RoomPause.startCheck` と `startCheckM` に使い、約 26 秒です。どれも数秒を超えます。
+
+## 測ったもの（定理ではない）
+
+表の探索、プログラムで（`room-music-check`）:
+
+| 選び方 | 結果 |
+|---|---|
+| 待ちを部屋の条件に入れ、急ぎの音楽のビットだけ自由、表に入れない | 待ちを 1 ビットずつ読む: ほかの曲の頭が 7 つ。1 回ごとに新しい状態 25、131 回で終わらない |
+| 待ちを表に入れ、矩形波 1 の位置をすべての状態で追う | 230 回で 231 状態、まだ増える |
+| 矩形波 1 の位置はエリア音楽のバッファが基準の値を許すところだけ追う | 62 状態。部屋の探索 635,696 ステップ、失敗 0。`roomCheckM` は真 |
+| 待ちを部屋の条件にも入れる（急ぎの音楽のビットのほか） | フレームの終わり 6 個が通らない: 穴での死が待ちにわからない値を入れる |
+
+本物の走り（`room-music-real FM2 5 R`）: [部屋のフレームを通るポーズ](d-3-4-4-RoomPause-ja.md) の走りです。縦の土管に入る本物のフレーム 13 から 5 回ずつ（土管のフレームで `R` フレームに 1 回ほど Start を無作為に押す）、部屋で最初に操作できるところまで。そこから Start も無作為に押す無作為な入力で 600 フレーム。横の土管の近くの 42 状態から土管へ歩く走り。そして動画です。
+
+| `R` | 最初の操作 | 表に入る | 部屋のフレームの始まり | 表に入る | 横の土管に入る | 表に入る | `EntryRestM` | `EntryRest` | 5 バイトが基準のとおり |
+|---|---|---|---|---|---|---|---|---|---|
+| 20 | 65 | 65 | 68,135 | 68,135 | 210 | 210 | 210 | 210 | 210 |
+| 7 | 65 | 62 | 69,597 | 69,594 | 210 | 210 | 210 | 210 | 210 |
+
+`R` = 7 で、最初の操作 3 つは音楽がまったくありません（表のバイトがすべて 0）。この 3 つの走りではどれも縦の土管の出口で最初の切り替えの `quiet₁` が成り立たないので、最初の切り替えの行の外にあり、定理はこれについて何も言いません。動画では部屋のどのフレームも表に入り、入口（動画のフレーム 764）で `EntryRestM` と `EntryRest` が成り立ちます。
+
+## 道筋で変わったこと
+
+* `entry₂` は 11 バイトを求めます（`RoomMusic.EntryRestM`）。定理 `ChangesK.entryRest₂` が `EntryRest` の 16 バイトを出し、`ChangesK.run₂` がそれを使います。
+* `RoomChecks` に新しいフィールド `music : ∃ T, RoomMusic.Facts … T` があります。`RoomChecks` は道筋と急ぎの音楽の非公開ファイルで作ります。
+* `RoomPause.Reg` に既定値つきの 2 つのフィールド（`keepB := []`、`needG := true`）があり、区間の外の 1 ステップは `writeOK` で書けます。既定値でポーズの確認は前と同じです。
+
+## 仮定（Lean で証明していないもの）
+
+* `entry₂`: 入口で 11 バイトが基準の値（1-1-d-2-5）。前は 16 バイト。
+* 部屋の各命令の `SiteOK`（`chg.roomSites`）と最初の切り替えの行の条件。前と同じです。
+
+**ファイル.** `Theorems/RoomMusic.lean`、`Theorems/RoomPause.lean`。非公開の確認は `Proof/RoomPause.lean`（`Main.lean` の `genRoomMusic`。[ポーズ](d-3-4-4-RoomPause-ja.md) の確認も書きます）。名前 `NoiseSoundQueue` と `TimeRunningOutMusic` を `ScreenPage.namesOf` に加えました。
+
+**再現.**
+```
+.lake/build/bin/smbrta room-music-check           # 表、roomCheckM、startCheckM、deriveCheck、refsCheck、約 90 秒
+.lake/build/bin/smbrta room-music-real FM2 5 20    # 本物の走りでの表、約 2 分（7 でも）
+```

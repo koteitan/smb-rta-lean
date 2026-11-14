@@ -93,6 +93,26 @@ Program: `sound-rows-real FM2 20`. 44 entries with `Entry2` (the reference entry
 
 After the exit, on these runs, `left` falls by exactly one on each frame, and control comes exactly where `left` is 0. From the entry to control: 375 to 598 frames.
 
+## Start after the pipe: measured in round 11, not done
+
+`chg.noStart₂` stays. A pause stops the song (the music routine does not run while the pause flag is set), and the game's frames go on after the unpause. So after a pause the song of a row can be the song of any earlier row: each row's table would have to hold the songs of all earlier rows. These are the numbers.
+
+| measured | result |
+|---|---|
+| songs of a row of the game core (the 38 bytes without the 4 of the pause sound) | 28 per row (rows 25 to 121) |
+| their union over the rows of the game core | grows by 9 a row: 55 at row 25, 920 at row 121 |
+| the same without the effects' bytes | 20 per row; the union grows by 1 a row, 103 at row 120 |
+| the rows with `DAC_Counter` not known in the tables | the same rows, 76,522 states of the tables; `chainS` true |
+| the three effect queues not known | the first frame's search passes 1,000,000 steps |
+| Square 2's three effect bytes not known | `chainS` true, but 1,092,164 states of the tables (14 times), 298 s and 268 s |
+| Square 1's effect buffer not known | no result in 600 s |
+| the noise effect's two bytes not known | the first frame's search passes 1,000,000 steps |
+| real runs with Start at random also after the exit (`pause-rows-real FM2 20 7`: 880 runs, 1,580 pauses after the exit) | no frame lowers `left` by more than one; no frame that ends paused lowers `left`; control within 679 frames |
+
+So the effects must stay in the tables, and the union reaches 920 states, about 33 times the 28 songs a row has now. Each row's walk splits the sound routine by its table, so the walks of the late rows would grow about that much. With the pause's six bytes in the same table, a paused row would hold each song with each of the 44 states of the pause sound. With the six bytes in a table of their own (as in [The pause through the room's frames](d-3-4-4-RoomPause.md)), the songs would have to be split only where the music runs, inside the region of the pause's table; that needs a second table with its own region, which `StepWrites` does not have. Another way would be a summary of the sound routine for a closed set of songs, used as one step of the rows' walk; that needs a walk that ends at the routine's return and a step of the frame's walk that covers the whole call. Neither is done.
+
+Programs (temporary, in `Main.lean`): `sound-probe ROWS`, `sound-rows-p NAMES`, `pause-rows-real FM2 N R`.
+
 ## What changed in the route
 
 * `Route.Changes` is split. `ChangesBase` has every field but `quiet₂`. `ChangesK` adds the condition of the second change on the pause, and `Run.chg` is a `ChangesK`: in round 8 `quiet₂` with `QuietK`, now `pause₂` at the entry ([The pause through the side pipe's frames](d-3-4-3-SidePause.md); `Changes.toK` is gone with it). `Changes` adds the old `quiet₂` with `Quiet`; `HurryStart` and `HurryMusic` still read it.

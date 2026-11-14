@@ -9,7 +9,8 @@ A frame of the room changes the vertical bytes (the height, the vertical speed a
 and in the collision routine when he lands or stands. Here two walks of one whole frame of the room (the abstract machine of `RoomMap`, which knows the room's bytes and the target
 of every store) show where:
 * `walkA`: from the frame's start to the player's routine no step writes these bytes, nor the jump's halt value and A and B of the frame before, nor the horizontal bytes; the
-  frame comes to the player's routine at most once, and not at its end (`finR`): so it comes there before its end (`before_R`, `hbytes_at_R`).
+  frame comes to the player's routine at most once, and not at its end (`finR`): so it comes there before its end (`before_R`, `hbytes_at_R`). At the frame's end a state
+  that came there knows the pause byte's low bit 0, the others know it 1 (`finA`): so a frame that ends paused does not come there, and keeps these bytes (`end_R`, `paused_R`).
 * `walkB`: when the frame comes to the scroll handler in the air (the state 1 or 2) and rising (the vertical speed negative), no step from there to the frame's end writes these bytes
   (`after_Q`).
 Each walk carries one bit (`AS.spent`, which nothing reads when the counter is not followed): in `walkA` it says that the frame has come to the player's routine, in `walkB` that it
@@ -349,8 +350,10 @@ def finR (sy : Syms) (B : AS) : Bool := B.pc != sy.PlayerCtrlRoutine
 theorem finR_spec {sy : Syms} {B : AS} (h : finR sy B = true) : B.pc ≠ sy.PlayerCtrlRoutine := by
   simpa [finR] using h
 
-/-- at the frame's end: not at the player's routine; and the frame has come there, or the low bit of the pause byte `pz` is known to be 1 (the game is paused) -/
-def finA (sy : Syms) (pz : Nat) (B : AS) : Bool := finR sy B && (B.spent || (B.getK pz).bit 0x01 == some true)
+/-- at the frame's end: not at the player's routine; and the frame has come there and the low bit of the pause byte `pz` is known to be 0 (the game is not paused), or it
+has not come there and the bit is known to be 1 (the game is paused) -/
+def finA (sy : Syms) (pz : Nat) (B : AS) : Bool :=
+  finR sy B && (if B.spent then (B.getK pz).bit 0x01 == some false else (B.getK pz).bit 0x01 == some true)
 
 theorem finA_pc {sy : Syms} {pz : Nat} {B : AS} (h : finA sy pz B = true) : B.pc ≠ sy.PlayerCtrlRoutine := by
   simp only [finA, Bool.and_eq_true] at h
@@ -604,25 +607,24 @@ theorem zoneA_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {A' A₁ : AS} (hA 
 
 /-! ## The frame up to the player's routine -/
 
-/-- **The frame comes to the player's routine at most once, and before it no step writes the bytes of `vKeepA`.** The frame starts in the room's condition, and each
-instruction meets `SiteOK`. -/
-theorem before_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
-    (h : OKV (phA sy E S pz) E P r K C Fu)
-    (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
-    (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
-    (∀ j, (trace m i j).frame = m.frame → (∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x) ∧
-    (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
-    (∀ j d, ((trace m i (j + d)).frame ≥ m.frame + 1 || (trace m i (j + d)).halted) = false → (trace m i j).frame = m.frame) ∧
-    (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame) := by
+/-- what the walk to the player's routine follows outside its states, after `j` instructions: its bit says that the frame has come to the player's routine before, and
+until it has, the bytes of `vKeepA` are those of the frame's start -/
+abbrev PhiA (sy : Syms) (m : Machine) (i : UInt8) (j : Nat) (b : Bool) (_l : List Nat) : Prop :=
+  (b = true ↔ ∃ j', j' < j ∧ (trace m i j').pc = sy.PlayerCtrlRoutine) ∧ (b = false → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x)
+
+/-- **The walk to the player's routine on one frame**: `PhiA` at every instruction of the frame and at its end, where the walk's state meets `fin` -/
+theorem walkA_frame {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (∀ j, (trace m i j).frame = m.frame → ∃ A, Sim C.E (m.frame, 2) A (trace m i j) ∧ (phA sy E S pz).pre A = true ∧ PhiA sy m i j A.spent A.log) ∧
+    ∃ J, (trace m i J).frame = m.frame + 1 ∧ (∀ j, j < J → (trace m i j).frame = m.frame) ∧ frame m i = trace m i J ∧
+      ∃ B, C.fin B = true ∧ Sim C.E (m.frame, 2) B (trace m i J) ∧ PhiA sy m i J B.spent B.log := by
   obtain ⟨S0, hw, hs, s1, s2, s3⟩ := start_of_room h hm
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
-  let Φ : Nat → Bool → List Nat → Prop := fun j b _ =>
-    (b = true ↔ ∃ j', j' < j ∧ (trace m i j').pc = sy.PlayerCtrlRoutine) ∧ (b = false → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x)
   have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phA sy E S pz).zone A', Sim C.E (m.frame, 2) A₁ x :=
     fun _ _ hr hsx => zoneA_cover hpz hr hsx
-  have hstep : ∀ j (A' A₁ : AS), Φ j A'.spent A'.log → Sim C.E (m.frame, 2) A' (trace m i j) → (trace m i j).frame = m.frame → A'.rk = false →
-      A₁ ∈ (phA sy E S pz).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phA sy E S pz).ok A₁ = true → Φ (j + 1) A₁.spent A₁.log := by
+  have hstep : ∀ j (A' A₁ : AS), PhiA sy m i j A'.spent A'.log → Sim C.E (m.frame, 2) A' (trace m i j) → (trace m i j).frame = m.frame → A'.rk = false →
+      A₁ ∈ (phA sy E S pz).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phA sy E S pz).ok A₁ = true → PhiA sy m i (j + 1) A₁.spent A₁.log := by
     intro j A' A₁ ⟨p1, p2⟩ hs' hf hr hA₁ hs₁ hok
     have hpc : (trace m i j).pc = A'.pc := hs'.pc
     by_cases hc : (A'.pc == sy.PlayerCtrlRoutine && !A'.spent) = true
@@ -656,8 +658,20 @@ theorem before_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : 
           have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
           rw [StepWrites.keep_step hs₂ hok' x (List.contains_iff_mem.2 hx)]
           exact p2 rfl x hx
-  obtain ⟨hall, J, hJ1, hJ2, _, B, hB, hsB, _⟩ := frame_of_walkV (Z := phA sy E S pz) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz
+  exact frame_of_walkV (Z := phA sy E S pz) (PhiA sy m i) hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide) (by rw [h.env]; exact h.pad) hz
     hw hs hk' ⟨by rw [s1]; simp, fun _ x _ => rfl⟩ hstep
+
+/-- **The frame comes to the player's routine at most once, and before it no step writes the bytes of `vKeepA`.** The frame starts in the room's condition, and each
+instruction meets `SiteOK`. -/
+theorem before_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu)
+    (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
+    (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (∀ j, (trace m i j).frame = m.frame → (∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) → ∀ x ∈ vKeepA sy, (trace m i j).ram.get! x = m.ram.get! x) ∧
+    (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
+    (∀ j d, ((trace m i (j + d)).frame ≥ m.frame + 1 || (trace m i (j + d)).halted) = false → (trace m i j).frame = m.frame) ∧
+    (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame) := by
+  obtain ⟨hall, J, hJ1, hJ2, _, B, hB, hsB, _⟩ := walkA_frame hpz h hm hk
   refine ⟨fun j hj hb x hx => ?_, fun j j' hlt hR hj' hR' => ?_, fun j d hl => ?_, fun j hR => ?_⟩
   rotate_left 3
   · -- the frame does not end at the player's routine: a state at its end is not there
@@ -799,12 +813,16 @@ theorem arrive_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : 
   obtain ⟨_, J, hJ1, hJ2, hJ3, B, hB, hsB, hΦB⟩ := frame_of_walkV (Z := phA sy E S pz) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide)
     (by rw [h.env]; exact h.pad) hz hw hs hk' (fun hb => by rw [s1] at hb; cases hb) hstep
   rw [hfin] at hB
-  simp only [finA, Bool.and_eq_true, Bool.or_eq_true] at hB
+  simp only [finA, Bool.and_eq_true] at hB
   have hsp : B.spent = true := by
-    rcases hB.2 with e | e
-    · exact e
-    · exfalso
-      have h1 : (trace m i J).ram.get! pz &&& 1 = 1 := CtrlKeep.low_of_bit (by simpa using e) (hsB.ram pz hpz)
+    cases e0 : B.spent with
+    | true => rfl
+    | false =>
+      exfalso
+      have e := hB.2
+      rw [e0] at e
+      simp only [Bool.false_eq_true, if_false] at e
+      have h1 : (trace m i J).ram.get! pz &&& 1 = 1 := CtrlKeep.low_of_bit e (hsB.ram pz hpz)
       rw [← hJ3, hu] at h1
       cases h1
   obtain ⟨j, hj, hR⟩ := hΦB hsp
@@ -818,6 +836,71 @@ theorem arrive_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : 
     · exact h1
   obtain ⟨_, a2, _, _⟩ := before_R hpz h (fun B' hB' => by rw [hfin] at hB'; exact finA_pc hB') hm hk
   refine ⟨j, hR, hJ2 j hj, by omega, fun j' hj' hR' => a2 j' j hj' hR' (hJ2 j hj) hR⟩
+
+theorem bit01_off : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0x01 != 0) = false → UInt8.ofNat n.val &&& 0x01 = 0 := by decide +kernel
+
+/-- a known low bit that is 0 -/
+theorem low0_of_bit {b : AB} {x : UInt8} (h : (b.bit 0x01 == some false) = true) (hm : b.mem x) : x &&& 1 = 0 := by
+  unfold AB.bit at h
+  split at h
+  · rename_i hk
+    simp only [beq_iff_eq, Option.some.injEq] at h hk
+    have e : (x &&& b.k) &&& 0x01 = (b.v &&& b.k) &&& 0x01 := by rw [show x &&& b.k = b.v &&& b.k from hm]
+    rw [UInt8.and_assoc, UInt8.and_assoc, hk] at e
+    show x &&& 0x01 = 0
+    rw [e]
+    have h1 := bit01_off ⟨b.v.toNat, b.v.toNat_lt⟩
+    simp only [UInt8.ofNat_toNat] at h1
+    exact h1 h
+  · simp at h
+
+/-- **The end of a frame of the room, by whether it came to the player's routine.** A frame that comes there ends with the pause byte's low bit 0 (the game not paused);
+a frame that does not come there ends with it 1, and keeps the bytes of `vKeepA`. The frame starts in the room's condition, and each instruction meets `SiteOK`; the walk's
+states at the frame's end meet `finA`: a state that has come to the player's routine knows the bit 0, the others know it 1. -/
+theorem end_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu) (hfin : C.fin = finA sy pz) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    ((∃ j, (trace m i j).pc = sy.PlayerCtrlRoutine) → (frame m i).ram.get! pz &&& 1 = 0) ∧
+    ((∀ j, (trace m i j).pc ≠ sy.PlayerCtrlRoutine) → (frame m i).ram.get! pz &&& 1 = 1 ∧ ∀ x ∈ vKeepA sy, (frame m i).ram.get! x = m.ram.get! x) := by
+  obtain ⟨_, J, hJ1, hJ2, hJ3, B, hB, hsB, hΦ1, hΦ2⟩ := walkA_frame hpz h hm hk
+  rw [hfin] at hB
+  simp only [finA, Bool.and_eq_true] at hB
+  obtain ⟨hR, hb⟩ := hB
+  have hRB := finR_spec hR
+  refine ⟨fun ⟨j, hj⟩ => ?_, fun hno => ?_⟩
+  · have hsp : B.spent = true := by
+      refine hΦ1.2 ⟨j, ?_, hj⟩
+      rcases Nat.lt_or_ge j J with h1 | h1
+      · exact h1
+      · exfalso
+        have e := PipeEntryRule.trace_stop (m := m) (i := i) (j := J) (by simp [hJ1]) (j - J)
+        rw [show J + (j - J) = j by omega] at e
+        have e2 : (trace m i J).pc = B.pc := hsB.pc
+        rw [← e, hj] at e2
+        exact hRB e2.symm
+    rw [hsp] at hb
+    simp only [if_true] at hb
+    rw [hJ3]
+    exact low0_of_bit hb (hsB.ram pz hpz)
+  · have hsp : B.spent = false := by
+      cases e0 : B.spent with
+      | false => rfl
+      | true =>
+        obtain ⟨j, _, hj⟩ := hΦ1.1 e0
+        exact absurd hj (hno j)
+    rw [hsp] at hb
+    simp only [Bool.false_eq_true, if_false] at hb
+    rw [hJ3]
+    exact ⟨CtrlKeep.low_of_bit hb (hsB.ram pz hpz), hΦ2 hsp⟩
+
+/-- **A frame of the room that ends paused keeps the bytes of `vKeepA`**: it does not come to the player's routine (`end_R`), so the walk says that no step writes them -/
+theorem paused_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu) (hfin : C.fin = finA sy pz) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j))
+    (hp : (frame m i).ram.get! pz &&& 1 = 1) : ∀ x ∈ vKeepA sy, (frame m i).ram.get! x = m.ram.get! x := by
+  obtain ⟨h1, h2⟩ := end_R hpz h hfin hm hk
+  refine (h2 fun j hj => ?_).2
+  have := h1 ⟨j, hj⟩
+  rw [hp] at this
+  cases this
 
 /-! ## The frame from the scroll handler -/
 
@@ -1176,6 +1259,18 @@ theorem vsOf_eq_of {sy : Syms} {m m' : Machine} (h : ∀ x ∈ vKeep sy, m.ram.g
   unfold VertModel.vsOf
   rw [e _ (by simp [vKeep]), e _ (by simp [vKeep]), e _ (by simp [vKeep]), e _ (by simp [vKeep]), e _ (by simp [vKeep]), e _ (by simp [vKeep]),
     e _ (by simp [vKeep]), e _ (by simp [vKeep]), e sy.A_B_Buttons (by simp [vKeep])]
+
+/-- **Two machines that agree on the bytes of `vKeepA` have the same horizontal state, position and vertical state** -/
+theorem model_eq_of {sy : Syms} {m m' : Machine} (h : ∀ x ∈ vKeepA sy, m.ram.get! x = m'.ram.get! x) :
+    FrameModel.readHS sy m = FrameModel.readHS sy m' ∧ posP sy m = posP sy m' ∧ VertModel.vsOf sy m = VertModel.vsOf sy m' := by
+  have e : ∀ a ∈ FrameModel.hBytes sy, peek m a = peek m' a :=
+    fun a ha => h _ (List.mem_append_right _ (List.mem_append_right _ (List.mem_map.2 ⟨a, ha, rfl⟩)))
+  refine ⟨?_, ?_, vsOf_eq_of (fun x hx => h x (List.mem_append_left _ hx))⟩
+  · unfold FrameModel.readHS
+    rw [e sy.Player_X_Speed (by simp [FrameModel.hBytes]), e sy.Player_X_MoveForce (by simp [FrameModel.hBytes]), e sy.PlayerFacingDir (by simp [FrameModel.hBytes]),
+      e sy.Player_MovingDir (by simp [FrameModel.hBytes]), e sy.RunningSpeed (by simp [FrameModel.hBytes])]
+  · unfold posP
+    rw [e sy.Player_PageLoc (by simp [FrameModel.hBytes]), e sy.Player_X_Position (by simp [FrameModel.hBytes]), e sy.SprObject_X_MoveForce (by simp [FrameModel.hBytes])]
 
 /-- **One frame of the room that is in the air and rising follows `vstep`.** The frame starts in the room's condition `M` in the air (the state 1 or 2), each
 instruction meets `SiteOK`, the frame comes to the player's routine at instruction `k` in the state `AtV` and does not end in the next `moveLen` instructions. At the frame's

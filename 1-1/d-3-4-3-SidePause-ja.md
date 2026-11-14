@@ -94,7 +94,7 @@ TAS（`changes-check FM2`、および 380、416、450、545、575、730、845 �
 
 ## 仮定（Lean で証明していない）
 
-* 入口の `PauseE` はもう仮定しません。[部屋のフレームを通るポーズ](d-3-4-4-RoomPause-ja.md) が部屋で最初に操作できるときから証明します。道筋はそこでポーズのバイトのビット 1 から 6 が 0 であることを求めます（`chg.pauseBits₂`、1-1-d-3-4-4）。
+* 入口の `PauseE` はもう仮定しません。[部屋のフレームを通るポーズ](d-3-4-4-RoomPause-ja.md) が部屋で最初に操作できるときから証明します。そこでポーズのバイトのビット 1 から 6 が 0 であることは定理です（`ChangesK.pauseBits₂`、1-1-b-3-10）。
 * ほかは [地上への切り替えを、音のバイトを表にして](d-3-4-2-SideChangeSound-ja.md) のとおりです：`Entry2`、`lagPaused`、土管のあとの `NoStart`、`TimerOK`。
 
 **ファイル.** `Theorems/SidePause.lean`。private の確認は `Proof/SidePause.lean`（`Main.lean` の `genSidePause`）、`side_pause` は `Proof/Route.lean` にあります。名前 `GamePauseTimer` を `SideChangeEnd.namesOf` に加えました。

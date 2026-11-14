@@ -2,7 +2,7 @@
 
 # The pause through the vertical pipe's frames
 
-**Claim.** Suppose that at the vertical pipe's entry the pause is silent, or the unpause sound plays with the pause timer one more than its counter, or the unpause was pressed on that frame (`PauseV`). Then on the frames of the pipe, for any input, Start included, the six bytes of the pause stay in one of 88 classes, and at the exit the pause is as `QuietV` says. This is proved, with a check on the ROM. So the route asks less at the exit: `chg.quiet₁` (item 1-1-b-3-7) no longer asks the pause sound's buffer, flag and counter, only that the pause sound's queue is as at the reference and, when the pause sound is silent, the two squares' effects and the song (`QuietRest`). `chg.pause₁` (the condition `PauseV` at the entry) is new. On real runs with Start at random, `PauseV` held at all 334 entries, every one of 90,963 frames of the pipe was in a class, and `QuietV` held at all 1,002 exits.
+**Claim.** Suppose that at the vertical pipe's entry the pause is silent, or the unpause sound plays with the pause timer one more than its counter, or the unpause was pressed on that frame (`PauseV`). Then on the frames of the pipe, for any input, Start included, the six bytes of the pause stay in one of 88 classes, and at the exit the pause is as `QuietV` says. This is proved, with a check on the ROM. So the route asks less at the exit: `chg.quiet₁` (item 1-1-b-3-7) no longer asks the pause sound's buffer, flag and counter, only that the pause sound's queue is as at the reference and, when the pause sound is silent, the two squares' effects and the song (`QuietRest`). `chg.pause₁` (the condition `PauseV` at the entry) was new; it is now proved ([1-1-b-3-7-3](b-3-7-3-EntryPause.md)). On real runs with Start at random, `PauseV` held at all 334 entries, every one of 90,963 frames of the pipe was in a class, and `QuietV` held at all 1,002 exits.
 
 `m[i]` is the RAM byte `i` of `m`. `frame(m, i)` is one frame of `m` with the input `i`. `trace(m, i, j)` is the machine after `j` steps of that frame. `x = run(E, 0^48)` is the reference machine at the exit. `During`, `ExitAt`, `Places` and `left` are those of [the change into the room without `fall`](b-3-2-PipeChangeEnd.md). `QuietP`, `SongAt`, `song`, `shape`, `TimerOK` and `InRowsK` are those of [the change into the room, with the sound's bytes in tables](b-3-7-1-SoundRows.md). `SIn(t, m)` says that the bytes of `m` are in the state `t` of a table.
 
@@ -64,10 +64,10 @@ PipeRunK.first   :  hc  →  ∀ n, a ≤ n < b,  left(seq n) ≠ 0
 PipeRunK.inRowsT :  hc  →  InRowsT(seq b)
 ```
 
-`Route` takes the first change from `ChangesK.run₁`, which now takes `pause := chg.pause₁`:
+`Route` takes the first change from `ChangesK.run₁`, which takes `pause` from the condition at the entry. That was the field `chg.pause₁`; since round 11 it is proved ([the pause at the vertical pipe's entry, from the title](b-3-7-3-EntryPause.md)):
 
 ```
-chg.pause₁ :  PauseV(seq a₁)                                                          (new)
+chg.pause₁ :  PauseV(seq a₁)                                                          (new in round 10; proved in round 11, Run.entry₁)
 chg.quiet₁ :  a₁ ≤ n ≤ b₁ ∧ ExitAt(seq n)  →  QuietRest(seq n) ∧ SongAt(shape, seq n)    (was QuietP ∧ SongAt(shape))
 ```
 
@@ -103,11 +103,11 @@ Program: `pipe-pause-real FM2 3 7`. 334 entries: the reference, the movie's, 26 
 
 `changes-check FM2`: `pause₁` and the new `quiet₁` hold on the TAS. With a pause of 60 frames at 380, they hold too (the old `quiet₁` failed there); at 416 the new `quiet₁` fails, as above. At 545 they hold.
 
-**The pause at the entry is not given by what is proved.** `pipe-pause-check` reports for the walk of [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md): none of the six bytes is among the 69 bytes kept from control, none among the 72 bytes proved at the entry, and a frame's start state of that walk knows none of them. When the pause timer is not 0 the pause routine writes neither `t` nor `g`, so that walk cannot know them at the entry. So `chg.pause₁` is a new condition on one state.
+**The pause at the entry.** In round 10 the walk of [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md) knew none of the six bytes, so `chg.pause₁` was a new condition on one state. In round 11 the class is carried beside that walk too, and frame 0 gives a class at control: `PauseV` at the entry is proved ([1-1-b-3-7-3](b-3-7-3-EntryPause.md)).
 
 ## Assumptions (not proved in Lean)
 
-* `PauseV` at the entry (`chg.pause₁`). New. To prove it, the frames from control to the entry need the classes beside their walk too (they may pause), and frame 0 from the title.
+* `PauseV` at the entry (`chg.pause₁`) is no longer assumed: [1-1-b-3-7-3](b-3-7-3-EntryPause.md) proves it, under `upClean₁` with the six bytes in the guard.
 * `QuietRest ∧ SongAt(shape)` at the exit (`chg.quiet₁`, item 1-1-b-3-7): the queue of the pause sound as at the reference, and when silent the two effects and the song's row. Before, also the buffer, the flag and the counter of the pause sound.
 * `NoStart` on the frames of the game core after the pipe (`chg.noStart₁`, item 1-1-b-3-6). Not done here; the paused rows of [d-3-4-3](d-3-4-3-SidePause.md) were measured and did not end.
 

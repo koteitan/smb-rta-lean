@@ -143,7 +143,7 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 
 ## Assumptions (not proved in Lean)
 
-* **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5.
+* **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5. The route now asks 11 of them: five music bytes follow from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).
 * **`Room(seq(c))`.** 82 bytes at the first control in the room. In the route it is proved from the rows of the time of the first change ([The condition `Room` at the first control in the room](d-2-4-1-ScreenStart.md)). The rest of this item is as written for this page, with 73 bytes. `K` keeps only bytes that do not differ between runs. It fails for a fire Mario (`PlayerStatus` 2); before this pipe in 1-1 there is one power-up. It should come from walking the rows of the change into the room, since the state after that change is nearly all known. If the last row of item 1-1-b-3-2 knows the values of `K`, one check with `AS.le` is enough. The bytes of `K` that the area's setup does not clear are `AreaType`, `CurrentPlayer`, `PlayerStatus`, `WorldNumber`, `OperMode`, `OperMode_Task`, `AreaMusicBuffer_Alt`. The exit condition of those rows has to know them. This page does not depend on those rows, and they were not run here.
 * **The time in `SiteOK`.** The frames in the room do not overrun.
 * **The address of a read.** `LDA (zp),Y` does not read a register. Measured (temporary program, not kept): with the rule of [the last frames of the change](d-2-3-SideChangeEnd.md) (the high byte of the pointer known to be at most `0x1E` or at least `0x80`) in place of this condition, the room's walk fails at the screen update's first read, `LDA ($00),Y`: the NMI loads the pointer from a table at the index `VRAM_Buffer_AddrCtrl`, which `Room` does not know (taking a coin changes it). So the walk would need that byte's bits in `Room` and a split of its read. Also [the block map in the room](c-7-12-RoomMap.md) uses this part of `SiteOK` for every `LDA (zp),Y`, also through a known pointer, so this part cannot be taken out of `chg.roomSites` without changing what that page's theorems are given. Item 1-1-d-2-4-2.
@@ -156,11 +156,11 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 
 ## Use in the [route](0-1-Route.md)
 
-`chg.entry₂` is `EntryRest`; the room gives the rest of `Entry2` and the timer (`entry_rest`, private `screen_entry`). `Changes.run₂` uses `entry_rest`. The checks on the ROM are `Route.RoomChecks` (`facts` is `RoomFacts` with `V`; `rt` is `entryEnvOK`: the references know the routine and it is `e_s`, the routine is in `R`, and `Entry2` has the room's ROM).
+`chg.entry₂` asks 11 of the 16 bytes of `EntryRest` (`RoomMusic.EntryRestM`); five music bytes come from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md), `ChangesK.entryRest₂`). The room gives the rest of `Entry2` and the timer (`entry_rest`, private `screen_entry`). `Changes.run₂` uses `entry_rest`. The checks on the ROM are `Route.RoomChecks` (`facts` is `RoomFacts` with `V`; `rt` is `entryEnvOK`: the references know the routine and it is `e_s`, the routine is in `R`, and `Entry2` has the room's ROM).
 
 ```
 a₂         := first(n ≥ b₁, n ≤ b₁ + dR : rt(seq n) ≠ rt(r))     (Changes.a₂; b₁ + dR if none)
-entry₂     : EntryRest(seq a₂)                       (16 bytes)
+entry₂     : EntryRestM(seq a₂)                      (11 bytes; EntryRest(seq a₂) is ChangesK.entryRest₂)
 Room(seq b₁)                                           (Changes.roomAt: the rows of the time of the first change, chg.time₁, Changes.ctlFirst₁)
 roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
 roomOrder  : b₁ ≤ a₂                                   (theorem, from the definition of a₂)

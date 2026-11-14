@@ -244,13 +244,11 @@ structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEn
     PipeChangeEnd.QuietRest d₁ (PipeChangeEnd.refX (PipeTransition.entry m0)) (B.seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (B.seq n)
   /-- at the exit, the game timer is not 000 -/
   time₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) → SideChangeEnd.TimerOK d₁.nx (B.seq n)
-  /-- at the vertical pipe's entry the pause is not paused (`PipeChangeEnd.PauseV`) -/
-  pause₁ : PipeChangeEnd.PauseV sy d₁ (B.seq (B.a₁ sy))
 
 /-- **The conditions of the two changes that `route_1_1` asks give those of the first change here** -/
 theorem chg₁_of_changes {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
     (C : Route.ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) : Chg₁ sy m0 nm₁ d₁ B kind :=
-  ⟨C.entryRest₁, C.upClean₁, C.ctlBy₁, C.paused₁, C.places₁, C.noStart₁, C.quiet₁, C.time₁, C.pause₁⟩
+  ⟨C.entryRest₁, C.upClean₁, C.ctlBy₁, C.paused₁, C.places₁, C.noStart₁, C.quiet₁, C.time₁⟩
 
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
@@ -259,16 +257,16 @@ variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} 
 theorem Chg₁.ctlFirst (_C : Chg₁ sy m0 nm₁ d₁ B kind) : ∀ n, B.a₁ sy ≤ n → n < B.b₁ sy → controllable sy (B.seq n) = false :=
   fun n h1 h2 => Route.firstWith_first (fun n => controllable sy (B.seq n)) _ B.dB n h1 h2
 
-/-- the condition at the vertical pipe's entry, from the press of Start on the title, as `Route.Run.entry₁` -/
+/-- the condition at the vertical pipe's entry with the pause, from the press of Start on the title, as `Route.Run.entry₁` -/
 theorem Chg₁.entry {tc : TitleStart.Ctx} {t0 : Nat} (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (T : TitleStart.Begin sy tc B.seq B.inp)
-    (C : Chg₁ sy m0 nm₁ d₁ B kind) : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy)) := by
+    (C : Chg₁ sy m0 nm₁ d₁ B kind) : PipeChangeEnd.EntryV sy d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy)) := by
   have stay : ∀ n, 1 ≤ n → n < B.a₁ sy → controllable sy (B.seq n) = true := fun n h1 h2 => by
     have h := Route.firstWith_first _ 1 B.dA n h1 h2
     simpa using h
-  exact EntryKeep.entry_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
+  exact EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
 
 /-- the first change as `PipeChangeEnd.PipeRunK`, as `Route.ChangesK.run₁` -/
-def Chg₁.run₁ (C : Chg₁ sy m0 nm₁ d₁ B kind) (he : PipeChangeEnd.Entry d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
+def Chg₁.run₁ (C : Chg₁ sy m0 nm₁ d₁ B kind) (he : PipeChangeEnd.EntryV sy d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
     PipeChangeEnd.PipeRunK sy nm₁ d₁ (PipeTransition.entry m0) where
   seq := B.seq
   inp := B.inp
@@ -280,13 +278,13 @@ def Chg₁.run₁ (C : Chg₁ sy m0 nm₁ d₁ B kind) (he : PipeChangeEnd.Entry
   a := B.a₁ sy
   b := B.b₁ sy
   order := Route.firstWith_ge _ _ B.dB
-  entry := he
+  entry := he.entry
   atCtl := Route.firstWith_at (fun n => controllable sy (B.seq n)) _ B.dB C.ctlBy₁
   lagPaused := C.paused₁
   places := C.places₁
   quiet := C.quiet₁
   noStart := C.noStart₁
-  pause := C.pause₁
+  pause := he.pause
   time := C.time₁
 
 /-- **The last frame of the first change, frame `b₁ − 1`, begins as `HurryFrame.Start` asks**, on the frames of a run. `hT` is the check of the change, `hB` and `hK`
@@ -309,7 +307,7 @@ theorem changes_startLast {nm : Names} {es : List Machine} {rt : StepWrites.Rt} 
   have stay : ∀ n, 1 ≤ n → n < B.a₁ sy → controllable sy (B.seq n) = true := fun n h1 h2 => by
     have h := Route.firstWith_first _ 1 B.dA n h1 h2
     simpa using h
-  have he := EntryKeep.entry_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
+  have he := EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
   exact EndRunQ.startLast hS hT hQ (C.run₂ hR he) C.ctlFirst₂ hH
 
 end

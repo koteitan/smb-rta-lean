@@ -5,7 +5,7 @@
 **Claim.** On every frame from control to the counted frame `N` (`N = 32`), counted or not, the two block buffers are those of the machine at control `m₀`, the
 jumpspring byte is 0, and the player's state is 0, 1 or 2. So the fields `st` and `spring` of [The opening on real frames](a-5-4-OpenFrames.md) are no longer assumed.
 In their place one condition on each instruction of these frames is asked (`map`, `MapOK`): a store through an index or a pointer does not write the player's state, the
-jumpspring byte or the block buffers, and the read of the block buffer routine is inside the block buffers.
+jumpspring byte or the block buffers, and the read of the block buffer routine is inside the first block buffer.
 
 The block buffers are the two tables of 13 rows of 16 tiles that the collision code reads. `B` is the set of their 416 bytes. At control they hold 5 kinds of tile:
 empty, ground, a brick and two kinds of block with an item. None of them is a jumpspring or a climbing tile.
@@ -17,7 +17,7 @@ frame `n`. `st(m)` is the player's state, `js(m)` the jumpspring byte. `R` is th
 ```
 MapAt(m)    :=  ∀ d ∈ B,  m(d) = m₀(d)   ∧   js(m) = 0   ∧   st(m) ≤ 2
 MapOK(m)    :=  store:  a store through an index or a pointer of m does not write st, js or a byte of B
-                read:   pc(m) = R  →  addr(m) is in the RAM and its byte is in B
+                read:   pc(m) = R  →  addr(m) is in the RAM and its byte is in the first block buffer (B₁ ⊂ B)
 ```
 
 ```
@@ -31,14 +31,15 @@ Lags.mapAt      :  lagCheck,  pauseCheck,  mapCheck,  Lags,  FrameStart(seq 1), 
                    ∀ n ∈ [1, b), ∀ k: MapOK(tr_n(k))   →   ∀ n ∈ [1, b],  MapAt(seq n)
 Real.stSpring   :  the checks,  Real (with the field map),  FrameStart(seq 1),  MapAt(seq 1)
                    →   ∀ t ∈ [1, N],  t < E  →  st(fm t) ∈ {0, 1, 2}  ∧  js(fm t) = 0                     (the old fields st and spring)
-map field       :  ∀ n,  1 ≤ n < ix(N),  n < ix(E),  ∀ k:  MapOK(tr_n(k))
+map_reads       :  the conditions of map_frame   →   at each read R of the frame with no NMI coming, ∀ d ∈ B,  m(d) = m₀(d)      (the walk's step at R asks it)
+map field       :  ∀ n,  1 ≤ n ≤ ix(N),  n < ix(E),  ∀ k:  MapOK(tr_n(k))
 ```
 
 `CleanK` here is `PipeWrites.Clean` of the guard of a frame in control (the field `lags.clean`) with the player's state, the jumpspring byte and `B` protected too: that is
 `Clean` and the store part of `MapOK` (`cleanK_of`). `RdOK` is the read part of `MapOK` (`rdOK_of`). The theorems without the ROM use only the axioms `propext`,
 `Classical.choice`, `Quot.sound`. `#print axioms route_1_1` shows no `sorryAx`.
 
-Lean: `Theorems/OpenMap.lean`; `StSpring`, `Real.stSpring`, the field `Real.map` in `Theorems/OpenFrames.lean`; `Run.pipeOpening`, `Run.pipeOpenB` in
+Lean: `Theorems/OpenMap.lean` (`map_reads`, with `liveT_all`); `StSpring`, `Real.stSpring`, the field `Real.map` in `Theorems/OpenFrames.lean`; `Run.pipeOpening`, `Run.pipeOpenB` in
 `Theorems/Route.lean`; private `Proof/OpenMap.lean` (`open_map_check`, `open_title_map_check`).
 
 ## How it works
@@ -84,12 +85,15 @@ Program `open-map-check FM2 300`. From the machine at control it runs each frame
 
 ## Assumed (not proved in Lean)
 
-* **`map`**: `MapOK` on each instruction of the frames from frame 1 to the counted frame `N`. A condition on single instructions. It would fail when the screen
-  scrolls far enough for the area parser to write the buffers, or on a read below the buffers; neither happens on these frames.
+* **`map`**: `MapOK` on each instruction of the frames from frame 1 to the counted frame `N`, that one included. A condition on single instructions. It would fail when
+  the screen scrolls far enough for the area parser to write the buffers, or on a read outside the first buffer (he is on page 0, so the columns he reads are those of
+  the first buffer); neither happens on these frames. This round the read is asked to be in the first buffer (it was: in either buffer), and the frame of the counted
+  frame `N` is included: [The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md) needs both.
 * **No longer assumed**: `st` and `spring` (item 1-1-a-5-4-3-3-3).
-* **Not proved**: `flat` and `jump` (items 1-1-a-5-6, 1-1-a-5-7). The tiles are now known on these frames. What is missing is the vertical part: the walk splits the
-  tile into the 5 values, not by the row and the column it reads, so it cannot see the ground under the feet; and the height in the air is not followed from frame to frame
-  (`vstep` and the arcs of [The height of a jump](c-2-Jump.md) would give it, as part c did for the first 8 frames of a jump).
+* **No longer assumed**: `flat` (item 1-1-a-5-4-3-4-1): a walk that reads the tiles by the known bits of the address sees the ground under the feet, with the new field
+  `ground` ([The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md)).
+* **Not proved**: `jump` (item 1-1-a-5-7): the height in the air is not followed from frame to frame (`vstep` and the arcs of [The height of a jump](c-2-Jump.md) would
+  give it, as part c did for the first 8 frames of a jump).
 
 **Files.** `Theorems/OpenMap.lean`, `Theorems/OpenFrames.lean`, `Theorems/Route.lean`, private `Proof/OpenMap.lean`.
 

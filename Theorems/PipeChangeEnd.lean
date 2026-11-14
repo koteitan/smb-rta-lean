@@ -756,6 +756,15 @@ theorem not_paused_of {E : Env} {F : Nat × UInt8} {g : Nat} {B : AS} {m : Machi
   rw [e, hv]
   decide
 
+/-- the state knows that bits 0 to 6 of the byte `g` are 0 -/
+def low7K (g : Nat) (B : AS) : Bool := decide (g < 2048) && (B.getK g).k &&& 0x7F == 0x7F && (B.getK g).v &&& 0x7F == 0
+
+/-- a machine of such a state has bits 0 to 6 of the byte `g` clear -/
+theorem low7_of {E : Env} {F : Nat × UInt8} {g : Nat} {B : AS} {m : Machine} (hs : Sim E F B m) (h : low7K g B = true) : m.ram.get! g &&& 0x7F = 0 := by
+  simp only [low7K, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at h
+  obtain ⟨⟨hg, hk⟩, hv⟩ := h
+  rw [TaintRun.bit_eq (hs.ram g hg) hk, hv]
+
 /-- at the frame's end, with the counter followed: a start state; if the counter has fallen in the frame, the state knows that the game is not paused -/
 def finRkP (g : Nat) (starts : List AS) (B : AS) : Bool := finRk starts B && (!B.spent || notPausedK g B)
 
@@ -1535,9 +1544,13 @@ def kindsP (sy : Syms) (d : Data) (x : Machine) : List SState :=
 /-- the bytes that the states at the exit know (`baseK`): those of the exit's list, the noise effect's buffer and the screen buffer's control. The walk of the pipe's frames gives them. -/
 def exitKnownK (nx : Names) : List Nat := bytesOf nx exitNames ++ bytesOf nx [("NoiseSoundBuffer", 0, 1), ("VRAM_Buffer_AddrCtrl", 0, 1)]
 
-/-- the states at the exit: the bytes of `exitKnownK`, and the bits of the masks of the exit -/
+/-- the masks of the states at the exit: those of the exit, and bits 0 to 6 of the pause byte. The pause routine writes the pause byte only with bit 0 flipped and
+bit 7 set, or with bit 7 cleared, so the walk of the pipe's frames keeps the bits 1 to 6 that the entry knows. -/
+def exitBitsK (nx : Names) : List (Nat × UInt8) := exitBits nx ++ [(adI nx "GamePauseStatus", 0x7F)]
+
+/-- the states at the exit: the bytes of `exitKnownK`, and the bits of `exitBitsK` -/
 def baseK (d : Data) (e : Machine) : List AS :=
-  (exitStarts (refX e) (exitKnownK d.nx) (adI d.nx "GamePauseStatus")).map (maskOn (exitBits d.nx) (refX e))
+  (exitStarts (refX e) (exitKnownK d.nx) (adI d.nx "GamePauseStatus")).map (maskOn (exitBitsK d.nx) (refX e))
 
 /-- the sound's bytes that the states at the exit know, as a state of a table, with the reference's values and masks -/
 def soundBaseP (R : Rt) (d : Data) (x : Machine) : SState :=
@@ -1586,9 +1599,9 @@ def InRowsT (sy : Syms) (nm : Names) (d : Data) (e : Machine) (m : Machine) : Pr
 def baseOK (c : Ctx) (d : Data) (e : Machine) : Bool :=
   (baseK d e).all fun S => !S.dg && StepWrites.soundLe S (soundBaseP (rtc c d e) d (refX e))
 
-/-- no state of the rows with tables is paused -/
+/-- no state of the rows with tables is paused, and each knows that bits 0 to 6 of the pause byte are 0 -/
 def goOK (c : Ctx) (d : Data) (e : Machine) : Bool :=
-  (rowsKc c d e).all fun r => r.row.R.all (notPausedK (pauseI d))
+  (rowsKc c d e).all fun r => r.row.R.all fun S => notPausedK (pauseI d) S && low7K (pauseI d) S
 
 /-- the check of the rows with tables from `c`: the states at the exit, the first table, the frames, control where `left` is 0, no paused state -/
 def soundCheckC (c : Ctx) (d : Data) (e : Machine) : Bool :=
@@ -1820,6 +1833,12 @@ def endCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : List Machin
 abbrev Entry (d : Data) (e : Machine) (m : Machine) : Prop :=
   SideChangeBound.EntryCond (envOf d e) (refsP d e) timerF m ∧ BitsAt d.bits e m
 
+/-- **The condition at the entry, with the pause**: `Entry`, and the six bytes of the pause in one of the classes that are not paused (`PauseV`). The press of Start on
+the title and the frames from control give it (`EntryKeep.entryV_of_title`). -/
+structure EntryV (sy : Syms) (d : Data) (e : Machine) (m : Machine) : Prop where
+  entry : Entry d e m
+  pause : PauseV sy d m
+
 /-- **The condition on the state at the exit.** The frame has ended in the idle loop, the listed bytes are those of the reference, the game is not paused, the song's bytes are a row of the table,
 and some bytes have the reference's bits. All other bytes are free. -/
 abbrev Exit (d : Data) (e : Machine) (m : Machine) : Prop :=
@@ -1893,6 +1912,8 @@ structure EndStatement (sy : Syms) (nm : Names) (d : Data) (e : Machine) (es : L
       (QuietP sy d (refX e) (frame m i) → SongAt d.xshape (frame m i) → TimerOK d.nx (frame m i) → InRowsK sy nm d e (frame m i)))
   /-- the pause at the exit and what the exit still asks give `QuietP` -/
   pauseExit : ∀ m, QuietV sy d m → QuietRest d (refX e) m → QuietP sy d (refX e) m
+  /-- **in the rows with tables, bits 0 to 6 of the pause byte are 0** -/
+  bitsK : ∀ m, InRowsK sy nm d e m → m.ram.get! (pauseI d) &&& 0x7F = 0
 
 /-- a machine in rows whose states know that the game is not paused is not paused -/
 theorem not_paused_rows {c : Ctx} {g : Nat} : ∀ (l : List Row), (∀ r ∈ l, ∀ S ∈ r.R, notPausedK g S = true) → ∀ {m : Machine}, InvL c l m → m.ram.get! g &&& 1 ≠ 1
@@ -2090,7 +2111,7 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
       exact absurd a1 (by decide)
   have hctl : ∀ m, controllable sy m = true → leftP sy nm e m = 0 := fun m hc => PipeChangeBound.left_zero_of_ctl hL.keys hc
   refine ⟨fun m hm => entryCond_of_ok (h10 m hm), hdur, ?_, fun m hm => inPipe_of_inv hL hm, ?_, fun m hm => in_rows hm.2.1 hm.2.2.1 (exit_base h1 hm), ?_, ?_, hctl, ?_, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_, ?_, ?_, fun m hq hr => quietP_of_V hX hq hr⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, fun m hq hr => quietP_of_V hX hq hr, ?_⟩
   · intro M hM
     have a1 : leftP sy nm e M = (tm (envOf d e) M).toNat + afterF := left_of_inv hL (hdur M hM)
     rw [a1]
@@ -2166,7 +2187,7 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
     exact SoundRows.ctl_of_zeroS hKc hKz hm h0
   · intro m hm hP
     obtain ⟨r, hr, S, hS, hs, _⟩ := SoundRows.mem_of_invS hm
-    exact not_paused_of hs (List.all_eq_true.1 (List.all_eq_true.1 hKn r hr) S hS) hP
+    exact not_paused_of hs ((Bool.and_eq_true _ _).mp (List.all_eq_true.1 (List.all_eq_true.1 hKn r hr) S hS)).1 hP
   · intro m hm h0
     unfold InRowsT timeRows
     exact invL_congr (c := ctxK (timeCtx sy nm d e) d e) (c' := timeCtx sy nm d e) rfl (SoundRows.invL_zero hKc hm h0)
@@ -2176,6 +2197,9 @@ theorem endStatement_of_check {sy : Syms} {nm : Names} {d : Data} {e : Machine} 
     · refine Or.inr ⟨g1, quietV_of_class hLen ht htm g3, fun hq hr ht' => inRowsK_of_exit hK ?_ hq hr ht'⟩
       obtain ⟨D, hD, hs2⟩ := g2 (fun _ h => by cases h)
       exact ⟨D, hD, hs2⟩
+  · intro m hm
+    obtain ⟨r, hr, S, hS, hs, _⟩ := SoundRows.mem_of_invS hm
+    exact low7_of hs ((Bool.and_eq_true _ _).mp (List.all_eq_true.1 (List.all_eq_true.1 hKn r hr) S hS)).2
 
 /-! ## A run -/
 
@@ -2544,6 +2568,18 @@ theorem PipeRunK.inRowsT (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e
   rcases h with h | h
   · exact absurd h0 (during_left T h.1)
   · exact T.ctlK _ h h0
+
+/-- **At control, bits 0 to 6 of the pause byte are 0**, if `b` is the first control after the entry: the machine is in the rows with tables (`EndStatement.bitsK`) -/
+theorem PipeRunK.pauseBits (T : EndStatement sy nm d e es) (R : PipeRunK sy nm d e) (hc : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) :
+    (R.seq R.b).ram.get! (pauseI d) &&& 0x7F = 0 := by
+  have hb := R.order
+  have e2 : R.a + (R.b - R.a) = R.b := by omega
+  have h := PipeRunK.way T R hc (R.b - R.a) (by omega)
+  rw [e2] at h
+  have h0 := T.atControl _ R.atCtl
+  rcases h with h | h
+  · exact absurd h0 (during_left T h.1)
+  · exact T.bitsK _ h
 
 end
 

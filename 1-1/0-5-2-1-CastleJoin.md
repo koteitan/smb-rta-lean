@@ -11,6 +11,8 @@
 
 `LagUp` is not a field of `Route.Run`. The theorems take it. `route_1_1` does not change.
 
+`LagUp` follows from the phase of `clock` being the machine's on each frame above ground (`PhaseUp`) and from the machine's rule of the phase on each frame (`Run.lagUp_of`). That rule is proved for the frames up to the touch's frame ([one frame in control](0-5-2-1-1-PhaseFrame.md)).
+
 ## Why
 
 `pole` counts a frame when it ends not paused (`FrameKeep.Keep`): its counted frame `j` ends at `pole.seq j = seq (b₂ + ix j)`, where `ix j` is the `j`-th frame from `b₂` that ends not paused. `clock` counts a frame when it is not a `lag` frame (`seen`). Above ground the two meet only in one number: `clock` counts `Cs + c` frames before `E` (`Segs.last`), and `c` is the number of `pole`. Which frames are `lag` frames is free. So up to now nothing said that the castle entry `E` of `clock` (where `flag` reads the machine) is the castle entry of `pole` (where `atCastle` reads the castle flag). `LagUp` ties the two ways of counting frame by frame.
@@ -48,6 +50,39 @@ The proof:
 * `j_up`: `r(n) + #lag(n) = n` at `n = E` and `n = b₂` (`seen_add_lag`), and `c ≤ E + 1 − b₂` (`seen_le_add`).
 * `atCastle_of_flag`: `flag.task_E` says the star flag's task byte is 2 after frame `E`. `castle(m)` says this byte is not 0.
 
+## `LagUp` from the phase
+
+[One frame in control](0-5-2-1-1-PhaseFrame.md) proves the machine's rule of the phase (`PhaseRule`: a frame keeps the phase `φ` exactly when it ends paused, and else moves it to `next(φ) = (φ + 20) % 21`) on the frames up to the touch's frame. Here it meets the clock.
+
+```
+PhaseAt(n)   :=  clock.ph(n) = phaseOf(seq n)                         (read₀ says it at n = 0)
+PhaseUp      :=  ∀ n,  b₂ ≤ n ≤ E + 1  ⟹  PhaseAt(n)
+PhaseName    :=  IntervalTimerControl of the names of the title is the byte φ of PhaseFrame        (a check on the ROM)
+
+not_setup         :  ∀ n,  b₂ ≤ n ≤ E  ⟹  kind(n) ≠ setup
+lag_of_phase      :  PhaseName,  b₂ ≤ n ≤ E,  PhaseAt(n),  PhaseAt(n + 1),  PhaseRule(seq n, seq(n + 1))
+                     ⟹  ( kind(n) = lag  ⟺  seq(n + 1) ends paused )
+phase_succ_iff    :  PhaseName,  b₂ ≤ n ≤ E,  PhaseAt(n),  PhaseRule(seq n, seq(n + 1))
+                     ⟹  ( PhaseAt(n + 1)  ⟺  ( kind(n) = lag  ⟺  seq(n + 1) ends paused ) )
+lagUp_of_phase    :  PhaseName,  PhaseUp,  ∀ n ∈ [b₂, E],  PhaseRule(seq n, seq(n + 1))   ⟹   LagUp
+rule_up           :  the checks,  StartK(seq b₂),  Watched(seq b₂),  tc(seq b₂) = 0,  φ(seq b₂) ≤ 20,  KeepsPhase on the frames up to the touch's frame
+                     ⟹  ∀ n < ix(g),  PhaseRule(seq(b₂ + n), seq(b₂ + n + 1))
+lagUp_of          :  the checks,  StartK(seq b₂),  Watched(seq b₂),  tc(seq b₂) = 0,  PhaseUp,  KeepsPhase on the frames up to the touch's frame,
+                     hA : ∀ n ∈ [b₂ + ix(g), E],  PhaseRule(seq n, seq(n + 1))   ⟹   LagUp
+atCastle_of_phase :  the hypotheses of lagUp_of,  g < c,  fc.sy = sy   ⟹   castle(pole.seq(c))
+```
+
+The checks are `FrameKeep.keepCheckOf`, `PhaseFrame.phaseCheck`, `PhaseFrame.tcCheck` and `TitleStart.check`. `ix(g)` is the end of the touch's frame, counted from `b₂`. `StartK` and `Watched` at `b₂` come from `Run.atCtl₀` and `PoleJoin.Run.watched₀`.
+
+The proof:
+
+* `not_setup`: a `setup` frame has the count `z₁` or `z₂` (`Segs.kind`), and both are below `Cs`; above ground the count is at least `Cs + 1` (`chg.hb₂`).
+* `lag_of_phase`: by `clock.step`, a `lag` frame keeps the phase of the clock, and a frame of play or an `auto` frame moves it to `next`. `next(p) ≠ p` for every `p`. With `PhaseAt` at both ends, the clock keeps its phase exactly when the machine keeps it, and `PhaseRule` says that the machine keeps it exactly when the frame ends paused.
+* `phase_succ_iff`: the same, the other way.
+* `lagUp_of`: `PhaseAt(b₂)` and the clock's phase below 21 (`CastleToLevel.Frames.ph_lt`, from `ph(0) = 2`) give `φ(seq b₂) ≤ 20`. Then `rule_up` gives `PhaseRule` up to the touch's frame, `hA` after it, and `lagUp_of_phase` gives `LagUp`.
+
+So `phase_succ_iff` says how far the clock's rule carries the phase. If the phase of the clock is the machine's when frame `n` begins, it is the machine's when the frame ends exactly when frame `n` meets `LagUp`. From `read₀` at frame 0 the rule gives no later frame without a tie of the kinds of the clock to the machine.
+
 ## On real runs
 
 `castle-join-check FM2` reads the kinds of `clock` from the machine as the checks of [the timer and the grid](g-1-CastleToLevel.md) do (`CastleToLevel.kindOf`: a frame whose phase stays is a `lag` frame). It runs from the machine when frame `b₂` begins and stops at the castle entry.
@@ -65,13 +100,16 @@ On the 81 random runs without a castle entry, the phase and the pause agree on e
 
 ## What is not proved
 
-* `LagUp` itself. It is a condition on single frames, measured above and not proved. `kind` is chosen with the run; `LagUp` says how to choose it above ground. It would follow from two facts: the phase of `clock` is the phase of the machine (`clock.ph n = phaseOf(seq n)`; now only at frame 0 and after `E`), and on a frame above ground the phase stays exactly when the frame ends paused (the code: the timers are skipped when the pause bit is set after the pause routine, or when `TimerControl` is not 0).
-* `LagUp` is not a field of `Route.Run`, so nothing stops being a hypothesis. Made a field, it would make `pole.atCastle` a theorem (`atCastle_of_flag`), and it would join the castle entry of `flag` to that of `pole`. It is a condition on every frame above ground in place of one on one machine, so it is not made a field here.
+* `LagUp` itself. It follows from `PhaseUp`, from `tc = 0` and the start in control at `b₂`, from `KeepsPhase` on each instruction up to the touch's frame, and from `hA` (`Run.lagUp_of`). The machine's part up to the touch's frame is proved ([one frame in control](0-5-2-1-1-PhaseFrame.md)).
+* `PhaseUp`: the phase of `clock` is the machine's on each frame above ground, as `read₀` says at frame 0 and `flag` after `E`. It does not follow from the fields: above ground the kinds of `clock` are chosen with the run, and `lag_of_phase` and `phase_succ_iff` show that, frame by frame, `PhaseUp` and `LagUp` say the same thing. On the movie, with the kinds read from the machine, `PhaseUp` holds on all 1,219 frames.
+* `hA`: the frames after the touch's frame up to `E` follow `PhaseRule`. No walk follows those frames. Measured on 388 runs to the castle (70,995 frames).
+* `pole.atCastle` stays a field. It would be a theorem (`atCastle_of_phase`) if `PhaseUp` and `hA` were fields, but they are conditions on every frame above ground in place of one on one machine.
 * Below ground and before the first pipe the kinds are tied only as before: `paused₁`, `paused₂` (a `lag` frame of a change ends paused), the counts `ha₁`, `hb₁`, `ha₂`, `hb₂`, and `read₀` at frame 0.
 
-**Files.** `Theorems/Route.lean` (`Run.LagUp`, `Run.seen_up`, `Run.up_E`, `Run.castle_join`, `Run.count_up`, `Run.kind_up`, `Run.j_up`, `Run.atCastle_of_flag`).
+**Files.** `Theorems/Route.lean` (`Run.LagUp`, `Run.seen_up`, `Run.up_E`, `Run.castle_join`, `Run.count_up`, `Run.kind_up`, `Run.j_up`, `Run.atCastle_of_flag`; `Run.PhaseAt`, `Run.PhaseUp`, `PhaseName`, `Run.not_setup`, `Run.lag_of_phase`, `Run.phase_succ_iff`, `Run.lagUp_of_phase`, `Run.rule_up`, `Run.lagUp_of`, `Run.atCastle_of_phase`), `Theorems/CastleToLevel.lean` (`Frames.ph_lt`).
 
 **To reproduce.**
 ```
 .lake/build/bin/smbrta castle-join-check FM2      # the runs above (about 140 s)
+.lake/build/bin/smbrta phase-frames-check FM2     # the conditions of lagUp_of on real runs (about 115 s)
 ```

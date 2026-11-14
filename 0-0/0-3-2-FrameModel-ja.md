@@ -147,6 +147,8 @@ stored_path :  modelOK,  frictionCheck,  storedOK,  AtFrame(R),  abs(R) = |v(R)|
 * `before`、`longer`、`far`: `Clean` と同じです。
 * `collide`（`Collide`）: スクロールの処理からフレームの最後までに、速さはそのままか 0、subspeed はそのまま、`P` はそのままか −256 か +256 で、+256 は `v ≤ 0` のときだけです。
 
+地上のフレームは `SurfaceRead.frame_readE` を使います（[機械から読むフレーム](../1-1/e-2-SurfaceFrames-ja.md#機械から読むフレーム)）。`FrameTime` の `frame_readR` の `Collide` を `CollideE` に変えたものです。画面の左端では、スクロールの処理が彼を端に置くので、そこでは `P` が 256 より多く動くことがあります。`CollideE` は `TopSpeed.Frame.impedeP` と同じく、`v ≤ 0` のとき `P(Q) ≤ P(b) ≤ P(M) + 256` を許します。`SurfaceRead.read_move` はスクロールの処理までの部分で、触るフレームに使います。
+
 `modelOK` と `frictionCheck` は ROM のチェックで、`native_decide` で通ります。
 
 ## 測ったこと

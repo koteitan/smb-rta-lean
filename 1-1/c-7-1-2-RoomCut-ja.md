@@ -9,7 +9,7 @@
 `RoomRun` で変わったこと:
 
 * `clean` は今は `CleanW` か `Stop ∧ ReadW` を求めます。`CleanW`: プレイヤーのルーチンで覚えている速さは `|v|`、押している側は塞がれていない、スクロールの処理から後は横のバイトに何も書かない。`ReadW`: プレイヤーのルーチンで当たりのビットは `TopSpeed.collBits` の値、スクロールの処理から後は `Collide`。
-* `unpaused`（新しい、1 つの機械）: `t₀` までの各フレームは、ゲームが止まっていない状態で終わる。
+* `unpaused`（新しい、1 つの機械）: `t₀` までの各フレームは、ゲームが止まっていない状態で終わる。これはまたなくなりました。部屋のフレームはいまは止まっていない状態で終わるフレームです（[部屋で一時停止する走り](c-7-1-4-RoomLag-ja.md)）。
 * `arr` はなくなりました（定義）。
 
 `R` はプレイヤーのルーチン、`tr(j)` は `M` からフレームの `j` 命令目の機械、`end` はフレームの終わりの機械です。`st` はプレイヤーの状態、`size` は大きさの変化、`rt` はルーチンのバイト、`pz` は一時停止のバイト、`S_R` はプレイヤーのルーチンのスタックポインタです。
@@ -29,7 +29,7 @@ CleanW.toR   :  CleanW(M, n₀),  AtV(tr(n₀))  →  CleanR(M, n₀)
 ReadW.toR    :  ReadW(M, n₀),  AtV(tr(n₀)),  |v(tr(n₀))| ≤ top  →  ReadR(M, n₀)
 ```
 
-Lean: `Theorems/RoomVert.lean`（`cutOK`、`phA`、`pzLd`、`pzPieces`、`finA`、`zoneA_cover`、`CutAt`、`cut_R`、`arrive_R`、`vKeepA`）、`Theorems/RoomPair.lean`（`knSt`、`knZero`、`phSt`、`phSz`、`checkSt`、`checkSz`、`Quad`、`QuadWalks`、`quad_step`、`rowQ`、`rowsCheck`、`quad_of_rows`、`quad_run`、`RoomWalks`）、`Theorems/RoomJoin.lean`（`CleanW`、`ReadW`、`CleanW.toR`、`ReadW.toR`、`RoomRun.unpaused`、`RoomRun.arr`、`InRoom.reach`、`InRoom.cut`、`RoomRun.arrive`、`atV_of`、`cleanR_of`、`speed_of`、`readR_of`）、`Theorems/Route.lean`（`Run.roomReach`、`Run.roomCut`、`Run.inRoom`）。非公開の `Proof/RoomVert.lean`（`room_vert_a`、`room_quad_st`、`room_quad_size`、`room_quad_apart`、`room_pair_rows`）。
+Lean: `Theorems/RoomVert.lean`（`cutOK`、`phA`、`pzLd`、`pzPieces`、`finA`、`zoneA_cover`、`CutAt`、`cut_R`、`arrive_R`、`vKeepA`）、`Theorems/RoomPair.lean`（`knSt`、`knZero`、`phSt`、`phSz`、`checkSt`、`checkSz`、`Quad`、`QuadWalks`、`quad_step`、`rowQ`、`rowsCheck`、`quad_of_rows`、`quad_run`、`RoomWalks`）、`Theorems/RoomJoin.lean`（`CleanW`、`ReadW`、`CleanW.toR`、`ReadW.toR`、`RoomRun.arr`、`InRoom.reach`、`InRoom.cut`、`RoomRun.arrive`、`atV_of`、`cleanR_of`、`speed_of`、`readR_of`）、`Theorems/Route.lean`（`Run.roomReach`、`Run.roomCut`、`Run.inRoom`）。非公開の `Proof/RoomVert.lean`（`room_vert_a`、`room_quad_st`、`room_quad_size`、`room_quad_apart`、`room_pair_rows`）。
 
 ## 方法
 
@@ -37,7 +37,7 @@ Lean: `Theorems/RoomVert.lean`（`cutOK`、`phA`、`pzLd`、`pzPieces`、`finA`�
 
 * 前に来ていない状態が `R` にいるとき、歩きは `cutOK` を求めます。スタックポインタは `S_R`、待っている NMI なし、制御レジスタのビット 7 は 0 と分かっている、ルーチンのバイト、エリアの種類、ジャンプ台、泳ぎのフラグは `CutAt` の値で分かっている。歩きはどの命令でも機械を覆うので、`cut_R` が出ます。
 * `R` まで、さらに 2 つのバイトを保ちます。大きさの変化と当たりのビットです。
-* NMI がモードのルーチンを呼ぶ前に一時停止のバイトを読むところ（`pzLd`）で、状態を 2 つに分けます。バイトの下のビットが 1 と分かっているものと、0 と分かっているものです。2 つには印 `[1]` と `[0]` が付くので、探索は 2 つを分けたままにします。`R` で印は消えます。フレームの終わりで、`R` に来ていない状態は下のビットが 1 と分かっていなければなりません（`finA`）。なので、そのビットが 0 で終わるフレームは `R` に来ています（`arrive_R`）。`before_R`（フレームが `R` に来るのは多くて 1 回）と合わせると、これが最初に来たところで、`CtrlKeep.arrAt` がそれを見つけます。
+* NMI がモードのルーチンを呼ぶ前に一時停止のバイトを読むところ（`pzLd`）で、状態を 2 つに分けます。バイトの下のビットが 1 と分かっているものと、0 と分かっているものです。2 つには印 `[1]` と `[0]` が付くので、探索は 2 つを分けたままにします。`R` で印は消えます。フレームの終わりで、`R` に来ていない状態は下のビットが 1 と分かっていなければなりません。そして（[部屋で一時停止する走り](c-7-1-4-RoomLag-ja.md) から）`R` に来た状態は 0 と分かっていなければなりません（`finA`）。なので、そのビットが 0 で終わるフレームは `R` に来ています（`arrive_R`）。`before_R`（フレームが `R` に来るのは多くて 1 回）と合わせると、これが最初に来たところで、`CtrlKeep.arrAt` がそれを見つけます。
 
 **プレイヤーの状態と大きさの変化.** 歩きはフレームの始まりでこれらを知らないので、前のフレームから出します。それぞれ 1 つのバイトの関係で、[RoomPair](c-7-5-2-RoomPair-ja.md) の種類の歩きを 1 つずつ使います（`pair_frame` で `x = y`）。`st ∈ {0, 1, 2}` は、ビット 2 から 7 が 0 と分かっていて、ビット 0 かビット 1 が 0 と分かっていることで示します（`knSt`）。`size = 0` はバイトが 0 と分かっていることで示します（`knZero`）。最初の操作では切り替えの段が両方を知っています（`rowQ`）。段を 1 回たどる中で、`RoomPair` の 2 つの関係とこの 2 つをまとめて調べます（`rowsCheck`）。`quad_run` は `pair_run` と同じくフレームについての帰納法です。`R` への歩きは両方のバイトを保つので、`R` でも成り立ちます。
 
@@ -72,11 +72,11 @@ Lean: `Theorems/RoomVert.lean`（`cutOK`、`phA`、`pzLd`、`pzPieces`、`finA`�
 
 ## 一時停止: このラウンドの前の間違い
 
-`clean` は、`t₀` までの各フレームがプレイヤーのルーチンに来ることを求めていました（`AtCtrl` と `AtFrame` の `pc`）。止まった状態で終わるフレームはそこに来ません。なので、`t₀` より前に部屋で一時停止する走りは定理の外でした。そう書いたページはありませんでした。上の自分の走りでは 37,392 フレームがプレイヤーのルーチンに来ず、すべて止まった状態でした。今も定理の外ですが、それ自身のフィールド `unpaused` になりました。一時停止は遅らせるだけです。でも部屋のモデル（`RoomCore`）は `C` からのフレームをすべて数えるので、止まったフレームはモデルに入りません。
+`clean` は、`t₀` までの各フレームがプレイヤーのルーチンに来ることを求めていました（`AtCtrl` と `AtFrame` の `pc`）。止まった状態で終わるフレームはそこに来ません。なので、`t₀` より前に部屋で一時停止する走りは定理の外でした。そう書いたページはありませんでした。上の自分の走りでは 37,392 フレームがプレイヤーのルーチンに来ず、すべて止まった状態でした。そのときは定理の外で、それ自身のフィールド `unpaused` になりました。いまは定理に入っています。部屋は止まっていない状態で終わるフレームだけを数えます（[部屋で一時停止する走り](c-7-1-4-RoomLag-ja.md)）。
 
 ## 仮定（Lean で証明していない）
 
-* `unpaused`（各フレーム 1 つの機械、新しい）: `t₀` までの各フレームは、ゲームが止まっていない状態で終わる。`clean` の中に隠れていました。
+* `unpaused` はなくなりました（[部屋で一時停止する走り](c-7-1-4-RoomLag-ja.md)）。かわりに `roomLag`: 部屋で止まった状態で終わるフレームは `lag` のフレーム。
 * `CleanW` か `Stop ∧ ReadW`（各 1 フレーム）: プレイヤーのルーチンでの覚えている速さと塞ぎ（フレームがモデルに従うかを決めます）、当たりのビットが `collBits` にあること、スクロールの処理から後にフレームがすること（`after`、`collide`）。
 * 部屋のフレームの各命令の `SiteOK`（`chg.roomSites`）。前と同じ。
 

@@ -27,7 +27,7 @@ pauseE_run      :  all of these from c = b₁ to e = a₂  →  PauseE(seq a₂)
 In the route (`Route.ChangesK.pause₂`):
 
 ```
-pauseBits₂ : g(seq b₁) & 0x7E = 0                    (new field)
+pauseBits₂ : g(seq b₁) & 0x7E = 0                    (the theorem ChangesK.pauseBits₂, 1-1-b-3-10)
 Room(seq b₁)                                            (ChangesK.roomAt, as before)
 InRowsT(seq b₁), ctl(seq b₁)                            (the rows of the first change, as before)
 ∀ n ∈ [b₁, a₂):  ∀ j, SiteOK(trₙ(j))                    (chg.roomSites, as before)
@@ -79,10 +79,12 @@ The pause byte at the first controls was 0 or `0x80`. On the movie the 6 bits ar
 
 ## Assumptions (not proved in Lean)
 
-* **Bits 1 to 6 of the pause byte at the room's first control** (`chg.pauseBits₂`, 1-1-d-3-4-4). New. The pause routine writes the pause byte only as the byte with bit 0 flipped and bit 7 set, or with bit 7 cleared, so these bits never change after the start of the game; this is not proved. The condition at the vertical pipe's entry knows these bits (`PipeChangeEnd.entryMasks`), but the states at its exit keep only bit 0 of the pause byte (`SideChangeEnd.exitStarts`), so the rows of the change into the room do not know them. If the exit's states kept them, the check `startCheck` could ask them and this field would go.
+* Bits 1 to 6 of the pause byte at the room's first control are no longer assumed. In round 11 the first change's exit states keep bits 0–6, and the field became the theorem `ChangesK.pauseBits₂` ([The pause byte at the room's first control](b-3-10-PauseBits.md), 1-1-b-3-10).
 * `SiteOK` on each instruction in the room (`chg.roomSites`) and the conditions of the first change's rows (part b), as before.
 
-**Files.** `Theorems/RoomPause.lean`; the private checks are in `Proof/RoomPause.lean` (`genRoomPause` in `Main.lean`).
+**Round 11.** The region `Reg` has two more fields with defaults, used by [the music bytes through the room's frames](d-2-5-1-RoomMusic.md): `keepB` (bits of the table's bytes kept after the forgetting, because the room's condition knows them) and `needG` (a frame that leaves the room must end with bit 0 of the pause byte known to be 0). A step outside the region may also write the table's bytes if every state of the table, so written, is in a state of the table (`StepWrites.writeOK`). With the defaults the pause's check is the same; it still passes.
+
+**Files.** `Theorems/RoomPause.lean`; the private checks are in `Proof/RoomPause.lean` (`genRoomMusic` in `Main.lean`, which also writes the checks of the music; `startCheck` comes from `RoomMusic.startBoth`, which makes the rows of the time once for both).
 
 **To reproduce.**
 ```

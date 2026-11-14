@@ -39,7 +39,7 @@ A frame that ends paused does not run the game engine. It writes neither byte, s
 
 **Two more bytes.** Item 1-1-c-7-1-2 uses two more walks of this kind, each with one byte (`x = y`): the player's state is 0, 1 or 2 (`checkSt`), and the change of size is 0 (`checkSz`), about 3.5 s each. The same pass over the rows checks them at the first control (`rowQ` in `rowsCheck`), so the rows are walked once (25 s in a program, as before) ([The room's frames at the player's routine](c-7-1-2-RoomCut.md)).
 
-**Every frame.** `RoomMap.cond_of_rows` gives the room's condition at the start of each frame from `b₁` to `a₂`. With `SiteOK` (`roomSites`) and the routine byte at each frame's end (`roomStay`), induction on the frames gives `pair_run`. `Run.roomPair` puts the room's frame `n` at frame `b₁ + (n − C)` of `base`, before `a₂`.
+**Every frame.** `RoomMap.cond_of_rows` gives the room's condition at the start of each frame from `b₁` to `a₂`. With `SiteOK` (`roomSites`) and the routine byte at each frame's end (`roomStay`), induction on the frames gives `pair_run`. `Run.roomPair` puts the start of the room's frame `n + 1` at frame `b₁ + ix(n + 1 − C) − 1` of `base`, before `a₂` (`Run.roomIdx`).
 
 | check on the ROM | table | time in a program |
 |---|---|---|

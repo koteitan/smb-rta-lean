@@ -34,15 +34,16 @@ Real  (for each t ∈ [1, N] with t < E):
   cleanK    :  ∀ k,  CleanK_F(tr(t, k))                   (PipeWrites.Clean, with the castle flag, the position's fraction, the pause byte, the area's type, the
                                                           swimming flag and the change of size protected, but the move routine's own store; the old cleanK and spare)
   after     :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = PlayerSubs  →  the 8 bytes of hs and P of b(t) are those of tr(t, k),  ab(b t) = |v(b t)|,  bits(b t) = FF
-  flat      :  ground(t)  ∧  ¬jump(in t)   →   ground(t + 1)
+  ground    :  ground(t)  →  GroundAt(fm t)                (the height of m₀, the high byte of the height 1, the vertical speed and its fraction 0)
   jump      :  ground(t)  ∧  jump(in t)    →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  ¬ground(t + d) for 1 ≤ d < n,  ground(t + n)
 and once:
   page      :  N < E  →  page(fm(N + 1)) ≠ 255
-and on each instruction of each frame n, counted or not, with 1 ≤ n < ix(N), n < ix(E)  (OpenMap):
+and on each instruction of each frame n, counted or not, with 1 ≤ n ≤ ix(N), n < ix(E)  (OpenMap):
   map       :  MapOK(tr_n(k))                             (no store through an index or a pointer to the player's state, the jumpspring byte or the block buffers;
-                                                          the read of the block buffer routine is in the buffers)
+                                                          the read of the block buffer routine is in the first buffer)
 
 Real.stSpring :  the checks,  Real,  FrameStart(seq 1),  MapAt(seq 1)   →   st(fm t) ∈ {0, 1, 2}  ∧  JumpspringAnimCtrl(fm t) = 0     (the old fields st, spring)
+Real.flat     :  the checks,  Real,  FrameStart(seq 1),  MapAt(seq 1),  Held(fm t),  ground(t),  ¬jump(in t)   →   ground(t + 1)       (the old field flat; OpenFlat)
 
 air(t)        :=  j − t,   j the first counted frame in [t, N + Zb) with ground(j),  else  N + Zb
 Held(m)       :=  ab(m) = |v(m)|  ∧  bits(m) = FF  ∧  AreaType(m) = v₀  ∧  SwimmingFlag(m) = 0  ∧  PlayerChangeSizeFlag(m) = 0
@@ -69,14 +70,15 @@ Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              (Run.pipeOpe
 `st(t)` is the model's state when the counted frame `t` begins: `((hs(fm t), air(t)), P(fm t) − P(fm 1))`.
 
 `Checks` are checks on the ROM: `modelOK` (the movement), `ctrlCheck` (the walk up to the player's routine), `afterCheck` (the walk of the whole frame, with the area's type
-`v₀` of `m₀`), `normIdem`, every length of `lens` below `Zb`, `Held(m₀) ∧ st(m₀) = 0`, that the pause byte the NMI tests is `g`, and that the idle loop is a `JMP` to itself. The private
+`v₀` of `m₀`), `normIdem`, every length of `lens` below `Zb`, `Held(m₀) ∧ st(m₀) = 0`, that the pause byte the NMI tests is `g`, that the idle loop is a `JMP` to itself,
+and the walks of a frame on the ground (`OpenFlat.flatCheck`, the private `open_flat_check`, about 3 s natively). The private
 `open_checks` gives them: the first three and the idle loop are those of part e (`pole_numbers`), and the area's type above ground is that of `m₀`. `title_pos_check` now also asks the six bytes `ab`, `bits`, `st` and the area's three bytes at control, with
 the values of `m₀` (about 2.2 s natively). `lag_check` now follows 17 bytes (about 6 s natively). The theorems without the ROM use only the axioms `propext`,
 `Classical.choice`, `Quot.sound`.
 
-Lean: `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean` (`Real.stSpring` uses it); `lags_keepI` in `Theorems/PipeFrames.lean`; `moreI`, `lagI` in `Theorems/LagFrames.lean`; `stI`, `titlePosCheck`, `Begin.bytesAll₁` in
-`Theorems/StartRun.lean`; `Pipe.opening`, `Run.pipeKeep₁`, `Run.pipeHeld`, `Run.pipeOpening`, `Run.pipeOpenB` in `Theorems/Route.lean`; private `Proof/OpenFrames.lean` (`open_checks`, `open_left`), `Proof/LagPause.lean`,
-`Proof/Opening.lean`, `Proof/PipeWrites.lean`.
+Lean: `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean` (`Real.stSpring` uses it), `Theorems/OpenFlat.lean` (`Real.flat` uses it); `lags_keepI` in `Theorems/PipeFrames.lean`; `moreI`, `lagI` in `Theorems/LagFrames.lean`; `stI`, `titlePosCheck`, `Begin.bytesAll₁` in
+`Theorems/StartRun.lean`; `Pipe.opening`, `Run.pipeKeep₁`, `Run.pipeHeld`, `Run.pipeOpening`, `Run.pipeOpenB` in `Theorems/Route.lean`; private `Proof/OpenFrames.lean` (`open_checks`, `open_left`), `Proof/OpenFlat.lean`,
+`Proof/LagPause.lean`, `Proof/Opening.lean`, `Proof/PipeWrites.lean`.
 
 ## How it works
 
@@ -94,7 +96,7 @@ Lean: `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.le
   (`CtrlKeep.ctrl_keep`). With the player's state and the jumpspring byte of `Real.stSpring` and `Held` this is `FrameModel.AtCtrl`. The input's state and jump bits come from `st(fm t)`.
 * **From frame to frame.** `after` gives `ab` and `bits` at the frame's end; the walk of the whole frame with `cleanK` gives the area's bytes (`SurfaceFrames.area_endF`). The frames
   not counted keep these bytes and `hs`, `P` (`lags_keepI`: the walk of `LagFrames` follows 9 more bytes). So `Held` holds at every counted frame, by induction from control.
-* **The air.** `air(t) = 0` exactly when `ground(t)`. In the air, `air(t + 1) = air(t) − 1` by the definition. On the ground with no jump start, `flat` gives `air(t + 1) = 0`.
+* **The air.** `air(t) = 0` exactly when `ground(t)`. In the air, `air(t + 1) = air(t) − 1` by the definition. On the ground with no jump start, `Real.flat` ([The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md)) gives `air(t + 1) = 0`.
   At a jump start, `jump` gives the landing `t + n`, so `air(t + 1) = n − 1 ∈ [L_tap − 1, L_hold − 1]`. The model's input is `norm(in t)`: it has the same state and jump bits,
   and `hstep` on it is the same (`normIdem`).
 * **At control.** `title_pos_check` walks frame 0 from every near state of the title's set, with any input, and asks the position, the horizontal state and the six bytes of
@@ -127,9 +129,12 @@ runs each counted frame instruction by instruction and checks each field of `Rea
 
 ## Assumed (not proved in Lean)
 
-* The fields of `Real`: `cleanK`, `map`, `after`, `flat`, `jump`, and `page` at the start of the counted frame `N + 1` only. They are
+* The fields of `Real`: `cleanK`, `map`, `after`, `ground`, `jump`, and `page` at the start of the counted frame `N + 1` only. They are
   conditions on single frames, on their instructions and on their starts. `after` says that from the scroll handler on nothing moves him and the collision routine finds nothing (no wall, no edge of the screen):
-  the horizontal half of item 1-1-a-5-6. `flat` is its vertical half (he does not fall off the ground). `jump` is item 1-1-a-5-7.
+  the horizontal half of item 1-1-a-5-6. `ground` says that a counted frame that begins on the ground begins at the ground's height with no vertical speed. `jump` is item 1-1-a-5-7.
+* No longer assumed (this round): `flat` (he does not fall off the ground). It is a theorem (`Real.flat`) from the walks of
+  [The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md) and the new field `ground`. The read of `map` is asked to be in the first block buffer, and `map` covers the
+  frame of the counted frame `N` too.
 * No longer assumed (this round): `longer`, and `page` at the starts of the counted frames 1 to `N`.
 * No longer assumed (this round): `st` and `spring`. They are a theorem (`Real.stSpring`) from the walk of
   [The block buffers, the jumpspring and the player's state on the first frames](a-5-4-3-3-3-OpenMap.md), with the new field `map` on each instruction. `spare` is now
@@ -138,8 +143,8 @@ runs each counted frame instruction by instruction and checks each field of `Rea
   ends not paused is a theorem (`PipeFrames.Lags.unpaused`): the counted frames are the frames that end not paused, found within `dP` frames (`lags.resume`).
 * **Not proved:** that frame 368 is reached (as before).
 
-**Files.** `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean`, `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`, private `Proof/OpenFrames.lean`,
-`Proof/LagPause.lean`, `Proof/Opening.lean`.
+**Files.** `Theorems/OpenFrames.lean`, `Theorems/OpenLeft.lean`, `Theorems/OpenMap.lean`, `Theorems/OpenFlat.lean`, `Theorems/PipeFrames.lean`, `Theorems/LagFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`, private `Proof/OpenFrames.lean`,
+`Proof/OpenFlat.lean`, `Proof/LagPause.lean`, `Proof/Opening.lean`.
 
 **Reproduce.**
 ```

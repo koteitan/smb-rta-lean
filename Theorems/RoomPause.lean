@@ -32,16 +32,23 @@ open PipeTransitionAll (go Names)
 
 /-! ## The step -/
 
-/-- the region of the walk: the call of the sound routine, the place after the call of the pause routine, the six bytes, the pause byte, and the table -/
+/-- the region of the walk: the call of the sound routine, the place after the call of the pause routine, the six bytes, the pause byte, and the table.
+`keepB`: bits of bytes of `SB` that are kept after the forgetting (the room's condition knows them). `needG`: a frame that leaves the room must end with bit 0 of
+the pause byte known to be 0. -/
 structure Reg where
   call : UInt16
   ret : UInt16
   SB : List Nat
   gI : Nat
   T : List SState
+  keepB : List (Nat × UInt8) := []
+  needG : Bool := true
 
 /-- `B` with bit 0 of the pause byte as `B0` knows it, and no other bit of it -/
 def keep0 (gI : Nat) (B0 B : AS) : AS := B.setK gI ⟨(B0.getK gI).v &&& 1, (B0.getK gI).k &&& 1⟩
+
+/-- `B` with the bits `p.2` of each byte `p.1` as `B0` knows them, and no other bit of it -/
+def keepBits (L : List (Nat × UInt8)) (B0 B : AS) : AS := L.foldl (fun B p => B.setK p.1 ⟨(B0.getK p.1).v &&& p.2, (B0.getK p.1).k &&& p.2⟩) B
 
 /-- the step of `ScreenPage`: the pieces of `preS` after the clamp of the time, then `stepS` -/
 def baseS (P : Places) (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) := (preS P (clampS P A)).flatMap (stepS P E ops)
@@ -55,16 +62,18 @@ def keepP (P : Places) (E : Env) (SB : List Nat) (A : AS) : Bool :=
 
 /-- a successor in the three routines: at the place after them, the bytes are in a class and are forgotten, but for bit 0 of the pause byte -/
 def inP (G : Reg) (A B : AS) : Option AS :=
-  if B.pc == G.ret && B.k == A.k then (if G.T.any (soundLe B) then some (keep0 G.gI B (retag false (forgetAll G.SB B))) else none)
+  if B.pc == G.ret && B.k == A.k then (if G.T.any (soundLe B) then some (keepBits G.keepB B (keep0 G.gI B (retag false (forgetAll G.SB B)))) else none)
   else some (retag true B)
 
 /-- **The step with the region split.** In the region (`spent`): the step of `ScreenPage`, and at its end the check and the forgetting. At the call: the pieces of the
-table, marked. Elsewhere: the step of `ScreenPage` from the pieces that keep the six bytes. -/
+table, marked. Elsewhere: the step of `ScreenPage` from the pieces that keep the six bytes, or that write some of them and every state of the table, so written, is in a
+state of the table (`StepWrites.writeOK`). -/
 def pstep (P : Places) (E : Env) (ops : Array (AM Unit)) (G : Reg) (A : AS) : List (Option AS) :=
   if A.spent then (baseS P E ops A).map fun o => o.bind (inP G A)
   else if A.pc == G.call then
     G.T.flatMap fun t => if agrees t A then (baseS P E ops (refineAll t A)).map fun o => o.map (retag true) else []
-  else (preS P (clampS P A)).flatMap fun A₁ => if keepP P E G.SB A₁ then stepS P E ops A₁ else [none]
+  else (preS P (clampS P A)).flatMap fun A₁ => if keepP P E G.SB A₁ then stepS P E ops A₁
+    else (stepS P E ops A₁).map fun o => o.bind fun B => if StepWrites.writeOK E G.SB G.T A₁ B then some B else none
 
 /-- outside the region the six bytes are in a class -/
 def Ph (G : Reg) (A : AS) (m : Machine) : Prop := A.spent = true ∨ ∃ t ∈ G.T, SIn t m
@@ -72,10 +81,10 @@ def Ph (G : Reg) (A : AS) (m : Machine) : Prop := A.spent = true ∨ ∃ t ∈ G
 /-! ## The walk -/
 
 /-- at the frame's end: out of the region, and a start state of the room's condition, or the routine is known and is not the reference's and the pause byte's bit 0 is
-known to be 0 -/
-def finP (P : Places) (r : Machine) (K : List (Nat × UInt8)) (gI : Nat) (B : AS) : Bool :=
+known to be 0 (if `needG`) -/
+def finP (P : Places) (r : Machine) (K : List (Nat × UInt8)) (gI : Nat) (needG : Bool) (B : AS) : Bool :=
   !B.spent && (endUnder r K B ||
-    (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI && (B.getK gI).k &&& 1 == 1 && (B.getK gI).v &&& 1 == 0))
+    (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI && (!needG || ((B.getK gI).k &&& 1 == 1 && (B.getK gI).v &&& 1 == 0))))
 
 /-- from `A`, step by step with `pstep`, until every path ends in a state of the table, or at the frame's end in a state that `fin` accepts -/
 def walkP (G : Reg) (C : CfgS) : Nat → AS → Bool
@@ -173,7 +182,7 @@ def cfgOfP (P : Places) (Z : Aids) (E : Env) (G : Reg) (r : Machine) (K : List (
       (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
     (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
   let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd]).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
-  { E, ops := (aRows E).toArray, P, fin := finP P r K G.gI, t := q.1, key := keyP Z E, idx := q.2.1, cut := q.2.2, norm := Z.norm, normAt := at0 }
+  { E, ops := (aRows E).toArray, P, fin := finP P r K G.gI G.needG, t := q.1, key := keyP Z E, idx := q.2.1, cut := q.2.2, norm := Z.norm, normAt := at0 }
 
 end
 
@@ -183,7 +192,7 @@ end
 def walkCheck (P : Places) (Z : ScreenPage.Aids) (E : Env) (G : Reg) (r : Machine) (K : List (Nat × UInt8)) : Bool :=
   let C := cfgOfP P Z E G r K
   ScreenPage.placesOK E P && E.pad.v == 0 && E.pad.k == 0 && ScreenPage.maskOK r K && tabOK G.SB G.T && decide (G.gI < 2048) &&
-    C.t.all (walkP G C ScreenPage.fuelS) && (startsR r K).all (walkP G C ScreenPage.fuelS)
+    G.keepB.all (fun p => decide (p.1 < 2048)) && C.t.all (walkP G C ScreenPage.fuelS) && (startsR r K).all (walkP G C ScreenPage.fuelS)
 
 /-! ## The region and the room, from the symbols -/
 
@@ -254,6 +263,29 @@ theorem low_of_mem {a : AB} {x : UInt8} (h : a.mem x) (hk : a.k &&& 1 = 1) (hv :
 theorem sim_keep0 {B0 B : AS} {m : Machine} {gI : Nat} (hs0 : Sim E F B0 m) (hs : Sim E F B m) (hg : gI < 2048) : Sim E F (keep0 gI B0 B) m :=
   SideChangeEnd.sim_refine hs (mem_low (hs0.ram gI hg))
 
+/-- a byte with only the bits of `msk` known holds the byte -/
+theorem mem_mask {a : AB} {x : UInt8} (msk : UInt8) (h : a.mem x) : (⟨a.v &&& msk, a.k &&& msk⟩ : AB).mem x := by
+  refine TaintRun.mem_iff.2 fun i hi => ?_
+  have a1 := TaintRun.mem_iff.1 h i hi
+  show (bt x i && bt (a.k &&& msk) i) = (bt (a.v &&& msk) i && bt (a.k &&& msk) i)
+  rw [bt_and, bt_and]
+  revert a1
+  generalize bt x i = p, bt a.v i = q, bt a.k i = s, bt msk i = u
+  revert p q s u
+  decide
+
+theorem sim_keepBits {B0 : AS} {m : Machine} (hs0 : Sim E F B0 m) :
+    ∀ (L : List (Nat × UInt8)), (∀ p ∈ L, p.1 < 2048) → ∀ {B : AS}, Sim E F B m → Sim E F (keepBits L B0 B) m
+  | [], _, _, hs => hs
+  | p :: L, hL, B, hs => by
+    have h1 : Sim E F (B.setK p.1 ⟨(B0.getK p.1).v &&& p.2, (B0.getK p.1).k &&& p.2⟩) m :=
+      SideChangeEnd.sim_refine hs (mem_mask p.2 (hs0.ram p.1 (hL p List.mem_cons_self)))
+    exact sim_keepBits hs0 L (fun q hq => hL q (List.mem_cons_of_mem _ hq)) h1
+
+theorem keepBits_k (B0 : AS) : ∀ (L : List (Nat × UInt8)) (B : AS), (keepBits L B0 B).k = B.k
+  | [], _ => rfl
+  | p :: L, B => keepBits_k B0 L (B.setK p.1 ⟨(B0.getK p.1).v &&& p.2, (B0.getK p.1).k &&& p.2⟩)
+
 theorem clamp_spent (A : AS) : (clampS P A).spent = A.spent := by
   unfold clampS
   split <;> rfl
@@ -301,7 +333,7 @@ theorem keepP_ok (hO : PlacesOK E P) {SB : List Nat} {A : AS} {m : Machine} (hs 
 
 /-- **One step**: `pstep` follows the machine, and `Ph` goes on -/
 theorem s_pstep (hO : PlacesOK E P) (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) (h0 : tabOK G.SB G.T = true) (hg : G.gI < 2048)
-    {A : AS} {m : Machine} (hs : Sim E F A m) (hh : SiteOK P m) (hph : Ph G A m) :
+    (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine} (hs : Sim E F A m) (hh : SiteOK P m) (hph : Ph G A m) :
     ∃ r ∈ pstep P E ops G A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 ∧ Ph G B (go step m).2 := by
   have tab : ∀ t ∈ G.T, ∀ p ∈ t, G.SB.contains p.1 = true ∧ p.1 < 2048 := by
     intro t ht p hp
@@ -323,8 +355,8 @@ theorem s_pstep (hO : PlacesOK E P) (hops : ops = (aRows E).toArray) (hT : 2 ≤
           simp only [Option.some.injEq] at hB'
           subst hB'
           obtain ⟨t, ht, hle⟩ := List.any_eq_true.1 hany
-          exact ⟨sim_keep0 g1 (StepWrites.sim_retag _ (StepWrites.sim_forgetAll _ g1)) hg,
-            StepWrites.stepRel_k rfl (StepWrites.forgetAll_k _ _) g2, Or.inr ⟨t, ht, StepWrites.sIn_of_le g1 hle⟩⟩
+          exact ⟨sim_keepBits g1 G.keepB hkb (sim_keep0 g1 (StepWrites.sim_retag _ (StepWrites.sim_forgetAll _ g1)) hg),
+            StepWrites.stepRel_k rfl ((keepBits_k _ _ _).trans (StepWrites.forgetAll_k _ _)) g2, Or.inr ⟨t, ht, StepWrites.sIn_of_le g1 hle⟩⟩
         · cases hB'
       · simp only [Option.some.injEq] at hB'
         subst hB'
@@ -355,7 +387,20 @@ theorem s_pstep (hO : PlacesOK E P) (hops : ops = (aRows E).toArray) (hT : 2 ≤
         obtain ⟨g1, g2⟩ := hB B hB'
         exact ⟨g1, StepWrites.stepRel_k (by rw [hk1, ScreenPage.clamp_k]) rfl g2,
           Or.inr ⟨t, ht, StepWrites.sIn_keep (fun p hp => (tab t ht p hp).1) htm (keepP_ok hO hs1 hh hk)⟩⟩
-      · refine ⟨none, List.mem_flatMap.2 ⟨A₁, hA, by rw [if_neg hk]; exact List.mem_singleton.2 rfl⟩, fun B hB => by cases hB⟩
+      · obtain ⟨r, hr, hB⟩ := ScreenPage.s_stepS hO hops hT hs1 hh
+        refine ⟨r.bind fun B => if StepWrites.writeOK E G.SB G.T A₁ B then some B else none,
+          List.mem_flatMap.2 ⟨A₁, hA, by rw [if_neg hk]; exact List.mem_map.2 ⟨r, hr, rfl⟩⟩, fun B hB' => ?_⟩
+        cases r with
+        | none => cases hB'
+        | some B0 =>
+          obtain ⟨g1, g2⟩ := hB B0 rfl
+          simp only [Option.bind_some] at hB'
+          split at hB'
+          · rename_i hw
+            simp only [Option.some.injEq] at hB'
+            subst hB'
+            exact ⟨g1, StepWrites.stepRel_k (by rw [hk1, ScreenPage.clamp_k]) rfl g2, Or.inr (StepWrites.sIn_write hs1 g1 hw ht htm)⟩
+          · cases hB'
 
 end
 
@@ -401,7 +446,7 @@ theorem weaken_of {B : AS} {m : Machine} (hs : Sim C.E F B m) :
   · exact ⟨hs, rfl, rfl⟩
 
 theorem live_stepP (hO : PlacesOK C.E C.P) (ht : C.t.all (walkP G C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
-    (h0 : tabOK G.SB G.T = true) (hg : G.gI < 2048) {A : AS} {m : Machine} (hl : LiveP G C F A m)
+    (h0 : tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine} (hl : LiveP G C F A m)
     (hh : SiteOK C.P m) (hh2 : SiteOK C.P (go step m).2) :
     (∃ A', LiveP G C F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
     ((go step m).2.frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2 ∧ Ph G B (go step m).2) := by
@@ -409,7 +454,7 @@ theorem live_stepP (hO : PlacesOK C.E C.P) (ht : C.t.all (walkP G C Fu) = true) 
   cases n with
   | zero => simp [walkP] at hw
   | succ n =>
-    obtain ⟨r, hr, hB⟩ := s_pstep hO hops hT h0 hg hs hh hp
+    obtain ⟨r, hr, hB⟩ := s_pstep hO hops hT h0 hg hkb hs hh hp
     simp only [walkP, List.all_eq_true] at hw
     have hw2 := hw r hr
     cases r with
@@ -435,7 +480,7 @@ theorem live_stepP (hO : PlacesOK C.E C.P) (ht : C.t.all (walkP G C Fu) = true) 
 
 /-- **One frame.** A walk from `S` that succeeds covers the frame of every machine of `S` for every input, if each instruction meets `SiteOK`, and `Ph` holds at its end. -/
 theorem frame_of_walkP (hO : PlacesOK C.E C.P) (ht : C.t.all (walkP G C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
-    (h0 : tabOK G.SB G.T = true) (hg : G.gI < 2048)
+    (h0 : tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkP G C Fu S = true) (hs : Sim C.E F S m) (hph : Ph G S m) (hk : ∀ j, SiteOK C.P (trace m i j)) :
     (frame m i).frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (frame m i) ∧ Ph G B (frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
@@ -456,7 +501,7 @@ theorem frame_of_walkP (hO : PlacesOK C.E C.P) (ht : C.t.all (walkP G C Fu) = tr
           simp only [nxt, if_neg hc]
         have hh2 := hk (j + 1)
         rw [e2] at hh2 ⊢
-        rcases live_stepP hO ht hops hT h0 hg h1 (hk j) hh2 with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a3, a4, a5⟩
+        rcases live_stepP hO ht hops hT h0 hg hkb h1 (hk j) hh2 with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a3, a4, a5⟩
         · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
         · exact Or.inr ⟨by rw [a1, h3], B, a2, by rw [a3, h2], a4, a5⟩
       · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
@@ -490,35 +535,37 @@ structure PauseOK (E : Env) (P : Places) (r : Machine) (K : List (Nat × UInt8))
   env : C.E = E
   pl : C.P = P
   ops : C.ops = (aRows C.E).toArray
-  fin : C.fin = finP P r K G.gI
+  fin : C.fin = finP P r K G.gI G.needG
   tab : tabOK G.SB G.T = true
   gI : G.gI < 2048
+  keepI : ∀ p ∈ G.keepB, p.1 < 2048
   table : C.t.all (walkP G C Fu) = true
   starts : ∀ S ∈ startsR r K, walkP G C Fu S = true
 
 theorem pauseOK_of_check {P : Places} {Z : ScreenPage.Aids} {E : Env} {G : Reg} {r : Machine} {K : List (Nat × UInt8)} (h : walkCheck P Z E G r K = true) :
     PauseOK E P r K G (cfgOfP P Z E G r K) ScreenPage.fuelS := by
   simp only [walkCheck, Bool.and_eq_true, List.all_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h3⟩, h4⟩, h5⟩, hkb⟩, h6⟩, h7⟩ := h
   have hp : E.pad = AB.top := by
     show E.pad = ⟨0, 0⟩
     cases hq : E.pad
     rw [hq] at h2 h2'
     simp only at h2 h2'
     rw [h2, h2']
-  exact ⟨ScreenPage.placesOK_spec h1, hp, ScreenPage.maskOK_spec h3, rfl, rfl, rfl, rfl, h4, h5, h6, h7⟩
+  exact ⟨ScreenPage.placesOK_spec h1, hp, ScreenPage.maskOK_spec h3, rfl, rfl, rfl, rfl, h4, h5, fun p hp => by simpa using hkb p hp, h6, h7⟩
 
 /-- **One frame in the room.** A frame that starts in the room's condition with the six bytes in a class ends with them in a class, and in the condition, or with
-another routine and not paused. -/
+another routine and (if `needG`) not paused. -/
 theorem pause_step {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {G : Reg} {C : CfgS} {Fu : Nat} (h : PauseOK E P r K G C Fu)
     {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) (hc : InCls G m) :
-    InCls G (frame m i) ∧ (RoomCond E r K (frame m i) ∨ ((frame m i).ram.get! P.rtI ≠ r.ram.get! P.rtI ∧ (frame m i).ram.get! G.gI &&& 1 = 0)) := by
+    InCls G (frame m i) ∧ (RoomCond E r K (frame m i) ∨
+      ((frame m i).ram.get! P.rtI ≠ r.ram.get! P.rtI ∧ (G.needG = true → (frame m i).ram.get! G.gI &&& 1 = 0))) := by
   obtain ⟨S, hS, hs⟩ := ScreenPage.sim_of_room (F := (m.frame, 2)) h.mask h.pad hm rfl
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hw := h.starts S hS
   have hs' : Sim C.E (m.frame, 2) S m := by rw [h.env]; exact hs
-  obtain ⟨_, B, h2, _, h4, h5⟩ := frame_of_walkP (i := i) hO h.table h.ops (show 2 ≤ (2 : UInt8).toNat by decide) (by rw [h.env]; exact h.pad) h.tab h.gI hw hs'
-    (Or.inr hc) (by rw [h.pl]; exact hk)
+  obtain ⟨_, B, h2, _, h4, h5⟩ := frame_of_walkP (i := i) hO h.table h.ops (show 2 ≤ (2 : UInt8).toNat by decide) (by rw [h.env]; exact h.pad) h.tab h.gI
+    h.keepI hw hs' (Or.inr hc) (by rw [h.pl]; exact hk)
   rw [h.env] at h4
   rw [h.fin] at h2
   unfold finP at h2
@@ -529,11 +576,15 @@ theorem pause_step {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)
     · rw [hsp] at h5; cases h5
     · exact h5
   refine ⟨hcls, ?_⟩
-  rcases h2 with h2 | ⟨⟨⟨⟨a3, a4⟩, a5⟩, a6⟩, a7⟩
+  rcases h2 with h2 | ⟨⟨⟨a3, a4⟩, a5⟩, a6⟩
   · exact Or.inl (ScreenPage.room_of_end h.mask h4 h2)
   · right
     have e := PipeEntryRule.known_eq a4 (h4.ram _ a3)
-    refine ⟨by rw [e]; exact a5, low_of_mem (h4.ram G.gI h.gI) a6 a7⟩
+    refine ⟨by rw [e]; exact a5, fun hn => ?_⟩
+    rcases a6 with a6 | ⟨a6, a7⟩
+    · rw [hn] at a6
+      cases a6
+    · exact low_of_mem (h4.ram G.gI h.gI) a6 a7
 
 /-- **The room's frames.** From the first control `c` with the six bytes in a class, up to the first machine `e` with another routine: each frame meets `SiteOK`
 and starts in the player's routine. Then at `e` the six bytes are in a class and the frame before `e` was not paused. -/
@@ -544,12 +595,12 @@ theorem pause_run {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)}
     (hs : ∀ n, c ≤ n → n < e → ∀ j, SiteOK P (trace (seq n) (inp n) j))
     (hr : ∀ n, c ≤ n → n < e → (seq n).ram.get! P.rtI = r.ram.get! P.rtI)
     (he : (seq e).ram.get! P.rtI ≠ r.ram.get! P.rtI) :
-    InCls G (seq e) ∧ (seq e).ram.get! G.gI &&& 1 = 0 := by
+    InCls G (seq e) ∧ (G.needG = true → (seq e).ram.get! G.gI &&& 1 = 0) := by
   have rtOf : ∀ {m : Machine}, RoomCond E r K m → m.ram.get! P.rtI = r.ram.get! P.rtI := by
     intro m hm
     exact ScreenPage.byte_of_ff (hm.bytes _ hrt)
   have key : ∀ d, c + d ≤ e → InCls G (seq (c + d)) ∧
-      (RoomCond E r K (seq (c + d)) ∨ ((seq (c + d)).ram.get! P.rtI ≠ r.ram.get! P.rtI ∧ (seq (c + d)).ram.get! G.gI &&& 1 = 0)) := by
+      (RoomCond E r K (seq (c + d)) ∨ ((seq (c + d)).ram.get! P.rtI ≠ r.ram.get! P.rtI ∧ (G.needG = true → (seq (c + d)).ram.get! G.gI &&& 1 = 0))) := by
     intro d
     induction d with
     | zero => exact fun _ => ⟨hc0, Or.inl h0⟩
@@ -697,7 +748,7 @@ theorem pauseE_run (hF : Facts sy m0 nm₁ d₁ nx₂ nmS) (hrt : ((placesR sy n
     (he : (seq e).ram.get! (placesR sy nmS m0).rtI ≠ (refR m0).ram.get! (placesR sy nmS m0).rtI) :
     SidePause.PauseE sy (SideChangeSound.pauseIdx nx₂) (SidePause.pauseBytesOf nx₂) (seq e) := by
   obtain ⟨⟨t, ht, hm⟩, h2⟩ := pause_run hF.walk hrt next hce h0 (class_of_rows hF.start hin hctl hg) hs hr he
-  exact pauseE_of_class hF.len ht hm h2
+  exact pauseE_of_class hF.len ht hm (h2 rfl)
 
 end
 

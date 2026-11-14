@@ -5,7 +5,7 @@
 **主張.** 操作できるときから数えるフレーム `N`（`N = 32`）までのどのフレームでも（数えるものも数えないものも）、2 つのブロックバッファは操作のときの機械 `m₀` の
 ものと同じで、ジャンプ台のバイトは 0 で、プレイヤーの状態は 0、1、2 のどれかです。なので [本物のフレームでの出だし](a-5-4-OpenFrames-ja.md) のフィールド `st` と
 `spring` はもう仮定ではありません。代わりに、これらのフレームの各命令に 1 つの条件を求めます（`map`、`MapOK`）: 添字やポインタを通った書き込みはプレイヤーの状態、
-ジャンプ台のバイト、ブロックバッファを書かず、ブロックバッファのルーチンの読み出しはブロックバッファの中にある、という条件です。
+ジャンプ台のバイト、ブロックバッファを書かず、ブロックバッファのルーチンの読み出しは最初のブロックバッファの中にある、という条件です。
 
 ブロックバッファは、当たり判定が読む 13 行 16 タイルの 2 つの表です。`B` はその 416 バイトの集合です。操作のときには 5 種類のタイルがあります: 空、地面、
 レンガ、中身のある 2 種類のブロックです。どれもジャンプ台でも、つかまれるタイルでもありません。
@@ -17,7 +17,7 @@
 ```
 MapAt(m)    :=  ∀ d ∈ B,  m(d) = m₀(d)   ∧   js(m) = 0   ∧   st(m) ≤ 2
 MapOK(m)    :=  store:  m の添字やポインタを通った書き込みは st、js、B のバイトを書かない
-                read:   pc(m) = R  →  addr(m) は RAM にあり、そのバイトは B にある
+                read:   pc(m) = R  →  addr(m) は RAM にあり、そのバイトは最初のブロックバッファ（B₁ ⊂ B）にある
 ```
 
 ```
@@ -31,14 +31,15 @@ Lags.mapAt      :  lagCheck,  pauseCheck,  mapCheck,  Lags,  FrameStart(seq 1), 
                    ∀ n ∈ [1, b), ∀ k: MapOK(tr_n(k))   →   ∀ n ∈ [1, b],  MapAt(seq n)
 Real.stSpring   :  確認,  Real（フィールド map あり）,  FrameStart(seq 1),  MapAt(seq 1)
                    →   ∀ t ∈ [1, N],  t < E  →  st(fm t) ∈ {0, 1, 2}  ∧  js(fm t) = 0                     （前のフィールド st と spring）
-フィールド map  :  ∀ n,  1 ≤ n < ix(N),  n < ix(E),  ∀ k:  MapOK(tr_n(k))
+map_reads       :  map_frame の条件   →   フレームの中で NMI が来ない各読み出し R で、∀ d ∈ B,  m(d) = m₀(d)      （R での歩きの 1 歩がそれを求める）
+フィールド map  :  ∀ n,  1 ≤ n ≤ ix(N),  n < ix(E),  ∀ k:  MapOK(tr_n(k))
 ```
 
 ここでの `CleanK` は、操作中のフレームのガードの `PipeWrites.Clean`（フィールド `lags.clean`）に、プレイヤーの状態、ジャンプ台のバイト、`B` の保護を加えたものです。
 これは `Clean` と `MapOK` の書き込みの部分から出ます（`cleanK_of`）。`RdOK` は `MapOK` の読み出しの部分です（`rdOK_of`）。ROM のない定理が使う公理は `propext`、
 `Classical.choice`、`Quot.sound` だけです。`#print axioms route_1_1` に `sorryAx` はありません。
 
-Lean: `Theorems/OpenMap.lean`。`Theorems/OpenFrames.lean` の `StSpring`、`Real.stSpring`、フィールド `Real.map`。`Theorems/Route.lean` の `Run.pipeOpening`、
+Lean: `Theorems/OpenMap.lean`（`map_reads`、`liveT_all` を使う）。`Theorems/OpenFrames.lean` の `StSpring`、`Real.stSpring`、フィールド `Real.map`。`Theorems/Route.lean` の `Run.pipeOpening`、
 `Run.pipeOpenB`。非公開の `Proof/OpenMap.lean`（`open_map_check`、`open_title_map_check`）。
 
 ## しくみ
@@ -85,12 +86,15 @@ Lean: `Theorems/OpenMap.lean`。`Theorems/OpenFrames.lean` の `StSpring`、`Rea
 
 ## 仮定（Lean で証明していないもの）
 
-* **`map`**: フレーム 1 から数えるフレーム `N` までのフレームの各命令の `MapOK`。1 命令ごとの条件です。画面が十分に動いてエリアの読み込みがバッファを書くとき、
-  またはバッファより下を読むときに成り立たなくなります。これらのフレームではどちらも起きません。
+* **`map`**: フレーム 1 から数えるフレーム `N` まで（それも含む）のフレームの各命令の `MapOK`。1 命令ごとの条件です。画面が十分に動いてエリアの読み込みが
+  バッファを書くとき、または最初のバッファの外を読むとき（彼はページ 0 にいるので、読む列は最初のバッファのものです）に成り立たなくなります。これらのフレームでは
+  どちらも起きません。この回から読み出しは最初のバッファの中と求め（前はどちらかのバッファの中）、数えるフレーム `N` のフレームも含めます。
+  [出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md) が両方を使います。
 * **もう仮定でないもの**: `st` と `spring`（1-1-a-5-4-3-3-3）。
-* **証明していないもの**: `flat` と `jump`（1-1-a-5-6、1-1-a-5-7）。これらのフレームのタイルは今は分かっています。足りないのは縦の部分です。歩きはタイルを
-  5 つの値に分けるだけで、読む行と列では分けないので、足の下の地面が見えません。また、空中の高さをフレームからフレームへ追っていません（`vstep` と
-  [ジャンプの高さ](c-2-Jump-ja.md) の弧が与えます。パート c はジャンプの最初の 8 フレームでそうしました）。
+* **もう仮定でないもの**: `flat`（1-1-a-5-4-3-4-1）。番地の分かっているビットでタイルを読む歩きは足の下の地面が見えます。新しいフィールド `ground` とあわせて
+  定理になりました（[出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md)）。
+* **証明していないもの**: `jump`（1-1-a-5-7）。空中の高さをフレームからフレームへ追っていません（`vstep` と [ジャンプの高さ](c-2-Jump-ja.md) の弧が与えます。
+  パート c はジャンプの最初の 8 フレームでそうしました）。
 
 **ファイル.** `Theorems/OpenMap.lean`、`Theorems/OpenFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/OpenMap.lean`。
 

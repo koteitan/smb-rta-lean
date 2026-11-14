@@ -1277,11 +1277,23 @@ def restNames : List (String × Nat × Nat) :=
 def restIdx (nm : Names) : List Nat :=
   restNames.flatMap fun p => (List.range p.2.2).map fun j => ((nm.ad p.1).toNat + p.2.1 + j) &&& 0x7FF
 
+/-- a value of the disassembly in hexadecimal (`$`) or binary (`%`) -/
+def asmValue2 (lines : List String) (n : String) : Option Nat :=
+  (PipeTransitionAll.asmValue lines n) <|> lines.findSome? fun l =>
+    match (l.splitOn "=").map (fun x => (x.splitOn ";").headD "") with
+    | a :: b :: _ =>
+      if a.trimAscii.toString == n then
+        match b.trimAscii.toString.toList with
+        | '%' :: ds => some (ds.foldl (fun v c => 2 * v + (if c == '1' then 1 else 0)) 0)
+        | _ => none
+      else none
+    | _ => none
+
 /-- the names this file needs -/
 def namesOf (text : String) : Names :=
   let ls := text.splitOn "\n"
-  ((["VRAM_Buffer1_Offset", "ScreenLeft_PageLoc", "ScrollLock", "ChangeAreaTimer", "FrameCounter", "GamePauseStatus", "PlayerStatus", "CoinTally", "PlayerScoreDisplay", "GameTimerDisplay", "HalfwayPage", "Hidden1UpFlag", "PseudoRandomBitReg"] ++ roomNames.map (·.1) ++ restNames.map (·.1)).eraseDups).filterMap fun n =>
-    (PipeTransitionAll.asmValue ls n).map (n, ·)
+  ((["VRAM_Buffer1_Offset", "ScreenLeft_PageLoc", "ScrollLock", "ChangeAreaTimer", "FrameCounter", "GamePauseStatus", "PlayerStatus", "CoinTally", "PlayerScoreDisplay", "GameTimerDisplay", "HalfwayPage", "Hidden1UpFlag", "PseudoRandomBitReg", "NoiseSoundQueue", "TimeRunningOutMusic"] ++ roomNames.map (·.1) ++ restNames.map (·.1)).eraseDups).filterMap fun n =>
+    (asmValue2 ls n).map (n, ·)
 
 /-- the references `V` of the condition at the entry, without the bytes `restIdx`, as known bits -/
 def entryW (nm : Names) (V : List (Machine × List Nat)) : List (Machine × List (Nat × UInt8)) :=

@@ -147,6 +147,8 @@ The fields of `ReadFrame(M, i, n₀)`:
 * `before`, `longer`, `far`: as in `Clean`.
 * `collide` (`Collide`): from the scroll handler to the frame's end the speed stays or becomes 0, the subspeed stays, `P` stays or moves by −256 or +256, and +256 only with `v ≤ 0`.
 
+Above ground the frames use `SurfaceRead.frame_readE` ([the frames read from the machines](../1-1/e-2-SurfaceFrames.md#the-frames-read-from-the-machines)): `frame_readR` of `FrameTime` with `CollideE` in place of `Collide`. At the screen's left edge the scroll handler puts him on the edge, so `P` can move by more than 256 there. `CollideE` allows `P(Q) ≤ P(b) ≤ P(M) + 256` with `v ≤ 0`, as `TopSpeed.Frame.impedeP` does. `SurfaceRead.read_move` is the part up to the scroll handler, for the touch's frame.
+
 `modelOK` and `frictionCheck` are checks on the ROM, passed with `native_decide`.
 
 ## What was measured

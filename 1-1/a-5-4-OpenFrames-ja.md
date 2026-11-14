@@ -34,15 +34,16 @@ Real  （t ∈ [1, N],  t < E  の各 t で）:
   cleanK    :  ∀ k,  CleanK_F(tr(t, k))                   （PipeWrites.Clean に城の旗、位置の端数、ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化の保護を
                                                           足したもの。ただし移動のルーチン自身の書き込みは除く。前の cleanK と spare）
   after     :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = PlayerSubs  →  b(t) の hs と P の 8 バイトは tr(t, k) のもの,  ab(b t) = |v(b t)|,  bits(b t) = FF
-  flat      :  ground(t)  ∧  ¬jump(in t)   →   ground(t + 1)
+  ground    :  ground(t)  →  GroundAt(fm t)                （高さは m₀ のもの、高さの上位バイト 1、縦の速さとその端数 0）
   jump      :  ground(t)  ∧  jump(in t)    →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  1 ≤ d < n で ¬ground(t + d),  ground(t + n)
 そして 1 回だけ:
   page      :  N < E  →  page(fm(N + 1)) ≠ 255
-1 ≤ n < ix(N)、n < ix(E) の各フレーム n（数えるものも数えないものも）の各命令で（OpenMap）:
+1 ≤ n ≤ ix(N)、n < ix(E) の各フレーム n（数えるものも数えないものも）の各命令で（OpenMap）:
   map       :  MapOK(tr_n(k))                             （添字やポインタでの書き込みが、プレイヤーの状態、ジャンプ台のバイト、ブロックバッファを書かない。
-                                                          ブロックバッファのルーチンの読み出しはバッファの中）
+                                                          ブロックバッファのルーチンの読み出しは最初のバッファの中）
 
 Real.stSpring :  確認,  Real,  FrameStart(seq 1),  MapAt(seq 1)   →   st(fm t) ∈ {0, 1, 2}  ∧  JumpspringAnimCtrl(fm t) = 0     （前のフィールド st、spring）
+Real.flat     :  確認,  Real,  FrameStart(seq 1),  MapAt(seq 1),  Held(fm t),  ground(t),  ¬jump(in t)   →   ground(t + 1)            （前のフィールド flat。OpenFlat）
 
 air(t)        :=  j − t   （j は [t, N + Zb) で ground(j) となる最初の数えるフレーム。なければ N + Zb）
 Held(m)       :=  ab(m) = |v(m)|  ∧  bits(m) = FF  ∧  AreaType(m) = v₀  ∧  SwimmingFlag(m) = 0  ∧  PlayerChangeSizeFlag(m) = 0
@@ -69,14 +70,15 @@ Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              （Run.pipeO
 `st(t)` は数えるフレーム `t` が始まるときのモデルの状態 `((hs(fm t), air(t)), P(fm t) − P(fm 1))` です。
 
 `Checks` は ROM での確認です。`modelOK`（移動）、`ctrlCheck`（プレイヤーのルーチンまでの歩き）、`afterCheck`（1 フレーム全体の歩き。エリアの種類は `m₀` の `v₀`）、
-`normIdem`、`lens` のどの長さも `Zb` より小さいこと、`Held(m₀) ∧ st(m₀) = 0`、NMI が見るポーズのバイトが `g` であること、アイドルループが自分への `JMP` であることです。
+`normIdem`、`lens` のどの長さも `Zb` より小さいこと、`Held(m₀) ∧ st(m₀) = 0`、NMI が見るポーズのバイトが `g` であること、アイドルループが自分への `JMP` であること、
+地面の上のフレームの歩き（`OpenFlat.flatCheck`、非公開の `open_flat_check`、ネイティブで約 3 秒）です。
 非公開の `open_checks` がこれを出します。はじめの 3 つとアイドルループはパート e の確認（`pole_numbers`）で、地上のエリアの種類は `m₀` のものと同じです。`title_pos_check` は、操作のときの `ab`、`bits`、`st` とエリアの 3 バイトの 6 バイトも `m₀` の値かを
 確かめるようになりました（ネイティブで約 2.2 秒）。`lag_check` は 17 バイトを追うようになりました（ネイティブで約 6 秒）。ROM のない定理が使う公理は `propext`、
 `Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`（`Real.stSpring` が使う）、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
+Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`（`Real.stSpring` が使う）、`Theorems/OpenFlat.lean`（`Real.flat` が使う）、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
 `titlePosCheck`、`Begin.bytesAll₁`、`Theorems/Route.lean` の `Pipe.opening`、`Run.pipeKeep₁`、`Run.pipeHeld`、`Run.pipeOpening`、`Run.pipeOpenB`、非公開の `Proof/OpenFrames.lean`（`open_checks`、`open_left`）、
-`Proof/LagPause.lean`、`Proof/Opening.lean`、`Proof/PipeWrites.lean`。
+`Proof/OpenFlat.lean`、`Proof/LagPause.lean`、`Proof/Opening.lean`、`Proof/PipeWrites.lean`。
 
 ## しくみ
 
@@ -95,7 +97,7 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
 * **フレームからフレームへ.** `after` がフレームの終わりの `ab` と `bits` を出します。1 フレーム全体の歩きと `cleanK` がエリアのバイトを出します（`SurfaceFrames.area_endF`）。
   数えないフレームはこれらのバイトと `hs`、`P` を変えません（`lags_keepI`: `LagFrames` の歩きが 9 バイト多く追います）。なので、操作のときからの帰納法で、どの数えるフレームでも
   `Held` が成り立ちます。
-* **空中.** `air(t) = 0` は `ground(t)` のときだけです。空中では定義から `air(t + 1) = air(t) − 1` です。地面で跳び始めなければ、`flat` から `air(t + 1) = 0` です。
+* **空中.** `air(t) = 0` は `ground(t)` のときだけです。空中では定義から `air(t + 1) = air(t) − 1` です。地面で跳び始めなければ、`Real.flat`（[出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md)）から `air(t + 1) = 0` です。
   跳び始めでは、`jump` が着地 `t + n` を出すので `air(t + 1) = n − 1 ∈ [L_tap − 1, L_hold − 1]` です。モデルの入力は `norm(in t)` です。状態とジャンプのビットは同じで、
   それでの `hstep` も同じです（`normIdem`）。
 * **操作のとき.** `title_pos_check` は、タイトルの集合の近い状態のどれからもどの入力でもフレーム 0 を追います。操作できる終わりのそれぞれで、位置、横の状態、`stI` の
@@ -128,9 +130,11 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
 
 ## 前提（Lean では証明していない）
 
-* `Real` のフィールド: `cleanK`、`map`、`after`、`flat`、`jump`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
+* `Real` のフィールド: `cleanK`、`map`、`after`、`ground`、`jump`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
   その始まりの状態ごとの条件です。`after` は、スクロールの処理からあと何も彼を動かさず、当たりのルーチンが何も見つけないこと（壁も画面の端もない）です。項目 1-1-a-5-6 の横の半分です。
-  `flat` はその縦の半分です（地面から落ちない）。`jump` は項目 1-1-a-5-7 です。
+  `ground` は、地面の上で始まる数えるフレームが地面の高さで縦の速さなしで始まることです。`jump` は項目 1-1-a-5-7 です。
+* もう仮定でないもの（この回）: `flat`（地面から落ちない）。[出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md) の歩きと、新しいフィールド `ground` から定理になりました
+  （`Real.flat`）。`map` の読み出しは最初のブロックバッファの中にあると求め、`map` は数えるフレーム `N` のフレームも含みます。
 * この回から仮定しないこと: `longer`、数えるフレーム 1 から `N` の始まりでの `page`。
 * もう仮定でないもの（この回）: `st` と `spring`。[最初のフレームのブロックバッファ、ジャンプ台、プレイヤーの状態](a-5-4-3-3-3-OpenMap-ja.md) の歩きと、各命令の
   新しいフィールド `map` から定理になりました（`Real.stSpring`）。`spare` は `cleanK` の一部になりました（そのバイトは `cleanK` のガード `FrameKeep.guardF` が
@@ -139,8 +143,8 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
   定理です（`PipeFrames.Lags.unpaused`）。数えるフレームはポーズでなく終わるフレームで、`dP` フレームの中で見つかります（`lags.resume`）。
 * **証明していないこと:** フレーム 368 で入れること（前と同じ）。
 
-**ファイル.** `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`、`Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の
-`Proof/OpenFrames.lean`、`Proof/LagPause.lean`、`Proof/Opening.lean`。
+**ファイル.** `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`、`Theorems/OpenFlat.lean`、`Theorems/PipeFrames.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、`Theorems/Route.lean`、非公開の
+`Proof/OpenFrames.lean`、`Proof/OpenFlat.lean`、`Proof/LagPause.lean`、`Proof/Opening.lean`。
 
 **再現.**
 ```

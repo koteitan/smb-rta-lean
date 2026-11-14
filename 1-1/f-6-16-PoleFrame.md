@@ -4,11 +4,13 @@
 
 **Claim.** On a real frame that touches the pole, the position at the end of the move, before the write of the pole's routine, is at or right of the left end of the pole's range. The proof follows the whole frame of the touch with an abstract machine, from the idle loop before the NMI to the frame's end, as [The side pipe's entry: one whole frame](c-7-16-SideFrame.md) does for the side pipe. The frame is frame `g` of the frames of the run (`PoleJoin.Run.keep`), so its start (`StartK`) and the condition on each instruction (`CleanK`) are what [One whole frame in control](f-6-19-FrameKeep.md) gives.
 
-So the hypotheses `pass` and `pos` of `PoleJoin.Run` are gone, and so are `fm` and `inp`: the touch is now on frame `g` of `keep`. The new hypotheses are `moved` and `edge`, as for the two pipes, and `tiles`, a condition on the byte that a side check reads.
+So the hypotheses `pass` and `pos` of `PoleJoin.Run` are gone, and so are `fm` and `inp`: the touch is now on frame `g` of `keep`. The hypotheses are `moved` and `edge`, as for the two pipes, `tiles`, a condition on the byte that a side check reads, and `posKeep`, a condition on each instruction up to the write.
 
-This round the walk cuts no place. Before, it stopped at the scroll handler's store of the position at the screen's edges and at the routine of the head's collision with a block, and `edge` said that the frame does not come to them before the write. Now the walk follows both. Each makes the walk forget the position, so right after each of them the walk splits the position again, as at the end of the move. `edge` is smaller: if he is in the pole's range right after one of them, he was in it at the end of the move.
+The walk cuts no place. It follows the scroll handler's store of the position at the screen's edges and the routine of the head's collision with a block. The edge store makes the walk forget the position, so right after it the walk splits the position again, as at the end of the move. `edge` says: if he is in the pole's range right after the edge store, he was in it at the end of the move.
 
-`tr(j)` is the machine `j` instructions into the frame of the touch: from `fm g = all(ix g − 1)` with the input `pad g`. `rt(m)` is `GameEngineSubroutine`, `e_f` the pole's routine. `px(m) = 256·page(m) + x(m)` is the position in pixels, `L = 3158` the left end of the pole's range in pixels, `pg = 12` the pole's page, `col` its column. `T_b`, `T_s` are the tiles of the pole's ball and shaft. `w_edge` is the scroll handler's store of the position at the screen's edges, `h` the routine of the head's collision with a block. `a_edge` is the instruction right after the edge store's store of the page, and `a_head` the collision routine's jump to the foot check right after its call of `h`: `again = {a_edge, a_head}`.
+**This round (item 1-1-f-6-18).** The head's routine stores through indexes. Before, the walk forgot the position there and split it again after the routine, and `edge` spoke of the head's routine too. Now the walk's guard protects the position's pixel and page (`GP`), so the walk keeps the position through the head's routine. For this, each instruction up to the write meets `PosAt` (the new field `posKeep`): a store through an index or a pointer to the pixel or the page is one of the move routine's two stores of them, with the index 0. So `edge` speaks only of the edge store. `PosAt` is a condition on one state; the part of `edge` that it replaces spoke of two states.
+
+`tr(j)` is the machine `j` instructions into the frame of the touch: from `fm g = all(ix g − 1)` with the input `pad g`. `rt(m)` is `GameEngineSubroutine`, `e_f` the pole's routine. `px(m) = 256·page(m) + x(m)` is the position in pixels, `L = 3158` the left end of the pole's range in pixels, `pg = 12` the pole's page, `col` its column. `T_b`, `T_s` are the tiles of the pole's ball and shaft. `w_edge` is the scroll handler's store of the position at the screen's edges, `h` the routine of the head's collision with a block. `a_edge` is the instruction right after the edge store's store of the page: `again = {a_edge}`. `xI`, `pI` are the RAM bytes of the pixel and the page, and `ps = {s_x, s_p}` are the move routine's two stores of them (`STA zp,X`, right after its store of the fraction). `X(m)` is the index register.
 
 ```
 WriteStep(n)    :=  rt(tr(n)) ≠ e_f  ∧  rt(tr(n + 1)) = e_f
@@ -17,12 +19,14 @@ SideRead(m)     :=  pc(m) = the instruction after the block buffer routine's rea
 read(m)         :=  the pointer plus Y: the RAM index that the read took
 TileRead(m)     :=  SideRead(m)  ∧  A(m) ∈ {T_b, T_s}   →   read(m) is in the pole's column  ∧  pg ≤ page(m) + 1
 HypT(m)         :=  (pc(m) = PlayerSubs → px(m) < L)  ∧  (pc(m) ∈ again → px(m) < L)  ∧  TileRead(m)
+PosAt(m)        :=  ∀ t,  m stores through an index or a pointer at t  ∧  t < 0x2000  ∧  (t mod 2048 = xI ∨ t mod 2048 = pI)   →   pc(m) ∈ ps  ∧  X(m) = 0
 ```
 
 ```
 no_write_frame      :  frameCheck,  s(j + 1) = step(s(j)) (j ≤ n),  frame(s(j)) ≤ frame(s(0)),  FrameStart(s(0)),
-                       ∀ j ≤ n,  CleanK(s(j)) ∧ HypT(s(j))                                   →   rt(s(n + 1)) ≠ e_f
+                       ∀ j ≤ n,  CleanK(s(j)) ∧ PosAt(s(j)) ∧ HypT(s(j))                     →   rt(s(n + 1)) ≠ e_f
 touch_right_of_left :  poleFrameCheck,  Touches,  StartK(fm g),  ∀ j,  CleanK(tr(j)),
+                       ∀ n,  WriteStep(n) → ∀ j ≤ n,  PosAt(tr(j)),
                        ∀ n,  WriteStep(n) → ∀ j ≤ n,  TileRead(tr(j))  ∧
                                   (pc(tr(j)) ∈ again ∧ L ≤ px(tr(j))  →  ∃ k ≤ n,  pc(tr(k)) = PlayerSubs ∧ L ≤ px(tr(k)))
                        →   ∃ n j,  WriteStep(n) ∧ j ≤ n ∧ pc(tr(j)) = PlayerSubs ∧ L ≤ px(tr(j))
@@ -31,16 +35,16 @@ Run.inRange         :  poleFrameCheck,  Run,  Start(seq 0),  fracCheck,  keepChe
 pole_frame_check (private) :  poleFrameCheck(sy, m₀) = true   (native_decide)
 ```
 
-`P₀ = 256·L` is `poleP`. `posP(m) = 256·px(m) + fraction`. `Run.inRange` takes the frame's start from `FrameKeep.Frames.start` and `CleanK` from `keep.clean` (`Frames.cleanAt`). The theorems without the ROM use the axioms `propext`, `Classical.choice`, `Quot.sound` only.
+`P₀ = 256·L` is `poleP`. `posP(m) = 256·px(m) + fraction`. `Run.inRange` takes the frame's start from `FrameKeep.Frames.start`, `CleanK` from `keep.clean` (`Frames.cleanAt`), and `PosAt` from `posKeep`. The theorems without the ROM use the axioms `propext`, `Classical.choice`, `Quot.sound` only.
 
 ## How it works
 
-**The steps.** The abstract machine is that of `FrameKeep` (`kstep`, `preK`): the steps of `PipeWrites`, with the store of the fraction in the move routine and the sum of its low bits. So the condition on one instruction is `CleanK`, which `keep.clean` asks of every frame up to the touch. The guard is that of `FrameKeep` (`guardK`) with the pole's routine.
+**The steps.** The abstract machine is that of `FrameKeep` (`kstep`, `preK`): the steps of `PipeWrites`, with the store of the fraction in the move routine and the sum of its low bits. The guard is that of `FrameKeep` (`guardK`) with the pole's routine, and with the pixel and the page protected (`GP`): a store with a target not known does not change them. At the move routine's two stores of them the walk needs the index (`kstepT`). If the index is known, the target is known and the step is the machine's. If it is known not to be 0 (another object's move), `PosAt` says that the store does not write them. Otherwise the walk fails; the index is split into 0 and not 0 at the routine's entry (`FrameKeep.splitX`), so this does not happen. So the condition on one instruction is `CleanK`, which `keep.clean` asks of every frame up to the touch, and `PosAt` (`cleanK_GP`, `clean_GP`, `s_kstepT`).
 
 **Pieces at five places.** None changes the machine. The walk only divides a state into pieces.
 
-* **The end of the move (`PlayerSubs`).** Under `px < L` the position is in one of 8 pieces: the page in `{0, …, 7}`, `{8, 9}` or `{10}` (two or more pages before the pole's, the pixel not known); the page 11 (the pixel not known); the page 12 with the pixel in `[0, 63]`, `[64, 79]`, `[80, 83]` or `[84, 85]`. The walk keeps the position through the scroll handler, the bounding box and the head's and the feet's checks.
-* **Right after the edge store and after the head's routine (`again`).** The edge store writes the screen's edge, which the walk does not know. The head's routine stores through indexes, so the walk forgets the bytes outside `Prot_K`. Either way the position is lost. There it is split again into the same 8 pieces. The proof is by contradiction: no arrival at `PlayerSubs` before the write is in the range. So by `edge` he is left of `L` at `again` too.
+* **The end of the move (`PlayerSubs`).** Under `px < L` the position is in one of 8 pieces: the page in `{0, …, 7}`, `{8, 9}` or `{10}` (two or more pages before the pole's, the pixel not known); the page 11 (the pixel not known); the page 12 with the pixel in `[0, 63]`, `[64, 79]`, `[80, 83]` or `[84, 85]`. The walk keeps the position through the scroll handler, the bounding box, the head's and the feet's checks, and the head's routine (with the pixel and the page protected).
+* **Right after the edge store (`again`).** The edge store writes the screen's edge, which the walk does not know. So the position is lost. There it is split again into the same 8 pieces. The proof is by contradiction: no arrival at `PlayerSubs` before the write is in the range. So by `edge` he is left of `L` at `again` too.
 * **The addition in a side check, near the pole.** When the page may be 11 or 12, the pixel is split into its values. Then the column of the read and the block buffer are known.
 * **The mask of the height in a side check, near the pole.** The high bits of the sum of the height and the adder are split. Then the row of the read is known.
 * **After the read of a side check.** If the page is at most 10, or the place read is known and is not in the pole's column, `TileRead` says that the byte read is not a pole tile. The byte is split into pieces that differ from `T_b` at a bit where `T_b` and `T_s` agree (`PoleEntryRule.tilesCover`).
@@ -51,7 +55,7 @@ pole_frame_check (private) :  poleFrameCheck(sy, m₀) = true   (native_decide)
 
 **Why `TileRead` and not `TilesOK`.** The old hypothesis `TilesOK` spoke of the bytes of the block buffers. A small Mario at a height of `0xD8` or more reads the row 13 in a side check. On an odd page that is past the end of the second block buffer, in the buffer of the column being drawn, which can hold the pole's tiles. The old `Pass` excluded this with `RowOK`. `TileRead` speaks only of the byte that a side check has read, wherever it is. On real frames no side read was outside the block buffers (below).
 
-**Size.** 8,150,212 steps, 840,404 forks (with the pieces), 0 failures, table 333,418. The search takes 17 s, the check 40 s as a program. With the two places cut (the last round) it was 8,075,357 steps, 833,579 forks and a table of 326,976: following them costs 1 %. A first version with the pieces of `SideEntryRule` failed 791,304 times: the two pole tiles differ in one bit, so its piece for that bit holds the shaft's tile.
+**Size.** 8,490,979 steps, 859,283 forks (with the pieces), 0 failures, table 352,579. The search takes 22 s, the check 51 s as a program, 56 s in the private build. With the position split again after the head's routine (the last round) it was 8,150,212 steps, 840,404 forks and a table of 333,418 (17 s, 40 s, 45 s in the build): keeping the position costs 6 % more states. With the two places cut (two rounds ago) it was 8,075,357 steps, 833,579 forks and a table of 326,976. A first version with the pieces of `SideEntryRule` failed 791,304 times: the two pole tiles differ in one bit, so its piece for that bit holds the shaft's tile.
 
 ## On real frames
 
@@ -70,9 +74,10 @@ A program (`pole-frame-check FM2 1200`, exit 0, bad 0). The runs of [Touching th
 | random inputs from the movie's frames 1002 to 1091 (1,200 runs) | 137,055 | 521,670 | 675 |
 
 * Every frame in control meets `StartK`; every instruction meets `CleanK`; every read of a side check meets `TileRead`; no read of a side check is outside the block buffers.
-* Every touch (4,665): no edge store and no head's routine before the write, one arrival at `PlayerSubs` before it, the position there at or right of `L` (3158 to 3161 and 3174 to 3177), and the position there is the frame's start moved by the speed there (`P₂ = P + 16·v₂`, `moved`). So `edge` holds on every touch.
-* 1,361 frames in control come to a place of `again`: 1,095 after the edge store (all in the random runs, the largest position there 3050) and 266 after the head's routine. None is in the range there unless it was in the range at the end of the move. The head's routine never changed the position.
-* Near the pole the head's routine came only in the runs with the position overwritten near the pole's column: 264 times, on the pole's page or the one before. 210 of them are in the range, each already in the range at the end of the move. In the movie it came twice, on the page 10. So near the pole the head's routine can be reached from some states, and `edge` does not need to exclude it.
+* Every instruction of every frame in control meets `PosAt`, not only up to the write of a touch: 382,304 stores through an index to the pixel or the page, each at one of the move routine's two stores with the index 0 (2 in each frame in control: the player's move).
+* Every touch (4,665): no edge store and no head's routine before the write, one arrival at `PlayerSubs` before it, the position there at or right of `L` (3158 to 3161 and 3174 to 3177), and the position there is the frame's start moved by the speed there (`P₂ = P + 16·v₂`, `moved`). Before the write each touch has 2 stores through an index to the position, the player's move. So `edge` and `posKeep` hold on every touch.
+* 1,361 frames in control come to the edge store or the head's routine: 1,095 after the edge store (all in the random runs, the largest position there 3050) and 266 after the head's routine. None is in the range there unless it was in the range at the end of the move. The head's routine never changed the position.
+* Near the pole the head's routine came only in the runs with the position overwritten near the pole's column: 264 times, on the pole's page or the one before. 210 of them are in the range, each already in the range at the end of the move. In the movie it came twice, on the page 10. So near the pole the head's routine can be reached from some states. The walk now follows it with the position known, and no hypothesis needs to exclude it.
 
 ## Why `moved` stays (item 1-1-f-6-18)
 
@@ -94,7 +99,8 @@ Part c removed its `movedE`: it reads `P(E)` at the end of the entering frame, a
 ## Hypotheses (not proved in Lean)
 
 * **`tiles`**: `TileRead` up to the write. The code that draws the pole's column into the block buffers is not followed.
-* **`edge`**: up to the write, if he is in the pole's range right after the edge store or after the head's routine, he was in it at the end of the move. That is, these two do not bring him into the range. Before this round: no `w_edge` and no `h` up to the write (as for the two pipes); that implies the new form. On the real frames above the head's routine never changed the position, but the walk cannot see that: its stores through indexes make the walk forget. By the code, the edge store at the right edge moves him left; at the left edge it puts him at the screen's left edge, so there `edge` says that the screen's left edge is not in the pole's range. None of this is proved.
+* **`posKeep`** (new): `PosAt` on each instruction up to the write. It is what lets the walk keep the position through the head's routine. It is not proved: the walk does not follow where the stores through an index point.
+* **`edge`**: up to the write, if he is in the pole's range right after the edge store, he was in it at the end of the move. That is, the edge store does not bring him into the range. Last round it spoke of the edge store and of the head's routine; two rounds ago it was: no `w_edge` and no `h` up to the write (as for the two pipes). Each older form implies the newer `edge`; `posKeep` is new. By the code, the edge store at the right edge moves him left; at the left edge it puts him at the screen's left edge, so there `edge` says that the screen's left edge is not in the pole's range. None of this is proved: the walk does not know the screen's edges.
 * **`moved`**: `P₂(g)` is `posP` at `PlayerSubs` before the write: part of making the frame model from the real frame, as for the two pipes.
 * `touches`, and the frames of `keep` (their own hypotheses).
 

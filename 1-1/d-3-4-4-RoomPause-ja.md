@@ -27,7 +27,7 @@ pauseE_run      :  c = b₁ から e = a₂ までこれらすべて  →  Pause
 道筋では（`Route.ChangesK.pause₂`）:
 
 ```
-pauseBits₂ : g(seq b₁) & 0x7E = 0                    （新しいフィールド）
+pauseBits₂ : g(seq b₁) & 0x7E = 0                    （定理 ChangesK.pauseBits₂、1-1-b-3-10）
 Room(seq b₁)                                            （ChangesK.roomAt、前と同じ）
 InRowsT(seq b₁), ctl(seq b₁)                            （最初の切り替えの行、前と同じ）
 ∀ n ∈ [b₁, a₂):  ∀ j, SiteOK(trₙ(j))                    （chg.roomSites、前と同じ）
@@ -79,10 +79,12 @@ Lean: `Theorems/RoomPause.lean`（`Reg`、`keep0`、`baseS`、`eraseKeeps`、`ke
 
 ## 仮定（Lean で証明していないもの）
 
-* **部屋で最初に操作できるときのポーズのバイトのビット 1 から 6**（`chg.pauseBits₂`、1-1-d-3-4-4）。新しい仮定です。ポーズのルーチンはポーズのバイトを、ビット 0 を反転してビット 7 を立てた値か、ビット 7 を消した値でしか書かないので、これらのビットはゲームの始まりのあと変わりません。これは証明していません。縦の土管の入口の条件はこれらのビットを知っています（`PipeChangeEnd.entryMasks`）が、出口の状態はポーズのバイトのビット 0 しか残しません（`SideChangeEnd.exitStarts`）。そのため部屋への切り替えの行はこれらを知りません。出口の状態がこれらを残せば、確認 `startCheck` がそれを求められ、このフィールドはなくなります。
+* 部屋で最初に操作できるときのポーズのバイトのビット 1 から 6 は、もう仮定しません。11 回目に最初の切り替えの出口の状態がビット 0〜6 を残すようになり、定理 `ChangesK.pauseBits₂` になりました（[部屋で最初に操作できるときのポーズのバイト](b-3-10-PauseBits-ja.md)、1-1-b-3-10）。
 * 部屋の各命令の `SiteOK`（`chg.roomSites`）と、最初の切り替えの行の条件（パート b）は前と同じです。
 
-**ファイル.** `Theorems/RoomPause.lean`。非公開の確認は `Proof/RoomPause.lean`（`Main.lean` の `genRoomPause`）。
+**11 回目.** 区間 `Reg` に既定値つきのフィールドを 2 つ加えました。[部屋のフレームを通る音楽のバイト](d-2-5-1-RoomMusic-ja.md) が使います。`keepB`（表のバイトのうち、部屋の条件が知るので忘れたあとも残すビット）と `needG`（部屋を出るフレームは、ポーズのバイトのビット 0 が 0 とわかって終わる）です。区間の外の 1 ステップも、そう書いた表の状態がどれも表の状態に入るなら、表のバイトを書けます（`StepWrites.writeOK`）。既定値ではポーズの確認は前と同じで、通ります。
+
+**ファイル.** `Theorems/RoomPause.lean`。非公開の確認は `Proof/RoomPause.lean`（`Main.lean` の `genRoomMusic`。音楽の確認も書きます。`startCheck` は `RoomMusic.startBoth` から出ます。これは時間の行を 1 回作って両方に使います）。
 
 **再現.**
 ```

@@ -2,7 +2,7 @@
 
 # Above ground: the frames from control, one by one
 
-**Claim.** [From control to the castle](f-5-PoleJoin.md) assumed the statements about a whole run `model`, `hit`, `stop`, `box`, `off`, `next`, `startP`, `startV`. They are theorems now. The assumptions that stay are about one frame. On frames 1 to 8 the vertical step (`vstep`) is a theorem on real machines too; what stays there is that the frame after the scroll handler keeps the vertical bytes. The part of each frame from its start to the player's routine is a theorem now: a walk of that part ([`CtrlKeep`](#the-frame-up-to-the-players-routine)) shows that it keeps 25 bytes and comes to the routine in the state the movement needs. So the fields `vBefore`, `Moves.at_ctrl`, `Moves.before`, `Moves.bits` are gone. The frame's two ends are theorems too, from conditions on one machine or one frame: a counted frame ends with the game not paused, so it comes to the player's routine (`Moves.arrive` is gone, new: `unpaused`); a frame not counted does not come to the player's routine, so it keeps the 25 bytes (`Moves.lag` is gone). A walk of the rest of the frame, from the player's routine to the frame's end ([below](#the-whole-frame-from-the-players-routine-to-its-end)), now shows that a frame that comes to the routine ends not paused, and that every frame in control keeps the area's type, the swimming flag and the change of size. So that a frame not counted does not come to the routine is a theorem (`OnFrames.lagNo`; new: `lagPaused`, a frame not counted ends paused), and so are three of the values of `state`. The new condition on each instruction is `spare`: no store through an index or a pointer writes these four bytes. The frames are those of the field `keep` of `Run` ([One whole frame in control](f-6-19-FrameKeep.md)), so the field `ends` is gone too. A frame where the side he presses is masked is a theorem too: the field `masked` is gone. Two more conditions of `moves` are theorems now ([The frame's time and the position's range](#the-frames-time-and-the-positions-range)): the frame does not end during the movement (`Moves.longer` is gone; it follows from the walks of the movement and the condition `time` of `CleanK`), and the position is far from the ends of its range (`Moves.far` is gone; it follows from the position at control and the frames before, which follow `hstep`). `startP`, `startV` are proved on real machines. They come from the last row of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). The conditions are those of that change, and that `left` is not 0 before control. Two more parts of `moves` are theorems now. `state.prevA` is gone: every frame in control keeps bit 7 of A and B of the frame before equal to that of A and B (`OnFrames.prevAll`, [below](#a-and-b-of-the-frame-before)). The fields `md` and `rs` of `After` are gone, and its `stored` is now `storedQ`, a condition on the machine at the scroll handler: the moving direction, the running speed and the stored speed at the frame's end are those at the scroll handler (`AfterKeep.keepH`, [below](#after-the-scroll-handler-three-bytes)). The new condition on each instruction is `spareE`: no store through an index or a pointer writes these five bytes. The field `storedQ` of `After` is gone too: the stored speed at the scroll handler is `|v|` there (`MovesAt.stored`, [below](#the-stored-speed-at-the-scroll-handler)). `ImposeFriction` stores it, the walks of `FrameModel.stored_path` follow it to the scroll handler, and the frame comes there once after the player's routine (`AfterKeep.subs_once`). New: the check `storedOK` in `numbersCheck`, and `TopSpeed.frictionCheck` (the field `fric` of `SurfaceRun.Statement`).
+**Claim.** [From control to the castle](f-5-PoleJoin.md) assumed the statements about a whole run `model`, `hit`, `stop`, `box`, `off`, `next`, `startP`, `startV`. They are theorems now. The assumptions that stay are about one frame. On frames 1 to 8 the vertical step (`vstep`) is a theorem on real machines too; what stays there is that the frame after the scroll handler keeps the vertical bytes. The part of each frame from its start to the player's routine is a theorem now: a walk of that part ([`CtrlKeep`](#the-frame-up-to-the-players-routine)) shows that it keeps 25 bytes and comes to the routine in the state the movement needs. So the fields `vBefore`, `Moves.at_ctrl`, `Moves.before`, `Moves.bits` are gone. The frame's two ends are theorems too, from conditions on one machine or one frame: a counted frame ends with the game not paused, so it comes to the player's routine (`Moves.arrive` is gone, new: `unpaused`); a frame not counted does not come to the player's routine, so it keeps the 25 bytes (`Moves.lag` is gone). A walk of the rest of the frame, from the player's routine to the frame's end ([below](#the-whole-frame-from-the-players-routine-to-its-end)), now shows that a frame that comes to the routine ends not paused, and that every frame in control keeps the area's type, the swimming flag and the change of size. So that a frame not counted does not come to the routine is a theorem (`OnFrames.lagNo`; new: `lagPaused`, a frame not counted ends paused), and so are three of the values of `state`. The new condition on each instruction is `spare`: no store through an index or a pointer writes these four bytes. The frames are those of the field `keep` of `Run` ([One whole frame in control](f-6-19-FrameKeep.md)), so the field `ends` is gone too. A frame where the side he presses is masked is a theorem too: the field `masked` is gone. Two more conditions of `moves` are theorems now ([The frame's time and the position's range](#the-frames-time-and-the-positions-range)): the frame does not end during the movement (`Moves.longer` is gone; it follows from the walks of the movement and the condition `time` of `CleanK`), and the position is far from the ends of its range (`Moves.far` is gone; it follows from the position at control and the frames before, which follow `hstep`). `startP`, `startV` are proved on real machines. They come from the last row of [The last frames of the change out of the side pipe](d-2-3-SideChangeEnd.md). The conditions are those of that change, and that `left` is not 0 before control. Two more parts of `moves` are theorems now. `state.prevA` is gone: every frame in control keeps bit 7 of A and B of the frame before equal to that of A and B (`OnFrames.prevAll`, [below](#a-and-b-of-the-frame-before)). The fields `md` and `rs` of `After` are gone, and its `stored` is now `storedQ`, a condition on the machine at the scroll handler: the moving direction, the running speed and the stored speed at the frame's end are those at the scroll handler (`AfterKeep.keepH`, [below](#after-the-scroll-handler-three-bytes)). The new condition on each instruction is `spareE`: no store through an index or a pointer writes these five bytes. The field `storedQ` of `After` is gone too: the stored speed at the scroll handler is `|v|` there (`MovesAt.stored`, [below](#the-stored-speed-at-the-scroll-handler)). `ImposeFriction` stores it, the walks of `FrameModel.stored_path` follow it to the scroll handler, and the frame comes there once after the player's routine (`AfterKeep.subs_once`). New: the check `storedOK` in `numbersCheck`, and `TopSpeed.frictionCheck` (the field `fric` of `SurfaceRun.Statement`). The frames `fr` are no longer data of `Run`: they are a definition on the machines of `keep` (`SurfaceFrames.frOf`, [below](#the-frames-read-from-the-machines)), so the field `reads` is gone. Each frame before the touch is proved to be a `TopSpeed.Frame` that starts and ends at the machines, from conditions on one frame or one machine. New: `state` on every frame (it was `Moves.state`, on the clean frames up to `T`), `coll`, `collide` and `farLate`. `collide` speaks of the same part of the frame as `After`, so `After` is smaller now (`AfterR`): its subspeed and the frames that move left or not at all at the scroll handler come from `collide`.
 
 The unit is 1/256 px. `seq j` is the machine at the end of the counted frame `j`. `seq 0` is the machine at control. `B.m` is the machine at control that the private proof holds.
 
@@ -42,6 +42,10 @@ After(a, Q, b)     : f, fd of b are those of Q
                      ∧ ( (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = FF)
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
+AfterR(a, Q, b)    : fd of b is that of Q                                             what After asks beyond CollideE (the field after of Moves)
+                     ∧ ( 0 < v(Q)  →  (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) ∈ {FF, noLeft})
+                                      ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
+After.of           : AfterR(a, Q, b) ∧ CollideE(a, Q, b) ∧ P(Q) = P(a) + 16·v(Q)  →  After(a, Q, b)
 AfterK(a, Q, b)    : After(a, Q, b) ∧ md, RunningSpeed, abs of b are those of Q        the three bytes are a theorem (AfterKeep.keepH)
                      ∧ abs(Q) = |v(Q)|                                                a theorem (MovesAt.stored)
 
@@ -50,7 +54,7 @@ MovesAt(a, M, x, n₀) : AtCtrl0(R)                                  the state a
                        ∧ bits(R) = bits(a)                             nor the collision bits
                        ∧ frame(R) = frame(M)                           the routine comes in the frame of M (Arrive)
                        ∧ ∀ n, pc(trM(n)) ≠ idle → fdot(trM(n)) ≤ dotsPerFrame − 64     the condition time of CleanK
-                       ∧ idleAt(idle) ∧ far(a) ∧ after                 the idle loop is a JMP to itself; far, after below
+                       ∧ idleAt(idle) ∧ far(a) ∧ after ∧ collide       the idle loop is a JMP to itself; far below; AfterR and CollideE at each Q
                        ∧ keepH                                         md, RunningSpeed, abs at the frame's end are those at each Q (AfterKeep.keepH)
                        ∧ stored                                        abs(Q) = |v(Q)| at each Q (storedQ_of)
 
@@ -61,12 +65,11 @@ AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ hChec
 
 Arrive(M, x, n₀)   : pc(trM(n₀)) = PlayerCtrlRoutine, in the frame of M, and no instruction before n₀ is there
 
-Moves(a, M, x, n₀) : state    CtlState(a)
-                     after    After(a, Q, b) at every Q at the scroll handler
+Moves(a, M, x, n₀) : after    AfterR(a, Q, b) at every Q at the scroll handler    (state is the field state of OnFrames now)
 far(a)             : 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
 
 Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Arrive(M, x, n₀) ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ AreaOK(v, a) ∧ v ∈ {1, 2, 3}
-                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ Moves  →  MovesAt
+                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ Moves  →  MovesAt
 at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  ∃ Q at the scroll handler, hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ AfterK(a, Q, b)
 one_of_moves  : modelOK ∧ MovesAt ∧ ¬Masked  →  Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)
 at_subsM      : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  ∃ Q at the scroll handler, (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
@@ -84,9 +87,11 @@ one_of_frames : OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ AreaRun(v) ∧ Cl
 The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`. `fm`, `pad` are those of `keep`.
 
 ```
-reads    : 1 ≤ j ≤ g   →  v, f, P at the start of fr j are those of seq (j − 1)
-           1 ≤ j < g   →  v', f', P' at the end of fr j are those of seq j
-moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)
+state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       (it was Moves.state, on the clean frames up to T)
+coll     : 1 ≤ j ≤ g   →  bits(seq (j − 1)) ∈ collBits = {noLeft & noRight, noLeft, noRight, FF}
+collide  : 1 ≤ j < g, Q at the scroll handler  →  CollideE(seq (j − 1), Q, seq j)
+farLate  : 1 ≤ j ≤ g, farN(B.m) ≤ j − 1  →  2048 ≤ P(seq (j − 1)) ∧ P(seq (j − 1)) + 2048 < 2²⁴
+moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves is now AfterR at every Q
 vAfter   : 1 ≤ j < J, j < g, Q at the scroll handler  →  at seq j the vertical bytes and A are those of Q
 box      : 1 ≤ j < J, j < g, Q at the scroll handler  →  from Q to seq j the collision routine does what it does
            on B.m at (pix P(Q), y, w, vy, st)          (y, vy, st) is vstep's result, w stands for the speed's sign
@@ -117,6 +122,9 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `step`: every clean frame is a `OneFrame` | `moves` (the frame outside the movement), `ends` |
 | `masked`: a frame with the pressed side masked is a `OneFrame` | theorem `one_of_movesM` (from `moves` and `FrameModel.move_masked`). New: `Moves.bits`; `Moves.at_ctrl` is `AtCtrl0`, with no condition on the mask |
 | `reads`: `v₂(fr j) = v₂` | gone. `box` is on the real machines `Q` and `seq j`, so the frame's `v₂` is not needed |
+| `reads`: the frames `fr` (data of `Run`) start and end with the bytes of `seq` | gone: `fr` is the definition `frOf` on the machines, and `OnFrames.reads` proves it. New: `state` on every frame, `coll`, `collide`, `farLate` ([below](#the-frames-read-from-the-machines)) |
+| `Moves.state`: `CtlState` at the end of the frame before, on the clean frames up to `T` | the field `state` of `OnFrames`, on every frame up to the touch: `frOf` needs it on every frame |
+| `After.f`, and `After.coll` when `v(Q) ≤ 0` | theorem `After.of`, from `collide` and the move. `Moves.after` is now `AfterR`: the facing, and `coll` when `v(Q) > 0` |
 | `box` on `fr j` | `box` on the real machines, from the scroll handler |
 | `Moves.input`: the routine reads `readIn(a, b)` | gone. The model's input is the one the routine reads |
 | `vert`: frames 1 to 8 follow `vstep` | theorem `vert_of`. New: `vBefore`, `vAfter` (the frame outside the movement routine keeps the vertical bytes) |
@@ -288,11 +296,61 @@ storedQ_of  : modelOK ∧ frictionCheck ∧ storedOK ∧ AtCtrl0(R) ∧ Clean(a)
 * **Conditions.** `AtFrame(R)` needs `|v(R)| ≤ v_top` and the collision bits in `TopSpeed.collBits`. Both come from `Clean(a)`: `inD`, and the bits `FF` or `noLeft`. `frictionCheck` is the check of [Top speed](../0-0/0-1-TopSpeed.md). It takes about 55 s natively, and the private proof has it already (`top_frictionCheck`). So it is passed in, as the field `fric` of `SurfaceRun.Statement`, and not computed again.
 * **Numbers.** `storedOK`: 4608 cases, 0 failures, 357 ms in a program. It is a part of `numbersCheck` (`Numbers.storedW`).
 
+## The frames read from the machines
+
+`fr j` used to be data of `Run`, and the field `reads` said that it starts with the bytes of `seq (j − 1)` and ends with those of `seq j`. So `reads` held a claim that was not written: each real frame is a `TopSpeed.Frame`. Now `fr` is a definition (`SurfaceFrames.frOf`, `Run.fr`), and that claim is proved from conditions on one frame or one machine.
+
+```
+CollideE(M, Q, b) : (v(b) = v(Q) ∨ v(b) = 0) ∧ f(b) = f(Q)
+                    ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
+ReadH(M, x, n₀)   : modelOK ∧ frictionCheck ∧ AtFrame(R) ∧ the 8 horizontal bytes of R are those of M ∧ InTime ∧ far(M)
+ReadE(M, x, n₀)   : ReadH(M, x, n₀) ∧ CollideE(M, Q, b) at every Q at the scroll handler
+frameE(a, M, x, n₀) = the Frame of frame_readE with the start of a,   if ReadE and M has the horizontal bytes of a
+                      a frame that stops at the start of a,             else
+frameH(a, M, x, n₀) = the Frame of read_move with the start of a,     if ReadH and M has the horizontal bytes of a
+                      (it ends at the scroll handler: v' = v₂, f' = f₂, P' = P₂)
+                      a frame that stops at the start of a,             else
+frOf j = frameE(seq (j − 1), fm j, pad j, arr j)    for j < g
+         frameH(seq (j − 1), fm j, pad j, arr j)    for j ≥ g
+farN(m) = min(⌊(P(m) − 2048) / (16·v_top + 256)⌋, ⌊(2²⁴ − 2049 − P(m)) / (16·v_top)⌋)          745 for B.m
+```
+
+`AtFrame(R)` is the state at the player's routine as `FrameModel.frame_read` needs it: `AtCtrl0` without the stored speed, with the collision bits in `collBits` and `|v| ≤ v_top`. `InTime` is the frame's time ([`FrameTime`](c-7-1-1-FrameTime.md)), which the condition `time` of `CleanK` gives.
+
+```
+read_move         : ReadH(M, x, n₀)  →  a Frame with v, f, P of M, and some k ≥ n₀ at the scroll handler with v₂, f₂, P₂ those of trM(k)
+frame_readE       : ReadE(M, x, n₀)  →  a Frame with v, f, P of M, v', f', P' of the frame's end, and P₂ − 256 ≤ P'
+OnFrames.readH    : 1 ≤ j ≤ g ∧ |v(seq (j − 1))| ≤ v_top ∧ far(seq (j − 1))  →  ReadH(fm j, pad j, arr j) ∧ fm j has the horizontal bytes of seq (j − 1)
+OnFrames.readAll  : ∀ d < g,  |v(seq d)| ≤ v_top  ∧  (d < farN(B.m)  →  P(B.m) − (16·v_top + 256)·d ≤ P(seq d) ≤ P(B.m) + 16·v_top·d)
+OnFrames.reads    : Reads(g, seq, frOf)                                   (the old field reads)
+OnFrames.touchMove: P₂(frOf g) and v₂(frOf g) are P and v at some arrival k ≥ arr g at the scroll handler
+```
+
+* `frame_readE` is `FrameModel.frame_readR` with `CollideE` in place of `Collide`. `Collide` asks `P(b) = P(Q) + 256` in its third case. At the screen's left edge the scroll handler puts him on the edge, and `P(b) − P(Q)` can be 512 ([The screen's left edge](#the-screens-left-edge)). `CollideE` allows this, as `TopSpeed.Frame.impedeP` does, and asks `P(Q) ≤ P(b)`: the edge pushes him right, not left.
+* `readH`: the walk of `CtrlKeep` (`ctrl_keep`) keeps the 25 bytes of `keepA` up to the routine, and the `lag` frames keep them too (`OnFrames.lagKeep`, now on every frame up to the touch). The area's values come from `AreaRun`. `state` and `coll` give the rest of `AtFrame`.
+* `readAll`: induction over the frames. At control `v = 0`. Each frame before the touch is `frameE` with `ReadE`. So `Frame.bound` keeps `|v'| ≤ v_top`. The frame moves him at most `16·v_top` right, and at most `16·v_top + 256` left (`P' ≥ P₂ − 256 = P + 16·v₂ − 256`). So on the first `farN` frames the position stays away from both ends of its range. Past `farN` frames this is `farLate`.
+* `reads`: the start is that of `seq (j − 1)` by the definition. The end of a frame before the touch is that of `frame(fm j, pad j)`, which is `seq j` (`keep.ends`), by `frame_readE`.
+* The touch's frame `g` does not end as a `Frame` ends: the touch moves him. `frOf g` is the frame up to the scroll handler. `touchMove` says that `P₂(g)` is the position at an arrival at the scroll handler. The field `moved` of `Run` (part f) says that every arrival before the routine's write has this position.
+
+**Measured.** `surface-read-check FM2 200` (a program, exit code 0, about 2 minutes 15 seconds of CPU). On each counted frame, from the end of the counted frame before: `state`, `coll`, `|v| ≤ v_top`, `far`, that the `lag` frames keep the 25 bytes, `AtFrame` at the routine, the horizontal bytes up to the routine, the frame's time, an arrival at the scroll handler, and on the frames before the touch `CollideE` at every arrival at the scroll handler. The last frame of a run, which ends out of control (the touch or a death), is checked as the touch's frame: all but `CollideE`.
+
+| Run | counted frames | `lag` | last frames | fails | `CollideE` but not `Collide` | largest move right, left |
+|---|---:|---:|---:|---:|---:|---|
+| TAS from 852 | 240 | 0 | 1 | 0 | 0 | 640, −224 |
+| random from control (200 runs) | 53,724 | 0 | 94 | 0 | 2 | 640, −592 |
+| random from the TAS's frames | 32,715 | 0 | 65 | 0 | 0 | 640, −640 |
+| with Select, with Start | 28,689 | 8,070 | 91 | 0 | 3 | 640, −592 |
+| running to the left edge | 53,398 | 0 | 130 | 0 | 13 | 640, −640 |
+| the late touch, the long jump | 34 | 0 | 1 | 0 | 0 | 640, −16 |
+
+The position at control is 669696 (`B.m` and the TAS), and `v_top = 40`. So `farN(B.m) = ⌊667648 / 896⌋ = 745`: `farLate` speaks only of frames 746 and later after control. The TAS touches the pole on frame 240.
+
 ## The statements about the whole run are theorems
 
 ```
 step_of_one       : Clean(a) ∧ OneFrame(a, b)  →  (Follow(a, b) ∧ Clean(b)) ∨ Hit(a, b)
-next_of_reads     : reads  →  ∀ j ∈ [1, g), Next(fr j, fr (j + 1))
+OnFrames.reads    : OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ AreaRun(v) ∧ v(seq 0) = 0 ∧ P(seq 0) = P(B.m)  →  Reads(g, seq, frOf)
+next_of_reads     : Reads(g, seq, fr)  →  ∀ j ∈ [1, g), Next(fr j, fr (j + 1))
 quiet_upto        : 1 ≤ j < J, j < g  →  frames 1..j are Follow ∧ seq 0..j are Clean ∧ bits(seq j) = FF
                                          ∧ frames 1..j are vNext ∧ seq 0..j are HaltOK
 surface_of_frames : OnFrames ∧ Start(B, seq 0) ∧ (∀ n < ix g, StartK(all n)) ∧ noHitCheck ∧ numbersCheck ∧ J ≤ T
@@ -305,7 +363,7 @@ Run.next, Run.startP, Run.startV                                 PoleJoin
 | `model`: `P'(j) ≤ P_A + d(w)` for `j < h` | theorem | `one_of_frames`. `w` is the list of `inp j`, `h` the first frame that is not `Follow ∧ Clean` |
 | `hit`, `stop` | theorem | `Hit` in `OneFrame` |
 | `box`, `off`: no hit before `J` | theorem (`Surface.first : J ≤ h`) | `box`, `vert_of`, `moves`, the bound on the distance (`dist_abs`), the search of the height (`vCheck`) |
-| `next` | theorem | `reads`. Both ends are read from the same machine |
+| `next` | theorem | `OnFrames.reads`. Both ends are read from the same machine |
 | `startP`, `startV` | theorem | `Start`. Next section |
 | `mem`, `long` | theorem | `inAt_mem`, how `w` is made |
 
@@ -382,7 +440,7 @@ So frame 1 alone closes. It is one frame of 233, and the states grow on the next
 
 ## The player's state and the jumpspring (not proved)
 
-`Moves.state` asks two values at the end of the frame before: `Player_State` ∈ {0, 1, 2} and `JumpspringAnimCtrl` = 0. These are the stores that write them in a frame in control before the touch (with `noStore`: no store to the routine, the mode or the task by its address).
+`state` (it was `Moves.state`) asks two values at the end of the frame before: `Player_State` ∈ {0, 1, 2} and `JumpspringAnimCtrl` = 0. These are the stores that write them in a frame in control before the touch (with `noStore`: no store to the routine, the mode or the task by its address).
 
 * The jumpspring byte: only `ChkForLandJumpSpring` makes it not 0. The foot check calls it on the path that lands him (`LandPlyr`), and it stores when the tile there is one of the two jumpspring tiles. The jumpspring object's code writes the byte only when it is not 0.
 * The state 3 (climbing): only `PutPlayerOnVine`. The side check of the collision routine comes to it (`HandleClimbing`) when a side point in the middle part of a tile is a climbing tile that is not the flagpole's. The flagpole's tile stores the routine as well, so that frame is the touch. The climbing tests of the foot check and of the head check store no state. The other stores of 3 are in the routines of the area's start, of the vine's entrance and of the climb up the vine, not in the player's control. The other stores of the state in such a frame write 0, 1 or 2 (a jump 1; the collision routine 0, 1, 2; a platform 0). The stores of a power-up and of a hit write the routine too, so `noStore` cuts them.
@@ -399,23 +457,28 @@ Measured on real frames (`spring-real FM2 100`: the movie from 852 and own runs 
 
 ## Assumptions (not proved in Lean)
 
-* `moves`: the frame outside the movement. Up to the player's routine it is proved (`ctrl_keep`) from the frame's start in control and `CleanK`, and so are the arrival at the routine and that the frames not counted keep the 25 bytes; that the frame does not end during the movement (from `CleanK`) and that the position is far from the ends (from the frames before) are proved too, and so are bit 7 of A of the frame before (`OnFrames.prevAll`) and three bytes after the scroll handler (`AfterKeep.keepH`). The stored speed at the scroll handler is proved too (`MovesAt.stored`). What stays: the values at the end of the frame before (`state`: the player's state and the jumpspring) and `After` (`f`, `fd`, `coll`). The movement is proved ([`FrameModel`](../0-0/0-3-2-FrameModel.md)), also with the pressed side masked.
+* `moves`: the frame outside the movement. Up to the player's routine it is proved (`ctrl_keep`) from the frame's start in control and `CleanK`, and so are the arrival at the routine and that the frames not counted keep the 25 bytes; that the frame does not end during the movement (from `CleanK`) and that the position is far from the ends (from the frames before) are proved too, and so are bit 7 of A of the frame before (`OnFrames.prevAll`) and three bytes after the scroll handler (`AfterKeep.keepH`). The stored speed at the scroll handler is proved too (`MovesAt.stored`). What stays: `After` (`f`, `fd`, `coll`). The values at the end of the frame before are the field `state` now. The movement is proved ([`FrameModel`](../0-0/0-3-2-FrameModel.md)), also with the pressed side masked.
 * `unpaused`, `lagPaused`, `spare` are no longer assumed here: the counted frames are the frames that end not paused, and the four bytes are in the guard of `keep.clean` ([One whole frame in control](f-6-19-FrameKeep.md)).
-* `state`: what stays is `Player_State` ∈ {0, 1, 2} and no jumpspring. They are written by the code of the map and the objects (the jumpspring when he lands on it, `Player_State` by the collision routine). A walk of a frame in control knows neither the map nor the objects, so it cannot keep them. Which conditions on the tiles would give them, and why they are not smaller: [above](#the-players-state-and-the-jumpspring-not-proved). `AreaType`, `SwimmingFlag`, `PlayerChangeSizeFlag` are proved (`OnFrames.areaAll`), and so is `PrevA` (`OnFrames.prevAll`).
-* `After`: the subspeed and the facing (written on the vine's and the flagpole's paths, see [the table](#after-the-scroll-handler-three-bytes)), and `coll` (the collision routine and the screen's edge). `storedQ` is no longer assumed ([above](#the-stored-speed-at-the-scroll-handler)).
+* `state` (now a field of `OnFrames`, on every frame up to the touch; it was `Moves.state`, on the clean frames up to `T`): what stays is `Player_State` ∈ {0, 1, 2} and no jumpspring. They are written by the code of the map and the objects (the jumpspring when he lands on it, `Player_State` by the collision routine). A walk of a frame in control knows neither the map nor the objects, so it cannot keep them. Which conditions on the tiles would give them, and why they are not smaller: [above](#the-players-state-and-the-jumpspring-not-proved). `AreaType`, `SwimmingFlag`, `PlayerChangeSizeFlag` are proved (`OnFrames.areaAll`), and so is `PrevA` (`OnFrames.prevAll`).
+* `After`, now `AfterR`: the facing (written on the vine's and the flagpole's paths, see [the table](#after-the-scroll-handler-three-bytes)), and `coll` (the collision routine and the screen's edge) on a frame that moves right at the scroll handler. The subspeed (`After.f`) and `coll` on a frame that moves left or not at all there follow from `collide` (`After.of`), so they are no longer asked here. `storedQ` is no longer assumed ([above](#the-stored-speed-at-the-scroll-handler)).
 * `spareE` (new, on each instruction): no store through an index or a pointer writes A_B, PrevA, the moving direction, the running speed or the stored speed. Measured: no failure (above). If `FrameKeep.spareK` had these five bytes, it would be a part of `keep.cleanF`.
 * `vAfter`: on frames 1 to 8, the frame after the scroll handler keeps the vertical bytes. That the routine follows `vstep` is proved (`vert_of`), and the part before it (`Moves.vBefore`). A walk cannot give `vAfter` as it gives the part before: on 2,375 of the 3,194 frames 1 to 8 measured, a vertical byte takes another value after the scroll handler and is back at the frame's end (the collision routine sets `Player_State` to 2 and lands him again). After the collision routine the enemies' code can write the vertical speed (a stomp), and the walk knows no enemy.
 * `keep.ends`, `keep.clean` and the theorem `keep.start` of [One whole frame in control](f-6-19-FrameKeep.md): the frames are the same, so `ends` is not a field here any more.
 * `box`: on frames 1 to 8 the collision routine gives the same result as on the machine at control.
-* `reads`: `fr` is read from the machines. That it is a `Frame` stays an assumption of [Top speed](../0-0/0-1-TopSpeed.md).
+* `reads` is gone: `fr` is a definition on the machines (`frOf`), and that each frame before the touch is a `TopSpeed.Frame` is proved ([above](#the-frames-read-from-the-machines)). What stays of it is on one frame or one machine:
+  * `coll`: at the end of each frame before the touch the collision bits are one of the four values of `collBits`. The collision routine sets them to `FF` and clears the bit of a side; when he is not on the screen's rows it keeps them. A walk after the player's routine with the bits watched under the mask `FC` (the four values) and protected, and the paths cut at the stores of `noStore`, closes but at one place (program `coll-cut-check`: 404,240 steps, a table of 22,446 states, 1.7 s, 4 failures, all at the frame's end). The end of `ImpedePlayerMove` clears the bit given by `X`, and `X` there is the side check's counter in a temp byte of the zero page, which the search forgets at its table states. So the walk would need that temp byte protected (a condition on every instruction) and in the search's key. Not done.
+  * `collide`: on each frame before the touch, what the collision routine and the rest of the frame do to the speed, the subspeed and the position (`CollideE`). It speaks of the same part of the frame as `After`, on every frame, not only the clean ones. The enemies' code runs there too.
+  * `farLate`: from frame 746 after control on, the position is at least 8 px from both ends of its range.
+  * `state` on every frame (above).
 * `chg.time₂`, `chg.ctlFirst₂`, and the theorem `Run.atCtl`.
 
-**Files.** `Theorems/SurfaceFrames.lean`, `Theorems/CtrlKeep.lean`, `Theorems/PrevKeep.lean` (`prev_end`), `Theorems/AfterKeep.lean` (`keepH`, `subs_once`), `Theorems/VertModel.lean`, `Theorems/FrameModel.lean` (`move_masked`, `trace_inFrame`, `stored_path`), `Theorems/FrameWalk.lean` (`InFrame`),
+**Files.** `Theorems/SurfaceFrames.lean` (`frOf`, `OnFrames.reads`), `Theorems/SurfaceRead.lean` (`CollideE`, `read_move`, `frame_readE`, `frameE`, `frameH`), `Theorems/CtrlKeep.lean`, `Theorems/PrevKeep.lean` (`prev_end`), `Theorems/AfterKeep.lean` (`keepH`, `subs_once`), `Theorems/VertModel.lean`, `Theorems/FrameModel.lean` (`move_masked`, `trace_inFrame`, `stored_path`), `Theorems/FrameWalk.lean` (`InFrame`),
 `Theorems/SurfaceRun.lean` (`far`, `Statement.fric`), private `Proof/SurfaceFrames.lean` (`side_start`), `Proof/PoleJoin.lean` (`pole_numbers`, which now includes `ctrlCheck`, `afterCheck`, `prevCheck`, `hCheck` and `storedOK`), `Proof/SurfaceRun.lean` (`surface_run`, with `top_frictionCheck`).
 
 **Reproduce.**
 ```
 .lake/build/bin/smbrta surface-frames-check FM2 200    # the table above, about 9 minutes of CPU
+.lake/build/bin/smbrta surface-read-check FM2 200      # the frames read from the machines, about 2 minutes of CPU
 .lake/build/bin/smbrta vert-model-check                # vertOK and each of its cases, about 0.1 s
 .lake/build/bin/smbrta mask-model-check                # maskOK and its parts, about 0.1 s
 .lake/build/bin/smbrta ctrl-keep-check                 # the walk up to the player's routine: each of the 25 bytes and the pause bit, about 4 s

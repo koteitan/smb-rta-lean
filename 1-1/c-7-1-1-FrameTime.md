@@ -36,7 +36,7 @@ Lean: `Theorems/FrameTime.lean` (`InTime`, `CleanR`, `ReadR`, `clean_frameR`, `f
 
 **The arrival and `before`.** The walk to the player's routine of [RoomVert](c-7-5-1-RoomVert.md) now asks that its states at the frame's end are not at `R` (`finR`). So if `tr(j)` is at `R`, the frame has not ended there (`before_R`). The walk also keeps the 8 horizontal bytes up to `R` (they are now in `vKeepA`), and the frame comes to `R` once, so at any `j` with `tr(j)` at `R` they are those of `M` (`hbytes_at_R`). The check of the walk is true (6.4 s). `room-vert-check` saw no step before `R` write a byte of `vKeepA` on 24,111 real frames (the movie and 200 runs).
 
-**On the room's frames.** `InRoom.time`, `InRoom.arrive` and `InRoom.before` hold for each frame before the entry `E` (`Route.Run.roomTime`, `Route.Run.roomArrive`, `Route.Run.roomBefore`: the room's frame `n` is frame `b₁ + (n − C)` of `base`, before `a₂`). `clean` speaks of frames up to `t₀`, and `t₀ ≤ E` (`t0_le_E`): on the entry frame he is at the mouth, and before `t₀` he is left of the goal, which is left of the mouth. `InRoom.le` is `C ≤ E` (`Route.Run.room_le`). `RoomVert.air_frame` uses the same time in place of its argument `hl`.
+**On the room's frames.** `InRoom.time`, `InRoom.arrive` and `InRoom.before` hold for each frame before the entry `E` (`Route.Run.roomTime`, `Route.Run.roomArrive`, `Route.Run.roomBefore`: the room's frame `n + 1` begins at frame `b₁ + ix(n + 1 − C) − 1` of `base`, before `a₂`: `Route.Run.roomIdx`). `clean` speaks of frames up to `t₀`, and `t₀ ≤ E` (`t0_le_E`): on the entry frame he is at the mouth, and before `t₀` he is left of the goal, which is left of the mouth. `InRoom.le` is `C ≤ E` (`Route.Run.room_le`). `RoomVert.air_frame` uses the same time in place of its argument `hl`.
 
 ## Checked on real frames
 
@@ -46,7 +46,7 @@ Lean: `Theorems/FrameTime.lean` (`InTime`, `CleanR`, `ReadR`, `clean_frameR`, `f
 
 * `far` is no longer a field: it is proved from `farNear`, a condition only on the frames that start within 3.5 px right of 8 px ([The position stays at 8 px or more](c-7-1-3-RoomFar.md)).
 * `SiteOK` on each instruction of the room's frames (`chg.roomSites`, item 1-1-d-2-4-2), as before.
-* The rest of `CleanR` and `ReadR`: the values at the player's routine that decide whether the frame follows the model (the stored speed, the mask, the collision bits), and what the frame does from the scroll handler on (`after`, `collide`). The rest of the state there and the arrival are proved now, from the new field `unpaused` ([The room's frames at the player's routine](c-7-1-2-RoomCut.md)).
+* The rest of `CleanR` and `ReadR`: the values at the player's routine that decide whether the frame follows the model (the stored speed, the mask, the collision bits), and what the frame does from the scroll handler on (`after`, `collide`). The rest of the state there and the arrival are proved now, from the definition of the room's frames, which end not paused (the field `unpaused` is gone: [A run that pauses in the room](c-7-1-4-RoomLag.md); [The room's frames at the player's routine](c-7-1-2-RoomCut.md)).
 
 **Files.** `Theorems/FrameTime.lean`, and the files above.
 

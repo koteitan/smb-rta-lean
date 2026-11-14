@@ -9,7 +9,7 @@ These were parts of the field `clean` of [Joining the bonus room](c-5-RoomJoin.m
 What changed in `RoomRun`:
 
 * `clean` now asks `CleanW` or `Stop ∧ ReadW`. `CleanW`: at the player's routine the stored speed is `|v|`, the side he presses is not masked, and from the scroll handler on nothing writes the horizontal bytes. `ReadW`: at the player's routine the collision bits are a value of `TopSpeed.collBits`, and `Collide` from the scroll handler on.
-* `unpaused` (new, one machine): each frame up to `t₀` ends with the game not paused.
+* `unpaused` (new, one machine): each frame up to `t₀` ends with the game not paused. It is gone again: the room's frames are now the frames that end not paused ([A run that pauses in the room](c-7-1-4-RoomLag.md)).
 * `arr` is gone (a definition).
 
 `R` is the player's routine, `tr(j)` the machine `j` instructions into the frame from `M`, `end` the machine at the frame's end. `st` is the player's state, `size` the change of size, `rt` the routine byte, `pz` the pause byte, `S_R` the stack pointer of the player's routine.
@@ -29,7 +29,7 @@ CleanW.toR   :  CleanW(M, n₀),  AtV(tr(n₀))  →  CleanR(M, n₀)
 ReadW.toR    :  ReadW(M, n₀),  AtV(tr(n₀)),  |v(tr(n₀))| ≤ top  →  ReadR(M, n₀)
 ```
 
-Lean: `Theorems/RoomVert.lean` (`cutOK`, `phA`, `pzLd`, `pzPieces`, `finA`, `zoneA_cover`, `CutAt`, `cut_R`, `arrive_R`, `vKeepA`), `Theorems/RoomPair.lean` (`knSt`, `knZero`, `phSt`, `phSz`, `checkSt`, `checkSz`, `Quad`, `QuadWalks`, `quad_step`, `rowQ`, `rowsCheck`, `quad_of_rows`, `quad_run`, `RoomWalks`), `Theorems/RoomJoin.lean` (`CleanW`, `ReadW`, `CleanW.toR`, `ReadW.toR`, `RoomRun.unpaused`, `RoomRun.arr`, `InRoom.reach`, `InRoom.cut`, `RoomRun.arrive`, `atV_of`, `cleanR_of`, `speed_of`, `readR_of`), `Theorems/Route.lean` (`Run.roomReach`, `Run.roomCut`, `Run.inRoom`); private `Proof/RoomVert.lean` (`room_vert_a`, `room_quad_st`, `room_quad_size`, `room_quad_apart`, `room_pair_rows`).
+Lean: `Theorems/RoomVert.lean` (`cutOK`, `phA`, `pzLd`, `pzPieces`, `finA`, `zoneA_cover`, `CutAt`, `cut_R`, `arrive_R`, `vKeepA`), `Theorems/RoomPair.lean` (`knSt`, `knZero`, `phSt`, `phSz`, `checkSt`, `checkSz`, `Quad`, `QuadWalks`, `quad_step`, `rowQ`, `rowsCheck`, `quad_of_rows`, `quad_run`, `RoomWalks`), `Theorems/RoomJoin.lean` (`CleanW`, `ReadW`, `CleanW.toR`, `ReadW.toR`, `RoomRun.arr`, `InRoom.reach`, `InRoom.cut`, `RoomRun.arrive`, `atV_of`, `cleanR_of`, `speed_of`, `readR_of`), `Theorems/Route.lean` (`Run.roomReach`, `Run.roomCut`, `Run.inRoom`); private `Proof/RoomVert.lean` (`room_vert_a`, `room_quad_st`, `room_quad_size`, `room_quad_apart`, `room_pair_rows`).
 
 ## How
 
@@ -37,7 +37,7 @@ Lean: `Theorems/RoomVert.lean` (`cutOK`, `phA`, `pzLd`, `pzPieces`, `finA`, `zon
 
 * At a state at `R` that has not been there before, the walk asks `cutOK`: the stack pointer `S_R`, no NMI pending, bit 7 of the control register known 0, and the routine byte, the area's type, the jumpspring and the swimming flag known with the values of `CutAt`. The walk covers the machine at every instruction, so `cut_R` follows.
 * It keeps two more bytes up to `R`: the change of size and the collision bits.
-* Where the NMI loads the pause byte before the call of the mode's routine (`pzLd`), it splits the state into two pieces: the byte's low bit known 1 and known 0. The pieces carry the marks `[1]` and `[0]`, so the search keeps them apart. At `R` the mark is cleared. At the frame's end a state that has not come to `R` must know the low bit to be 1 (`finA`). So a frame that ends with the bit 0 came to `R` (`arrive_R`). With `before_R` (the frame comes to `R` at most once) this is the first arrival, and `CtrlKeep.arrAt` finds it.
+* Where the NMI loads the pause byte before the call of the mode's routine (`pzLd`), it splits the state into two pieces: the byte's low bit known 1 and known 0. The pieces carry the marks `[1]` and `[0]`, so the search keeps them apart. At `R` the mark is cleared. At the frame's end a state that has not come to `R` must know the low bit to be 1, and (since [A run that pauses in the room](c-7-1-4-RoomLag.md)) a state that has come there must know it to be 0 (`finA`). So a frame that ends with the bit 0 came to `R` (`arrive_R`). With `before_R` (the frame comes to `R` at most once) this is the first arrival, and `CtrlKeep.arrAt` finds it.
 
 **The player's state and the change of size.** The walk does not know them at a frame's start, so they come from the frames before. Each is a relation of one byte, with its own walk of the kind of [RoomPair](c-7-5-2-RoomPair.md) (`pair_frame` with `x = y`): `st ∈ {0, 1, 2}` is shown by the bits 2 to 7 known 0 and bit 0 or bit 1 known 0 (`knSt`), `size = 0` by the byte known 0 (`knZero`). At the first control the rows of the change know both (`rowQ`); the same pass over the rows checks both relations of `RoomPair` and these two (`rowsCheck`). `quad_run` is the induction over the frames, as `pair_run`. The walk to `R` keeps both bytes, so they hold at `R` too.
 
@@ -72,11 +72,11 @@ The split at the pause byte adds 2 states to the table.
 
 ## The pause, a false fact before this round
 
-`clean` asked that each frame up to `t₀` comes to the player's routine (`pc` of `AtCtrl` and of `AtFrame`). A frame that ends paused does not come there. So a run that pauses in the room before `t₀` was outside the theorem, and no page said so. On the own runs above, 37,392 frames do not come to the player's routine, all paused. It is still outside the theorem, but now as its own field, `unpaused`. A pause only delays, but the room's model (`RoomCore`) counts every frame from `C`, so a paused frame is not in it.
+`clean` asked that each frame up to `t₀` comes to the player's routine (`pc` of `AtCtrl` and of `AtFrame`). A frame that ends paused does not come there. So a run that pauses in the room before `t₀` was outside the theorem, and no page said so. On the own runs above, 37,392 frames do not come to the player's routine, all paused. It was then outside the theorem as its own field, `unpaused`. Now it is in the theorem: the room counts only the frames that end not paused ([A run that pauses in the room](c-7-1-4-RoomLag.md)).
 
 ## Assumptions (not proved in Lean)
 
-* `unpaused` (one machine each frame, new): each frame up to `t₀` ends with the game not paused. It was hidden in `clean`.
+* `unpaused` is gone ([A run that pauses in the room](c-7-1-4-RoomLag.md)); in its place `roomLag`: in the room a frame that ends paused is a `lag` frame.
 * `CleanW` or `Stop ∧ ReadW` (one frame each): the stored speed and the mask at the player's routine (they decide whether the frame follows the model), the collision bits in `collBits`, and what the frame does from the scroll handler on (`after`, `collide`).
 * `SiteOK` on each instruction of the room's frames (`chg.roomSites`), as before.
 

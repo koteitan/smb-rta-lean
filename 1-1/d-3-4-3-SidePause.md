@@ -94,7 +94,7 @@ On the movie (`changes-check FM2`, and with a pause of 60 frames at 380, 416, 45
 
 ## Assumptions (not proved in Lean)
 
-* `PauseE` at the entry is no longer assumed. [The pause through the room's frames](d-3-4-4-RoomPause.md) proves it from the room's first control, where the route asks that bits 1 to 6 of the pause byte are 0 (`chg.pauseBits₂`, 1-1-d-3-4-4).
+* `PauseE` at the entry is no longer assumed. [The pause through the room's frames](d-3-4-4-RoomPause.md) proves it from the room's first control, where bits 1 to 6 of the pause byte are 0 by a theorem (`ChangesK.pauseBits₂`, 1-1-b-3-10).
 * The others are as on [The change out of the side pipe, with the sound's bytes in tables](d-3-4-2-SideChangeSound.md): `Entry2`, `lagPaused`, `NoStart` after the pipe, `TimerOK`.
 
 **Files.** `Theorems/SidePause.lean`; the private check is in `Proof/SidePause.lean` (`genSidePause` in `Main.lean`), and `side_pause` in `Proof/Route.lean`. The name `GamePauseTimer` was added to `SideChangeEnd.namesOf`.
