@@ -723,6 +723,17 @@ theorem hbytes_at_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r
   intro a ha
   exact a1 j hf hfirst (I a) (List.mem_append_right _ (List.mem_append_right _ (List.mem_map.2 ⟨a, ha, rfl⟩)))
 
+/-- **At the player's routine the player's state is that of the frame's start**: the frame comes there once, and no step before it writes the bytes of `vKeepA` -/
+theorem st_at_R {sy : Syms} {E : Env} {S : UInt8} {pz : Nat} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (hpz : pz < 2048)
+    (h : OKV (phA sy E S pz) E P r K C Fu)
+    (hfin : ∀ B, C.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine) {m : Machine} {i : UInt8}
+    (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) {j : Nat} (hR : (trace m i j).pc = sy.PlayerCtrlRoutine) :
+    peek (trace m i j) sy.Player_State = peek m sy.Player_State := by
+  obtain ⟨a1, a2, _, a4⟩ := before_R hpz h hfin hm hk
+  have hf := a4 j hR
+  have hfirst : ∀ j', j' < j → (trace m i j').pc ≠ sy.PlayerCtrlRoutine := fun j' hj' hR' => a2 j' j hj' hR' hf hR
+  exact a1 j hf hfirst (I sy.Player_State) (List.mem_append_left _ (by simp [vKeep]))
+
 /-- **The machine at the player's routine**, as the walk gives it (`cutOK`): the program, no NMI pending and the NMI off, the stack pointer `S`, the routine byte of
 control, the area's type 1, 2 or 3, the jumpspring and the swimming flag 0 -/
 structure CutAt (sy : Syms) (E : Env) (S : UInt8) (m : Machine) : Prop where

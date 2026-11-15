@@ -114,6 +114,7 @@ to `N` do not need more.
 * **New**: `noStore` (no instruction of a counted frame stores to the routine, the mode or the task by address).
 * **Wider**: `cleanK` asks `CleanK` of `guardE` (5 more protected bytes: A and B, A and B of the frame before, the moving direction, the running speed, the stored
   speed); `afterV` asks 11 bytes (it asked 4); `map` (`MapOK`) protects the collision flag too.
+* Round 19: `cleanK` is no longer a field: `Route.Run.pipeReal` proves it from `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
 
 **Files.** `Theorems/OpenAir.lean`, `Theorems/OpenAirFrame.lean`, `Theorems/OpenWalk.lean`, `Theorems/OpenVert.lean`, `Theorems/OpenFrames.lean`, private
 `Proof/OpenAir.lean`.

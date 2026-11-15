@@ -5,7 +5,7 @@
 **Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 97 bytes and 12 bytes under a mask have the values of the reference entry (115 and 13 before round 12). Here the idle loop, the pipe's timer and 73 of these 109 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has two fields:
 
 * `entryRest₁`: the condition `Entry` on the other 36 bytes only (`Rest`). This is a condition on one state.
-* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 71 bytes of `held`, the pipe's timer and the six bytes of the pause among the bytes that a store through an index or a pointer does not touch.
+* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 71 bytes of `held`, the pipe's timer and the six bytes of the pause among the bytes that a store through an index or a pointer does not touch. Since round 14 it is the theorem `Run.upClean₁` from the one field `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
 
 In round 10, item 1-1-b-3-4-2 shrank from 61 bytes and the timer to 56 bytes: the frames keep 4 more bytes (the kind of enemy slot 4, the place of cannon 0: 3 bytes), and the walk of the entry frame gives one more byte (the buttons left and right) and the timer. Each byte that stays has a measured reason below.
 

@@ -2,7 +2,7 @@
 
 # The star flag's rule after the castle entry
 
-**Claim.** This is a partial result. Let the machine on the first frame after the castle entry meet one condition `Good`, with task 2 and the flag at the height it is made at. Then, with any inputs, the counters of the real machines follow the rule of one frame on every frame up to the level change, and the level changes on a frame that begins with task 5. A frame that ends paused keeps the counters: it is a `lag` frame. Any other frame follows `FlagRun`. This makes the fields `step`, `task_E`, `y_E` and `task_L` of `Flag` in [From the castle to 1-2](g-1-CastleToLevel.md) theorems. The condition `Good` stays, as a hypothesis on one state at the castle entry. How the check treats the pause is on [The pause after the castle entry](g-2-5-FlagPause.md).
+**Claim.** This is a partial result. Let the machine on the first frame after the castle entry have task 2 and the flag at the height it is made at, and let the machine on the first frame `G` after the castle entry where the area parser is done meet one condition `Good`; on the frames before `G` let the counters follow the rule (`pre`). Then, with any inputs, the counters of the real machines follow the rule of one frame on every frame up to the level change, and the level changes on a frame that begins with task 5. A frame that ends paused keeps the counters: it is a `lag` frame. Any other frame follows `FlagRun`. This makes the fields `step`, `task_E`, `y_E` and `task_L` of `Flag` in [From the castle to 1-2](g-1-CastleToLevel.md) theorems. The condition `Good` stays, as a hypothesis on one state at `G`, and `pre` as a hypothesis on each frame before `G`. How the check treats the pause is on [The pause after the castle entry](g-2-5-FlagPause.md).
 
 `seq(n)` is the machine when frame `n` begins and `inp(n)` its input (`Changes` of [The whole of 1-1](0-1-Route.md)), so `seq(n + 1) = frame(seq(n), inp(n))`. `m[b]` is the byte `b` of `m`. `E` is the frame of the castle entry. `r` is the reference machine: the castle entry of the own route (`CastleWalk`) with no delay and the real timer. `lim` and `w₀` are those of [From the castle to 1-2](g-1-CastleToLevel.md).
 
@@ -12,13 +12,16 @@
 x(m)       = (task, t, y, w, ph)    the counters of m (flagOf); the flag is in the first enemy slot
 paused(m)  = (m[GamePauseStatus] &&& 1 ≠ 0)
 
-After(seq, inp, E, T, c, L) :
-  Good(seq(E + 1))
-  task(seq(E + 1)) = 2,   y(seq(E + 1)) = y(r)
+After(seq, inp, E, T, c, L) :   a number G and
+  E < G,   Good(seq(G))                     G: the first frame after E where the area parser is done
+  pre:  ∀ n, E < n < G  →  FlagStep(lim, w₀, paused(seq(n + 1)), x(seq n), x(seq(n + 1)))
+  task(seq(E + 1)) = 2,   y(x(seq(E + 1))) = y(r)
   t(seq(E + 1)) = T,      ph(seq(E + 1)) = c
-  E < L
+  G ≤ L
   level(seq(L + 1))                         the level number or the world number is not 0
 ```
+
+With `G = E + 1`, `pre` says nothing; this was `After` up to round 18. `G` is later when the area parser is at work at `E + 1` ([The castle entry with the area parser at work](g-2-2-3-FlagParser.md)).
 
 The theorems:
 
@@ -130,8 +133,8 @@ In the three runs with idle frames real fireworks go up. The timer was set at th
 
 ## What is not proved
 
-* `Good(seq(E + 1))`, task 2 and the flag's height are hypotheses. They are not proved from the frames before the castle entry. They were checked on the runs above and on runs that touch the pole at other heights ([A wider condition at the castle entry](g-2-2-1-FlagWide.md)). The rows from the touch's end were only measured ([Rows from the touch's end to the castle](g-2-2-2-TouchRows.md)).
-* Nothing outside `Good` is covered: big Mario, the flag in another slot, slots with other objects, Mario's numbers outside `Q`, a timer above `tmax`, bytes that differ from `B₀`. A run with the area parser at work at the castle entry is outside too.
+* `Good(seq(G))`, the rule on the frames before `G` (`pre`), task 2 and the flag's height are hypotheses. They are not proved from the frames before the castle entry. They were checked on the runs above and on runs that touch the pole at other heights ([A wider condition at the castle entry](g-2-2-1-FlagWide.md)). The rows from the touch's end were only measured ([Rows from the touch's end to the castle](g-2-2-2-TouchRows.md)).
+* Nothing outside `Good` is covered: big Mario, the flag in another slot, slots with other objects, Mario's numbers outside `Q`, a timer above `tmax`, bytes that differ from `B₀`. A run with the area parser at work at the castle entry is in, through `G` and `pre`, but `pre` is not proved.
 * `t(seq(E + 1)) = T` and `ph(seq(E + 1)) = c` stay fields that join `Frames`.
 * `GMerge` (1-1-g-2-3) is not treated here.
 

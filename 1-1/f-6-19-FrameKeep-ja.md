@@ -30,7 +30,7 @@ CleanK(m)        :=  store:  添え字かポインタを通して書く命令、
 Prot_F           :=  Prot_K  ∪  {pause, AreaType, SwimmingFlag, PlayerChangeSizeFlag}        （spareK。pause は CtrlKeep のポーズのバイト）
 CleanK_F(m)      :=  Prot_K の代わりに Prot_F の CleanK(m)                                   （guardF の CleanK）
 cleanK_of_F      :  CleanK_F(m)  →  CleanK(m)
-Prot_E           :=  Prot_F  ∪  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}   （spareE）
+Prot_E           :=  Prot_F  ∪  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}   （spareE。ほかに collE、speedE、vertE: 1-1-f-6-21）
 CleanK_E(m)      :=  Prot_K の代わりに Prot_E の CleanK(m)                                   （guardE の CleanK）
 cleanK_of_E      :  CleanK_E(m)  →  CleanK_F(m)
 ```

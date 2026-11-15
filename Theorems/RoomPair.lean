@@ -1,5 +1,6 @@
 import Theorems.RoomVert
 import Theorems.RoomFall
+import Theorems.RoomStand
 import Theorems.RoomStart
 
 /-!
@@ -572,6 +573,8 @@ structure RoomWalks (sy : Syms) (nmS : Names) (m0 : Machine) (h k : Nat) (nm : N
   vert : RoomVert.VChecks sy nmS m0 h k
   /-- the walk from the scroll handler falling, and every state of the jumps from the floor (`RoomFall`) -/
   fall : RoomFall.FChecks sy nmS m0 h
+  /-- the walk from the player's routine standing (`RoomStand`) -/
+  stand : RoomStand.SChecks sy nmS m0
   pair : Checks sy nmS m0 nm d v0
   quad : QuadWalks sy nmS m0
   idle : FrameModel.idleAt (FrameModel.Rom.of m0) (placesR sy nmS m0).idle = true

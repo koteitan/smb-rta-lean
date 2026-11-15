@@ -146,18 +146,23 @@ theorem read_move {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadH sy m0 M i
     omega
 
 /-- **A real frame is a `TopSpeed.Frame`**, with `CollideE` for the part after the scroll handler: `FrameModel.frame_readR` with the screen's left edge. The collision
-routine and the rest of the frame move him at most 1 px left from the end of the move (`P₂ − 256 ≤ P'`). -/
+routine and the rest of the frame move him at most 1 px left from the end of the move (`P₂ − 256 ≤ P'`). The frame comes to the scroll handler at an instruction `k`,
+and `v₂`, `f₂`, `P₂` are the bytes there (`read_move`). -/
 theorem frame_readE {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀) :
     ∃ f : Frame (top sy : Int) (amax sy m0), f.v = sbyte (peek M sy.Player_X_Speed) ∧ f.f = ((peek M sy.Player_X_MoveForce).toNat : Int) ∧ f.P = posP sy M ∧
       f.v' = sbyte (peek (frame M i) sy.Player_X_Speed) ∧ f.f' = ((peek (frame M i) sy.Player_X_MoveForce).toNat : Int) ∧ f.P' = posP sy (frame M i) ∧
-      f.P₂ - 256 ≤ f.P' := by
+      f.P₂ - 256 ≤ f.P' ∧
+      ∃ k, n₀ ≤ k ∧ (trace M i k).pc = sy.PlayerSubs ∧ f.v₂ = sbyte (peek (trace M i k) sy.Player_X_Speed) ∧
+        f.f₂ = ((peek (trace M i k) sy.Player_X_MoveForce).toNat : Int) ∧ f.P₂ = posP sy (trace M i k) := by
   obtain ⟨c, k, hk, hpc, e1, e2, e3, e4, e5, e6, _, _, _⟩ := read_move h.toReadH
   have hco := h.collide k hk hpc
+  have hmv : c.v₂ = sbyte (peek (trace M i k) sy.Player_X_Speed) ∧ c.f₂ = ((peek (trace M i k) sy.Player_X_MoveForce).toNat : Int) ∧
+      c.P₂ = posP sy (trace M i k) := ⟨e4, e5, e6⟩
   generalize hQ : trace M i k = Q at hco e4 e5 e6
   generalize hb : frame M i = b at hco ⊢
   refine ⟨{ c with
       v' := sbyte (peek b sy.Player_X_Speed), f' := ((peek b sy.Player_X_MoveForce).toNat : Int), P' := posP sy b,
-      impedeV := ?_, impedeF := ?_, impedeP := ?_ }, e1, e2, e3, rfl, rfl, rfl, ?_⟩
+      impedeV := ?_, impedeF := ?_, impedeP := ?_ }, e1, e2, e3, rfl, rfl, rfl, ?_, k, hk, hpc, hmv⟩
   · rcases hco.v with e | e
     · left
       show sbyte (peek b sy.Player_X_Speed) = c.v₂
@@ -263,8 +268,19 @@ theorem frameE_end {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 
   refine ⟨rfl, rfl, rfl, ?_⟩
   show (Classical.choose (frame_readE h)).P₂ - 256 ≤ posP sy (frame M i)
   have e := s.2.2.2.2.2.1
-  have l := s.2.2.2.2.2.2
+  have l := s.2.2.2.2.2.2.1
   omega
+
+/-- **A frame that meets `ReadE`, at the end of the move**: `v₂`, `f₂` and `P₂` are the speed, the subspeed and the position at an arrival at the scroll handler -/
+theorem frameE_move {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀) (hs : Same sy a M) :
+    ∃ k, n₀ ≤ k ∧ (trace M i k).pc = sy.PlayerSubs ∧ (frameE sy m0 a M i n₀).v₂ = sbyte (peek (trace M i k) sy.Player_X_Speed) ∧
+      (frameE sy m0 a M i n₀).f₂ = ((peek (trace M i k) sy.Player_X_MoveForce).toNat : Int) ∧ (frameE sy m0 a M i n₀).P₂ = posP sy (trace M i k) := by
+  have s := Classical.choose_spec (frame_readE h)
+  obtain ⟨k, hk, hpc, e1, e2, e3⟩ := s.2.2.2.2.2.2.2
+  refine ⟨k, hk, hpc, ?_, ?_, ?_⟩ <;> unfold frameE <;> rw [dif_pos ⟨h, hs⟩]
+  · exact e1
+  · exact e2
+  · exact e3
 
 /-- **The touch's frame that meets `ReadH`**: `P₂` and `v₂` are the position and the speed at an arrival at the scroll handler -/
 theorem frameH_move {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadH sy m0 M i n₀) (hs : Same sy a M) :

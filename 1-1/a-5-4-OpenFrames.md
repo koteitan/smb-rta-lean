@@ -158,7 +158,10 @@ runs each counted frame instruction by instruction and checks each field of `Rea
 
 ## Assumed (not proved in Lean)
 
-* The fields of `Real`: `cleanK`, `noStore`, `map`, `after`, `afterV`, and `page` at the start of the counted frame `N + 1` only. They are conditions on single frames,
+* Round 19: `cleanK` is no longer a field of `pipe.opening` (`OpenFrames.RealB`). `OpenFrames.Real` adds it and the `Clean` of the frames not counted (the old
+  `lags.clean`), and `Route.Run.pipeReal` proves both from the one condition `chg.upCleanU`
+  ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
+* The fields of `RealB`: `noStore`, `map`, `after`, `afterV`, and `page` at the start of the counted frame `N + 1` only. They are conditions on single frames,
   on their instructions and on their starts. `after` says that from the scroll handler on nothing moves him and the collision routine finds nothing (no wall, no edge of
   the screen): the horizontal half of item 1-1-a-5-6. `afterV` says that from the return of the collision routine on the 11 bytes of the vertical model do not change.
 * Round 13: `vert` is no longer assumed ([The vertical model on real frames](a-5-7-2-OpenAir.md), `Real.vertOK`), nor asked after the counted frame `N`. New:

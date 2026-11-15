@@ -78,7 +78,8 @@ Lean: `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean` の `ixP`、`ixP_pau
   `dP` は走りが選ぶ `Lags` のフィールドなので、入る前にポーズが終わる走りは、大きい `dP` でこれを満たします。これがあると、数えるフレームはポーズでなく終わります
   （`Lags.unpaused`）。[本物のフレームでの出だし](a-5-4-OpenFrames-ja.md) がこれを使います。
 * **`lags.keeps` はもうフィールドではありません**（この回）。数えないフレームのどの命令も添字やポインタを通ってポーズのバイトを書かないことは、操作から入るまでの
-  どのフレームでもポーズのバイトを守る `lags.clean` の一部になりました（`Lags.keepsP`）。
+  どのフレームでもポーズのバイトを守る `lags.clean` の一部になりました（`Lags.keepsP`）。19 回目: `lags.clean` ももうフィールドではありません。仮定
+  `Lags.CleanP` で、`chg.upCleanU` から証明します（[土管までの各命令に 1 つの条件](a-5-10-UpClean-ja.md)）。
 * **証明していないこと: タイマーの制御が 0 のままであること.** いまは要りません。
 
 **ファイル.** `Theorems/LagPause.lean`、`Theorems/PipeFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/LagPause.lean`。

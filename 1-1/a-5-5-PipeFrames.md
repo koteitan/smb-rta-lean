@@ -76,8 +76,9 @@ the speed, the subspeed and the position.
 * **Each frame is a `Frame`.** This is the type of `fr`. It was assumed before; it is item 0-0-0-3-1 (`FrameModel.frame_read` gives it under `ReadFrame`). It is checked on the real frames above.
   New is that it is used for frames 1 to `N` as well.
 * **A frame that is not counted changes none of the three values.** This is no longer assumed as a whole. It is proved for a frame that does not call the mode's routine (a paused
-  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), `lags.clean`, and (in place of `lags.game`)
-  `lags.keeps` ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). `lags.store` is proved now. `lags.paused` is gone: a frame not counted
+  frame). What stays assumed is in [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md) and [Every frame from control to the pipe starts in the idle loop](a-5-5-3-2-StartRun.md): `lags.ctl` (now only the counted frames), and the `Clean` of each instruction (`Lags.CleanP`, the old field
+  `lags.clean`, now from `chg.upCleanU`: [One condition on each instruction up to the pipe](a-5-10-UpClean.md)), which also does what `lags.keeps` did
+  ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)). `lags.store` is proved now. `lags.paused` is gone: a frame not counted
   ends paused by the definition of the counted frames.
 * **`still`: the speed at control is 0.** This is now proved (`Route.Run.still`) from the press of Start on the title ([From Start on the title to control](0-5-3-TitleStart.md)).
 * **The frames are those of the run (item 1-1-0-4).** `Lags` takes the real frames of the whole run (`FrameKeep.RealRun`, `Route.Run.base`) as a parameter. Where the counted frames are is

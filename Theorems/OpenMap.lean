@@ -650,14 +650,15 @@ theorem start_G {sy : Syms} {m0 m : Machine} {E : Env} (h : FrameStart (guardM s
   StartRun.start_mono h rfl rfl fun _ hp => hp
 
 /-- **Every frame from frame 1 up to `b`, counted or not, starts with the buffers of `m0`, the jumpspring byte 0 and the player's state 0, 1 or 2**: `map_run` on the frames
-of `Lags`, from frame 1 (`hs₁`, `hm₁`), with `Clean` (`Lags.clean`) and `MapOK` on each instruction before `b`, and the known bytes at each frame's end
+of `Lags`, from frame 1 (`hs₁`, `hm₁`), with `Clean` (`Lags.CleanP`, `hcl`) and `MapOK` on each instruction before `b`, and the known bytes at each frame's end
 (`Lags.known_end`). `hc`, `hk`, `hp`, `hM` are the checks on the ROM. -/
 theorem Lags.mapAt {sy : Syms} {m0 : Machine} {g E : Nat} {S : FrameKeep.RealRun} (hc : LagFrames.lagCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true)
-    (hM : mapCheck sy m0 = true) (L : PipeFrames.Lags sy m0 g S E)
+    (hM : mapCheck sy m0 = true) (L : PipeFrames.Lags sy m0 g S E) (hcl : L.CleanP)
     (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (hm₁ : MapAt sy m0 (S.seq 1)) {b : Nat} (hb : b ≤ L.ix E)
     (hmap : ∀ n, 1 ≤ n → n < b → ∀ k, MapOK sy m0 (trace (S.seq n) (S.inp n) k)) :
     ∀ n, 1 ≤ n → n ≤ b → MapAt sy m0 (S.seq n) := fun n h1 h2 =>
-  (map_run hM S.next (start_M hs₁) hm₁ (fun n a1 a2 j => cleanK_of (L.cleanG n a1 (Nat.lt_of_lt_of_le a2 hb) j) (hmap n a1 a2 j))
-    (fun n a1 a2 j => rdOK_of (hmap n a1 a2 j)) (fun _ a1 a2 hs => L.known_end hc hp a1 (Nat.lt_of_lt_of_le a2 hb) (start_G hs)) n h1 h2).2
+  (map_run hM S.next (start_M hs₁) hm₁ (fun n a1 a2 j => cleanK_of (L.cleanG hcl n a1 (Nat.lt_of_lt_of_le a2 hb) j) (hmap n a1 a2 j))
+    (fun n a1 a2 j => rdOK_of (hmap n a1 a2 j))
+    (fun n a1 a2 hs => L.known_end hc hp a1 (Nat.lt_of_lt_of_le a2 hb) (start_G hs) (hcl n a1 (Nat.lt_of_lt_of_le a2 hb))) n h1 h2).2
 
 end Smbrta.OpenMap

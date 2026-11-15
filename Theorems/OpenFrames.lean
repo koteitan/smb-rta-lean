@@ -259,12 +259,9 @@ def After (sy : Syms) (Q b : Machine) : Prop :=
   (∀ x ∈ FrameModel.hBytes sy, peek b x = peek Q x) ∧ peek b sy.Player_XSpeedAbsolute = TopSpeed.absB (peek b sy.Player_X_Speed) ∧ peek b sy.Player_CollisionBits = 0xFF
 
 /-- **What stays assumed of the first `N` counted frames**, before the entry `E`: conditions on single frames, on their instructions and on their starts. The frames are those of
-`L` (`PipeFrames.Lags`): the counted frame `t` begins at `L.fm t` with the input `L.inp t`. -/
-structure Real (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S : FrameKeep.RealRun} (L : Lags sy m0 g S E) : Prop where
-  /-- each instruction of the frame meets `CleanK` of `FrameKeep.guardE`: `PipeWrites.Clean` with the castle flag, the position's fraction, the pause byte, the area's
-  type, the swimming flag, the change of size, A and B, A and B of the frame before, the moving direction, the running speed and the stored speed protected too, but the
-  move routine's own store (the old fields `cleanK` and `spare`; `guardE` in place of `guardF` for `GuardE.prev_endE`) -/
-  cleanK : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k)
+`L` (`PipeFrames.Lags`): the counted frame `t` begins at `L.fm t` with the input `L.inp t`. The condition on each instruction (the old field `cleanK`) is not here: `Real`
+adds it, and `Route.Run.pipeReal` proves it from `chg.upCleanU`. -/
+structure RealB (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S : FrameKeep.RealRun} (L : Lags sy m0 g S E) : Prop where
   /-- **no instruction of a counted frame writes the routine, the mode or the task byte by its address** (as `FrameKeep.Frames.noStore` above ground) -/
   noStore : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, FrameKeep.CtlStore sy (trace (L.fm t) (L.inp t) k) = false
   /-- each instruction of each frame from frame 1 to the counted frame `N`, counted or not, meets `OpenMap.MapOK`: a store through an index or a pointer does not write the
@@ -282,6 +279,16 @@ structure Real (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S
   those of the frame's end (`OpenAir.AfterVS`). The walks follow these bytes up to the return; after it the walk does not know the enemies, and their code may write
   the vertical speed (a stomp) or the state (a platform) -/
   afterV : ∀ t, 1 ≤ t → t ≤ N → t < E → OpenAir.AfterVS sy m0 (L.fm t) (L.inp t)
+
+/-- **The first `N` counted frames, with the conditions on their instructions**: `RealB`, and the two conditions on each instruction that were fields (`Route.Run.pipeReal`
+proves both from `chg.upCleanU`) -/
+structure Real (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S : FrameKeep.RealRun} (L : Lags sy m0 g S E) : Prop extends RealB sy m0 lens N E L where
+  /-- each instruction of the frame meets `CleanK` of `FrameKeep.guardE`: `PipeWrites.Clean` with the castle flag, the position's fraction, the pause byte, the area's
+  type, the swimming flag, the change of size, A and B, A and B of the frame before, the moving direction, the running speed and the stored speed protected too, but the
+  move routine's own store (the old field `cleanK`) -/
+  cleanK : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k)
+  /-- each instruction of each frame from frame 1 to the entry, counted or not, is `Clean` with the pause byte protected (the old field `lags.clean`) -/
+  lagsClean : L.CleanP
 
 /-- **What the frame's start holds, frame after frame**: the stored speed is `|v|`, the collision bits are all 1, and the area's type is `v` with no swimming and no change
 of size -/
@@ -383,7 +390,7 @@ theorem Real.stSpring {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} (
   intro t h1 h2 h3
   have hmono : L.ix t ≤ L.ix N := L.ix_mono h2
   have hmE : L.ix t ≤ L.ix E := L.ix_mono (Nat.le_of_lt h3)
-  have hA := OpenMap.Lags.mapAt hc hp hM L hs₁ hm₁ hmE
+  have hA := OpenMap.Lags.mapAt hc hp hM L O.lagsClean hs₁ hm₁ hmE
     (fun n a1 a2 k => O.map n a1 (Nat.le_of_lt (Nat.lt_of_lt_of_le a2 hmono)) (Nat.lt_of_lt_of_le a2 hmE) k) (L.ix t) (L.one_le_ix h1) (Nat.le_refl _)
   obtain ⟨hw, hst⟩ := hA
   refine ⟨?_, ?_⟩
@@ -448,9 +455,9 @@ theorem Real.frame_step {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E}
 
 /-- every counted frame from control to the entry starts in the idle loop in control, for the guard of the walks of `CtrlKeep` (`Lags.starts`) -/
 theorem startK_of {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} (hc : LagFrames.lagCheck sy m0 = true) (hk : StartRun.walkCheck sy m0 = true)
-    (hp : LagPause.pauseCheck sy m0 g = true) (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) {t : Nat} (h1 : 1 ≤ t) (h2 : t ≤ E) :
+    (hp : LagPause.pauseCheck sy m0 g = true) (hcl : L.CleanP) (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) {t : Nat} (h1 : 1 ≤ t) (h2 : t ≤ E) :
     FrameKeep.StartK sy m0 (L.fm t) :=
-  StartRun.start_mono (L.startAt hc hk hp hs₁ h1 h2) rfl rfl (fun _ hp => hp)
+  StartRun.start_mono (L.startAt hc hk hp hcl hs₁ h1 h2) rfl rfl (fun _ hp => hp)
 
 theorem lagI_mem {x : UInt16} (h : x ∈ FrameModel.hBytes sy ∨ x = sy.Player_XSpeedAbsolute ∨ x = sy.Player_CollisionBits ∨ x = sy.AreaType ∨ x = sy.SwimmingFlag ∨
     x = sy.PlayerChangeSizeFlag ∨ x = sy.Player_State) : LagFrames.I x ∈ LagFrames.lagI sy := by
@@ -510,17 +517,17 @@ theorem Real.flat {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb :
   have hixN : L.ix t ≤ L.ix N := L.ix_mono h2
   have h1ix : 1 ≤ L.ix t := L.one_le_ix h1
   have hmap : ∀ k, OpenMap.MapOK sy m0 (trace (L.fm t) (L.inp t) k) := fun k => O.map (L.ix t) h1ix hixN hix k
-  have hsG : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm t) := L.startAt hc hk hp hs₁ h1 (Nat.le_of_lt h3)
-  have hsK : FrameKeep.StartK sy m0 (L.fm t) := startK_of hc hk hp hs₁ h1 (Nat.le_of_lt h3)
+  have hsG : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm t) := L.startAt hc hk hp O.lagsClean hs₁ h1 (Nat.le_of_lt h3)
+  have hsK : FrameKeep.StartK sy m0 (L.fm t) := startK_of hc hk hp O.lagsClean hs₁ h1 (Nat.le_of_lt h3)
   have hmA : OpenMap.MapAt sy m0 (L.fm t) :=
-    OpenMap.Lags.mapAt hc hp hM L hs₁ hm₁ (b := L.ix t) (Nat.le_of_lt hix)
+    OpenMap.Lags.mapAt hc hp hM L O.lagsClean hs₁ hm₁ (b := L.ix t) (Nat.le_of_lt hix)
       (fun n a1 a2 k => O.map n a1 (Nat.le_trans (Nat.le_of_lt a2) hixN) (Nat.lt_of_lt_of_le a2 (Nat.le_of_lt hix)) k) (L.ix t) h1ix (Nat.le_refl _)
   have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) :=
     fun k => FrameKeep.cleanK_of_E (O.cleanK t h1 h2 h3 k)
   have hcl : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => FrameKeep.cleanK_of_F (hclF k)
   have hcq : ∀ k, FrameKeep.CleanK (OpenFlat.guardQ sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => OpenFlat.cleanQ_of (hclF k) (hmap k)
   have hcM : ∀ k, FrameKeep.CleanK (OpenMap.guardM sy m0) StartRun.noSpot.store (trace (L.fm t) (L.inp t) k) :=
-    fun k => OpenMap.cleanK_of (L.cleanG (L.ix t) h1ix hix k) (hmap k)
+    fun k => OpenMap.cleanK_of (L.cleanG O.lagsClean (L.ix t) h1ix hix k) (hmap k)
   have hrM : ∀ k, OpenMap.RdOK (OpenMap.rdOf sy m0) (trace (L.fm t) (L.inp t) k) := fun k => OpenMap.rdOK_of (hmap k)
   have hr : ∀ k, (trace (L.fm t) (L.inp t) k).frame = (L.fm t).frame → OpenFlat.RdOK1 (OpenFlat.rdOf sy m0) (trace (L.fm t) (L.inp t) k) := fun k hf =>
     OpenFlat.rdOK1_of (hmap k) (fun hpc hn => OpenMap.map_reads hM (OpenMap.start_M hsG) hmA.1 hmA.2 hcM hrM hf hpc hn)
@@ -530,7 +537,7 @@ theorem Real.flat {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb :
     exact L.unpaused h1 (by omega)
   have hjump : (FrameModel.readIn sy (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t)))).jump = false := hj
   obtain ⟨B, hfin, hsB, hgx⟩ := OpenFlat.flat_end C.ctrl C.flat hsK hcl hcq hr hu hh.2.2 hg hG hspr hjump (OpenAir.afterV_of (O.afterV t h1 h2 h3))
-  have hkn := L.known_end hc hp h1ix hix hsG
+  have hkn := L.known_end hc hp h1ix hix hsG (O.lagsClean _ h1ix hix)
   rw [S.next] at hkn
   have k1 := hkn _ (List.Mem.head _)
   have k2 := hkn _ (List.Mem.tail _ (List.Mem.head _))
@@ -560,7 +567,7 @@ theorem Real.flat {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb :
     rcases hgx with hx | hx
     · rw [hnx] at hx; cases hx
     · exact hx
-  have hl := PipeFrames.lags_keepI hc hk hp L hs₁ t h3
+  have hl := PipeFrames.lags_keepI hc hk hp L O.lagsClean hs₁ t h3
   refine ⟨?_, ground_keep hl hgE⟩
   rw [peek_keep hl (x := sy.Player_State) (by simp)]
   exact hend
@@ -818,9 +825,9 @@ theorem Real.prevAll {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Z
     by_cases ht : t = 0
     · subst ht; exact hpv₁
     · have hpv := ih (by omega) (by omega) (by omega)
-      have he := GuardE.prev_endE C.ctrl C.prev (startK_of hc hk hp hs₁ (by omega) (by omega)) (O.cleanK t (by omega) (by omega) (by omega))
+      have he := GuardE.prev_endE C.ctrl C.prev (startK_of hc hk hp O.lagsClean hs₁ (by omega) (by omega)) (O.cleanK t (by omega) (by omega) (by omega))
         (O.noStore t (by omega) (by omega) (by omega)) (hh t (by omega) (by omega) (by omega)).2.2 hpv
-      have hl := PipeFrames.lags_keepI hc hk hp L hs₁ t (by omega)
+      have hl := PipeFrames.lags_keepI hc hk hp L O.lagsClean hs₁ t (by omega)
       unfold PrevKeep.PrevOK at he ⊢
       rw [show peek (L.fm (t + 1)) sy.PreviousA_B_Buttons = peek (frame (L.fm t) (L.inp t)) sy.PreviousA_B_Buttons from hl _ ab_lagI.2,
         show peek (L.fm (t + 1)) sy.A_B_Buttons = peek (frame (L.fm t) (L.inp t)) sy.A_B_Buttons from hl _ ab_lagI.1]
@@ -844,17 +851,17 @@ theorem Real.vertOK {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb
   have hixN : L.ix t ≤ L.ix N := L.ix_mono h2
   have h1ix : 1 ≤ L.ix t := L.one_le_ix h1
   have hmap : ∀ k, OpenMap.MapOK sy m0 (trace (L.fm t) (L.inp t) k) := fun k => O.map (L.ix t) h1ix hixN hix k
-  have hsG : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm t) := L.startAt hc hk hp hs₁ h1 (Nat.le_of_lt h3)
-  have hsK : FrameKeep.StartK sy m0 (L.fm t) := startK_of hc hk hp hs₁ h1 (Nat.le_of_lt h3)
+  have hsG : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm t) := L.startAt hc hk hp O.lagsClean hs₁ h1 (Nat.le_of_lt h3)
+  have hsK : FrameKeep.StartK sy m0 (L.fm t) := startK_of hc hk hp O.lagsClean hs₁ h1 (Nat.le_of_lt h3)
   have hmA : OpenMap.MapAt sy m0 (L.fm t) :=
-    OpenMap.Lags.mapAt hc hp hM L hs₁ hm₁ (b := L.ix t) (Nat.le_of_lt hix)
+    OpenMap.Lags.mapAt hc hp hM L O.lagsClean hs₁ hm₁ (b := L.ix t) (Nat.le_of_lt hix)
       (fun n a1 a2 k => O.map n a1 (Nat.le_trans (Nat.le_of_lt a2) hixN) (Nat.lt_of_lt_of_le a2 (Nat.le_of_lt hix)) k) (L.ix t) h1ix (Nat.le_refl _)
   have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) :=
     fun k => FrameKeep.cleanK_of_E (O.cleanK t h1 h2 h3 k)
   have hcl : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => FrameKeep.cleanK_of_F (hclF k)
   have hcq : ∀ k, FrameKeep.CleanK (OpenFlat.guardQ sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => OpenFlat.cleanQ_of (hclF k) (hmap k)
   have hcM : ∀ k, FrameKeep.CleanK (OpenMap.guardM sy m0) StartRun.noSpot.store (trace (L.fm t) (L.inp t) k) :=
-    fun k => OpenMap.cleanK_of (L.cleanG (L.ix t) h1ix hix k) (hmap k)
+    fun k => OpenMap.cleanK_of (L.cleanG O.lagsClean (L.ix t) h1ix hix k) (hmap k)
   have hrM : ∀ k, OpenMap.RdOK (OpenMap.rdOf sy m0) (trace (L.fm t) (L.inp t) k) := fun k => OpenMap.rdOK_of (hmap k)
   have hr : ∀ k, (trace (L.fm t) (L.inp t) k).frame = (L.fm t).frame → OpenFlat.RdOK1 (OpenFlat.rdOf sy m0) (trace (L.fm t) (L.inp t) k) := fun k hf =>
     OpenFlat.rdOK1_of (hmap k) (fun hpc hn => OpenMap.map_reads hM (OpenMap.start_M hsG) hmA.1 hmA.2 hcM hrM hf hpc hn)
@@ -866,7 +873,7 @@ theorem Real.vertOK {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb
     have := hmA.1 (OpenMap.dcdI sy m0, 0xFF, 0) (List.mem_append_right _ (List.Mem.tail _ (List.Mem.head _)))
     rw [FrameKeep.and_ff, FrameKeep.and_ff] at this
     exact this
-  have hl := PipeFrames.lags_keepI hc hk hp L hs₁ t h3
+  have hl := PipeFrames.lags_keepI hc hk hp L O.lagsClean hs₁ t h3
   -- the bytes of the next counted frame from those at a return of the collision routine
   have nxt : ∀ k₂, CtrlKeep.arrAt sy (L.fm t) (L.inp t) ≤ k₂ → (trace (L.fm t) (L.inp t) k₂).pc = OpenFlat.collRet sy m0 →
       ∀ x ∈ OpenAir.vsA sy, peek (L.fm (t + 1)) x = peek (trace (L.fm t) (L.inp t) k₂) x := fun k₂ e1 e2 x hx =>
@@ -952,7 +959,7 @@ def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : N
     (O : Real sy m0 lens N E L) (hm : StSpring sy L N E) (hpv₁ : PrevKeep.PrevOK sy (L.fm 1)) : OpenRunM sy m0 lens N E L.fm := by
   -- the frames not counted after the counted frame `t`
   have lk : ∀ t, 1 ≤ t → t < E → ∀ b ∈ LagFrames.lagI sy, (L.fm (t + 1)).ram.get! b = (frame (L.fm t) (L.inp t)).ram.get! b :=
-    fun t _ h2 => PipeFrames.lags_keepI hc hk hp L hs₁ t h2
+    fun t _ h2 => PipeFrames.lags_keepI hc hk hp L O.lagsClean hs₁ t h2
   -- `Held` at each counted frame, by induction
   have held : ∀ d, d ≤ N → 1 + d ≤ E → Held sy v (L.fm (1 + d)) := by
     intro d
@@ -961,7 +968,7 @@ def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : N
     | succ d ih =>
       intro hd hE
       have hh := ih (by omega) (by omega)
-      have fs := O.frame_step C (t := 1 + d) (by omega) (by omega) (by omega) (startK_of hc hk hp hs₁ (by omega) (by omega)) hh (hm (1 + d) (by omega) (by omega) (by omega))
+      have fs := O.frame_step C (t := 1 + d) (by omega) (by omega) (by omega) (startK_of hc hk hp O.lagsClean hs₁ (by omega) (by omega)) hh (hm (1 + d) (by omega) (by omega) (by omega))
       rw [show 1 + (d + 1) = 1 + d + 1 by omega]
       exact (keep_parts (lk (1 + d) (by omega) (by omega))).2.2 fs.2.2.1
   have heldT : ∀ t, 1 ≤ t → t ≤ N → t < E → Held sy v (L.fm t) := fun t h1 h2 h3 => by
@@ -1018,7 +1025,7 @@ def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : N
   refine ⟨airT sy lens L.fm (min (N + 1) E), airT_ground (Nat.le_refl 1) hg₁, ?_⟩
   intro t h1 h2 h3
   have hh := heldT t h1 h2 h3
-  obtain ⟨s1, s2, _, s4⟩ := O.frame_step C h1 h2 h3 (startK_of hc hk hp hs₁ h1 (by omega)) hh (hm t h1 h2 h3)
+  obtain ⟨s1, s2, _, s4⟩ := O.frame_step C h1 h2 h3 (startK_of hc hk hp O.lagsClean hs₁ h1 (by omega)) hh (hm t h1 h2 h3)
   obtain ⟨k1, k2, _⟩ := keep_parts (v := v) (lk t h1 h3)
   have hmem : inOf sy L.fm L.inp t ∈ Potential.inputs := FrameModel.readIn_mem (FrameModel.joy_of_model C.model) _
   -- the input as the routine reads it, on the ground or in the air

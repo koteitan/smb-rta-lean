@@ -20,8 +20,8 @@ fall_mem   :  d < 51,   ∀ j ∈ (C, C + d]: st(vs(j)) ≠ 0   →   vs(C + d) 
 fall_next  :  同じ条件   →   vs(C + d + 1) = t  ∨  (falling(t) ∧ vs(C + d + 1) = land(t)),     t = vstepR(vs(C + d), a(C + d + 1))
 vfall_first:  C ≤ n,  n + 1 < C + 51,  ∀ j ∈ (C, n]: st(vs(j)) ≠ 0   →   VDrop(vs(n), vs(n + 1))
 fall_first :  C ≤ n < C + 34,  ∀ j ∈ (C, n): st(vs(j)) ≠ 0   →   ¬OnFloor(vs(n))
-fall_long_of: C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                           （fall_stand と）
-vfall_of   :  C ≤ n,  n + 1 < C + 51,  st(vs(n)) ≠ 1,  jump(n + 1) = false   →   VDrop(vs(n), vs(n + 1))   （vfall_stand と）
+fall_long_of: C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                           （今は跳ばないフレームと fall_jump から）
+vfall_of   :  C ≤ n,  n + 1 < C + 51,  st(vs(n)) ≠ 1,  フレーム C + 1 … n + 1 で跳ばない   →   VDrop(vs(n), vs(n + 1))   （今は跳ばないフレームから）
 floor_at_of:  NoWall   →   OnFloor(vs(C + 34))                                               （stand_wall、land_at と）
 ```
 
@@ -46,6 +46,8 @@ land_at    :  NoWall   →   st(vs(C + 34)) = 0
 * `fall_stand` は、床でないところに立ったあと、つまり左の壁に立ったあとの `fall_long` です。
 * `vfall_stand` は、最初に立ったところからの `vfall` です。
 * `land_at` は、高さを除いた `floor_at` です。`C + 34` での床の高さは最初の落下が出します。そこで立つことは当たり判定の足の確かめで、証明していません。
+
+項目 1-1-c-7-5-5（[部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md)）から、`vfall_stand` はなくなり、`fall_stand` は小さなフィールド `fall_jump` になりました。立って始まるフレームの歩きで、跳ばない状態がまた有限の集まりになります。`vfall` は、最初の操作から跳ばないときだけ求めます。
 
 `InRoom` に新しく `vstart`（証明、`Route.Run.roomV0`）。`Checks` に新しく `first`（確かめ `fallCheck`）。`Nums` に新しく `vStart`（最初の操作での縦の状態）。
 
@@ -87,12 +89,12 @@ land_at    :  NoWall   →   st(vs(C + 34)) = 0
 
 ## 仮定（Lean で証明していないもの）
 
-* `fall_stand`、`vfall_stand`、`land_at`（上）。壁に立ったあとのフレームと、`C + 34` の 1 つの状態のことだけを言います。
+* `fall_jump`（もとの `fall_stand`、[部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md)）、`land_at`（上）。壁から跳んだあとのフレームと、`C + 34` の 1 つの状態のことだけを言います。
 * 部屋のフレームの各命令の `SiteOK`。[ブロックの地図](c-7-12-RoomMap-ja.md) と同じです（`vair_of` を通して）。
 
 ## まだ要るもの
 
-* 壁に立ったあとのフレーム: 立った状態で始まるフレームは、部屋のどの歩きもたどっていません。そういう歩き（跳ばずに立った状態で始まるフレームは、高さ、速さ 0、力を保ち、立つか落ちるかで終わる）があれば、立ったあとの状態もまた有限の集まりになり、`vfall_stand` は `vfall_first` と同じように出ます。`fall_stand` には壁からのジャンプも要ります。
+* 壁に立ったあとのフレーム: 跳ばない走りでは [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) で済みました。壁からのジャンプが残ります（`fall_jump`）。
 * `land_at`: どのフレームで着地するかには、ブロックの地図の上での当たり判定の足の確かめが要ります。[部屋でのジャンプの各フレーム](c-7-11-1-RoomFall-ja.md) と同じです。
 
 **ファイル.** `Theorems/RoomJoin.lean`（`fallNext`、`fallLayer`、`vdropB`、`fallStep`、`fallOk`、`fallRun`、`fallCheck`、`fall_ok`、`fallStep_spec`、`first_of`、`RoomRun.vs_start`、`t0_far`、`fall_mem`、`fall_next`、`vfall_first`、`fall_first`、`fall_long_of`、`vfall_of`、`floor_at_of`）、`Theorems/RoomPair.lean`（`vsBytes`、`rowV`、`rowsCheck`、`of_invL`、`v_of_state`、`v_of_rows`）、`Theorems/Route.lean`（`Run.roomV0`、`Run.inRoom`）。非公開の `Proof/RoomJoin.lean`（`room_checks.first`）、`Proof/RoomVert.lean`（`room_pair_rows`）。

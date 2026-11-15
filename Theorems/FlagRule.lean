@@ -5,8 +5,8 @@ import Theorems.SideChangeEnd
 # The star flag's rule on real frames
 
 After the castle entry Mario has no control: the star flag counts the timer's digits down (task 2), rises (task 3), and waits on the interval timer (task 4); then
-the level changes (task 5). `CastleToLevel.Flag` takes the rule of one frame (`FlagRun`) on every frame as a field. Here it is proved on real machines, from one
-condition on the machine at the castle entry and inputs with no Start (`After`, `flagOf_after`).
+the level changes (task 5). `CastleToLevel.Flag` takes the rule of one frame (`FlagRun`) on every frame as a field. Here it is proved on real machines, with any
+inputs, from one condition on the first frame `G` after the castle entry where the area parser is done, and the rule on the frames before `G` (`After`, `flagOf_after`).
 
 The condition `Good` says the machine is in one of the abstract states `Data.B0` of a frame's start, and the counters and Mario's numbers have values in stated
 ranges. One frame from such a machine is cut at 13 named places of the program (`cutOf`). On each stage the walks of the abstract machine of `TaintRun` show
@@ -2135,16 +2135,25 @@ theorem frame_next {c : Ctx} {d : Data} (hC : Checked c d) {m : Machine} (hm : G
 /-! ## The frames after the castle entry -/
 
 /-- **The frames after the castle entry, on real machines.** `seq n` is the machine when frame `n` begins and `inp n` its input, as in `Route.Changes`. `T` and `ph` are what the frames
-up to the castle entry `E` leave. The level has changed when frame `L + 1` begins. -/
-structure After (c : Ctx) (seq : Nat → Machine) (inp : Nat → UInt8) (E T ph L : Nat) : Prop where
-  /-- the machine after the castle entry is in the condition of `frame_step`, with task 2 and the flag at the height it is made at -/
-  entry : Good c (dataOf c) (seq (E + 1))
+up to the castle entry `E` leave. The level has changed when frame `L + 1` begins. The area parser may still be at work when frame `E + 1` begins: then the machine is not in
+the condition of `frame_step`. `G` is the first frame after `E` whose machine is in it; on the frames from `E + 1` to `G − 1` the counters follow the rule of one frame by `pre`,
+a condition on each of these frames. With `G = E + 1`, `pre` says nothing. -/
+structure After (c : Ctx) (seq : Nat → Machine) (inp : Nat → UInt8) (E T ph L : Nat) where
+  /-- the first frame after the castle entry in the condition of `frame_step` -/
+  G : Nat
+  hG : E < G
+  /-- the machine of frame `G` is in the condition of `frame_step` -/
+  entry : Good c (dataOf c) (seq G)
+  /-- the frames from `E + 1` to `G − 1`: the counters follow the rule of one frame, with a frame that ends paused as a `lag` frame -/
+  pre : ∀ n, E < n → n < G →
+    CastleToLevel.FlagStep c.lim c.w0 (paused c (seq (n + 1))) (CastleToLevel.flagOf c.sy c.nm (seq n)) (CastleToLevel.flagOf c.sy c.nm (seq (n + 1)))
+  /-- the machine after the castle entry has task 2 and the flag at the height it is made at -/
   task_E : (seq (E + 1)).ram.get! c.task = 2
-  y_E : (seq (E + 1)).ram.get! c.y = c.r.ram.get! c.y
+  y_E : (CastleToLevel.flagOf c.sy c.nm (seq (E + 1))).y = (c.r.ram.get! c.y).toNat
   /-- the timer and the phase that the castle entry leaves -/
   t_E : CastleToLevel.timerOf c.nm (seq (E + 1)) = T
   ph_E : CastleToLevel.phaseOf c.nm (seq (E + 1)) = ph
-  after : E < L
+  after : G ≤ L
   /-- the level has changed when frame `L + 1` begins -/
   level : CastleToLevel.level c.sy (seq (L + 1)) = true
 
@@ -2167,11 +2176,19 @@ theorem held_run {n : Nat} (h : ¬ (CastleToLevel.flagOf c.sy c.nm (held c seq E
   simp only [held]
   rw [if_neg (fun e => h e.2)]
 
-/-- what holds on each frame from `E + 1` to `L + 1` -/
+/-- what holds on each frame from `E + 1` to `L + 1`: the task is 5, or the machine is the real one and it is a frame before `G` or in the condition -/
 theorem held_inv (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (seq n) (inp n)) (A : After c seq inp E T ph L) :
     ∀ k, E + 1 + k ≤ L + 1 → (CastleToLevel.flagOf c.sy c.nm (held c seq E (E + 1 + k))).task = 5 ∨
-      (held c seq E (E + 1 + k) = seq (E + 1 + k) ∧ Good c (dataOf c) (seq (E + 1 + k)))
-  | 0, _ => Or.inr ⟨held_E c seq E, A.entry⟩
+      (held c seq E (E + 1 + k) = seq (E + 1 + k) ∧ (E + 1 + k < A.G ∨ Good c (dataOf c) (seq (E + 1 + k))))
+  | 0, _ => by
+    right
+    refine ⟨held_E c seq E, ?_⟩
+    by_cases h : E + 1 + 0 < A.G
+    · exact Or.inl h
+    · right
+      have e : A.G = E + 1 + 0 := by have := A.hG; omega
+      rw [← e]
+      exact A.entry
   | k + 1, hk => by
     rcases held_inv hC hn A k (by omega) with h5 | ⟨he, hg⟩
     · left
@@ -2181,20 +2198,31 @@ theorem held_inv (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (s
       · left
         rw [show E + 1 + (k + 1) = E + 1 + k + 1 by omega, held_five (by omega) h5]
         exact h5
-      · have hr := frame_next hC hg (inp (E + 1 + k))
-        rw [show E + 1 + (k + 1) = E + 1 + k + 1 by omega, held_run h5, hn]
-        rcases hr with h | h
-        · exact Or.inl h
-        · exact Or.inr ⟨rfl, h⟩
+      · rw [show E + 1 + (k + 1) = E + 1 + k + 1 by omega, held_run h5]
+        rcases hg with hlt | hg
+        · -- a frame before `G`: the next frame is before `G`, or it is `G`
+          right
+          refine ⟨rfl, ?_⟩
+          by_cases h : E + 1 + k + 1 < A.G
+          · exact Or.inl h
+          · right
+            have e : A.G = E + 1 + k + 1 := by omega
+            rw [← e]
+            exact A.entry
+        · have hr := frame_next hC hg (inp (E + 1 + k))
+          rw [hn]
+          rcases hr with h | h
+          · exact Or.inl h
+          · exact Or.inr ⟨rfl, Or.inr h⟩
 
 theorem held_inv' (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (seq n) (inp n)) (A : After c seq inp E T ph L) {n : Nat} (h1 : E < n) (h2 : n ≤ L + 1) :
-    (CastleToLevel.flagOf c.sy c.nm (held c seq E n)).task = 5 ∨ (held c seq E n = seq n ∧ Good c (dataOf c) (seq n)) := by
+    (CastleToLevel.flagOf c.sy c.nm (held c seq E n)).task = 5 ∨ (held c seq E n = seq n ∧ (n < A.G ∨ Good c (dataOf c) (seq n))) := by
   have := held_inv hC hn A (n - (E + 1)) (by omega)
   rwa [show E + 1 + (n - (E + 1)) = n by omega] at this
 
-/-- **The rule on every frame after the castle entry.** From the condition at `E + 1`, with any inputs, the counters of the real machines follow `FlagStep` up to
-the level change, and the frame of the level change begins with task 5. A frame that ends paused is a `lag` frame: it keeps the counters. The frames from the first
-frame of task 5 on are counted as frames that do not run: the counters are held there. -/
+/-- **The rule on every frame after the castle entry.** From the condition at `G` and the rule on the frames before it (`pre`), with any inputs, the counters of the real
+machines follow `FlagStep` up to the level change, and the frame of the level change begins with task 5. A frame that ends paused is a `lag` frame: it keeps the counters.
+The frames from the first frame of task 5 on are counted as frames that do not run: the counters are held there. -/
 def flagOf_after (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (seq n) (inp n)) (A : After c seq inp E T ph L) :
     CastleToLevel.Flag c.lim c.w0 E T ph L where
   lag n := decide (E < n ∧ ((CastleToLevel.flagOf c.sy c.nm (held c seq E n)).task = 5 ∨ paused c (seq (n + 1)) = true))
@@ -2208,11 +2236,9 @@ def flagOf_after (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (s
     rw [A.task_E]
     rfl
   y_E := by
-    rw [held_E, flagOf_cnt (quiet_start hC A.entry.at0)]
-    show c.lim + 30 ≤ ((seq (E + 1)).ram.get! c.y).toNat
-    rw [A.y_E]
+    rw [held_E, A.y_E]
     exact hC.y0
-  after := A.after
+  after := by have := A.hG; have := A.after; omega
   step := by
     intro n h1 h2
     unfold CastleToLevel.FlagStep
@@ -2221,24 +2247,39 @@ def flagOf_after (hC : Checked c (dataOf c)) (hn : ∀ n, seq (n + 1) = frame (s
     · rw [held_run h5]
       rcases held_inv' hC hn A h1 (by omega) with h | ⟨he, hg⟩
       · exact absurd h h5
-      · have F := (frame_step hC hg (inp n)).2.2.2
-        rw [← hn] at F
-        by_cases hp : paused c (seq (n + 1)) = true
-        · rw [if_pos (by simp [h1, hp]), he]
-          rw [if_pos hp] at F
-          exact F.1
-        · rw [if_neg (by simp [h5, hp]), he]
-          rw [if_neg hp] at F
-          exact F.1
+      · rcases hg with hlt | hg
+        · -- a frame before `G`: the rule is `pre`
+          have P := A.pre n h1 hlt
+          unfold CastleToLevel.FlagStep at P
+          by_cases hp : paused c (seq (n + 1)) = true
+          · rw [if_pos (by simp [h1, hp]), he]
+            rw [if_pos hp] at P
+            exact P
+          · rw [if_neg (by simp [h5, hp]), he]
+            rw [if_neg hp] at P
+            exact P
+        · have F := (frame_step hC hg (inp n)).2.2.2
+          rw [← hn] at F
+          by_cases hp : paused c (seq (n + 1)) = true
+          · rw [if_pos (by simp [h1, hp]), he]
+            rw [if_pos hp] at F
+            exact F.1
+          · rw [if_neg (by simp [h5, hp]), he]
+            rw [if_neg hp] at F
+            exact F.1
   task_L := by
     show (CastleToLevel.flagOf c.sy c.nm (held c seq E L)).task = 5
-    rcases held_inv' hC hn A A.after (by omega) with h | ⟨he, hg⟩
+    have hEL : E < L := by have := A.hG; have := A.after; omega
+    rcases held_inv' hC hn A hEL (by omega) with h | ⟨he, hg⟩
     · exact h
     · by_cases h5 : (CastleToLevel.flagOf c.sy c.nm (held c seq E L)).task = 5
       · exact h5
-      · have hl := (frame_step hC hg (inp L)).2.2.1
-        rw [← hn, A.level] at hl
-        cases hl
+      · rcases hg with hlt | hg
+        · have := A.after
+          omega
+        · have hl := (frame_step hC hg (inp L)).2.2.1
+          rw [← hn, A.level] at hl
+          cases hl
 
 end
 

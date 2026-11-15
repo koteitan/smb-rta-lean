@@ -79,7 +79,8 @@ first counted frame that ends out of control.
   `dP` is a field of `Lags` that the run chooses, so a run whose pauses end before the entry meets it with a large `dP`. With it a counted frame ends not paused
   (`Lags.unpaused`), which [The opening on real frames](a-5-4-OpenFrames.md) uses.
 * **`lags.keeps` is no longer a field** (this round): that no instruction of a frame not counted writes the pause byte through an index or a pointer is now part of
-  `lags.clean`, which protects the pause byte on every frame from control to the entry (`Lags.keepsP`).
+  `lags.clean`, which protects the pause byte on every frame from control to the entry (`Lags.keepsP`). Round 19: `lags.clean` is no longer a field either; it is the
+  hypothesis `Lags.CleanP`, proved from `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
 * **Not proved: that the master timer control stays 0.** It is not needed now.
 
 **Files.** `Theorems/LagPause.lean`, `Theorems/PipeFrames.lean`, `Theorems/Route.lean`, private `Proof/LagPause.lean`.

@@ -10,7 +10,7 @@ The two theorems that used `spareE` are the walk of A and B of the frame before 
 
 ```
 spareE           :=  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}
-Prot_E           :=  spareE  ∪  collE  ∪  Prot_F                                          (guardE; round 13: also collE = {Player_CollisionBits}, so `spareC` of part e is a part of `keep.cleanE`)
+Prot_E           :=  spareE  ∪  collE  ∪  speedE  ∪  vertE  ∪  Prot_F                      (guardE; round 13: collE = {Player_CollisionBits}; round 14: speedE = {Player_X_Speed}, vertE = {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump}; so `spareC`, `spareV` and four bytes of `vAfter` of part e come from `keep.cleanE`)
 CleanK_E(m)      :=  CleanK(m) with Prot_E for Prot_K
 keep.cleanE      :  n < ix g  →  ∀ k,  CleanK_E(tr_n(k))                               (the field; it was cleanF, with Prot_F)
 

@@ -9,7 +9,8 @@ death stores a value that the walk does not know, but then writes the routine by
 
 Here a walk follows the speed from the scroll handler to the frame's end as the counter of `TaintRun` (`Env.rkI`), as the second walk of `AfterKeep` does, but before a
 store to it by its address it stops following it (`rkOff`). At the frame's end it asks (`finV`) that the speed is still followed, or that it is known to be 0. The guard
-protects the speed (`SpareV`: no store through an index or a pointer writes it, on each instruction).
+protects the speed: no store through an index or a pointer writes it. `FrameKeep.guardE` protects it (`FrameKeep.speedE`), so `CleanK` of `guardE` gives `CleanK` of the
+walk's guard (`cleanV_of`), and the one-instruction condition `SpareV` (the old field `spareV` of the frames above ground) is a part of it (`spareV_of`).
 
 So (`speed_end`): at the frame's end the speed is the speed at the scroll handler, or 0. This is `SurfaceRead.CollideE.v`.
 
@@ -35,7 +36,7 @@ def sfI (sy : Syms) : Nat := (sy.Player_X_MoveForce &&& 0x7FF).toNat
 /-- the player's state (for the experiment only) -/
 def stI (sy : Syms) : Nat := (sy.Player_State &&& 0x7FF).toNat
 
-/-- **A store through an index or a pointer does not write the speed** (one instruction) -/
+/-- **A store through an index or a pointer does not write the speed** (one instruction): a part of `CleanK` of `FrameKeep.guardE` (`spareV_of`) -/
 def SpareV (sy : Syms) (m : Machine) : Prop := ∀ t, PipeWrites.wTarget (PipeWrites.opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ∉ [spI sy]
 
 /-- `SpareV`, for a program -/
@@ -318,16 +319,37 @@ open PipeTransition (frame)
 
 variable {sy : Syms} {m0 : Machine}
 
-/-- `CleanK` of the walk's guard: `CleanK` of `FrameKeep.guardE` and `SpareV` -/
-theorem cleanV_of {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) (hs : SpareV sy m) : FrameKeep.CleanK (guardV sy m0) q m :=
-  CtrlKeep.cleanK_prot (G := FrameKeep.guardF sy m0) (l := [spI sy]) (FrameKeep.cleanK_of_E hc) hs
+/-- the speed is protected by `FrameKeep.guardE` -/
+theorem spI_mem : spI sy ∈ (FrameKeep.guardE sy m0).prot :=
+  List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ (List.mem_singleton.2 rfl)))
+
+/-- **`CleanK` of the walk's guard from `CleanK` of `FrameKeep.guardE`**: each byte that the walk's guard protects, `guardE` protects (the speed is in
+`FrameKeep.speedE`) -/
+theorem cleanV_of {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) : FrameKeep.CleanK (guardV sy m0) q m := by
+  refine FrameKeep.cleanK_sub hc (fun x hx => ?_) rfl rfl rfl rfl
+  simp only [guardV, List.mem_append, List.mem_singleton] at hx
+  rcases hx with rfl | hx
+  · exact spI_mem
+  · exact List.mem_append_right _ hx
+
+/-- **`SpareV` is a part of `CleanK` of `FrameKeep.guardE`**, on every instruction but the player's own store of the fraction (the instruction at the store of the move
+routine with the index 0), where `CleanK` asks nothing -/
+theorem spareV_of {q : UInt16} {m : Machine} (h : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) (hq : ¬ (m.pc = q ∧ m.x = 0)) : SpareV sy m := by
+  intro t ht hlt hm
+  rcases h.store t ht hq with ⟨_, h2⟩ | ⟨h1, _⟩
+  · simp only [List.mem_singleton] at hm
+    exact h2 (hm ▸ spI_mem)
+  · have a1 := UInt16.lt_iff_toNat_lt.1 hlt
+    have a2 := UInt16.le_iff_toNat_le.1 h1
+    simp at a1 a2
+    omega
 
 /-- **A frame in control ends with the speed of the scroll handler, or 0.** The frame starts in the idle loop in control (`FrameKeep.StartK`), each instruction meets
-`CleanK` of `FrameKeep.guardE` and `SpareV`, and writes neither the routine, nor the mode, nor the task by its address; the area's type is `v`, the swimming flag 0, the
+`CleanK` of `FrameKeep.guardE`, and writes neither the routine, nor the mode, nor the task by its address; the area's type is `v`, the swimming flag 0, the
 change of size 0. It comes to the player's routine at `n₀`, the first time. Then at each instruction `k ≥ n₀` at the scroll handler (`PlayerSubs`) the speed is that
 of the frame's end, or the frame's end has the speed 0. `hc`, `hh` are the checks on the ROM. -/
 theorem speed_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : vCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
-    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsv : ∀ n, SpareV sy (trace m i n))
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
     ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs →
@@ -369,7 +391,7 @@ theorem speed_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hh : vChec
       AfterKeep.q1_run (C := AfterKeep.q1Cfg sy m0 v P) hp2 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw hsA h2 h5 hclF hx'
     have hs2 : Sim (vCfg sy m0 P.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! (spI sy)) (AfterKeep.rkOn B₁) (trace m i k₁) :=
       AfterKeep.sim_rkOn hs₁
-    have hclV : ∀ j, FrameKeep.CleanK (vCfg sy m0 P.stops.toList).G (vCfg sy m0 P.stops.toList).S.store (trace m i j) := fun j => cleanV_of (hcl j) (hsv j)
+    have hclV : ∀ j, FrameKeep.CleanK (vCfg sy m0 P.stops.toList).G (vCfg sy m0 P.stops.toList).S.store (trace m i j) := fun j => cleanV_of (hcl j)
     obtain ⟨⟨B₂, hfin, hs₂⟩, hnoQ⟩ := endKV (C := vCfg sy m0 P.stops.toList) cov_rkOff hp3 rfl rfl hne2 hat hs2 hf1 hd1 hclV hx'
     intro k hk hpc
     have hkk : k = k₁ := by

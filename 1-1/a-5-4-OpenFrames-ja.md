@@ -156,7 +156,9 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
 
 ## 前提（Lean では証明していない）
 
-* `Real` のフィールド: `cleanK`、`noStore`、`map`、`after`、`afterV`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
+* 19 回目: `cleanK` はもう `pipe.opening`（`OpenFrames.RealB`）のフィールドではありません。`OpenFrames.Real` がそれと数えないフレームの `Clean`（前の
+  `lags.clean`）を足し、`Route.Run.pipeReal` が 1 つの条件 `chg.upCleanU` から両方を証明します（[土管までの各命令に 1 つの条件](a-5-10-UpClean-ja.md)）。
+* `RealB` のフィールド: `noStore`、`map`、`after`、`afterV`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
   その始まりの状態ごとの条件です。`after` は、スクロールの処理からあと何も彼を動かさず、当たりのルーチンが何も見つけないこと（壁も画面の端もない）です。項目 1-1-a-5-6 の横の半分です。
   `afterV` は、当たり判定から戻るところからあと縦のモデルの 11 バイトが変わらないことです。
 * 13 回目: `vert` はもう仮定しません（[本物のフレームの上の縦のモデル](a-5-7-2-OpenAir-ja.md)、`Real.vertOK`）。数えるフレーム `N` のあとでも求めません。新しい:

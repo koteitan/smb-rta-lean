@@ -68,7 +68,7 @@ Lean: `Theorems/EntryRoutine.lean`（`rest_rt`、`rt_of_rows`）、`Theorems/Rou
 
 ## 仮定（Lean で証明していないもの）
 
-* `chg.entry₂`: 入口の 10 バイトが基準の値: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ、レベルの番号（1-1-d-2-5）。
+* `chg.entry₂`: 入口の 10 バイトが基準の値: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ、レベルの番号（1-1-d-2-5）。14 回目から 9 バイト: レベルの番号は縦の土管の入口から出ます（[1-1-d-2-5-3](d-2-5-3-AreaKeep-ja.md)）。
 * `dR_pos`: 入口の探索は部屋の最初の操作から少なくとも 1 フレーム先まで見る。
 
 **ファイル.** `Theorems/EntryRoutine.lean`、`Theorems/Route.lean`。`Main.lean` では生成する道筋と急ぎの音楽の証明の `RoomChecks` と、プログラム `entry-y-check`。

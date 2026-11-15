@@ -42,7 +42,7 @@ B + 32 < P₀                                   Statement.gap
 P_f ≤ P₂(e),  e + d = T   →   P₂(e) + 16·v_top·d ≤ B      hB_of_line。Statement.after と hit_bound から、ぶつかる場合も含む
 ```
 
-Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_keep`、`pole_falls`、`pole_frac`、`pole_join`、`pole_touch`。`pole_join` は非公開の `surface_run`、`castle_walk`、`jump_grab`、`pole_rules`、`top_frictionCheck`、`pole_keep`、`pole_falls`、`pole_frame_check`、`pole_frac`、`keep_check` を適用しているので、これらは仮定に現れません。
+Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_falls`、`pole_frac`、`pole_join`、`pole_touch`。`pole_join` は非公開の `surface_run`、`castle_walk`、`jump_grab`、`pole_rules`、`top_frictionCheck`、`pole_falls`、`pole_frame_check`、`pole_frac`、`keep_check` を適用しているので、これらは仮定に現れません。（`keepCases` のチェック `pole_keep` はなくなりました。覚えている速さは機械から読みます: [速いジャンプの前の覚えている速さ](f-6-9-1-StopRead-ja.md)。）
 
 ## つないだことで道筋のページから変わること
 
@@ -66,8 +66,8 @@ Lean: `Theorems/PoleJoin.lean`、非公開の `pole_join_numbers`、`pole_keep`�
 
 ```
 J ≤ h                       first_of_surface    box, off, SurfaceRun.noHitCheck
-FastLink (T' = L + 1)       fastLink_of_cases   reads, stopped, air, TopSpeed.frictionCheck, keepCheck, poleCheck
-A ≤ |v₂(T' − 1)|  (T' > L + 1)  approach_of_cases  reads, onGround, TopSpeed.frictionCheck
+FastLink (T' = L + 1)       fastLink_of_cases   reads, air, poleCheck, Run.stop_step
+A ≤ |v₂(T' − 1)|  (T' > L + 1)  approach_of_cases  reads, ground, Run.ground_step
 L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_late
 ```
 
@@ -113,6 +113,7 @@ Run.afterTouch  :  同じもの  →  g < c
 * そのあと、なくなったもの: `seq`（定義 `Run.seq = keep.seq` になった。どのフレームでも `seq j = S.seq(a + ix(j))`。ですから触ったあとのフレームも走りの本物のフレームです）、`keep` のフィールド `seqAt`（`keep` は `FrameKeep.Keep sy m0 S a g` になった。`seq` を持ちません。`keep.toFrames` は前の `FrameKeep.Frames` で、`seqAt` は定義から成り立ちます）。増えたもの: `toCastle : c ≤ upTo(upAt, keep.top)`。城に入るのは走りの数えるフレームの終わりです。`flagAny`、`flagTight`、`other` は、`c` までのフレームの旗だけを仮定します（`FollowsTouch sy flag g c E n` は `g + k ≤ c` を仮定します）。弱くなりました。`DirectFlag`、`OtherFlag`、`FollowsTouch`、`DirectWay` は `g` のあとに `c` をとります。`frames` は `SurfaceFrames.OnFrames sy m0 B T J g keep.seq fr keep.toFrames` です。定理の型は変わっていません。
 * そのあと、増えたもの: `posKeep`。書き込みまで、添え字かポインタを通してピクセルかページに書くのは、移動のルーチンのそれらへの書き込みで添え字が 0 のときだけ（`PoleFrame.PosKeep`）。`edge` は端の書き込みについてだけ言います（`PoleFrame.again` はそのすぐあとの場所だけ）。歩きは頭の当たりのルーチンを、位置を覚えたまま追います。定理の型は変わっていません。
 * そのあと、なくなったもの: `moved`（定理 `Run.moved` になった。触るフレームは移動の終わりに多くても 1 回来る: [`SubsOnce`](f-6-18-2-SubsOnce-ja.md)）。`Run.inRange` は `R` のあとに `hN`、`hfr` を、最後に `hg` をとります。`touch_ge` と `direct_castle` は `Run.inRange` にそれらを渡します。`PoleFrame.poleFrameCheck` は `SubsOnce.subsCheck` も含みます。ほかの定理の形は変わりません。
+* そのあと、`ApproachCases` からなくなったもの: `stopped`（定理 `Run.stop_step` になった）、`onGround`（新しいフィールドとともに定理 `Run.ground_step` になった）。増えたもの: `ground`。`L + 1` より後の速いジャンプで、フレーム `T' − 1` は地面で始まり（`st(T' − 2) = 0`）、プレイヤーのルーチンはジャンプを読まない（`jump(T' − 1) = false`）。トラックは機械から読みます。`direct` は `u` だけを与え、トラックは `trackOf sy keep.toFrames u` です（`abs j`、`md j`、`st j` は `seq j` の覚えている速さ、進む向き、プレイヤーの状態。`jump j` は数えるフレーム `j` のプレイヤーのルーチンが読むジャンプ）。`Track` のフィールドが 2 つ増えました: `st`、`jump`。なくなったもの: `Imposes`、`abs_of_imposes`、`keepCases`、`keepCheck`、`StopStep`、`stopStep_spec`。`direct_castle`、`castle_ge`、`touch_castle` は `(hk : keepCheck sy m0 = true)` をとらなくなりました。`approach_of_cases` は `hf`、`hk` をとらず、最後に `hstop`、`hground` をとります。`fastLink_of_cases` は `hf`、`hk` をとらず、最後に `hstop` をとります（[速いジャンプの前の覚えている速さ](f-6-9-1-StopRead-ja.md)）。
 
 本物のフレームで（`pole-frac-check`、最後の変更のあと、exit 0、悪いもの 0）:
 
@@ -158,8 +159,7 @@ Run.afterTouch  :  同じもの  →  g < c
 | `Collides`、`lowCase`、`inBlockCase` | 土台のところのフレームは `cases` の 1 つについて `PoleGrab.collide` のとおり | ルーチンを単独で確認。小さいマリオ |
 | `mask` | 右へ押されたあとの速さは、左を止めた `hstep` のとおり。1 フレームのつながり。`maskCheck` は証明済み | 下の本物の走り |
 | `reads` | 速いジャンプ: 踏み切りの前の覚えている速さは空中のしきい値以上 | コード。`Jump.vstep` がこれを読む |
-| `onGround` | `L + 1` より後の速いジャンプ: フレーム `T' − 1` は `frictionCheck` の状態で `ImposeFriction` を動かす（`Imposes`） | 下の本物の走り |
-| `stopped` | `L + 1` の速いジャンプ: 速さ 0 からのフレームは `ImposeFriction` を動かすか、`keepCases` の 1 つとして移動のルーチンを動かす | 下の本物の走り |
+| `ground` | `L + 1` より後の速いジャンプ: フレーム `T' − 1` は地面で始まり、ジャンプを読まない（それぞれ 1 つの状態の条件）。そのときフレームが覚えている速さ `|v₂|` で終わることは定理 `Run.ground_step`。速さ 0 からのフレームが `|v₂|` で終わるか、覚えている速さと進む向きを保つことは定理 `Run.stop_step`（前のフィールド `stopped`） | `stop-read-check`: ムービーと自分の 233 回の走りで、1 フレームより前の着地のあとの踏み切り 709 回の全部（[速いジャンプの前の覚えている速さ](f-6-9-1-StopRead-ja.md)） |
 | `fall` | 遅いジャンプ: 落下は `w ≤ q` で `fallStarts` の 1 つか、土台から降りて始まる。フレームは `fallNext` のとおり | 下のマップの事実 |
 | `flagAny`、`flagTight` | 遅いジャンプでつかむと、124 フレームのあいだ、`c` まで、数えるフレームの旗は `P₂(g)` の端数で確かめた直接つかみと同じ。前のフレームが左に動き、端数が `F` より小さければ 125 フレーム | 下の測定 |
 
@@ -179,11 +179,11 @@ Run.afterTouch  :  同じもの  →  g < c
 
 `Run` は本物の走りで成り立ちます。プログラムで確かめました（`pole-join-check`）。TAS は `h = 234`、`q = 233`、`L = 237`、`T' = 238`、`g = 240`、`c = 366` です。TAS の 1089 のあと左、A、A、A の走りは `g = 241`、`c = 367` です。TAS で A を長く押した走りは、ほかの触り方で `g = 234`、`c = 387` です。作業用のファイルで、TAS の数の `Approach` を Lean の項として作り、`slow_tight` の結論が出ることも確かめました。これはこのフィールドを変える前のことです。
 
-新しいフィールドは、作業用のプログラムでほかの走りも調べました。操作できてからランダムな入力の 500 回で、フレーム 1 から 8 の `box` が成り立ちます。フレーム 1002 から 1089 のあとランダムな入力の 1500 回で、全部の `off` が成り立ちます。着地が 3384 回あり、ジャンプのあとが 3074 回、降りたあとが 310 回です。全部で `fall` が成り立ちます。土台の近くの 1392 回で `stopped` と `onGround` が成り立ちます。そのうち 14 回は速いジャンプの前です。位置を土台の上に書き換えて左を押すと、土台の高さに 4 フレームいて、`fall` の土台から降りる場合が成り立ちます。
+新しいフィールドは、作業用のプログラムでほかの走りも調べました。操作できてからランダムな入力の 500 回で、フレーム 1 から 8 の `box` が成り立ちます。フレーム 1002 から 1089 のあとランダムな入力の 1500 回で、全部の `off` が成り立ちます。着地が 3384 回あり、ジャンプのあとが 3074 回、降りたあとが 310 回です。全部で `fall` が成り立ちます。土台の近くの 1392 回で前のフィールド `stopped` と `onGround` が成り立ちました。そのうち 14 回は速いジャンプの前です。位置を土台の上に書き換えて左を押すと、土台の高さに 4 フレームいて、`fall` の土台から降りる場合が成り立ちます。
 
 `hstep` は覚えている速さを `|v|` にします。`X_Physics` はこれを読みます。ヒットのあと、覚えている速さは `|v|` ではありません。上のランダムな走りで、`hstep` の `v₂` が本物のフレームと違うのは 126510 フレームのうち 59 フレームです。たとえば TAS の 1066 のあと `0082828282c102c1c1...` では、フレーム 1088 で `v = 0`、覚えている速さ 35、左で `v₂ = −1` ですが、`hstep` は 0 です。`Surface.model` は最初のヒットの前のフレームだけのことです。`mask` はこれらの走り全部で成り立ちました。`pole-join-check` は本物の覚えている速さで `v₂` を読むようにしました。
 
-証明していないこと: すべての走りが `Run` を満たすこと。位置の上限 `B` はマップのないモデルのものなので、`fall` が要ります。これがないと `g = T + 7` で `e = T`、`k = 4` を、`g = T + 8` で `e = T + 1`、`k = 4` を除けません。[道筋のページ](../docs/route-1-1-ja.md) のエミュレータの探索はもっと小さな本物の上限を与え、それならこの場合を除けます。`box`、`stopped`、`onGround`、`fall` はフレームのすることを述べています。本物の走りの全部のフレームがそうすることは証明していません。
+証明していないこと: すべての走りが `Run` を満たすこと。位置の上限 `B` はマップのないモデルのものなので、`fall` が要ります。これがないと `g = T + 7` で `e = T`、`k = 4` を、`g = T + 8` で `e = T + 1`、`k = 4` を除けません。[道筋のページ](../docs/route-1-1-ja.md) のエミュレータの探索はもっと小さな本物の上限を与え、それならこの場合を除けます。`box`、`ground`、`fall` はフレームのすることを述べています。本物の走りの全部のフレームがそうすることは証明していません。
 
 **ファイル.** `Theorems/PoleJoin.lean`、非公開の `Proof/PoleJoin.lean`。
 
@@ -194,4 +194,5 @@ Run.afterTouch  :  同じもの  →  g < c
 .lake/build/bin/smbrta pole-frac-check FM2 300               # 本物の走りで 16 ∣ P' − P、fracCheck、城の旗（約 4 分）
 .lake/build/bin/smbrta keep-frames-check FM2 100            # 本物の走りで keep の条件
 .lake/build/bin/smbrta castle-count-check FM2 200           # 触ってから城までの数えるフレーム、ポーズあり（約 1 分）
+.lake/build/bin/smbrta stop-read-check FM2 100              # 本物のフレームで Run.stop_step、Run.ground_step、フィールド ground（約 30 秒）
 ```

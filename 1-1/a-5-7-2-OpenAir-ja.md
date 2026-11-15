@@ -112,6 +112,7 @@ Lean: `Theorems/OpenAir.lean`（相、`piecesQ`、`zoneA`、`okA`、`startsA`、
 * **新しい**: `noStore`（数えるフレームのどの命令もルーチン、モード、タスクに番地で書かない）。
 * **広げた**: `cleanK` は `guardE` の `CleanK` を求めます（守るバイトが 5 つ増える: A と B、前のフレームの A と B、動く向き、走る速さ、覚えている速さ）; `afterV`
   は 11 バイトを求めます（前は 4）; `map`（`MapOK`）は当たりの旗も守ります。
+* 19 回目: `cleanK` はもうフィールドではありません。`Route.Run.pipeReal` が `chg.upCleanU` から証明します（[土管までの各命令に 1 つの条件](a-5-10-UpClean-ja.md)）。
 
 **ファイル.** `Theorems/OpenAir.lean`、`Theorems/OpenAirFrame.lean`、`Theorems/OpenWalk.lean`、`Theorems/OpenVert.lean`、`Theorems/OpenFrames.lean`、非公開の
 `Proof/OpenAir.lean`。

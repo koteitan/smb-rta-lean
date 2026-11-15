@@ -3,6 +3,7 @@ import Theorems.FastHop
 import Theorems.PoleEntryRule
 import Theorems.FrameKeep
 import Theorems.PoleFrame
+import Theorems.StopRead
 
 /-!
 # Above ground: the castle entry from control
@@ -12,8 +13,8 @@ counted from control above ground: `fr j` is frame `j` after control. The theore
 entry is at least `T + 7 + Nc` frames after control. The case split is in `direct_castle` and `castle_ge`:
 
 * any other touch: not before `T + 1`, and the castle is `Nc + 6` or more frames later (`touch_ge`, `castle_of_other`);
-* a direct grab by a fast jump: never (`fast_short`: `fast_near` on the frame after the landing, `fast_late` later). The stored speed is read from the routines: `Imposes` by
-  `TopSpeed.frictionCheck`, `keepCases` by `FastHop.caseOk`;
+* a direct grab by a fast jump: never (`fast_short`: `fast_near` on the frame after the landing, `fast_late` later). The stored speed is read from the machines
+  (`Run.stop_step`, `Run.ground_step`, by the walks of `StopRead`);
 * a direct grab by a slow jump: not by `T + 6` (`slow_short`, with `Crossed` and `landing_cases` for every `k`); on `T + 7` and `T + 8` he moved left on the frame before, with the
   fraction below `F` (`slow_tight`), so the castle is `Nc` frames later; after `T + 8` the castle is at least `Nc − 1` frames later. `touch_castle` gives these cases to the timer.
   A fall has at most 3 frames in the base's rows, by a search of every fall (`fallCheck`, `fall_rows`); stepping off the base itself is too late (`base_late`).
@@ -906,55 +907,6 @@ def frictionRun (sy : Syms) (m0 : Machine) (v fr lo hi mr ml a cb : UInt8) : Mac
   let m := poke m sy.Player_CollisionBits cb
   runSub m sy.ImposeFriction a 0 0
 
-/-- The real frame `f` runs `ImposeFriction` on a state of `TopSpeed.frictionCheck`: its `v₂` and the stored speed `a` after it are what the routine leaves.
-A frame on the ground does this, and a frame in the air with Left or Right. -/
-def Imposes (sy : Syms) (m0 : Machine) (f : Frame tp am) (a : Nat) : Prop :=
-  ∃ v ∈ speedsB sy, ∃ fr ∈ bytes, ∃ lo hi, (lo, hi) ∈ adders sy m0 ∧ ∃ mr ∈ maxRs sy m0, ∃ ml ∈ maxLs sy m0, ∃ k ∈ upTo 3, ∃ cb ∈ collBits sy,
-    f.v₂ = sbyte (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_X_Speed) ∧
-    a = (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_XSpeedAbsolute).toNat
-
-/-- `frictionCheck` on a frame: `ImposeFriction` writes `|v₂|` into the stored speed -/
-theorem abs_of_imposes (hf : frictionCheck sy m0 = true) {f : Frame tp am} {a : Nat} (h : Imposes sy m0 f a) : a = f.v₂.natAbs := by
-  obtain ⟨v, hv, fr, hfr, lo, hi, hp, mr, hmr, ml, hml, k, hk, cb, hcb, h1, h2⟩ := h
-  simp only [frictionCheck, List.all_eq_true] at hf
-  have h3 := hf v hv fr hfr (lo, hi) hp mr hmr ml hml k hk cb hcb
-  simp only [Bool.and_eq_true, beq_iff_eq] at h3
-  have h4 : peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_XSpeedAbsolute =
-      absB (peek (frictionRun sy m0 v fr lo hi mr ml k cb) sy.Player_X_Speed) := h3.1.2
-  rw [h2, h4, SurfaceFrames.absB_natAbs, h1]
-
-/-- In the air with no Left or Right, from a stopped Mario at every stored speed. The fraction and the collision bits are not read on this path: these values stand for all. -/
-def keepCases (sy : Syms) : List FastHop.Case :=
-  (List.range (TopSpeed.top sy + 1)).flatMap fun abs => ([0, 0x80, 0xFF] : List UInt8).flatMap fun f =>
-    ([1, 2] : List UInt8).flatMap fun st => ([1, 2, 3] : List UInt8).flatMap fun fd =>
-      ([1, 2] : List UInt8).flatMap fun md => (Potential.rsVals sy).map fun rs =>
-        { abs := abs.toUInt8, f, lr := 0, bits := 0xFF, st, fd, md, rs }
-
-/-- nothing changes on these frames (`FastHop.caseOk`) -/
-def keepCheck (sy : Syms) (m : Machine) : Bool := (keepCases sy).all (FastHop.caseOk sy m)
-
-/-- A frame from a stopped Mario, between the stored speeds `a`, `a'` and the moving directions `d`, `d'`: it runs `ImposeFriction`, or the movement routine on a case of `keepCases`. -/
-def StopStep (sy : Syms) (m0 : Machine) (f : Frame tp am) (a a' : Nat) (d d' : UInt8) : Prop :=
-  Imposes sy m0 f a' ∨ ∃ c ∈ keepCases sy, c.abs.toNat = a ∧ c.md = d ∧
-    a' = (peek (FastHop.move sy m0 c) sy.Player_XSpeedAbsolute).toNat ∧ d' = peek (FastHop.move sy m0 c) sy.Player_MovingDir
-
-theorem stopStep_spec (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) {f : Frame tp am} {a a' : Nat} {d d' : UInt8}
-    (h : StopStep sy m0 f a a' d d') : a' = f.v₂.natAbs ∨ (a' = a ∧ d' = d) := by
-  rcases h with h | ⟨c, hc, h1, h2, h3, h4⟩
-  · exact Or.inl (abs_of_imposes hf h)
-  · right
-    have h5 := List.all_eq_true.1 hk c hc
-    have hst : (c.st != 0 && c.lr == 0) = true := by
-      simp only [keepCases, List.mem_flatMap, List.mem_map, List.mem_cons, List.not_mem_nil, or_false] at hc
-      obtain ⟨_, _, _, _, st, hst, _, _, _, _, _, _, rfl⟩ := hc
-      rcases hst with rfl | rfl <;> rfl
-    simp only [FastHop.caseOk] at h5
-    rw [if_pos hst] at h5
-    simp only [Bool.and_eq_true, beq_iff_eq] at h5
-    obtain ⟨⟨h6, _⟩, h7⟩ := h5
-    rw [h3, h4, h6, h7]
-    exact ⟨h1, h2⟩
-
 /-! ### The fall -/
 
 section Fall
@@ -1052,10 +1004,20 @@ end Fall
 structure Track where
   /-- the stored speed after frame `j` -/
   abs : Nat → Nat
-  /-- the moving direction at frame `j`'s collision -/
+  /-- the moving direction after frame `j`: that of frame `j`'s collision (`AfterKeep.keepH`) -/
   md : Nat → UInt8
+  /-- the player's state after frame `j` -/
+  st : Nat → UInt8
+  /-- frame `j` reads a jump at its player's routine: on the ground, with A pressed and not pressed on the frame before -/
+  jump : Nat → Bool
   /-- the vertical state at frame `j`'s collision, in the model of `fallNext` -/
   u : Nat → Jump.VS
+
+/-- **The track of a real run**: the stored speed, the moving direction and the player's state at the end of the counted frame `j` (`seq j`), and the jump that its
+player's routine reads, all read from the machines; only the vertical state `u` is given -/
+def trackOf (sy : Syms) {m0 : Machine} {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (K : FrameKeep.Frames sy m0 S a g seq) (u : Nat → Jump.VS) : Track :=
+  { abs := fun j => (peek (seq j) sy.Player_XSpeedAbsolute).toNat, md := fun j => peek (seq j) sy.Player_MovingDir, st := fun j => peek (seq j) sy.Player_State,
+    jump := fun j => (SurfaceFrames.inAt sy (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))).jump, u }
 
 /-- `Approach`, with the rules read from the routines -/
 structure ApproachCases (sy : Syms) (m0 : Machine) (rows : Nat) (fr : Nat → Frame tp am) (t q L T g : Nat) (fast : Bool) (tk : Track) : Prop where
@@ -1072,11 +1034,9 @@ structure ApproachCases (sy : Syms) (m0 : Machine) (rows : Nat) (fr : Nat → Fr
   hop : ∀ j, L < j → j < g → BesideCase sy m0 (sideP sy m0) (fr j)
   /-- a fast jump reads the stored speed of the frame before it -/
   reads : fast = true → sy.AirFastSpeed.toNat ≤ tk.abs (T - 1)
-  /-- a fast jump on the frame after the landing: the frames from a stopped Mario, from `q` on -/
-  stopped : fast = true → T = L + 1 → ∀ j, q < j → j ≤ L → (fr j).v = 0 →
-    StopStep sy m0 (fr j) (tk.abs (j - 1)) (tk.abs j) (tk.md (j - 1)) (tk.md j)
-  /-- a fast jump later: the frame before it is on the ground -/
-  onGround : fast = true → L + 1 < T → Imposes sy m0 (fr (T - 1)) (tk.abs (T - 1))
+  /-- a fast jump later than the frame after the landing: the frame before it starts on the ground and reads no jump (the old field `onGround`; with it the frame
+  writes `|v₂|` into the stored speed: `Run.ground_step`). The old field `stopped` is a theorem (`Run.stop_step`). -/
+  ground : fast = true → L + 1 < T → tk.st (T - 2) = 0 ∧ tk.jump (T - 1) = false
   /-- a slow jump: the fall began on a frame `w`, by a jump or by stepping off a block (`fallStarts`), and followed `fallNext`: no block above stopped it. If he stepped off a
   block one row up, it was the base: he stood with his feet over it on the frame before -/
   fall : fast = false → ∃ w, w ≤ q ∧ (∀ j, w ≤ j → j + 1 < L → tk.u (j + 1) ∈ fallNext sy m0 (tk.u j)) ∧
@@ -1109,8 +1069,11 @@ theorem falling_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) 
     have h7 := hC.v₂
     exact Or.inr ⟨h0, inBlock_of_rule (hp c hc) hl h4 h2 h5 hC, by omega⟩
 
-theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true)
-    {rows : Nat} {fr : Nat → Frame tp am} {t q L T g : Nat} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g true tk) (hT : T = L + 1) :
+/-- `FastLink` from the cases, with `hstop`: a frame from a stopped Mario writes `|v₂|` into the stored speed, or keeps the stored speed and the moving direction
+(`Run.stop_step` on a real run) -/
+theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true)
+    {rows : Nat} {fr : Nat → Frame tp am} {t q L T g : Nat} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g true tk) (hT : T = L + 1)
+    (hstop : ∀ j, q < j → j ≤ L → (fr j).v = 0 → tk.abs j = (fr j).v₂.natAbs ∨ (tk.abs j = tk.abs (j - 1) ∧ tk.md j = tk.md (j - 1))) :
     FastLink fr (feetP sy m0) q L sy.AirFastSpeed.toNat tk.abs (fun j => tk.md j == 1) := by
   have hrule : ∀ j, q < j → j < L → feetP sy m0 ≤ (fr j).P₂ →
       ∃ c ∈ cases sy, Collides sy (withPole sy m0) (fr j) c ∧ inBlockCase sy c = true ∧ c.md = tk.md j := by
@@ -1122,7 +1085,7 @@ theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true
   · have h := A.reads rfl
     rwa [hT, Nat.add_sub_cancel] at h
   · intro j h1 h2 h3
-    rcases stopStep_spec hf hk (A.stopped rfl hT j h1 h2 h3) with h4 | ⟨h4, h5⟩
+    rcases hstop j h1 h2 h3 with h4 | ⟨h4, h5⟩
     · exact Or.inl h4
     · exact Or.inr ⟨h4, by simp only [h5]⟩
   · intro j h1 h2 h3 h4
@@ -1162,10 +1125,14 @@ theorem rows_of_cases {rows : Nat} (hr : fallCheck sy m0 rows = true) {fr : Nat 
   · have := hbase w h2 hw h3
     omega
 
+/-- `Approach` from the cases. `hstop` and `hground` are the stored speed of the real frames (`Run.stop_step`, and `Run.ground_step` with `ground`). -/
 theorem approach_of_cases (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hd : domainOk sy = true)
-    {rows : Nat} (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true)
+    {rows : Nat} (hr : fallCheck sy m0 rows = true)
     {fr : Nat → Frame tp am} {t q L T g : Nat} {fast : Bool} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g fast tk)
-    (hbase : ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (fr (w - 1)).P₂ → t + 1 ≤ w) :
+    (hbase : ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (fr (w - 1)).P₂ → t + 1 ≤ w)
+    (hstop : fast = true → T = L + 1 → ∀ j, q < j → j ≤ L → (fr j).v = 0 →
+      tk.abs j = (fr j).v₂.natAbs ∨ (tk.abs j = tk.abs (j - 1) ∧ tk.md j = tk.md (j - 1)))
+    (hground : fast = true → L + 1 < T → tk.abs (T - 1) = (fr (T - 1)).v₂.natAbs) :
     Approach fr (sideP sy m0) (feetP sy m0) t q L T g fast := by
   have hair : (13 : Nat) ≤ sy.AirFastSpeed.toNat := by
     simp only [domainOk, Bool.and_eq_true, decide_eq_true_eq] at hd
@@ -1174,9 +1141,9 @@ theorem approach_of_cases (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = 
     beside_of_case hp hd A.land, fun j h1 h2 => beside_of_case hp hd (A.hop j h1 h2), ?_, ?_, ?_⟩
   · intro h1 h2
     subst h1
-    exact ⟨_, _, _, hair, fastLink_of_cases hp hd hf hk A h2⟩
+    exact ⟨_, _, _, hair, fastLink_of_cases hp hd A h2 (hstop rfl h2)⟩
   · intro h1 h2
-    have h3 := abs_of_imposes hf (A.onGround h1 h2)
+    have h3 := hground h1 h2
     have h4 := A.reads h1
     omega
   · intro h1
@@ -1338,7 +1305,7 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   atCastle : castle sy (keep.seq c) = true
   /-- a direct grab -/
   direct : IsDirect sy touchY touchRising →
-    ∃ q L T' a tk, DirectWay sy m0 b vs B.rows (SurfaceFrames.frOf sy m0 keep.toFrames) (flagOf sy keep.seq) T Nc F g c touchY touchRising q L T' a tk
+    ∃ q L T' a u, DirectWay sy m0 b vs B.rows (SurfaceFrames.frOf sy m0 keep.toFrames) (flagOf sy keep.seq) T Nc F g c touchY touchRising q L T' a (trackOf sy keep.toFrames u)
   /-- any other touch: no castle for the frames that could matter, up to the castle entry -/
   other : ¬ IsDirect sy touchY touchRising → OtherFlag sy b vs (flagOf sy keep.seq) g c (Nc + 5)
 
@@ -1452,6 +1419,36 @@ theorem Run.moved {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F 
     (R.keep.toFrames.cleanAt R.g R.one_le (Nat.le_refl _)) j k hj hpc
   rw [e]
   exact hP
+
+/-- **A frame from a stopped Mario** (the old field `stopped` of `ApproachCases`): a counted frame before the touch that starts with the speed 0 ends with the stored
+speed `|v₂|`, or with the stored speed and the moving direction of the frame before. `StopRead.stop_step` on the frames of `keep`: the walks from the player's routine to
+the scroll handler (`StopRead.stored_subs`), and `GuardE.keepHE` from there to the frame's end. `hN`, `hfr`, `st`, `hq`, `hk`, `hc0`, `hg` are as in `Run.reads`. -/
+theorem Run.stop_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+    (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g)
+    (h0 : (R.fr j).v = 0) :
+    (peek (R.seq j) sy.Player_XSpeedAbsolute).toNat = (R.fr j).v₂.natAbs ∨
+      (peek (R.seq j) sy.Player_XSpeedAbsolute = peek (R.seq (j - 1)) sy.Player_XSpeedAbsolute ∧
+        peek (R.seq j) sy.Player_MovingDir = peek (R.seq (j - 1)) sy.Player_MovingDir) := by
+  have Nm := SurfaceFrames.numbers_of_check hN
+  have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
+    fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  exact StopRead.stop_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3 h0
+
+/-- **A frame on the ground before a jump** (the old field `onGround` of `ApproachCases`): a counted frame before the touch that starts on the ground and whose
+player's routine reads no jump runs `ImposeFriction`, so it ends with the stored speed `|v₂|` (`StopRead.ground_step` on the frames of `keep`). The hypotheses are as
+in `Run.stop_step`. -/
+theorem Run.ground_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+    (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g)
+    (hs : peek (R.seq (j - 1)) sy.Player_State = 0) (hj : (SurfaceFrames.inAt sy (R.keep.toFrames.fm j) (R.keep.toFrames.pad j) (CtrlKeep.arrAt sy (R.keep.toFrames.fm j) (R.keep.toFrames.pad j))).jump = false) :
+    (peek (R.seq j) sy.Player_XSpeedAbsolute).toNat = (R.fr j).v₂.natAbs := by
+  have Nm := SurfaceFrames.numbers_of_check hN
+  have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
+    fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  exact StopRead.ground_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3 hs hj
 
 /-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleFrame.inRange_of_frame`) on frame `g` of `keep`. The frame starts in control
 (`FrameKeep.Frames.start`, from the machine at control), each instruction is `CleanK` (`keep.clean`), and up to the write each instruction meets `PosKeep` (`posKeep`).
@@ -1568,12 +1565,12 @@ later than that, `Nc − 1` frames are enough. -/
 theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
+    (hf : frictionCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) (hd : IsDirect sy R.touchY R.touchRising) :
     T + 7 ≤ R.g ∧ (R.g ≤ T + 8 → R.g + Nc ≤ R.c) ∧ R.g + Nc ≤ R.c + 1 := by
   have H := numbers_of_check hn
-  obtain ⟨q, L, T', a, tk, W⟩ := R.direct hd
+  obtain ⟨q, L, T', a, u, W⟩ := R.direct hd
   have hrise := grab_frame hj W.path (by rw [W.atRising, hd.1]; rfl) (by rw [W.atY]; exact hd.2.1) (by rw [W.atY]; exact hd.2.2)
   have hq := W.one_le
   have hnx : ∀ j, q ≤ j → j < R.g → Next (R.fr j) (R.fr (j + 1)) := fun j h1 h2 => R.next A.1 S.fric A.2 hfq hkc hc0 hgN j (by omega) h2
@@ -1587,11 +1584,26 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
   have hTg := W.path.before
   have hbase : q < L → L < T' → ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (R.fr (w - 1)).P₂ → T + 1 ≤ w :=
     fun h1 h2 w h3 h4 h5 => base_late Fa S H hfq hkc R A hc0 hgN w h3 (by omega) h5
+  -- the stored speed of the frames before the jump, read from the machines
+  have hstop : (a T').fast = true → T' = L + 1 → ∀ j, q < j → j ≤ L → (R.fr j).v = 0 →
+      (trackOf sy R.keep.toFrames u).abs j = (R.fr j).v₂.natAbs ∨
+        ((trackOf sy R.keep.toFrames u).abs j = (trackOf sy R.keep.toFrames u).abs (j - 1) ∧
+          (trackOf sy R.keep.toFrames u).md j = (trackOf sy R.keep.toFrames u).md (j - 1)) := by
+    intro _ hT j h1 h2 h0
+    rcases R.stop_step A.1 hf A.2 hfq hkc hc0 hgN (j := j) (by omega) (by omega) h0 with e | ⟨e1, e2⟩
+    · exact Or.inl e
+    · exact Or.inr ⟨congrArg UInt8.toNat e1, e2⟩
+  have hground : (a T').fast = true → L + 1 < T' → (trackOf sy R.keep.toFrames u).abs (T' - 1) = (R.fr (T' - 1)).v₂.natAbs := by
+    intro h1 h2
+    have hA0 := W.approach (Or.inl h1)
+    have hqL := hA0.order.1
+    obtain ⟨g1, g2⟩ := hA0.ground h1 h2
+    exact R.ground_step A.1 hf A.2 hfq hkc hc0 hgN (j := T' - 1) (by omega) (by omega) (by rw [show T' - 1 - 1 = T' - 2 by omega]; exact g1) (by simpa only [trackOf] using g2)
   cases hfa : (a T').fast with
   | true =>
     exfalso
     have hA0 := W.approach (Or.inl hfa)
-    have hA := approach_of_cases hp hm H.hd hf hk hr' hA0 (hbase hA0.order.1 hA0.order.2)
+    have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) hstop hground
     rw [hfa] at hA
     have hr : R.g = T' + 1 := by simpa [hfa] using hrise
     have := fast_short H.h16 H.hA R.fr (sideP sy m0) (feetP sy m0) (poleP sy m0) T H.hPs H.hfar hnx hv hA hr
@@ -1601,7 +1613,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
     by_cases hg : R.g ≤ T + 6
     · exfalso
       have hA0 := W.approach (Or.inr (by omega))
-      have hA := approach_of_cases hp hm H.hd hf hk hr' hA0 (hbase hA0.order.1 hA0.order.2)
+      have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) hstop hground
       rw [hfa] at hA
       have := slow_short H.h16 H.hA R.fr (sideP sy m0) (feetP sy m0) (poleP sy m0)
         (posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int)) T H.hPs H.hfar (by omega)
@@ -1611,7 +1623,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
       have h0 := castle_of_direct C (n := Nc - 2) hu (by omega) (W.flagAny hfa) R.atCastle (R.afterTouch A.2 hfq hkc hc0)
       refine ⟨by omega, fun hg8 => ?_, by omega⟩
       have hA0 := W.approach (Or.inr hg8)
-      have hA := approach_of_cases hp hm H.hd hf hk hr' hA0 (hbase hA0.order.1 hA0.order.2)
+      have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) hstop hground
       rw [hfa] at hA
       have hA' : Approach R.fr (sideP sy m0) (feetP sy m0) T q L T' (T' + 2) false := hr ▸ hA
       have hin' : poleP sy m0 ≤ (R.fr (T' + 2)).P₂ := hr ▸ hin
@@ -1628,12 +1640,12 @@ control: its numbers and state, and the start of a frame in control with the cas
 theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
+    (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) : T + 7 + Nc ≤ R.c := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc hfq hkc R A hc0 hgN hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hr hc hfq hkc R A hc0 hgN hd
     by_cases hg : R.g ≤ T + 8
     · have := h2 hg
       omega
@@ -1647,13 +1659,13 @@ theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 theorem touch_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hk : keepCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
+    (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleFrame.poleFrameCheck sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) :
     (T + 1 ≤ R.g ∧ R.g + Nc + 6 ≤ R.c) ∨ (T + 7 ≤ R.g ∧ R.g ≤ T + 8 ∧ R.g + Nc ≤ R.c) ∨ (T + 9 ≤ R.g ∧ R.g + Nc ≤ R.c + 1) := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hk hr hc hfq hkc R A hc0 hgN hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hr hc hfq hkc R A hc0 hgN hd
     by_cases hg : R.g ≤ T + 8
     · exact Or.inr (Or.inl ⟨h1, hg, h2 hg⟩)
     · exact Or.inr (Or.inr ⟨by omega, h3⟩)

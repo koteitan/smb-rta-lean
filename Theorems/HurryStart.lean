@@ -228,8 +228,8 @@ structure here. -/
 structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (B : Route.Base) (kind : Nat → Kind) : Prop where
   /-- the part of the condition at the entry that the press of Start and the frames from control do not give -/
   entryRest₁ : EntryKeep.Rest d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))
-  /-- each instruction of the frames from control to the entry is `Clean` -/
-  upClean₁ : ∀ n, 1 ≤ n → n < B.a₁ sy → ∀ j, PipeWrites.Clean (EntryKeep.guardOf sy m0 d₁ (PipeTransition.entry m0)) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
+  /-- each instruction of the frames from control to the entry meets `CleanK` of the union guard (`UpClean.CleanU`) -/
+  upCleanU : ∀ n, 1 ≤ n → n < B.a₁ sy → ∀ j, UpClean.CleanU sy m0 d₁ (PipeTransition.entry m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
   /-- control within `dB` frames of the entry -/
   ctlBy₁ : controllable sy (B.seq (B.a₁ sy + B.dB)) = true
   /-- a `lag` frame is a paused frame -/
@@ -248,7 +248,7 @@ structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEn
 /-- **The conditions of the two changes that `route_1_1` asks give those of the first change here** -/
 theorem chg₁_of_changes {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
     (C : Route.ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃) : Chg₁ sy m0 nm₁ d₁ B kind :=
-  ⟨C.entryRest₁, C.upClean₁, C.ctlBy₁, C.paused₁, C.places₁, C.noStart₁, C.quiet₁, C.time₁⟩
+  ⟨C.entryRest₁, C.upCleanU, C.ctlBy₁, C.paused₁, C.places₁, C.noStart₁, C.quiet₁, C.time₁⟩
 
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}
@@ -263,7 +263,8 @@ theorem Chg₁.entry {tc : TitleStart.Ctx} {t0 : Nat} (hB : TitleStart.check sy 
   have stay : ∀ n, 1 ≤ n → n < B.a₁ sy → controllable sy (B.seq n) = true := fun n h1 h2 => by
     have h := Route.firstWith_first _ 1 B.dA n h1 h2
     simpa using h
-  exact EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
+  have hc := UpClean.upClean₁_of (S := B.toRealRun) (UpClean.prg_of_start (EntryKeep.Begin.start hB hK.near T (B.next 0)).1) C.upCleanU
+  exact EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay hc) hc C.entryRest₁
 
 /-- the first change as `PipeChangeEnd.PipeRunK`, as `Route.ChangesK.run₁` -/
 def Chg₁.run₁ (C : Chg₁ sy m0 nm₁ d₁ B kind) (he : PipeChangeEnd.EntryV sy d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))) :
@@ -307,7 +308,8 @@ theorem changes_startLast {nm : Names} {es : List Machine} {rt : StepWrites.Rt} 
   have stay : ∀ n, 1 ≤ n → n < B.a₁ sy → controllable sy (B.seq n) = true := fun n h1 h2 => by
     have h := Route.firstWith_first _ 1 B.dA n h1 h2
     simpa using h
-  have he := EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay C.upClean₁) C.upClean₁ C.entryRest₁
+  have hc := C.upClean₁ (UpClean.prg_of_start (EntryKeep.Begin.start hB hK.near T (B.next 0)).1)
+  have he := EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay hc) hc C.entryRest₁
   exact EndRunQ.startLast hS hT hQ (C.run₂ hR he) C.ctlFirst₂ hH
 
 end

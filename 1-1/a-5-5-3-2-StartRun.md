@@ -99,9 +99,9 @@ It checks that every frame ends in control, so it covers the new `lags.ctl` (the
 
 * **`lags.ctl`**: each counted frame from control to the entry ends in control. A condition on one state of each frame. It fails on a growth, an injury and a death.
   A frame not counted ends in control by the check: it ends paused (by the definition of `ix`), so it does not call the mode's routine.
-* **`lags.clean`**: each instruction of these frames is `Clean`, with the pause byte protected too (no store through an index or a pointer writes it). It is the same kind
-  of condition as `chg.upClean₁` (part b) on the same frames, with fewer bytes protected, and as `FrameKeep.Frames.cleanF` above ground. Checked on the same runs as
-  below with the pause byte protected (`start-check FM2 240 pause`): 0 instructions fail.
+* **`lags.clean` is no longer a field** (round 19): each instruction of these frames is `Clean`, with the pause byte protected too. The theorems here take it as the
+  hypothesis `Lags.CleanP`, and `Route.Run.lagsClean` proves it from the one condition `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
+  Checked before on the same runs as below with the pause byte protected (`start-check FM2 240 pause`): 0 instructions fail.
 * **`lags.keeps` is no longer a field** (this round): it was the pause byte's part of `Clean` on the frames not counted, and it is now in `lags.clean` (`Lags.keepsP`).
 * **`lags.game` is no longer assumed**: in its place the pause byte protected in `lags.clean` and the definition of the counted frames ([A frame that ends paused does not call the mode's routine](a-5-5-3-3-LagPause.md)).
 * `lags.store` is no longer assumed: the check of `LagFrames` proves it.

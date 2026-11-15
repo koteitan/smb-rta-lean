@@ -94,8 +94,8 @@ Lean: `Theorems/RoomFall.lean`（`phC`、`finC`、`piecesC`、`yPieces`、`after
 * 跳ぶフレーム: ジャンプの入力のある床のフレームが `arcStart` の状態を出すこと（`vfloor`、仮定）。かたまりの横とかたまりの上からも同じこと（高さからの `Over`、`Off.jump`）。それらの高さからの `bridgeAll` はプログラムでは真ですが、`OnArc` と Lean は床からだけを使います。
 * どのフレームで着地するか: `varc_all` は着地が `vstep` の状態の `land` であることを言いますが、どのフレームで着地するかは言いません。`Approach` の窓（かたまりの上に着地する）と `Off` のフレーム `F`（床に着く）には、ブロックの地図の上での当たり判定の足の確かめが要ります。
 * 地面かそれより下で落下中に始まるフレーム（`varc_all` はそこにいないことを求めます）。
-* 空中のフレームの入力（`air_in`、`Approach.air`）。
-* 最初の操作からの落下（状態 2、ジャンプなし）は `vstepR` で `vair_of` に入ります。[部屋での最初の落下](c-7-5-4-FirstFall-ja.md) がそれを使います。最初の操作での状態は分かっているので、最初に立つまでの状態は有限の集まりで、そこでは `vfall`、`fall_long`、`floor_at` を証明します。壁に立ったあとは小さな形で仮定のままです（`vfall_stand`、`fall_stand`）。`C + 34` での着地（`land_at`）も仮定のままです。
+* 空中のフレームの入力（`Approach.air`）。`air_in` は [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) で証明しました。
+* 最初の操作からの落下（状態 2、ジャンプなし）は `vstepR` で `vair_of` に入ります。[部屋での最初の落下](c-7-5-4-FirstFall-ja.md) がそれを使います。最初の操作での状態は分かっているので、最初に立つまでの状態は有限の集まりで、そこでは `vfall`、`fall_long`、`floor_at` を証明します。壁に立ったあとは、跳ばなければ [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) が証明します。壁から跳んだあとは `fall_jump` が仮定のままです。`C + 34` での着地（`land_at`）も仮定のままです。
 
 **ファイル.** `Theorems/RoomFall.lean`、`Theorems/VertAir.lean`、非公開の `Proof/RoomFall.lean`。
 

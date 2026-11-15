@@ -8,7 +8,7 @@
 * Mario's `x` at a frame's start `x0` or `x0 + 1` (`x0` is that of `r`);
 * the left and right `x` of the screen (`ScreenEdge_X_Pos`, `ScreenRight_X_Pos`) from 0 to 127 (before: 0 to 63).
 
-The check on the ROM of [The star flag's rule after the castle entry](g-2-1-FlagRule.md) still passes. So the rule after the castle entry is proved for these runs too. `Good` at the castle entry stays a hypothesis, but a weaker one. Of 193 runs with random inputs that reach the castle, 176 are now in `Good` at `E + 1`. The other 17 have the area parser at work when the frame `E + 1` begins. They are still outside.
+The check on the ROM of [The star flag's rule after the castle entry](g-2-1-FlagRule.md) still passes. So the rule after the castle entry is proved for these runs too. `Good` at the castle entry stays a hypothesis, but a weaker one. Of 193 runs with random inputs that reach the castle, 176 are now in `Good` at `E + 1`. The other 17 have the area parser at work when the frame `E + 1` begins. Round 19 brings them in through a later frame `G` and the rule on the frames before it ([The castle entry with the area parser at work](g-2-2-3-FlagParser.md)).
 
 ## Found on real runs
 
@@ -65,7 +65,7 @@ The stage of the offscreen bits takes twice as long: it splits the two bytes of 
 ## What is not proved
 
 * `Good(seq(E + 1))`, task 2 and the flag's height stay hypotheses (1-1-g-2-2).
-* Runs with the area parser at work at `E + 1` are outside `Good` (17 of 193 measured random runs). To bring them in, `B₀` would need the parser's bytes known (its task, the column, the name table's address, the buffer of metatiles, the attribute buffer, the second screen buffer) in about 45 combinations, and the stages would have to keep them apart. The stage of the other slots takes 18 s with 240 states, so this was not tried.
+* Runs with the area parser at work at `E + 1` are outside `Good` at `E + 1` (17 of 193 measured random runs); `After` now asks `Good` at the first frame `G` after `E` where the parser is done, and the rule on the frames before `G` as a hypothesis ([The castle entry with the area parser at work](g-2-2-3-FlagParser.md)). To prove those frames, `B₀` would need the parser's bytes known (its task, the column, the name table's address, the buffer of metatiles, the attribute buffer, the second screen buffer) in about 45 combinations, and the stages would have to keep them apart. The stage of the other slots takes 18 s with 240 states, so this was not tried.
 
 ## Files
 

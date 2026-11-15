@@ -68,7 +68,7 @@ A program, not a theorem: `entry-y-check FM2 400` (about 1 min). It runs the mov
 
 ## Assumptions (not proved in Lean)
 
-* `chg.entry₂`: 10 bytes at the entry have the values of a reference: the player's height, the screen's buffer (5 bytes), the area music's buffer, the event music's queue, the added note length, the level's number (1-1-d-2-5).
+* `chg.entry₂`: 10 bytes at the entry have the values of a reference: the player's height, the screen's buffer (5 bytes), the area music's buffer, the event music's queue, the added note length, the level's number (1-1-d-2-5). Since round 14, 9: the level's number comes from the vertical pipe's entry ([1-1-d-2-5-3](d-2-5-3-AreaKeep.md)).
 * `dR_pos`: the search for the entry looks at least one frame past the room's first control.
 
 **Files.** `Theorems/EntryRoutine.lean`, `Theorems/Route.lean`; in `Main.lean` the `RoomChecks` in the generated route and hurry-up proofs, and the program `entry-y-check`.

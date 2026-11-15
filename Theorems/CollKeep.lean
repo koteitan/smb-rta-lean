@@ -338,7 +338,7 @@ theorem mem_of_collOK (hb : collBitsOK sy = true) {m : Machine} (h : CollOK sy m
 
 /-- the collision bits are protected by `FrameKeep.guardE` -/
 theorem bitsI_mem : bitsI sy ∈ (FrameKeep.guardE sy m0).prot :=
-  List.mem_append_left _ (List.mem_append_right _ (List.mem_singleton.2 rfl))
+  List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ (List.mem_singleton.2 rfl))))
 
 /-- **`CleanK` of the walk's guard from `CleanK` of `FrameKeep.guardE`**: each byte that the walk's guard protects, `guardE` protects (the collision bits are in
 `FrameKeep.collE`) -/
