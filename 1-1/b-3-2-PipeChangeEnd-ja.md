@@ -9,10 +9,12 @@
 **入るときの条件.** `Entry(M)` は、入るフレームの終わりの状態 `M` についての条件です。
 
 * フレームは待ちの繰り返しの中で終わっています。[地上への切り替えのはじめのフレーム](d-2-2-SideChangeBound-ja.md)と同じです。プログラムカウンタとスタックポインタは `E` と同じです。ドットは 9 以下です。vblank と NMI のフラグはドットに合っています。スプライト 0 のフラグは立っています。PPU 制御で NMI はオンです。コントローラはストローブ中ではありません。
-* 97 バイトの `K` は `E` と同じ値です。下に挙げます。
+* 98 バイトの `K` は `E` と同じ値です。下に挙げます。
 * 12 バイトは、マスクのビットが `E` と同じです。下に挙げます。
 
 12 回目: 19 バイトが `K` とマスクから出ました（前は 115 と 13）。土管のフレームの歩きがそれらを使わないからです（`PipeChangeEnd.entryDropped`）。[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)を見てください。
+
+15 回目: `K` に 1 バイト、レベルの番号 `AreaNumber` が加わりました（前は 97）。土管のフレームの歩きはそれを使いません。それがあってもなくても、同じ表で通ります（`entry-area-check`）。ルートが入口でそれを使い（`Run.area₁`）、[縦の土管に入るときの状態を、タイトルから出す](b-3-4-EntryKeep-ja.md)のほかのバイトと同じく、タイトルで Start を押したことと操作できるときからのフレームがそれを出します。
 * `timer(M) ≥ 48`。
 
 ほかのバイトは何でもかまいません。マリオの位置、速さ、大きさ、スコア、コイン、ゲームタイマーの数字、フレームカウンタ、乱数、曲、スプライト、画面のバッファ、面のパーサー、スロットにいる敵です。
@@ -23,7 +25,7 @@
 |---|---|
 | ゲーム | `WorldNumber`、`PrimaryHardMode` |
 | モード | `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`JoypadOverride` |
-| 面 | `AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`WarpZoneControl`、`CurrentPlayer`、`AreaType`、`CloudTypeOverride`、`ScrollThirtyTwo+1`、`VerticalScroll` |
+| 面 | `AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`WarpZoneControl`、`CurrentPlayer`、`AreaType`、`CloudTypeOverride`、`ScrollThirtyTwo+1`、`VerticalScroll`、`AreaNumber` |
 | タイマー | `GameTimerExpiredFlag`、`StarInvincibleTimer`、`WorldEndTimer` |
 | 入力 | `Left_Right_Buttons` |
 | 空のままのスロット | `Enemy_Flag+4` … `+6`、`Enemy_ID+3` … `+6`、`Enemy_State+4`、`Fireball_State`（2）、`Block_State`（4）、`Block_RepFlag`（2）、`Misc_State`（9）、`Misc_Y_Position+7`、`Misc_Collision_Flag+10` … `+12`、`FloateyNum_Control`（7）、`FirebarSpinSpeed+14`、`+15`、`MaximumRightSpeed+18`、`+19`、`SprDataOffset_Ctrl+1`、`Cannon_PageLoc`（6）、`Cannon_X_Position`（6）、`Cannon_Y_Position`（5）、`FireballCounter`、`VineFlagOffset`、`FlagpoleFNum_YMFDummy`、`FlagpoleScore` |

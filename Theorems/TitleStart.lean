@@ -1,4 +1,5 @@
 import Theorems.SideChangeEnd
+import Theorems.TitleBoot
 import Theorems.CastleToLevel
 import Theorems.SurfaceFrames
 
@@ -9,6 +10,9 @@ Frame 0 of the route is the frame before the first control of 1-1. `Route.Run` a
 phase is 2, and `HurryMusic.Run` that the hurry-up music is not on. `Route.Pipe` asked that the speed is 0 at control. Here these come from one condition on the machine after the frame
 on which Start is pressed on the title screen (`Begin.press`). The bytes that the run from there reads before it writes them are those of a reference machine; the bytes that differ
 from run to run are free (`freeNames`: the frame counter, the interval timers' phase, the random bytes, the timers, the top score, the number of players, ...).
+`Begin.press` is no field any more: it is a theorem. For a run from power-on it follows from the machine at power-on and the inputs up to the press (`Begin.boot`,
+`TitleBoot.Start.power`, `TitleBoot.Run`; the frames of the press that the check covers are `Ctx.first` to `Ctx.last`); a run outside that class can still give the
+condition itself (`TitleBoot.Start.press`).
 
 The game then clears RAM, draws the screens and waits on a timer that ticks with the phase, so that the phase at control does not depend on the phase at the press. An abstract
 machine (`TaintRun`, with the tick across the frame's end of `SideChangeEnd`) follows every machine of the condition, with any input on every frame. A search finds a set
@@ -35,7 +39,7 @@ def nameList : List String :=
   ["GameTimerDisplay", "IntervalTimerControl", "EventMusicQueue", "EventMusicBuffer", "NoteLengthTblAdder", "TimeRunningOutMusic", "FrameCounter", "GamePauseStatus",
    "GamePauseTimer", "ScreenRoutineTask", "ScreenTimer", "DisableScreenFlag", "AreaParserTaskNum", "VRAM_Buffer1_Offset", "PseudoRandomBitReg", "NumberOfPlayers",
    "TopScoreDisplay", "ScoreAndCoinDisplay", "Timers", "JoypadBitMask", "HorizontalScroll", "VerticalScroll", "SprShuffleAmtOffset", "SprDataOffset",
-   "Mirror_PPU_CTRL_REG1", "PlayerStatus", "DeathMusicLoaded", "DigitModifier", "DisplayDigits", "PauseSoundBuffer"]
+   "Mirror_PPU_CTRL_REG1", "PlayerStatus", "DeathMusicLoaded", "DigitModifier", "DisplayDigits", "PauseSoundBuffer", "AreaNumber"]
 
 /-- a value of the disassembly written in binary (`%`) -/
 def binValue (lines : List String) (n : String) : Option Nat :=
@@ -52,7 +56,7 @@ def binValue (lines : List String) (n : String) : Option Nat :=
 /-- the names above, from the text of the disassembly -/
 def namesFrom (text : String) : Names :=
   let ls := text.splitOn "\n"
-  nameList.filterMap fun n => ((asmValue ls n).orElse fun _ => binValue ls n).map (n, ·)
+  (nameList ++ TitleBoot.zeroNames ++ [TitleBoot.markName]).filterMap fun n => ((asmValue ls n).orElse fun _ => binValue ls n).map (n, ·)
 
 /-- a RAM index of a name -/
 def adI (nm : Names) (n : String) : Nat := ((nm.ad n) &&& 0x7FF).toNat
@@ -93,10 +97,15 @@ def readsOf (sy : Syms) (x : Machine) (n : Nat) : List Nat := Id.run do
 the sound engine clears it at the end of each pause sound, and the power-on and a reset clear it. -/
 def pauseNames : List String := ["PauseSoundBuffer"]
 
-/-- the bytes that the condition at the press knows: those read before written, but the free ones, and those of `pauseNames` -/
+/-- the level's number: a byte known at the press that the run with no input does not read (round 15). The run reads it only where the area's data has a pipe
+(to leave out the plant of the first level) and when it looks up the next area. On the title screen it has the value of the reference: the title's first task clears it
+with the rest of the game's memory, and the code that picks a world there stores to it. With it the near states know it, so that `Route.Run.area₁` is a theorem. -/
+def areaNames : List String := ["AreaNumber"]
+
+/-- the bytes that the condition at the press knows: those read before written, but the free ones, and those of `pauseNames` and `areaNames` -/
 def knownOf (sy : Syms) (nm : Names) (x : Machine) : List Nat :=
   let f := freeOf nm
-  (readsOf sy x 400).filter (fun i => !f.contains i) ++ pauseNames.map (adI nm)
+  (readsOf sy x 400).filter (fun i => !f.contains i) ++ pauseNames.map (adI nm) ++ areaNames.map (adI nm)
 
 /-- the state just before control: the timer shows `t0`, the phase is 2, the music queue, its buffer and the tempo's adder are 0 -/
 def zeroBytes (nm : Names) (t0 : Nat) : List (Nat × UInt8) :=
@@ -110,6 +119,9 @@ structure Ctx where
   /-- the machine after the press, and the bytes known of it -/
   x : Machine
   K : List Nat
+  /-- the frames of the press, counted from power-on, that the check covers (`TitleBoot`): none unless they are given -/
+  first : Nat := 1
+  last : Nat := 0
 
 /-- the environment: the pad is not known, and the frame counter is read in pieces by its low bits -/
 def Ctx.E (c : Ctx) : Env :=
@@ -123,6 +135,13 @@ def vI (sy : Syms) : Nat := (sy.Player_X_Speed &&& 0x7FF).toNat
 def ctxOf (sy : Syms) (nm : Names) (cart : Machine) (kk : Nat) : Ctx :=
   let x := pressAt cart kk
   { nm, x, K := knownOf sy nm x }
+
+/-- the context of the run from power-on to the press (`TitleBoot`): the reference at power-on is the cartridge of `c.x` after the reset; the bytes `Z` are those of
+`TitleBoot.zeroNames` and the byte `W` that of `TitleBoot.markName`. The search keeps them apart. -/
+def bootOf (sy : Syms) (c : Ctx) : TitleBoot.Ctx :=
+  { E := c.E, sy, keep := keepOf sy c.nm ++ TitleBoot.zeroNames.map (adI c.nm) ++ [adI c.nm TitleBoot.markName], x := c.x, K := c.K, gps := c.gps,
+    P := powerOn { prg := c.x.prg, prgMask := c.x.prgMask } 0, Z := TitleBoot.zeroNames.map (adI c.nm), W := adI c.nm TitleBoot.markName,
+    first := c.first, last := c.last }
 
 /-! ## The condition at the press -/
 
@@ -269,7 +288,8 @@ def checkOf (sy : Syms) (c : Ctx) (t0 : Nat) (s : Sets) : Bool :=
   decide (t0 < 1000) && decide (c.gps < 2048) && decide (vI sy < 2048) && c.K.contains c.gps && exitStartsOK c.x c.K &&
     (startsOf c).all (fun S => s.all.any fun D => S.le D) && !s.farP.core && !s.farC.core &&
     grpOK sy c s.farP (finFar sy c A) && grpOK sy c s.farC (finFar sy c A) && grpOK sy c s.near (finNear sy) && grpOK sy c s.hold (finFar sy c A) &&
-    grpOK sy c s.anyN (finAny sy c A) && (s.near.R ++ s.hold.R).all (fun S => (zeroBytes c.nm t0).all (knownIs S))
+    grpOK sy c s.anyN (finAny sy c A) && (s.near.R ++ s.hold.R).all (fun S => (zeroBytes c.nm t0).all (knownIs S)) &&
+    TitleBoot.check (bootOf sy c)
 
 /-- **The check**, with the set that the search finds -/
 def check (sy : Syms) (c : Ctx) (t0 : Nat) : Bool := checkOf sy c t0 (setsOf sy c)
@@ -284,8 +304,10 @@ structure Begin (sy : Syms) (c : Ctx) (seq : Nat → Machine) (inp : Nat → UIn
   tm : Nat → Machine
   ti : Nat → UInt8
   next : ∀ n, tm (n + 1) = frame (tm n) (ti n)
-  /-- **one state**: the machine after the frame of the press, in the idle loop, with the bytes `K` of the reference machine -/
-  press : ExitCond c.E c.x c.K c.gps (tm 0)
+  /-- **the press**: `tm 0` is the machine after the frame of the press. Either the run comes from power-on (`TitleBoot.Start.power`: one state, the machine at
+  power-on, and conditions on single inputs, `TitleBoot.Run`), or the machine meets the condition itself (`TitleBoot.Start.press`, as the old field `press`). In both
+  cases the condition holds: the theorem `Begin.press`. -/
+  boot : TitleBoot.Start (bootOf sy c) (tm 0)
   /-- frame 0 of the route -/
   atZero : tm pre = seq 0 ∧ ti pre = inp 0
   /-- frame 0 is the frame before the first control after the press -/
@@ -425,11 +447,12 @@ structure Parts (sy : Syms) (c : Ctx) (t0 : Nat) (s : Sets) : Prop where
   hold : grpOK sy c s.hold (finFar sy c (allOf sy c s.all)) = true
   any : grpOK sy c s.anyN (finAny sy c (allOf sy c s.all)) = true
   zero : ∀ S ∈ s.near.R ++ s.hold.R, ∀ p ∈ zeroBytes c.nm t0, knownIs S p = true
+  boot : TitleBoot.check (bootOf sy c) = true
 
 theorem parts_of_check (h : checkOf sy c t0 s = true) : Parts sy c t0 s := by
   simp only [checkOf, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, List.any_eq_true, Bool.not_eq_true'] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, _⟩, _⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩ := h
-  exact ⟨h1, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, _⟩, _⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩ := h
+  exact ⟨h1, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩
 
 /-- the machine after the press is in the set -/
 theorem in_press (P : Parts sy c t0 s) {m : Machine} (h : ExitCond c.E c.x c.K c.gps m) : In c s.all m := by
@@ -455,9 +478,14 @@ theorem step (P : Parts sy c t0 s) {m : Machine} (h : In c s.all m) (i : UInt8) 
 
 variable {seq : Nat → Machine} {inp : Nat → UInt8}
 
+/-- **The condition at the press** (it was the field `press`): the machine after the frame of the press is in the idle loop, with the bytes `K` of the reference machine.
+For a run from power-on it follows from the machine at power-on and the inputs up to the press (`Begin.boot`), by the rows of `TitleBoot`. -/
+theorem Begin.press (P : Parts sy c t0 s) (B : Begin sy c seq inp) : ExitCond c.E c.x c.K c.gps (B.tm 0) :=
+  B.boot.cond (E_pad c) P.boot
+
 /-- every machine from the press to frame 0 is in the set, with any input -/
 theorem Begin.inSet (P : Parts sy c t0 s) (B : Begin sy c seq inp) : ∀ n, n ≤ B.pre → In c s.all (B.tm n)
-  | 0, _ => in_press P B.press
+  | 0, _ => in_press P (B.press P)
   | n + 1, h => by
     rcases step P (Begin.inSet P B n (by omega)) (B.ti n) with ⟨_, h2⟩ | ⟨_, h2, _⟩
     · rw [B.next]

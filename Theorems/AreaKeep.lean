@@ -4,8 +4,8 @@ import Theorems.RoomMusic
 # The level's number from the vertical pipe's entry to the side pipe's entry
 
 `entry₂` of the route asked that the level's number (`AreaNumber`) at the side pipe's entry is that of a reference. Only the code of a level's end, of a warp and of the
-title stores to it (read from the disassembly), but the walks of the first change and of the room did not know it: the vertical pipe's entry (`PipeChangeEnd.Entry`) and
-its exit do not list it. Here three walks carry it, each a copy of a walk of the route with the byte known in its start states:
+title stores to it (read from the disassembly), but the walks of the first change and of the room did not know it: in round 14 the vertical pipe's entry (`PipeChangeEnd.Entry`) and
+its exit did not list it (since round 15 the entry lists it, and `Run.area₁` is a theorem; the exit still does not). Here three walks carry it, each a copy of a walk of the route with the byte known in its start states:
 
 * the vertical pipe's frames: the walk `zcheck` of `PipeChangeEnd` from the start states of the entry with the byte known, asked to end in the states at the exit with the
   byte known (`pipeCheckA`);

@@ -9,10 +9,12 @@
 **The condition at the entry.** `Entry(M)` is a condition on the state `M` at the end of the entry frame.
 
 * The frame has ended in the idle loop, as in [the side pipe's first frames](d-2-2-SideChangeBound.md): the program counter and the stack pointer are those of `E`, the dot is at most 9, the vblank and NMI flags fit the dot, the sprite-0 flag is set, NMI is on in the PPU control, the controller is not strobed.
-* The 97 bytes `K` have the values of `E`. They are listed below.
+* The 98 bytes `K` have the values of `E`. They are listed below.
 * 12 bytes have the bits of `E` under a mask, below.
 
 Round 12: 19 bytes left `K` and the masks (115 and 13 before), because the walks of the pipe's frames do not need them (`PipeChangeEnd.entryDropped`): see [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
+
+Round 15: one byte joined `K` (97 before), the level's number `AreaNumber`. The walks of the pipe's frames do not need it: they pass with the same tables with it and without it (`entry-area-check`). The route needs it at the entry (`Run.area₁`), and the press of Start on the title and the frames from control give it, as the other bytes of [the state at the vertical pipe's entry, from the title](b-3-4-EntryKeep.md).
 * `timer(M) ≥ 48`.
 
 All other bytes are free: Mario's position, speed and size, the score, the coins, the digits of the game timer, the frame counter, the random bytes, the song, the sprites, the screen buffers, the area parser, the enemies in their slots.
@@ -23,7 +25,7 @@ All other bytes are free: Mario's position, speed and size, the score, the coins
 |---|---|
 | game | `WorldNumber`, `PrimaryHardMode` |
 | mode | `OperMode`, `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `JoypadOverride` |
-| area | `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `WarpZoneControl`, `CurrentPlayer`, `AreaType`, `CloudTypeOverride`, `ScrollThirtyTwo+1`, `VerticalScroll` |
+| area | `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `WarpZoneControl`, `CurrentPlayer`, `AreaType`, `CloudTypeOverride`, `ScrollThirtyTwo+1`, `VerticalScroll`, `AreaNumber` |
 | timers | `GameTimerExpiredFlag`, `StarInvincibleTimer`, `WorldEndTimer` |
 | input | `Left_Right_Buttons` |
 | slots that stay empty | `Enemy_Flag+4` … `+6`, `Enemy_ID+3` … `+6`, `Enemy_State+4`, `Fireball_State` (2), `Block_State` (4), `Block_RepFlag` (2), `Misc_State` (9), `Misc_Y_Position+7`, `Misc_Collision_Flag+10` … `+12`, `FloateyNum_Control` (7), `FirebarSpinSpeed+14`, `+15`, `MaximumRightSpeed+18`, `+19`, `SprDataOffset_Ctrl+1`, `Cannon_PageLoc` (6), `Cannon_X_Position` (6), `Cannon_Y_Position` (5), `FireballCounter`, `VineFlagOffset`, `FlagpoleFNum_YMFDummy`, `FlagpoleScore` |

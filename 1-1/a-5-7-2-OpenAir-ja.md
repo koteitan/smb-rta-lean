@@ -72,12 +72,14 @@ Lean: `Theorems/OpenAir.lean`（相、`piecesQ`、`zoneA`、`okA`、`startsA`、
 最初の load の operand）。[ブロックのバッファ](a-5-4-3-3-3-OpenMap-ja.md) がいまはこれもどのフレームでも 0 に保ち、`CtrlKeep` の歩きがプレイヤーのルーチンまで
 追います。
 
-**戻りのあと.** `vsA` のバイト（11: 縦のバイト、上位バイト、状態、A と B、止める値）は変わりません: フィールド `afterV`、仮定（前と同じで、バイトが多い）。
+**戻りのあと.** `vsA` のバイト（11: 縦のバイト、上位バイト、状態、A と B、止める値）は変わりません（`Real.afterVS`）。そのうち 7 つはフィールド `afterV` で、
+仮定です（高さ、その上位バイト、縦の速さ、その端数、高さの端数、縦の力、状態）。20 回目から、ほかの 4 つ（下向きの縦の力、ジャンプの始まりの高さ、A と B、
+止める値）は定理です。[OpenAfter](a-5-4-3-3-4-OpenAfter-ja.md) の歩きが、戻りからフレームの終わりまで 1 つずつ追います。
 数えないフレームはこれを保ちます: [LagFrames](a-5-5-3-LagFrames-ja.md) が 7 バイト多く追います。
 
 **2 つの関係.** 止める値の関係は各ジャンプに沿って運びます: 跳ぶとき歩きは止める値 1 を知り、空中では歩きが `cR` で確かめます。`PrevOK` はパート e の歩き
-（`GuardE.prev_endE`）で各数えるフレームで成り立ちます: `guardE` の `CleanK` と、ルーチン、モード、タスクへの番地での書き込みがないこと（守るバイトが 5 つ増えた
-フィールド `cleanK` と新しいフィールド `noStore`）、それに数えるフレーム 1 での `PrevOK`（操作できる時の状態のタイトルの確認が A と B と前のフレームの A と B も
+（`GuardE.prev_endE`）で各数えるフレームで成り立ちます: `guardE` の `CleanK` と、ルーチン、モード、タスクへの番地での書き込みがないこと（`chg.upCleanU` からの
+`cleanK` と、20 回目から定理の `Real.noStore`: [OpenStore](a-5-4-3-3-5-OpenStore-ja.md)）、それに数えるフレーム 1 での `PrevOK`（操作できる時の状態のタイトルの確認が A と B と前のフレームの A と B も
 求めます、`StartRun.stI`）を求めます。
 
 **見る範囲.** `H` までに着地しないジャンプには、空中のフレームを `max(L_tap − 1, H − t − 1)` 与えます（`airT`）。`arcOK` が `H − t < L_hold` を与えます。`N` までの
@@ -95,8 +97,8 @@ Lean: `Theorems/OpenAir.lean`（相、`piecesQ`、`zoneA`、`okA`、`startsA`、
 
 ## 本物のフレームで確かめた
 
-`open-real-check FM2 300` は、`N` までの各数えるフレームで `Real` のフィールド（`guardE` の `cleanK`、`noStore`、11 バイトの `afterV`、`map`、`after`）、
-証明がフレームの始まりで出すもの（`PrevOK`、止める値の関係、当たりの旗 0）、空中か跳ぶフレームで 1 歩 `VStep` を確かめます:
+`open-real-check FM2 300` は、`N` までの各数えるフレームで `Real` のフィールド（`guardE` の `cleanK`、7 バイトの `afterV`、`map`、`after`）、
+歩きが言うこと（ルーチン、モード、タスクへの書き込みがないこと、戻りのあとの `vsA` のほかの 4 バイト）、証明がフレームの始まりで出すもの（`PrevOK`、止める値の関係、当たりの旗 0）、空中か跳ぶフレームで 1 歩 `VStep` を確かめます:
 
 | 回 | 数えるフレーム | 空中か跳ぶ | 跳び始め | 条件を満たさないフレーム |
 |---|---|---|---|---|
@@ -113,6 +115,8 @@ Lean: `Theorems/OpenAir.lean`（相、`piecesQ`、`zoneA`、`okA`、`startsA`、
 * **広げた**: `cleanK` は `guardE` の `CleanK` を求めます（守るバイトが 5 つ増える: A と B、前のフレームの A と B、動く向き、走る速さ、覚えている速さ）; `afterV`
   は 11 バイトを求めます（前は 4）; `map`（`MapOK`）は当たりの旗も守ります。
 * 19 回目: `cleanK` はもうフィールドではありません。`Route.Run.pipeReal` が `chg.upCleanU` から証明します（[土管までの各命令に 1 つの条件](a-5-10-UpClean-ja.md)）。
+* 20 回目: `noStore` はもうフィールドではありません（[OpenStore](a-5-4-3-3-5-OpenStore-ja.md)）。`afterV` が求めるのは 7 バイトで、ほかの 4 つは定理です
+  （[OpenAfter](a-5-4-3-3-4-OpenAfter-ja.md)）。
 
 **ファイル.** `Theorems/OpenAir.lean`、`Theorems/OpenAirFrame.lean`、`Theorems/OpenWalk.lean`、`Theorems/OpenVert.lean`、`Theorems/OpenFrames.lean`、非公開の
 `Proof/OpenAir.lean`。

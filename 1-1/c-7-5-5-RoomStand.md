@@ -2,7 +2,7 @@
 
 # Frames that start standing in the room
 
-**Claim.** A frame of the bonus room that starts standing (the state 0) with no new press of A does not jump. The height's fraction, the two forces and the jump's origin stay. The height, the vertical speed and its fraction stay, and the state at the end is 0 or 2 (he stands, or he falls off); or he lands. So with no jump since first control the vertical states are again a finite set, from the states at first control. A check on this set proves the field `vfall_stand` and the part of `fall_stand` with no jump (item 1-1-c-7-5 of [Joining the bonus room](c-5-RoomJoin.md)). What stays is the field `fall_jump`: after a jump from the wall he is not on the floor before `C + 34`. The input of every frame is now read from the machine at the player's routine (the new field `read_stop` on the frames that do not follow the model), and with it the field `air_in` is proved too.
+**Claim.** A frame of the bonus room that starts standing (the state 0) with no new press of A does not jump. The height's fraction, the two forces and the jump's origin stay. The height, the vertical speed and its fraction stay, and the state at the end is 0 or 2 (he stands, or he falls off); or he lands. So with no jump since first control the vertical states are again a finite set, from the states at first control. A check on this set proves the field `vfall_stand` and the part of `fall_stand` with no jump (item 1-1-c-7-5 of [Joining the bonus room](c-5-RoomJoin.md)). What stayed was the field `fall_jump`: after a jump from the wall he is not on the floor before `C + 34`. Item 1-1-c-7-5-6 ([A jump from a stand during the fall in the room](c-7-5-6-RoomJump.md)) now proves it, with the fields `stand_wall` and `wall`. The input of every frame is now read from the machine at the player's routine (the new field `read_stop` on the frames that do not follow the model), and with it the field `air_in` is proved too.
 
 The notation is that of [The first fall in the room](c-7-5-4-FirstFall.md). `R` is the player's routine, `tr(j)` the machine `j` instructions into the frame, `end` the machine at the frame's end, `rt` the routine byte. `V_S` are the height's fraction, the two forces and the jump's origin; `V_3` are the height `y`, the vertical speed `vy` and its fraction `mf`. `A(x)` is bit 7 of the joypad's bits, `A'(x)` bit 7 of A of the frame before. `jump(n)` is the jump bit of the input of frame `n` (`Frames.inp`); `readIn` is the input that the model reads at `R`.
 
@@ -27,7 +27,7 @@ noJump_ok     :  q(0) ∈ vStart,  ∀ j < n: q(j + 1) ∈ next(q(j)),  n + 1 < 
 nj_next       :  d + 1 < 51,  jump(C + d + 1) = false   →   vs(C + d + 1) ∈ next(vs(C + d))
 vfall_of      :  C ≤ n,  n + 1 < C + 51,  st(vs(n)) ≠ 1,  ∀ j ∈ [C, n]: jump(j + 1) = false   →   VDrop(vs(n), vs(n + 1))
 fall_nojump   :  C ≤ n < C + 34,  ∀ j ∈ [C, n): jump(j + 1) = false   →   ¬OnFloor(vs(n))
-fall_long_of  :  C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                    (fall_nojump; after a jump the field fall_jump)
+fall_long_of  :  C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                    (fall_nojump; after a jump fall_any, item 1-1-c-7-5-6)
 ```
 
 ## The fields
@@ -101,14 +101,14 @@ With the input read at `R` on every frame (`read_stop`), the other fields that s
 
 ## Assumptions (not proved in Lean)
 
-* `fall_jump` (above): only the runs with a jump input before `C + 34`.
+* `fall_jump` (above) was assumed here: only the runs with a jump input before `C + 34`. It is a theorem since item 1-1-c-7-5-6.
 * `read_stop` (above): a read of the input, on the frames that do not follow the model.
 * `land_at` (unchanged): with no wall he stands at `C + 34`.
 * `SiteOK` on each instruction of the room's frames, as for [the block map](c-7-12-RoomMap.md).
 
 ## What is still needed
 
-* `fall_jump`: a jump from the wall reads the stored speed (five classes of the jump). A walk from `R` with a new press would give the takeoff for each class; then the states after it would be jumps from each stand of the set. They are many more states (about 688 stands × 5 classes, with the jumps' frames).
+* `fall_jump`: done in item 1-1-c-7-5-6. The takeoff depends only on the height and the stored speed (3 takeoffs for a height on this ROM), and no new walk of the room was needed. But the vertical bytes alone do not give it: the set from first control reaches the floor at frame 31. It needs that the first stand is at frame `C + 15` or later, from `stand_wall` and `wall`.
 * `land_at`: which frame lands needs the collision routine's feet check on the block map.
 
 **Files.** `Theorems/RoomStand.lean` (`vRestS`, `vLand3`, `StandAt`, `standP0`, `standP1`, `newP`, `piecesS`, `phS`, `outR`, `finS`, `checkS`, `piecesS_class`, `piecesS_cover`, `apartS`, `after_RS`, `nopress_of`, `stand_frame`, `SChecks`, `stand_room`), `Theorems/RoomJoin.lean` (`StandNext`, `StandNext.vdrop`, `noJumpNext`, `noJumpOk`, `njStep`, `njAdd`, `njRun`, `noJumpCheck`, `njStep_eq`, `njAdd_spec`, `NjDone`, `njRun_sound`, `noJump_ok`, `mem_noJumpNext_air`, `mem_noJumpNext_stand`, `joyOf_mem`, `readIn_mem`, `InRoom.stand`, `InRoom.stR`, `RoomRun.read_inp`, `jump_read`, `air_in_of`, `vstand_of`, `nj_next`, `nj_ok`, `vfall_of`, `fall_nojump`, `fall_long_of`, `drop_run`), `Theorems/RoomVert.lean` (`st_at_R`), `Theorems/RoomPair.lean` (`RoomWalks.stand`), `Theorems/Route.lean` (`Run.roomStand`, `Run.roomStR`, `Run.inRoom`); private `Proof/RoomStand.lean` (`room_stand`), `Proof/RoomJoin.lean` (`room_checks.nojump`).

@@ -4,7 +4,7 @@
 
 **命題.** タイトル画面で Start を押したところからの走りを考えます。各フレームの入力は何でもよく、Start も押してよいです。押したフレームのあとの機械が 1 つの条件を満たすとします。すると、最初に操作できるフレームの前のフレーム（道筋のフレーム 0）は、タイマー 401、インターバルタイマーの位相 2、急ぎの音楽なしで始まります。操作できるときの速さは 0 です。
 
-**これは仮定つきの定理です.** 仮定は `TitleStart.Begin` のフィールドで、下に全部挙げます。押したときの条件は 1 つの状態の条件です。本物の 339 通りで確かめましたが、全部の走りについては証明していません。Start がないことを求めるフィールドはありません。フレーム 0 も含めて、どのフレームでも Start を押してよいです。フレーム 0 を操作まで歩くほかのファイルの確かめ（`StartRun`、`EntryKeep`、`HurryMusic`）は、近い状態と止まった状態からどの入力でも歩きます（`frame0Check`、`Begin.frame0`）。
+**これは仮定つきの定理です.** 仮定は `TitleStart.Begin` のフィールドで、下に全部挙げます。押したときの条件は 1 つの状態の条件です。これは [電源から Start を押すまで](0-5-4-TitleBoot-ja.md) の電源からの走りについては定理になりました（`Begin.press`）。ウォームブートの印がないか 2 バイトが 0 の RAM、押す前に Start も Select もない、フレーム 32 から 508 で Start、という走りです。ほかの走りでは、まだ仮定です（`boot` の 2 つ目の場合）。本物の 339 通りで確かめました。Start がないことを求めるフィールドはありません。フレーム 0 も含めて、どのフレームでも Start を押してよいです。フレーム 0 を操作まで歩くほかのファイルの確かめ（`StartRun`、`EntryKeep`、`HurryMusic`）は、近い状態と止まった状態からどの入力でも歩きます（`frame0Check`、`Begin.frame0`）。
 
 これまで `Route.Run` にはフィールド `zero`（フレーム 0 が始まるときのタイマーと位相）、`Route.Pipe` には `still`（操作できるときの速さ）、`HurryMusic.Run` には `zero` と `quiet₀` がありました。これらは定理になりました: `Route.Run.zero`、`Route.Run.still`、`HurryMusic.Run.zero`、`HurryMusic.Run.quiet₀`。
 
@@ -27,7 +27,7 @@ K         =  x から何も押さずに走るとき、操作できるまでに�
              Timers（36）、JoypadBitMask（2）、HorizontalScroll、VerticalScroll、SprShuffleAmtOffset、SprDataOffset（15）、Mirror_PPU_CTRL_REG1
 ```
 
-`K` は 53 バイトです。音のキューとバッファ、画面のバッファの頭、ワールドとレベルとエリア、プレイヤーの大きさと状態、タイマーのフラグ、モードとタスク、ポーズのバイト、点数です。ほかのバイトは全部自由です。
+`K` は 54 バイトです。音のキューとバッファ、画面のバッファの頭、ワールドとレベルとエリア、プレイヤーの大きさと状態、タイマーのフラグ、モードとタスク、ポーズのバイト、点数、レベルの番号です（`AreaNumber`。15 回目に加えた。走りは操作までにこれを読みませんが、縦の土管の入口がその値を使います。1-1-b-3-4-5）。ほかのバイトは全部自由です。
 
 `PauseSoundBuffer`（鳴っているポーズの音）は `K` に新しく入れました。何も押さない走りはこれを読みませんが、ポーズする走りはポーズの次のフレームで読みます。分からないままだと、抽象機械はポーズの音が `PauseModeFlag` を立てない道を通れます。すると音楽がどんなに長いポーズのあいだも鳴り、探索が終わりません。本物の走りではタイトル画面でいつも 0 です。音のエンジンが各ポーズの音の終わりに消し、電源とリセットも消します。`GamePauseStatus` はもとから `K` にあります。始まりの状態は、いまはそのビットを全部知っています（前はビット 0 だけでした）。
 
@@ -35,7 +35,8 @@ K         =  x から何も押さずに走るとき、操作できるまでに�
 
 ```
 next      tm(n + 1) = frame(tm n, ti n)
-press     Press(tm 0)                                                          （1 つの状態）
+boot      TitleBoot.Start(tm 0)  =  power(TitleBoot.Run(tm 0))  |  press(Press(tm 0))
+              power: 1 つの状態（電源を入れたときの機械）と、押すまでの 1 つずつの入力。 press: 前と同じ 1 つの状態
 atZero    tm(pre) = seq 0,  ti(pre) = inp 0
 first     n ≤ pre  ⟹  ¬ctl(tm n)
 ctl       ctl(seq 1)
@@ -44,6 +45,7 @@ ctl       ctl(seq 1)
 定理です（`title_check` は ROM での確かめで、`native_decide` によります）。
 
 ```
+Begin.press    :  Press(tm 0)                                                       （前はフィールド press。boot から、TitleBoot の段で）
 Begin.zero     :  seq 1 = frame(seq 0, inp 0)  ⟹  timer(seq 0) = 401,  phase(seq 0) = 2,  EventMusicQueue = EventMusicBuffer = NoteLengthTblAdder = 0
 Begin.timer    :  timer(seq 0) = t0  ∧  phase(seq 0) = 2
 Begin.still    :  v(seq 1) = 0
@@ -63,7 +65,7 @@ HurryMusic.Run.zero, HurryMusic.Run.quiet₀   Run.title から
 
 近い状態は、ポーズなしの 4 個と、ポーズが終わった直後の 4 個（`GamePauseStatus` = 128、`GamePauseTimer` = 43: 次の 43 フレームは Start が効かない）です。止まった状態は、プレイヤーの登場のルーチンでポーズしている状態です。Start でポーズが終わり、同じフレームで操作できます。Start がなければ、近い状態のフレームは操作できて終わり、止まった状態のフレームはポーズのまま操作できずに終わります（2 つの歩き。いまはどの定理も使いません）。
 
-探索は証明の一部ではありません。`check` が集まりのすべての状態と、表のすべての状態（17,591 個）を歩きます。ネイティブで約 4 秒です（探索 1.8 秒、歩き 2.5 秒）。そこから帰納法で、入力が何でも、`n ≤ pre` の `tm n` は全部集まりの中にあります（`Begin.inSet`）。フレーム 0 より前に操作できて終わるフレームは `first` が除きます。`tm pre` は遠い状態ではありません。そのフレームで操作できるからです（`ctl`）。なので近い状態か止まった状態で（`Begin.anyNear`）、バイトと速さが出ます。
+探索は証明の一部ではありません。`check` が集まりのすべての状態と、表のすべての状態（17,591 個）を歩きます。ネイティブで約 4 秒です（探索 1.8 秒、歩き 2.5 秒）。`check` にはいまは `TitleBoot` の段も入っています（約 4 秒増えて、全部で約 8 秒です）。そこから帰納法で、入力が何でも、`n ≤ pre` の `tm n` は全部集まりの中にあります（`Begin.inSet`）。フレーム 0 より前に操作できて終わるフレームは `first` が除きます。`tm pre` は遠い状態ではありません。そのフレームで操作できるからです（`ctl`）。なので近い状態か止まった状態で（`Begin.anyNear`）、バイトと速さが出ます。
 
 前に探索が終わらなかったわけ: 前の回、Start を許すと集まりは 6,852 個を超えても閉じませんでした。始まりの状態は `GamePauseStatus` のビット 0 しか知らず、`PauseSoundBuffer` は何も知りませんでした。するとポーズで `PauseModeFlag` が 0 のままの道を通れて、ポーズのあいだ音楽が鳴り、曲の各フレームが新しい状態を作りました。
 
@@ -84,11 +86,11 @@ HurryMusic.Run.zero, HurryMusic.Run.quiet₀   Run.title から
 
 ## 証明していないこと
 
-* `press` は 1 つの状態の仮定です。上の 339 通りでは全部成り立ちます。タイトルが別のワールドを示す走り（ゲームオーバーのあとの A と Start）や、`K` のバイトが別の値の走りは外です。押したときの `PauseSoundBuffer` = 0 もその一部です。見た本物の走り（ゲームオーバーのあとの 6 通りも）では全部成り立ちますが、電源からは証明していません。
+* `press` は、[電源から Start を押すまで](0-5-4-TitleBoot-ja.md) の電源からの走りについては証明しました。押したときの `PauseSoundBuffer` = 0 もその一部です。ほかの走り（押す前の Select や Start、最初のデモのあとに押す、ゲームオーバーやリセットのあとのタイトル）では、まだ 1 つの状態の仮定です（`boot` の場合 `press`）。上の 339 通りでは全部成り立ちます。タイトルが別のワールドを示す走り（ゲームオーバーのあとの A と Start）や、`K` のバイトが別の値の走りは外です。電源からフレーム 31 で押す走りも外です。ゲームは `FetchNewGameTimerFlag` = 2 で始まり、`Press` は 1 を求めます。その走りでもフレーム 0 と操作は定理のとおりです。
 * フィールド `noPause`（フレーム 0 で Start を押さない）がありましたが、なくしました。`StartRun.titleCheck` と `EntryKeep.nearCheck` を、`HurryMusic.nearCheck` と同じく `frame0Check`（近い状態と止まった状態からどの入力でも、フレーム 0 の終わりは全部、その条件を満たすか遠い状態）にし、`Begin.near` の代わりに `Begin.frame0` を使います。どちらの確かめも証明のビルドで通ります。
 * `atZero`、`first`、`ctl` はどの機械がフレーム 0 かです。列の作り方から成り立ちます。`pipeAt` はもう欄ではありません。`pipe` は機械を `base` からとり、数えるフレーム 1 はフレーム 1 です（定理 `Run.pipeAt`）。
 
-**ファイル.** `Theorems/TitleStart.lean`、`Theorems/Route.lean`（`Run.title`、`Run.pipeAt`、`Run.zero`、`Run.still`）、`Theorems/HurryMusic.lean`、非公開の `Proof/TitleStart.lean`。
+**ファイル.** `Theorems/TitleStart.lean`、`Theorems/TitleBoot.lean`、`Theorems/Route.lean`（`Run.title`、`Run.pipeAt`、`Run.zero`、`Run.still`）、`Theorems/HurryMusic.lean`、非公開の `Proof/TitleStart.lean`。
 
 **再現.**
 ```

@@ -13,8 +13,9 @@ counted from control above ground: `fr j` is frame `j` after control. The theore
 entry is at least `T + 7 + Nc` frames after control. The case split is in `direct_castle` and `castle_ge`:
 
 * any other touch: not before `T + 1`, and the castle is `Nc + 6` or more frames later (`touch_ge`, `castle_of_other`);
-* a direct grab by a fast jump: never (`fast_short`: `fast_near` on the frame after the landing, `fast_late` later). The stored speed is read from the machines
-  (`Run.stop_step`, `Run.ground_step`, by the walks of `StopRead`);
+* a direct grab by a fast jump: never (`fast_short`). The stored speed is read from the machines: each frame writes `|v₂|` into it or keeps it (`Run.stop_step`,
+  `Run.stored_step`, by the walks of `StopRead`). If no frame since the landing wrote it, every frame in the block pushed him back (`fast_near`); if one did, he was
+  left of the block's side there (`fast_late`). The jump need not come on the frame after the landing, and nothing is asked of the frame before it;
 * a direct grab by a slow jump: not by `T + 6` (`slow_short`, with `Crossed` and `landing_cases` for every `k`); on `T + 7` and `T + 8` he moved left on the frame before, with the
   fraction below `F` (`slow_tight`), so the castle is `Nc` frames later; after `T + 8` the castle is at least `Nc − 1` frames later. `touch_castle` gives these cases to the timer.
   A fall has at most 3 frames in the base's rows, by a search of every fall (`fallCheck`, `fall_rows`); stepping off the base itself is too late (`base_late`).
@@ -239,10 +240,10 @@ structure Approach (fr : Nat → Frame top amax) (Ps Pf : Int) (t q L T g : Nat)
   land : Beside Ps (fr L)
   /-- on the ground and rising, until the grab -/
   hop : ∀ j, L < j → j < g → Beside Ps (fr j)
-  /-- a fast jump on the frame after the landing reads a stored speed nothing has updated -/
-  fastLink : fast = true → T = L + 1 → ∃ A abs right, 13 ≤ A ∧ FastLink fr Pf q L A abs right
-  /-- a fast jump later: the frame before it is on the ground, so it writes `|v₂|` into the stored speed that the jump reads -/
-  fastLate : fast = true → L + 1 < T → 13 ≤ (fr (T - 1)).v₂ ∨ (fr (T - 1)).v₂ ≤ -13
+  /-- a fast jump: it reads a stored speed that nothing has updated since the landing; or a frame after the landing and before the jump wrote its speed, 13 or more
+  either way, into the stored speed -/
+  fastWay : fast = true →
+    (∃ A abs right, 13 ≤ A ∧ FastLink fr Pf q L A abs right) ∨ ∃ j, L < j ∧ j < T ∧ (13 ≤ (fr j).v₂ ∨ (fr j).v₂ ≤ -13)
   /-- a slow jump's approach: a fall through the block's rows, from a frame not after `t + 1`, takes at most three frames -/
   rows : fast = false → ∀ e, q < e → e < L → e ≤ t + 1 → (∀ i, e ≤ i → i < L → Pf ≤ (fr i).P₂) → L ≤ e + 3
 
@@ -269,25 +270,27 @@ theorem landing_cases (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame
     · right
       exact ⟨e, L - e - 2, hqe, by omega, h1, he, hb⟩
 
-/-- A fast jump on the frame after the landing: `P₂(g) < P₀`, at any time. -/
+/-- A fast jump that reads a stored speed nothing has updated since the landing `L`: `P₂(g) < P₀`, at any time, on any frame `g` after the frames on the ground and
+rising that follow the landing. The jump need not be on the frame after the landing. -/
 theorem fast_near (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ : Int) {q L g : Nat}
     (hPs : Ps + 16 * top < P₀) (hfar : Pf + 16 * top ≤ P₀ + 224)
-    (hg : g = L + 2) (hqL : q < L) (hleft : (fr q).P' < Pf)
+    (hg : L + 2 ≤ g) (hqL : q < L) (hleft : (fr q).P' < Pf)
     (hnx : ∀ j, q ≤ j → j < g → Next (fr j) (fr (j + 1)))
     (hv : ∀ j, q ≤ j → j ≤ g → -top ≤ (fr j).v ∧ (fr j).v ≤ top)
     (hair : ∀ j, q < j → j < L → Falling Pf (fr j))
-    (hland : Beside Ps (fr L)) (hhop : Beside Ps (fr (L + 1)))
+    (hland : Beside Ps (fr L)) (hhop : ∀ j, L < j → j < g → Beside Ps (fr j))
     (hfl : ∃ A abs right, 13 ≤ A ∧ FastLink fr Pf q L A abs right) :
     (fr g).P₂ < P₀ := by
-  subst hg
+  obtain ⟨m, hm⟩ : ∃ m, g = L + m + 1 := ⟨g - L - 1, by omega⟩
+  subst hm
+  have hm1 : (1 : Int) ≤ m := by omega
   have hC : Crossed fr Pf q L := by
     have h := crossed fr Pf q hleft (L - q - 1) (fun j hj => hnx (q + j) (by omega) (by omega))
       (fun j hj => hair (q + j + 1) (by omega) (by omega))
     rwa [show q + (L - q - 1) + 1 = L by omega] at h
-  refine hop_short h16 hA fr Ps P₀ L 1 hPs hland (hnx L (by omega) (by omega))
+  refine hop_short h16 hA fr Ps P₀ L m hPs hland (hnx L (by omega) (by omega))
     (fun j hj => hv _ (by omega) (by omega))
-    (fun j hj => by have : j = 0 := by omega
-                    subst this; exact hhop)
+    (fun j hj => hhop _ (by omega) (by omega))
     (fun j hj => hnx (L + j + 1) (by omega) (by omega)) ?_
   intro hsL hsL12
   have hvL := hv L (by omega) (by omega)
@@ -306,31 +309,32 @@ theorem fast_near (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top
     have h5 := side_step hA h3 hsL
     omega
 
-/-- A fast jump later than that: the speed on the frame before it comes from running, so he has not been pushed since he was left of the block's side. -/
-theorem fast_late (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps P₀ : Int) {L T : Nat}
-    (hPs : Ps + 16 * top < P₀) (hLT : L + 1 < T)
-    (hland : Beside Ps (fr L)) (hnx : ∀ j, L ≤ j → j < T + 1 → Next (fr j) (fr (j + 1)))
-    (hv : ∀ j, L < j → j ≤ T + 1 → -top ≤ (fr j).v ∧ (fr j).v ≤ top)
-    (hb : ∀ j, L < j → j < T + 1 → Beside Ps (fr j))
-    (hfast : 13 ≤ (fr (T - 1)).v₂ ∨ (fr (T - 1)).v₂ ≤ -13) :
-    (fr (T + 1)).P₂ < P₀ := by
-  obtain ⟨m, hm⟩ : ∃ m, T = L + m + 2 := ⟨T - L - 2, by omega⟩
+/-- A frame `j` after the landing that ends its move with a speed of 13 or more, either way: the speed comes from running, so he has not been pushed since he was left of
+the block's side, and the frames on the ground and rising after it do not bring him to `P₀`, on any later frame `g`. A fast jump after such a frame reads the stored
+speed that it wrote; the jump need not be on the next frame. -/
+theorem fast_late (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps P₀ : Int) {L j g : Nat}
+    (hPs : Ps + 16 * top < P₀) (hLj : L < j) (hjg : j < g)
+    (hland : Beside Ps (fr L)) (hnx : ∀ i, L ≤ i → i < g → Next (fr i) (fr (i + 1)))
+    (hv : ∀ i, L < i → i ≤ g → -top ≤ (fr i).v ∧ (fr i).v ≤ top)
+    (hb : ∀ i, L < i → i < g → Beside Ps (fr i))
+    (hfast : 13 ≤ (fr j).v₂ ∨ (fr j).v₂ ≤ -13) :
+    (fr g).P₂ < P₀ := by
+  obtain ⟨m, hm⟩ : ∃ m, j = L + m + 1 := ⟨j - L - 1, by omega⟩
   subst hm
-  have hT1 : L + m + 2 - 1 = L + m + 1 := by omega
-  rw [hT1] at hfast
+  obtain ⟨d, hd⟩ : ∃ d, g = L + m + 1 + d + 1 := ⟨g - (L + m + 1) - 1, by omega⟩
+  subst hd
   have hnL := hnx L (Nat.le_refl _) (by omega)
-  -- the state on the frame before the jump
+  -- the state on the frame `j`
   obtain ⟨Z, h0⟩ : ∃ Z, HopState Ps Z (fr (L + 1)) := by
     rcases hland with ⟨h1, _⟩ | ⟨_, h2⟩
     · exact ⟨(fr L).P', Or.inl ⟨low_of_side h1 hnL, by have := hnL.2.2; omega⟩⟩
     · exact ⟨Ps, Or.inr (Or.inl (by have := hnL.2.2; omega))⟩
-  have hst := hopState_iter h16 hA fr Ps Z L h0 m (fun j hj => hv _ (by omega) (by omega))
-    (fun j hj => hb _ (by omega) (by omega)) (fun j hj => hnx (L + j + 1) (by omega) (by omega))
-  have hn1 : Next (fr (L + m + 1)) (fr (L + m + 2)) := hnx (L + m + 1) (by omega) (by omega)
-  have hn2 := hnx (L + m + 2) (by omega) (by omega)
+  have hst := hopState_iter h16 hA fr Ps Z L h0 m (fun i hi => hv _ (by omega) (by omega))
+    (fun i hi => hb _ (by omega) (by omega)) (fun i hi => hnx (L + i + 1) (by omega) (by omega))
+  have hn1 : Next (fr (L + m + 1)) (fr (L + m + 1 + 1)) := hnx (L + m + 1) (by omega) (by omega)
   have hP1 := hn1.2.2
-  -- at the takeoff he is left of the block's side, or pushed back from there
-  have hW : HopState Ps (Ps + 16 * top - 256) (fr (L + m + 2)) := by
+  -- on the next frame he is left of the block's side, or pushed back from there
+  have hW : HopState Ps (Ps + 16 * top - 256) (fr (L + m + 1 + 1)) := by
     rcases hb (L + m + 1) (by omega) (by omega) with ⟨h1, h2⟩ | ⟨_, h2⟩
     · have hl := low_of_side h1 hn1
       have hv1 : 13 ≤ (fr (L + m + 1)).v₂ := by omega
@@ -346,23 +350,26 @@ theorem fast_late (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top
       · have := PoleGrab.speed_le_two hA h3
         omega
     · exact Or.inr (Or.inl (by omega))
-  have h3 := hopState_step h16 hA (hv (L + m + 2) (by omega) (by omega)) hW (hb (L + m + 2) (by omega) (by omega)) hn2
-  exact short_of_state h16 hA (hv (L + m + 2 + 1) (by omega) (by omega)) h3 (by omega) hPs
+  -- and so on every later frame
+  have hfin := hopState_iter h16 hA fr Ps (Ps + 16 * top - 256) (L + m + 1) hW d (fun i hi => hv _ (by omega) (by omega))
+    (fun i hi => hb _ (by omega) (by omega)) (fun i hi => hnx (L + m + 1 + i + 1) (by omega) (by omega))
+  have hd0 : (0 : Int) ≤ d := by omega
+  exact short_of_state h16 hA (hv (L + m + 1 + d + 1) (by omega) (by omega)) hfin (by omega) hPs
 
-/-- A fast jump: `P₂(g) < P₀` at any time. So a fast jump gives no direct grab at all. -/
+/-- A fast jump: `P₂(g) < P₀` at any time. So a fast jump gives no direct grab at all. The two cases are those of `Approach.fastWay`: no frame since the landing
+wrote the stored speed (`fast_near`), or one did (`fast_late`). -/
 theorem fast_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ : Int) (t : Nat) {q L T g : Nat}
     (hPs : Ps + 16 * top < P₀) (hfar : Pf + 16 * top ≤ P₀ + 224)
     (hnx : ∀ j, q ≤ j → j < g → Next (fr j) (fr (j + 1)))
     (hv : ∀ j, q ≤ j → j ≤ g → -top ≤ (fr j).v ∧ (fr j).v ≤ top)
     (G : Approach fr Ps Pf t q L T g true) (rise : g = T + 1) :
     (fr g).P₂ < P₀ := by
-  obtain ⟨⟨hqL, hLT⟩, hleft, hair, _, hland, hhop, hfl, hfs, _⟩ := G
+  obtain ⟨⟨hqL, hLT⟩, hleft, hair, _, hland, hhop, hfw, _⟩ := G
   subst rise
-  by_cases hT : T = L + 1
-  · subst hT
-    exact fast_near h16 hA fr Ps Pf P₀ hPs hfar rfl hqL hleft hnx hv hair hland (hhop _ (by omega) (by omega)) (hfl rfl rfl)
-  · exact fast_late h16 hA fr Ps P₀ hPs (by omega) hland (fun j h1 h2 => hnx j (by omega) h2)
-      (fun j h1 h2 => hv j (by omega) h2) hhop (hfs rfl (by omega))
+  rcases hfw rfl with hfl | ⟨j, hj1, hj2, hfast⟩
+  · exact fast_near h16 hA fr Ps Pf P₀ hPs hfar (by omega) hqL hleft hnx hv hair hland hhop hfl
+  · exact fast_late h16 hA fr Ps P₀ hPs hj1 (by omega) hland (fun i h1 h2 => hnx i (by omega) h2)
+      (fun i h1 h2 => hv i (by omega) h2) hhop hfast
 
 /-- A slow jump, in time: `P₂(g) < P₀` for `g ≤ t + 6`. `hB` is the position bound. -/
 theorem slow_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ B : Int) (t : Nat) {q L T g : Nat}
@@ -372,7 +379,7 @@ theorem slow_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame to
     (hv : ∀ j, q ≤ j → j ≤ g → -top ≤ (fr j).v ∧ (fr j).v ≤ top)
     (G : Approach fr Ps Pf t q L T g false) (rise : g = T + 2) (hg : g ≤ t + 6) :
     (fr g).P₂ < P₀ := by
-  obtain ⟨⟨hqL, hLT⟩, hleft, hair, hmask, hland, hhop, _, _, _⟩ := G
+  obtain ⟨⟨hqL, hLT⟩, hleft, hair, hmask, hland, hhop, _, _⟩ := G
   obtain ⟨m, hm⟩ : ∃ m, g = L + m + 1 := ⟨g - L - 1, by omega⟩
   subst hm
   have hm2 : 2 ≤ m := by omega
@@ -416,7 +423,7 @@ theorem slow_tight (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame to
     (G : Approach fr Ps Pf t q L T (T + 2) false) (hg : T + 2 ≤ t + 8)
     (hin : P₀ ≤ (fr (T + 2)).P₂) :
     (fr (T + 1)).v₂ < 0 ∧ (fr (T + 2)).P₂ < P₀ + F := by
-  obtain ⟨⟨hqL, hLT⟩, hleft, hair, hmask, hland, hhop, _, _, hrows⟩ := G
+  obtain ⟨⟨hqL, hLT⟩, hleft, hair, hmask, hland, hhop, _, hrows⟩ := G
   have hC : Crossed fr Pf q L := by
     have h := crossed fr Pf q hleft (L - q - 1) (fun j hj => hnx (q + j) (by omega) (by omega))
       (fun j hj => hair (q + j + 1) (by omega) (by omega))
@@ -1006,18 +1013,13 @@ structure Track where
   abs : Nat → Nat
   /-- the moving direction after frame `j`: that of frame `j`'s collision (`AfterKeep.keepH`) -/
   md : Nat → UInt8
-  /-- the player's state after frame `j` -/
-  st : Nat → UInt8
-  /-- frame `j` reads a jump at its player's routine: on the ground, with A pressed and not pressed on the frame before -/
-  jump : Nat → Bool
   /-- the vertical state at frame `j`'s collision, in the model of `fallNext` -/
   u : Nat → Jump.VS
 
-/-- **The track of a real run**: the stored speed, the moving direction and the player's state at the end of the counted frame `j` (`seq j`), and the jump that its
-player's routine reads, all read from the machines; only the vertical state `u` is given -/
-def trackOf (sy : Syms) {m0 : Machine} {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (K : FrameKeep.Frames sy m0 S a g seq) (u : Nat → Jump.VS) : Track :=
-  { abs := fun j => (peek (seq j) sy.Player_XSpeedAbsolute).toNat, md := fun j => peek (seq j) sy.Player_MovingDir, st := fun j => peek (seq j) sy.Player_State,
-    jump := fun j => (SurfaceFrames.inAt sy (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))).jump, u }
+/-- **The track of a real run**: the stored speed and the moving direction at the end of the counted frame `j` (`seq j`), read from the machines; only the vertical
+state `u` is given -/
+def trackOf (sy : Syms) {m0 : Machine} {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (_K : FrameKeep.Frames sy m0 S a g seq) (u : Nat → Jump.VS) : Track :=
+  { abs := fun j => (peek (seq j) sy.Player_XSpeedAbsolute).toNat, md := fun j => peek (seq j) sy.Player_MovingDir, u }
 
 /-- `Approach`, with the rules read from the routines -/
 structure ApproachCases (sy : Syms) (m0 : Machine) (rows : Nat) (fr : Nat → Frame tp am) (t q L T g : Nat) (fast : Bool) (tk : Track) : Prop where
@@ -1032,11 +1034,10 @@ structure ApproachCases (sy : Syms) (m0 : Machine) (rows : Nat) (fr : Nat → Fr
   land : BesideCase sy m0 (sideP sy m0) (fr L)
   /-- on the ground and rising, until the grab -/
   hop : ∀ j, L < j → j < g → BesideCase sy m0 (sideP sy m0) (fr j)
-  /-- a fast jump reads the stored speed of the frame before it -/
+  /-- a fast jump reads the stored speed of the frame before it. This is the only link from the class of the model's jump to the machines. The old fields
+  `stopped`, `onGround` and `ground` are gone: every frame writes `|v₂|` into the stored speed or keeps it (`Run.stop_step`, `Run.stored_step`), and both cases
+  are closed (`approach_of_cases`). -/
   reads : fast = true → sy.AirFastSpeed.toNat ≤ tk.abs (T - 1)
-  /-- a fast jump later than the frame after the landing: the frame before it starts on the ground and reads no jump (the old field `onGround`; with it the frame
-  writes `|v₂|` into the stored speed: `Run.ground_step`). The old field `stopped` is a theorem (`Run.stop_step`). -/
-  ground : fast = true → L + 1 < T → tk.st (T - 2) = 0 ∧ tk.jump (T - 1) = false
   /-- a slow jump: the fall began on a frame `w`, by a jump or by stepping off a block (`fallStarts`), and followed `fallNext`: no block above stopped it. If he stepped off a
   block one row up, it was the base: he stood with his feet over it on the frame before -/
   fall : fast = false → ∃ w, w ≤ q ∧ (∀ j, w ≤ j → j + 1 < L → tk.u (j + 1) ∈ fallNext sy m0 (tk.u j)) ∧
@@ -1069,10 +1070,11 @@ theorem falling_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) 
     have h7 := hC.v₂
     exact Or.inr ⟨h0, inBlock_of_rule (hp c hc) hl h4 h2 h5 hC, by omega⟩
 
-/-- `FastLink` from the cases, with `hstop`: a frame from a stopped Mario writes `|v₂|` into the stored speed, or keeps the stored speed and the moving direction
-(`Run.stop_step` on a real run) -/
+/-- `FastLink` from the cases, with `htake`: the stored speed at the landing's end is at the air threshold or more; and `hstop`: a frame from a stopped Mario
+writes `|v₂|` into the stored speed, or keeps the stored speed and the moving direction (`Run.stop_step` on a real run) -/
 theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true)
-    {rows : Nat} {fr : Nat → Frame tp am} {t q L T g : Nat} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g true tk) (hT : T = L + 1)
+    {rows : Nat} {fr : Nat → Frame tp am} {t q L T g : Nat} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g true tk)
+    (htake : sy.AirFastSpeed.toNat ≤ tk.abs L)
     (hstop : ∀ j, q < j → j ≤ L → (fr j).v = 0 → tk.abs j = (fr j).v₂.natAbs ∨ (tk.abs j = tk.abs (j - 1) ∧ tk.md j = tk.md (j - 1))) :
     FastLink fr (feetP sy m0) q L sy.AirFastSpeed.toNat tk.abs (fun j => tk.md j == 1) := by
   have hrule : ∀ j, q < j → j < L → feetP sy m0 ≤ (fr j).P₂ →
@@ -1081,9 +1083,7 @@ theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true
     rcases A.air j h1 h2 with ⟨h4, _⟩ | ⟨_, c, hc, hC, hl, hm, _⟩
     · omega
     · exact ⟨c, hc, hC, hl, hm⟩
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · have h := A.reads rfl
-    rwa [hT, Nat.add_sub_cancel] at h
+  refine ⟨htake, ?_, ?_, ?_⟩
   · intro j h1 h2 h3
     rcases hstop j h1 h2 h3 with h4 | ⟨h4, h5⟩
     · exact Or.inl h4
@@ -1125,27 +1125,47 @@ theorem rows_of_cases {rows : Nat} (hr : fallCheck sy m0 rows = true) {fr : Nat 
   · have := hbase w h2 hw h3
     omega
 
-/-- `Approach` from the cases. `hstop` and `hground` are the stored speed of the real frames (`Run.stop_step`, and `Run.ground_step` with `ground`). -/
+/-- `Approach` from the cases. `hstop` and `hkeep` are the stored speed of the real frames (`Run.stop_step`, `Run.stored_step`): a frame from a stopped Mario
+writes `|v₂|` into the stored speed or keeps the stored speed and the moving direction, and every frame writes `|v₂|` or keeps the stored speed.
+
+A fast jump reads a stored speed at the air threshold or more (`reads`). Going back from the takeoff to the landing, each frame wrote it or kept it. So either a frame
+after the landing wrote it, with `|v₂|` at the threshold or more; or no frame did, and the stored speed at the landing's end is at the threshold or more (`FastLink`).
+The frame before the takeoff need not start on the ground: the old field `ground` is gone. -/
 theorem approach_of_cases (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hd : domainOk sy = true)
     {rows : Nat} (hr : fallCheck sy m0 rows = true)
     {fr : Nat → Frame tp am} {t q L T g : Nat} {fast : Bool} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g fast tk)
     (hbase : ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (fr (w - 1)).P₂ → t + 1 ≤ w)
-    (hstop : fast = true → T = L + 1 → ∀ j, q < j → j ≤ L → (fr j).v = 0 →
+    (hstop : fast = true → ∀ j, q < j → j ≤ L → (fr j).v = 0 →
       tk.abs j = (fr j).v₂.natAbs ∨ (tk.abs j = tk.abs (j - 1) ∧ tk.md j = tk.md (j - 1)))
-    (hground : fast = true → L + 1 < T → tk.abs (T - 1) = (fr (T - 1)).v₂.natAbs) :
+    (hkeep : fast = true → ∀ j, L < j → j < T → tk.abs j = (fr j).v₂.natAbs ∨ tk.abs j = tk.abs (j - 1)) :
     Approach fr (sideP sy m0) (feetP sy m0) t q L T g fast := by
   have hair : (13 : Nat) ≤ sy.AirFastSpeed.toNat := by
     simp only [domainOk, Bool.and_eq_true, decide_eq_true_eq] at hd
     exact hd.1.2
   refine ⟨A.order, A.left, fun j h1 h2 => falling_of_case hp hd (A.air j h1 h2), maskL_of_step hm A.mask,
-    beside_of_case hp hd A.land, fun j h1 h2 => beside_of_case hp hd (A.hop j h1 h2), ?_, ?_, ?_⟩
-  · intro h1 h2
+    beside_of_case hp hd A.land, fun j h1 h2 => beside_of_case hp hd (A.hop j h1 h2), ?_, ?_⟩
+  · intro h1
     subst h1
-    exact ⟨_, _, _, hair, fastLink_of_cases hp hd A h2 (hstop rfl h2)⟩
-  · intro h1 h2
-    have h3 := hground h1 h2
-    have h4 := A.reads h1
-    omega
+    have hLT := A.order.2
+    -- going back from the takeoff: the stored speed is still at the threshold or more, or a frame wrote it
+    have hback : ∀ d, L + d < T → sy.AirFastSpeed.toNat ≤ tk.abs (T - 1 - d) ∨
+        ∃ j, L < j ∧ j < T ∧ sy.AirFastSpeed.toNat ≤ (fr j).v₂.natAbs := by
+      intro d
+      induction d with
+      | zero => exact fun _ => Or.inl (A.reads rfl)
+      | succ d ih =>
+        intro h
+        rcases ih (by omega) with h1 | h1
+        · rcases hkeep rfl (T - 1 - d) (by omega) (by omega) with h2 | h2
+          · exact Or.inr ⟨T - 1 - d, by omega, by omega, by omega⟩
+          · left
+            rw [show T - 1 - (d + 1) = T - 1 - d - 1 by omega]
+            omega
+        · exact Or.inr h1
+    rcases hback (T - 1 - L) (by omega) with h1 | ⟨j, h1, h2, h3⟩
+    · rw [show T - 1 - (T - 1 - L) = L by omega] at h1
+      exact Or.inl ⟨_, _, _, hair, fastLink_of_cases hp hd A h1 (hstop rfl)⟩
+    · exact Or.inr ⟨j, h1, h2, by omega⟩
   · intro h1
     subst h1
     exact rows_of_cases hr A hbase
@@ -1436,19 +1456,19 @@ theorem Run.stop_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat}
   have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
   exact StopRead.stop_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3 h0
 
-/-- **A frame on the ground before a jump** (the old field `onGround` of `ApproachCases`): a counted frame before the touch that starts on the ground and whose
-player's routine reads no jump runs `ImposeFriction`, so it ends with the stored speed `|v₂|` (`StopRead.ground_step` on the frames of `keep`). The hypotheses are as
-in `Run.stop_step`. -/
-theorem Run.ground_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+/-- **A frame writes the stored speed or keeps it**: a counted frame before the touch ends with the stored speed `|v₂|`, or with the stored speed of the frame
+before (`StopRead.stored_step` on the frames of `keep`). Nothing is asked of the frame's speed, state or jump. It closes the frames between the landing and a fast
+jump (`approach_of_cases`), where the old fields `onGround` and `ground` of `ApproachCases` were asked. The hypotheses are as in `Run.stop_step`. -/
+theorem Run.stored_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
-    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g)
-    (hs : peek (R.seq (j - 1)) sy.Player_State = 0) (hj : (SurfaceFrames.inAt sy (R.keep.toFrames.fm j) (R.keep.toFrames.pad j) (CtrlKeep.arrAt sy (R.keep.toFrames.fm j) (R.keep.toFrames.pad j))).jump = false) :
-    (peek (R.seq j) sy.Player_XSpeedAbsolute).toNat = (R.fr j).v₂.natAbs := by
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g) :
+    (peek (R.seq j) sy.Player_XSpeedAbsolute).toNat = (R.fr j).v₂.natAbs ∨
+      peek (R.seq j) sy.Player_XSpeedAbsolute = peek (R.seq (j - 1)) sy.Player_XSpeedAbsolute := by
   have Nm := SurfaceFrames.numbers_of_check hN
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
   have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
-  exact StopRead.ground_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3 hs hj
+  exact StopRead.stored_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3
 
 /-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleFrame.inRange_of_frame`) on frame `g` of `keep`. The frame starts in control
 (`FrameKeep.Frames.start`, from the machine at control), each instruction is `CleanK` (`keep.clean`), and up to the write each instruction meets `PosKeep` (`posKeep`).
@@ -1585,25 +1605,28 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
   have hbase : q < L → L < T' → ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (R.fr (w - 1)).P₂ → T + 1 ≤ w :=
     fun h1 h2 w h3 h4 h5 => base_late Fa S H hfq hkc R A hc0 hgN w h3 (by omega) h5
   -- the stored speed of the frames before the jump, read from the machines
-  have hstop : (a T').fast = true → T' = L + 1 → ∀ j, q < j → j ≤ L → (R.fr j).v = 0 →
+  have hstop : ∀ j, 1 ≤ j → j < R.g → (R.fr j).v = 0 →
       (trackOf sy R.keep.toFrames u).abs j = (R.fr j).v₂.natAbs ∨
         ((trackOf sy R.keep.toFrames u).abs j = (trackOf sy R.keep.toFrames u).abs (j - 1) ∧
           (trackOf sy R.keep.toFrames u).md j = (trackOf sy R.keep.toFrames u).md (j - 1)) := by
-    intro _ hT j h1 h2 h0
-    rcases R.stop_step A.1 hf A.2 hfq hkc hc0 hgN (j := j) (by omega) (by omega) h0 with e | ⟨e1, e2⟩
+    intro j h1 h2 h0
+    rcases R.stop_step A.1 hf A.2 hfq hkc hc0 hgN (j := j) h1 h2 h0 with e | ⟨e1, e2⟩
     · exact Or.inl e
     · exact Or.inr ⟨congrArg UInt8.toNat e1, e2⟩
-  have hground : (a T').fast = true → L + 1 < T' → (trackOf sy R.keep.toFrames u).abs (T' - 1) = (R.fr (T' - 1)).v₂.natAbs := by
-    intro h1 h2
-    have hA0 := W.approach (Or.inl h1)
-    have hqL := hA0.order.1
-    obtain ⟨g1, g2⟩ := hA0.ground h1 h2
-    exact R.ground_step A.1 hf A.2 hfq hkc hc0 hgN (j := T' - 1) (by omega) (by omega) (by rw [show T' - 1 - 1 = T' - 2 by omega]; exact g1) (by simpa only [trackOf] using g2)
+  have hkeep : ∀ j, 1 ≤ j → j < R.g →
+      (trackOf sy R.keep.toFrames u).abs j = (R.fr j).v₂.natAbs ∨
+        (trackOf sy R.keep.toFrames u).abs j = (trackOf sy R.keep.toFrames u).abs (j - 1) := by
+    intro j h1 h2
+    rcases R.stored_step A.1 hf A.2 hfq hkc hc0 hgN (j := j) h1 h2 with e | e
+    · exact Or.inl e
+    · exact Or.inr (congrArg UInt8.toNat e)
   cases hfa : (a T').fast with
   | true =>
     exfalso
     have hA0 := W.approach (Or.inl hfa)
-    have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) hstop hground
+    have ho := hA0.order
+    have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) (fun _ j h1 h2 h0 => hstop j (by omega) (by omega) h0)
+      (fun _ j h1 h2 => hkeep j (by omega) (by omega))
     rw [hfa] at hA
     have hr : R.g = T' + 1 := by simpa [hfa] using hrise
     have := fast_short H.h16 H.hA R.fr (sideP sy m0) (feetP sy m0) (poleP sy m0) T H.hPs H.hfar hnx hv hA hr
@@ -1613,7 +1636,9 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
     by_cases hg : R.g ≤ T + 6
     · exfalso
       have hA0 := W.approach (Or.inr (by omega))
-      have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) hstop hground
+      have ho := hA0.order
+      have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) (fun _ j h1 h2 h0 => hstop j (by omega) (by omega) h0)
+        (fun _ j h1 h2 => hkeep j (by omega) (by omega))
       rw [hfa] at hA
       have := slow_short H.h16 H.hA R.fr (sideP sy m0) (feetP sy m0) (poleP sy m0)
         (posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int)) T H.hPs H.hfar (by omega)
@@ -1623,7 +1648,9 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
       have h0 := castle_of_direct C (n := Nc - 2) hu (by omega) (W.flagAny hfa) R.atCastle (R.afterTouch A.2 hfq hkc hc0)
       refine ⟨by omega, fun hg8 => ?_, by omega⟩
       have hA0 := W.approach (Or.inr hg8)
-      have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) hstop hground
+      have ho := hA0.order
+      have hA := approach_of_cases hp hm H.hd hr' hA0 (hbase hA0.order.1 hA0.order.2) (fun _ j h1 h2 h0 => hstop j (by omega) (by omega) h0)
+        (fun _ j h1 h2 => hkeep j (by omega) (by omega))
       rw [hfa] at hA
       have hA' : Approach R.fr (sideP sy m0) (feetP sy m0) T q L T' (T' + 2) false := hr ▸ hA
       have hin' : poleP sy m0 ≤ (R.fr (T' + 2)).P₂ := hr ▸ hin

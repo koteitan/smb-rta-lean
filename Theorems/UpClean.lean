@@ -11,11 +11,11 @@ Four conditions on the instructions of the frames from control to the entry were
 `FrameKeep.guardE` on the first counted frames). The four guards are the guard of `PipeWrites` with more protected bytes; they have the same idle loop, the same `late`
 and the same jump tables. `guardU` protects the bytes of all four lists (`EntryKeep.guardOf`, `LagPause.guardP` with the pause byte of `CtrlKeep.pauseI`, `FrameKeep.guardE`).
 
-`CleanU` is `CleanK` of `guardU`: `Clean` of it, but the store of the move routine (`FrameKeep.spotOf`) with the index 0 is not asked. That store writes the player's
-fraction, which `guardE` protects and the other three guards do not. So `CleanK` of `guardU` gives `CleanK` of each guard (`FrameKeep.cleanK_sub`), and for the three
-guards of `Clean` the store of the move routine is `Plain`: on the ROM it is `STA abs,X`, its target with the index 0 is a byte of RAM, none of the three guards protects
-it (`qCheck`), and the machine runs the ROM's program (`StepPrg.trace_prg`). This is `at_q`. The store is set apart only when the ROM has it so (`qCheck`); on
-another ROM `CleanU` is `Clean` of `guardU`, with nothing set apart.
+The one condition is `CleanK` of `guardU`: `Clean` of it, but the store of the move routine (`FrameKeep.spotOf`) with the index 0 is not asked. That store writes the
+player's fraction, which `guardE` protects and the other three guards do not. So `CleanK` of `guardU` gives `CleanK` of each guard (`FrameKeep.cleanK_sub`), and for the
+three guards of `Clean` the store of the move routine is `Plain`: on the ROM it is `STA abs,X`, its target with the index 0 is a byte of RAM, none of the three guards
+protects it (`qCheck`), and the machine runs the ROM's program (`StepPrg.trace_prg`). This is `at_q`. `qCheck` is a check on the ROM, one of `EntryKeep.Checks`
+(round 15); before, the condition was `CleanU`, with an `if` on `qCheck` inside it, because the theorems that use it had no place for the check.
 
 There is no game data in this file. Page: `1-1/a-5-10-UpClean.md`.
 -/
@@ -35,24 +35,9 @@ def guardU (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : G
   { PipeWrites.guardOf sy m0 with
     prot := (EntryKeep.guardOf sy m0 d e).prot ++ (LagPause.guardP sy m0 (CtrlKeep.pauseI sy m0)).prot ++ (FrameKeep.guardE sy m0).prot }
 
-/-- the store of the move routine (`FrameKeep.spotOf`) -/
-abbrev qOf (sy : Syms) (m0 : Machine) : UInt16 := (FrameKeep.spotOf sy m0).store
-
-/-- the operand of the instruction at `q`: with `STA abs,X` and the index 0, its target -/
-def tq (sy : Syms) (m0 : Machine) : UInt16 :=
-  (romByte m0 (qOf sy m0 + 1)).toUInt16 ||| ((romByte m0 (qOf sy m0 + 2)).toUInt16 <<< 8)
-
-/-- **The check on the ROM**: the instruction at `q` is `STA abs,X` (opcode 157) in the program's part of memory, its target with the index 0 is a byte of RAM, the guard of
-`EntryKeep` does not protect it, and it is not the pause byte -/
-def qCheck (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : Bool :=
-  romByte m0 (qOf sy m0) == 0x9D && decide (0x8000 ≤ qOf sy m0) && decide (0x8000 ≤ qOf sy m0 + 1) && decide (0x8000 ≤ qOf sy m0 + 2) &&
-    decide (tq sy m0 < 0x2000) && !((EntryKeep.guardOf sy m0 d e).prot.contains (tq sy m0 &&& 0x7FF).toNat) &&
-    (tq sy m0 &&& 0x7FF).toNat != CtrlKeep.pauseI sy m0
-
-/-- **The condition on one instruction**: `CleanK` of `guardU`, the store of the move routine with the index 0 set apart. It is set apart when the ROM has it as `qCheck`
-reads it; else nothing is set apart. -/
-def CleanU (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) (m : Machine) : Prop :=
-  if qCheck sy m0 d e = true then CleanK (guardU sy m0 d e) (qOf sy m0) m else Clean (guardU sy m0 d e) m
+/- The store of the move routine (`qOf`), the operand of its instruction (`tq`) and the check on the ROM (`qCheck`) are those of `EntryKeep`, which has the check among
+its checks (`EntryKeep.Checks.q`). -/
+export EntryKeep (qOf tq qCheck)
 
 section
 variable {sy : Syms} {m0 : Machine} {d : PipeChangeEnd.Data} {e : Machine} {m : Machine}
@@ -60,13 +45,6 @@ variable {sy : Syms} {m0 : Machine} {d : PipeChangeEnd.Data} {e : Machine} {m : 
 /-- `Clean` is `CleanK` with any store set apart -/
 theorem cleanK_of_clean {G : Guard} {q : UInt16} (h : Clean G m) : CleanK G q m :=
   ⟨fun t ht _ => h.store t ht, h.read, h.jump, h.time⟩
-
-/-- **`CleanU` gives `CleanK` of `guardU`** -/
-theorem cleanK_of_U (h : CleanU sy m0 d e m) : CleanK (guardU sy m0 d e) (qOf sy m0) m := by
-  unfold CleanU at h
-  split at h
-  · exact h
-  · exact cleanK_of_clean h
 
 /-- a guard with the idle loop, `late` and the jump tables of the guard of `PipeWrites` -/
 def SameW (sy : Syms) (m0 : Machine) (G : Guard) : Prop :=
@@ -110,8 +88,8 @@ theorem mem_W_E {x : Nat} (h : x ∈ (PipeWrites.guardOf sy m0).prot) : x ∈ (E
   exact Or.inr h
 
 /-- **`CleanK` of `guardE`** (the old field `opening.cleanK`) -/
-theorem cleanE_of_U (h : CleanU sy m0 d e m) : CleanK (FrameKeep.guardE sy m0) (qOf sy m0) m :=
-  cleanK_sub (cleanK_of_U h) sameW_U sameW_FE fun _ hx => mem_FE hx
+theorem cleanE_of_U (h : CleanK (guardU sy m0 d e) (qOf sy m0) m) : CleanK (FrameKeep.guardE sy m0) (qOf sy m0) m :=
+  cleanK_sub h sameW_U sameW_FE fun _ hx => mem_FE hx
 
 /-! ## The store of the move routine -/
 
@@ -162,34 +140,28 @@ theorem plainP_q (hc : qCheck sy m0 d e = true) : Plain (LagPause.guardP sy m0 (
     · exact h6 (mem_W_E hx)
   · exact Or.inr h5
 
-/-- `CleanU` gives `Clean` of a guard with the bytes of `guardU`, if the store of the move routine is `Plain` for it, on a machine that runs the ROM's program -/
-theorem clean_of_U {G : Guard} (h : CleanU sy m0 d e m) (hG : SameW sy m0 G) (hp : ∀ x ∈ G.prot, x ∈ (guardU sy m0 d e).prot)
-    (hq : qCheck sy m0 d e = true → Plain G.prot (tq sy m0)) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) : Clean G m := by
-  unfold CleanU at h
-  split at h
-  · rename_i hc
-    have hk : CleanK G (qOf sy m0) m := cleanK_sub h sameW_U hG hp
-    by_cases hqx : m.pc = qOf sy m0 ∧ m.x = 0
-    · refine ⟨fun t ht => ?_, hk.read, hk.jump, hk.time⟩
-      rw [at_q hc hprg hmask hqx.1 hqx.2] at ht
-      cases ht
-      exact hq hc
-    · exact FrameKeep.clean_of hk hqx
-  · have hk : CleanK G 0 m := cleanK_sub (cleanK_of_clean h) sameW_U hG hp
-    refine ⟨fun t ht => ?_, hk.read, hk.jump, hk.time⟩
-    rcases h.store t ht with ⟨a1, a2⟩ | a1
-    · exact Or.inl ⟨a1, fun hx => a2 (hp _ hx)⟩
-    · exact Or.inr a1
+/-- `CleanK` of `guardU` gives `Clean` of a guard with the bytes of `guardU`, if the store of the move routine is `Plain` for it, on a machine that runs the ROM's
+program. `hc` is the check on the ROM. -/
+theorem clean_of_U {G : Guard} (hc : qCheck sy m0 d e = true) (h : CleanK (guardU sy m0 d e) (qOf sy m0) m) (hG : SameW sy m0 G)
+    (hp : ∀ x ∈ G.prot, x ∈ (guardU sy m0 d e).prot) (hq : Plain G.prot (tq sy m0)) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) : Clean G m := by
+  have hk : CleanK G (qOf sy m0) m := cleanK_sub h sameW_U hG hp
+  by_cases hqx : m.pc = qOf sy m0 ∧ m.x = 0
+  · refine ⟨fun t ht => ?_, hk.read, hk.jump, hk.time⟩
+    rw [at_q hc hprg hmask hqx.1 hqx.2] at ht
+    cases ht
+    exact hq
+  · exact FrameKeep.clean_of hk hqx
 
 /-- **`Clean` of the guard of `EntryKeep`** (the old field `upClean₁`) -/
-theorem cleanE₁_of_U (h : CleanU sy m0 d e m) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) : Clean (EntryKeep.guardOf sy m0 d e) m :=
-  clean_of_U h sameW_E (fun _ hx => mem_E hx) plainE_q hprg hmask
+theorem cleanE₁_of_U (hc : qCheck sy m0 d e = true) (h : CleanK (guardU sy m0 d e) (qOf sy m0) m) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) :
+    Clean (EntryKeep.guardOf sy m0 d e) m :=
+  clean_of_U hc h sameW_E (fun _ hx => mem_E hx) (plainE_q hc) hprg hmask
 
 /-- **`Clean` of `LagPause.guardP`** with the pause byte `g` that the NMI tests (the old field `pipe.lags.clean`) -/
-theorem cleanP_of_U {g : Nat} (hg : CtrlKeep.pauseI sy m0 = g) (h : CleanU sy m0 d e m) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) :
-    Clean (LagPause.guardP sy m0 g) m := by
+theorem cleanP_of_U {g : Nat} (hc : qCheck sy m0 d e = true) (hg : CtrlKeep.pauseI sy m0 = g) (h : CleanK (guardU sy m0 d e) (qOf sy m0) m) (hprg : m.prg = m0.prg)
+    (hmask : m.prgMask = m0.prgMask) : Clean (LagPause.guardP sy m0 g) m := by
   subst hg
-  exact clean_of_U h (sameW_P _) (fun _ hx => mem_P hx) plainP_q hprg hmask
+  exact clean_of_U hc h (sameW_P _) (fun _ hx => mem_P hx) (plainP_q hc) hprg hmask
 
 /-- `Clean` of a guard gives `Clean` of a guard with fewer protected bytes, both with the idle loop, `late` and the jump tables of the guard of `PipeWrites` -/
 theorem clean_sub {G G' : Guard} (h : Clean G m) (hG : SameW sy m0 G) (hG' : SameW sy m0 G') (hp : ∀ x ∈ G'.prot, x ∈ G.prot) : Clean G' m := by
@@ -200,8 +172,9 @@ theorem clean_sub {G G' : Guard} (h : Clean G m) (hG : SameW sy m0 G) (hG' : Sam
   · exact Or.inr a1
 
 /-- **`Clean` of the guard of `PipeWrites`** (the old field `pipe.clean`) -/
-theorem cleanW_of_U (h : CleanU sy m0 d e m) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) : Clean (PipeWrites.guardOf sy m0) m :=
-  clean_sub (cleanE₁_of_U h hprg hmask) sameW_E sameW_W fun _ hx => mem_W_E hx
+theorem cleanW_of_U (hc : qCheck sy m0 d e = true) (h : CleanK (guardU sy m0 d e) (qOf sy m0) m) (hprg : m.prg = m0.prg) (hmask : m.prgMask = m0.prgMask) :
+    Clean (PipeWrites.guardOf sy m0) m :=
+  clean_sub (cleanE₁_of_U hc h hprg hmask) sameW_E sameW_W fun _ hx => mem_W_E hx
 
 end
 
@@ -222,12 +195,12 @@ theorem prg_on {S : FrameKeep.RealRun} {a : Nat} (h : (S.seq a).prg = m0.prg ∧
 theorem prg_of_start {G : Guard} {m : Machine} (h : PipeWrites.FrameStart G (PipeEntryRule.envOf m0) m) : m.prg = m0.prg ∧ m.prgMask = m0.prgMask :=
   ⟨h.prg, h.mask⟩
 
-/-- **`upClean₁` from `CleanU`**: each instruction of the frames from frame 1 to frame `a`, `a` not included, is `Clean` of the guard of `EntryKeep`, when frame 1 begins
-with the ROM's program -/
-theorem upClean₁_of {S : FrameKeep.RealRun} {a : Nat} (h1 : (S.seq 1).prg = m0.prg ∧ (S.seq 1).prgMask = m0.prgMask)
-    (hU : ∀ n, 1 ≤ n → n < a → ∀ j, CleanU sy m0 d e (trace (S.seq n) (S.inp n) j)) :
+/-- **`upClean₁` from `CleanK` of `guardU`**: each instruction of the frames from frame 1 to frame `a`, `a` not included, is `Clean` of the guard of `EntryKeep`, when
+frame 1 begins with the ROM's program. `hc` is the check on the ROM. -/
+theorem upClean₁_of {S : FrameKeep.RealRun} {a : Nat} (hc : qCheck sy m0 d e = true) (h1 : (S.seq 1).prg = m0.prg ∧ (S.seq 1).prgMask = m0.prgMask)
+    (hU : ∀ n, 1 ≤ n → n < a → ∀ j, CleanK (guardU sy m0 d e) (qOf sy m0) (trace (S.seq n) (S.inp n) j)) :
     ∀ n, 1 ≤ n → n < a → ∀ j, Clean (EntryKeep.guardOf sy m0 d e) (trace (S.seq n) (S.inp n) j) := fun n a1 a2 j =>
-  cleanE₁_of_U (hU n a1 a2 j) (prg_on h1 a1 j).1 (prg_on h1 a1 j).2
+  cleanE₁_of_U hc (hU n a1 a2 j) (prg_on h1 a1 j).1 (prg_on h1 a1 j).2
 
 end
 

@@ -9,8 +9,8 @@ fast with no speed left. From a stopped Mario with a high stored speed:
 * a ground frame, or Left or Right in the air, makes the stored speed `|v|`, which is below the air threshold.
 
 So a fast hop on the frame after the landing needs no Left or Right from the hit until it starts. Then each frame with his feet inside the block pushes him back, and he does not
-reach the pole's range. A later fast hop needs a high speed on the ground frame before it, so he is left of the block's side, and it does not reach the range either
-(`fast_late` in [From control to the castle](f-5-PoleJoin.md)).
+reach the pole's range. A later fast hop reads the stored speed of the landing, and the same holds; or a frame after the landing wrote a high speed into it, so he was left of
+the block's side there, and it does not reach the range either (`fast_near`, `fast_late` in [From control to the castle](f-5-PoleJoin.md)).
 
 ```
 absCheck        :  the movement routine follows the two points above on every state of the domain

@@ -11,14 +11,12 @@
 ```
 GU        :=  the guard of PipeWrites, with  prot(GU) = prot(EntryKeep.guardOf) ++ prot(LagPause.guardP p) ++ prot(FrameKeep.guardE)
               p = the pause byte that the NMI tests (CtrlKeep.pauseI)
-CleanU(m) :=  CleanK(GU, q, m)     if qCheck
-              Clean(GU, m)         if not qCheck
-upCleanU  :   ∀ n,  1 ≤ n < a₁  →  ∀ j,  CleanU(tr(n, j))
+upCleanU  :   ∀ n,  1 ≤ n < a₁  →  ∀ j,  CleanK(GU, q, tr(n, j))
 ```
 
 `CleanK(G, q, m)` is `Clean(G, m)`, but a store at `q` with the index `X = 0` is not asked. `qCheck` is a check on the ROM: the instruction at `q` is `STA abs,X`,
-its target with `X = 0` is a byte of RAM, the guard of `EntryKeep` does not protect it, and it is not `p`. On this ROM `qCheck` holds (private `up_q_check`), so
-`CleanU = CleanK(GU, q)` (private `up_clean_iff`).
+its target with `X = 0` is a byte of RAM, the guard of `EntryKeep` does not protect it, and it is not `p`. `qCheck` is one of the checks of
+`EntryKeep.Checks` (the field `q`; private `up_q_check`), so every theorem that takes `hK` has it.
 
 From it (`Route.lean`, `UpClean.lean`):
 
@@ -33,9 +31,9 @@ Run.pipeReal   :  ∀ t, 1 ≤ t ≤ N, t < E → ∀ k,  CleanK(guardE, q, tr(i
 `E` is `pipe.E`, the counted entering frame, and `ix(t)` the frame of the run where the counted frame `t` begins. `g` is the pause byte of `pipe`; `hg : p = g` is a
 field of the checks of the opening (`OpenFrames.Checks.pause`).
 
-Lean: `Theorems/UpClean.lean` (`guardU`, `qCheck`, `CleanU`, `at_q`, `clean_of_U`, `cleanE_of_U`, `upClean₁_of`), `Theorems/StepPrg.lean` (`step_prg`, `trace_prg`,
+Lean: `Theorems/UpClean.lean` (`guardU`, `at_q`, `clean_of_U`, `cleanE_of_U`, `upClean₁_of`; `qCheck` is in `Theorems/EntryKeep.lean`), `Theorems/StepPrg.lean` (`step_prg`, `trace_prg`,
 `run_prg`), `Theorems/Route.lean` (`Run.prg₁`, `Run.upClean₁`, `Run.entryIx`, `Run.lagsClean`, `Run.pipeClean`, `Run.pipeReal`), private `Proof/UpClean.lean`
-(`up_q_check`, `up_clean_iff`, `native_decide`, under 1 s).
+(`up_q_check`, `native_decide`, under 1 s).
 
 ## How it works
 
@@ -55,15 +53,15 @@ Lean: `Theorems/UpClean.lean` (`guardU`, `qCheck`, `CleanU`, `at_q`, `clean_of_U
   (`Run.upStart₁`) and its instructions are `Clean` with the pause byte, by `upCleanU`, since `a₁ − 1 < a₁`. So frame `a₁` begins with the routine of control. But it
   begins with the pipe's routine: the routine byte is a byte of `entryRest₁`, and the reference entry has the pipe's routine there (the list check of `EntryKeep`).
   The two routines differ. So `ix(E) < a₁`. With the definition of `a₁` this is `ix(E) + 1 = a₁`; only the bound is used.
-* **Why the `if`.** `Run.upStart₁` and `Run.entry₁` take only the checks `hB` and `hK`, and about 20 theorems of other parts use them. `qCheck` is not among those
-  checks. With the `if`, they need no new argument: if `qCheck` fails, `CleanU` sets nothing apart. On this ROM it holds, and the field asks `CleanK(GU, q)`.
+* **No `if` (round 15).** In round 14 the field was `CleanK(GU, q)` if `qCheck` held and `Clean(GU)` if not, because `Run.upStart₁` and `Run.entry₁` take only the
+  checks `hB` and `hK`, and about 20 theorems of other parts use them. Now `qCheck` is a field of `EntryKeep.Checks`, so `hK` carries it, and the field is a plain `CleanK`.
 
 ## Measured on real frames
 
 `up-clean-u FM2` (exit 0) runs the runs of `up-clean-union` (part b, round 13) with the guard `GU` of the Lean statement, and again with part e's new byte of this round
 (the speed, `speedE` in `FrameKeep.guardE`) added: the merged guard.
 
-| runs | frames (paused) | instructions | against `CleanU` | against the merged guard | the store at `q` with `X = 0` (`Plain` for `EntryKeep` and `guardP`) |
+| runs | frames (paused) | instructions | against `upCleanU` | against the merged guard | the store at `q` with `X = 0` (`Plain` for `EntryKeep` and `guardP`) |
 |---|---|---|---|---|---|
 | the TAS, 368 frames to the entry | 368 (0) | 1,917,255 | 0 | 0 | 368 (368) |
 | the reference entry | 440 (0) | 2,256,005 | 0 | 0 | 440 (440) |
@@ -84,12 +82,13 @@ The four old conditions asked:
 | `chg.upClean₁` | `EntryKeep.guardOf` (124 bytes) | `1 ≤ n < a₁` |
 | `pipe.lags.clean` | `LagPause.guardP` (48 bytes) | `1 ≤ n < ix(E)` |
 | `pipe.clean` | `PipeWrites.guardOf` | the entering frame `ix(E)`, up to the write |
-| `pipe.opening.cleanK` | `FrameKeep.guardE` (59 bytes), `CleanK` | the counted frames 1 to 32 |
+| `pipe.opening.cleanK` | `FrameKeep.guardE` (67 bytes), `CleanK` | the counted frames 1 to 32 |
 
-`GU` protects 134 bytes (135 with part e's speed byte). The guard of `EntryKeep` already protects the pause byte of `guardP` (the same byte), so on the entering frame
-nothing is new for it. What is new: **no store through an index or a pointer writes the 10 bytes of `guardE` that neither the guard of `EntryKeep` nor `guardP` protects**
+`GU` protects 143 bytes: 125 of the guard of `EntryKeep` (round 15: the level's number is one of them), and 18 of `guardE` that the other two do not protect. The guard of `EntryKeep` already protects the pause byte of `guardP` (the same byte), so on the entering frame
+nothing is new for it. What is new: **no store through an index or a pointer writes the 18 bytes of `guardE` that neither the guard of `EntryKeep` nor `guardP` protects**
 (A and B, A and B of the frame before, the moving direction, the running speed, the stored speed `|v|`, the collision bits, the swimming flag, the change of size, the
-castle flag, the player's fraction but at `q` with `X = 0`; 11 with part e's speed), **on the frames that are not among the counted frames 1 to 32**: the frames not
+castle flag, the player's fraction but at `q` with `X = 0`, and from rounds 14 and 15 the speed, three bytes of the jump, the player's state, the vertical force, the
+facing and the subspeed), **on the frames that are not among the counted frames 1 to 32**: the frames not
 counted before the counted frame 32, and every frame after it up to the entry. At `q` with `X = 0` the union asks less than `upClean₁` did: nothing. On this ROM that store
 is `Plain` for the guard of `EntryKeep` (`qCheck`), so it is the same.
 

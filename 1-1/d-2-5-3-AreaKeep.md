@@ -22,7 +22,7 @@ area_run       :  Room(seq c),  seq(c)[i] = v,
                   ∀ n ∈ [c, e):  (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r),     rt(seq e) ≠ rt(r)
                   →  seq(e)[i] = v
 
-Run.area₁       :  seq(a₁)[i] = v                                         (field, new)
+Run.area₁       :  seq(a₁)[i] = v                                         (a theorem since round 15, 1-1-b-3-4-5; a field in round 14)
 Run.area₂       :  seq(a₂)[i] = v                                         (theorem)
 entryAt_of_area :  m[i] = v  ∧  EntryAt(R₉, m)  →  EntryAt(R₁₀, m)
 chg.entry₂      :  EntryAt(R₉, seq a₂)                                    (9 bytes; it was R₁₀)
@@ -94,15 +94,15 @@ So `TimerOK(seq b₁)` does not give `TimerOK(seq a₂)`: the room's frames lowe
 ## What changed in the route
 
 * `Run.chg : ChangesK … (restIdxA sy nmS m0)`: 9 bytes at the side pipe's entry (it was `restIdxR`, 10 bytes). `Run.chgK` gives the changes with the 11 bytes from `Run.area₂` and `Run.rt₂`, as before for `Run.change₂`, `Run.start`, `Run.atCtl₀`.
-* `Run` has a new field `area₁`.
+* `Run` had a new field `area₁` in round 14. Since round 15 it is the theorem `Run.area₁`: the condition at the vertical pipe's entry lists the byte (1-1-b-3-4-5).
 * `RoomChecks` has a new field `area : AreaKeep.Facts …`. It is built in the private files of the route (5 times) and of the hurry-up music (once), from `area_facts`.
 
-Removed from the assumptions: the level's number of `entry₂`. Added: `area₁`, the level's number at the vertical pipe's entry.
+Removed from the assumptions: the level's number of `entry₂`. Added in round 14: `area₁`, the level's number at the vertical pipe's entry; removed in round 15.
 
 ## Assumptions (not proved in Lean)
 
-* `area₁`: the level's number at the vertical pipe's entry is the reference's. Frame 0 does not know it (`TitleStart`); the frames from control to the entry keep it if the guard of `upClean₁` protects it (measured).
-* `chg.entry₂`: 9 bytes at the side pipe's entry: the player's height, the screen's buffer (5 bytes), the area music's buffer, the event music's queue, the added note length.
+* `area₁` is no longer assumed (round 15): the press of Start on the title now asks the byte (`title.boot`), the guard of `upCleanU` protects it, and `EntryKeep`'s walk keeps it up to the entry. So these two assumptions each ask one more byte.
+* `chg.entry₂`: 9 bytes at the side pipe's entry: the player's height, the screen's buffer (5 bytes), the area music's buffer, the event music's queue, the added note length. Since round 15 the height and the five bytes of the screen's buffer come from the entering frame, when it starts with a small player and with the control of the screen's buffers at 0 ([1-1-d-2-5-4](d-2-5-4-EntryHeight.md), [1-1-d-2-5-5](d-2-5-5-EntryBuffer.md)): `chg.entry₂` asks 3 bytes, and `Run` has the two fields `height₂`, `buffer₂` for the other runs.
 * `chg.time₂`: the game timer is not 000 at the side pipe's entry.
 
 **Files.** `Theorems/AreaKeep.lean`, `Theorems/Route.lean`; the private checks are `Proof/AreaKeep.lean` and `Proof/AreaJoin.lean` (`genAreaKeep` in `Main.lean`).

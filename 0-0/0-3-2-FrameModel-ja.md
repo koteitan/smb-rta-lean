@@ -119,7 +119,7 @@ stored_path :  modelOK,  frictionCheck,  storedOK,  AtFrame(R),  abs(R) = |v(R)|
 |---|---|
 | (1) フレームの最初からプレイヤーのルーチンまで | 地上: 操作中のフレームの始まりから証明（`SurfaceFrames.Moves.toAt`、`CtrlKeep` の歩き）。部屋: 前提（`at_ctrl`、`before`） |
 | (2) プレイヤーのルーチンからスクロールの処理まで | 証明。`move_model` |
-| (3) スクロールの処理からフレームの最後まで | 地上: 動く向き、走りの速さ、覚えている速さは証明（`AfterKeep.keepH`。スクロールの処理での覚えている速さは `stored_path`）、残りは前提（`SurfaceFrames.After`）。部屋: 前提（`after` または `collide`） |
+| (3) スクロールの処理からフレームの最後まで | 地上: 動く向き、走りの速さ、覚えている速さは証明（`AfterKeep.keepH`。スクロールの処理での覚えている速さは `stored_path`）。速さ、向き、サブ速さ、当たり判定のビットは歩きで証明（`CollideKeep.speed_end`、`FaceKeep.keepZ_end`、`FaceKeep.bits_end`。向きとサブ速さは、速さ 0 とサブ速さ 0 で終わるフレームを除く）。位置は前提（`SurfaceFrames.AfterP`、`CollideS`）。部屋: 前提（`after` または `collide`） |
 
 (2) の中身です。`Player_State` 3 通り、ボタン 256 通り、前のフレームの A 2 通り、`AreaType` 3 通りの 4608 の場合ごとに、次の歩きが通ります。
 
@@ -189,8 +189,8 @@ TAS の操作できる 3442 フレームでは、`Clean` は 3404 で、モデ�
 ## まだ証明していないこと
 
 * `before`、部屋で: パッドの読み取りからプレイヤーのルーチンまでは、上の表のとおり歩きが閉じます。そこでは定理にはしていません。地上では定理です: 各命令の条件 `FrameKeep.CleanK`（ポインタや添字での書き込みは守るバイトに触れず、ポインタでの読み込みはレジスタを読まない）のもとで、`CtrlKeep` の歩きはフレームの始まりから、画面の更新と音も含めて、プレイヤーのルーチンまで閉じます（[地上: 操作できてからのフレーム](../1-1/e-2-SurfaceFrames-ja.md)）。
-* `vert_model` について: スクロールの処理のあとも縦のバイトが変わらないこと。地上ではそのうち 4 つが定理です（`SurfaceFrames.OnFrames.kAt`: 下向きの縦の力、ジャンプの始まりの高さ、ジャンプを止める値、A）。残りの 6 つは仮定です（`SurfaceFrames.OnFrames.vAfter`）。プレイヤーのルーチンまで縦のバイトが前のフレームのものであることと、そこでの 2 つの条件は、地上では定理です（`SurfaceFrames.vBefore`）。数えないフレーム（定理 `OnFrames.lagKeep`）と前のフレームの A の 7 ビット目（定理 `OnFrames.prevAll`）から出ます。
-* `after`、`collide`: 当たり判定とゲームエンジンの中は閉じません。`after` は当たりがなかったことを言います。地上では一部が証明です: `AfterKeep` の歩きは、スクロールの処理からフレームの終わりまで、動く向き、走りの速さ、覚えている速さを追います。そこで前提に残るのは `SurfaceFrames.After`（サブ速さ、向き、当たり判定）です。スクロールの処理での覚えている速さは証明です（`stored_path`）。
+* `vert_model` について: スクロールの処理のあとも縦のバイトが変わらないこと。地上ではそのうち 5 つが定理です（`SurfaceFrames.OnFrames.kAt`: 下向きの縦の力、ジャンプの始まりの高さ、ジャンプを止める値、A。`SurfaceFrames.OnFrames.vfAt`: 縦の力。変わらないか、フレームはジャンプ台への着地の値を持って地面の上で終わり、`SurfaceFrames.VStep` がそれを許します）。残りの 5 つは仮定です（`SurfaceFrames.OnFrames.vAfter`）。プレイヤーのルーチンまで縦のバイトが前のフレームのものであることと、そこでの 2 つの条件は、地上では定理です（`SurfaceFrames.vBefore`）。数えないフレーム（定理 `OnFrames.lagKeep`）と前のフレームの A の 7 ビット目（定理 `OnFrames.prevAll`）から出ます。
+* `after`、`collide`: 当たり判定とゲームエンジンの中は閉じません。`after` は当たりがなかったことを言います。地上では一部が証明です: `AfterKeep` の歩きは、スクロールの処理からフレームの終わりまで、動く向き、走りの速さ、覚えている速さを追います。`CollideKeep` と `FaceKeep` の歩きは、速さ、向き、サブ速さ、当たり判定のビットを追います。そこで前提に残るのは、位置（`SurfaceFrames.AfterP`、`CollideS`）と、速さ 0 とサブ速さ 0 で終わるフレームのサブ速さと、はじめの 8 フレームのうちそう終わるフレームの向き（`faceJ`）です。スクロールの処理での覚えている速さは証明です（`stored_path`）。
 * `at_ctrl` のうちスタックポインタ、NMI なし、`AreaType` など: 部屋ではフレームが始まる状態から導いていません。地上ではスタックポインタ、NMI なし、ルーチンは歩きから、`AreaType`、泳ぎなし、大きさの変化なしは 1 フレーム全体の歩きから操作のときからの帰納法で（`SurfaceFrames.OnFrames.areaAll`）、`Player_State` とジャンプ台は前のフレームの終わりの値（`SurfaceFrames.CtlState`）から出ます。
 * フレームがあふれる走り（1 フレームで処理が終わらない）。`clean` はそのフレームでは成り立ちません。部屋では見ていません。一番短いフレームでも来てから 1469 命令ありました。
 * エミュレータが本物の機械と同じこと。

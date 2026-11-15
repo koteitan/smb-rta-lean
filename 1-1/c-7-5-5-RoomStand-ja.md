@@ -2,7 +2,7 @@
 
 # 部屋で立って始まるフレーム
 
-**主張.** 地下の部屋で、立って（状態 0）始まり、A を新しく押さないフレームは跳びません。高さの端数、2 つの力、ジャンプの起点は変わりません。高さ、縦の速さとその端数は変わらず、終わりの状態は 0 か 2 です（立ったまま、または落ち始める）。または着地します。なので最初の操作から跳ばない走りでは、縦の状態は最初の操作の状態からの有限の集まりになります。この集まりの確かめで、[地下の部屋をつなぐ](c-5-RoomJoin-ja.md) の項目 1-1-c-7-5 のフィールド `vfall_stand` と、`fall_stand` の跳ばない部分を証明します。残るのはフィールド `fall_jump` です。壁から跳んだあと、`C + 34` より前に床にいないことです。どのフレームの入力も、今はプレイヤーのルーチンで機械から読みます（モデルに従わないフレームでの新しいフィールド `read_stop`）。それでフィールド `air_in` も証明します。
+**主張.** 地下の部屋で、立って（状態 0）始まり、A を新しく押さないフレームは跳びません。高さの端数、2 つの力、ジャンプの起点は変わりません。高さ、縦の速さとその端数は変わらず、終わりの状態は 0 か 2 です（立ったまま、または落ち始める）。または着地します。なので最初の操作から跳ばない走りでは、縦の状態は最初の操作の状態からの有限の集まりになります。この集まりの確かめで、[地下の部屋をつなぐ](c-5-RoomJoin-ja.md) の項目 1-1-c-7-5 のフィールド `vfall_stand` と、`fall_stand` の跳ばない部分を証明します。残っていたのはフィールド `fall_jump` です。壁から跳んだあと、`C + 34` より前に床にいないことです。今は項目 1-1-c-7-5-6（[部屋の落下中に立ってから跳ぶフレーム](c-7-5-6-RoomJump-ja.md)）が、フィールド `stand_wall` と `wall` を使って証明します。どのフレームの入力も、今はプレイヤーのルーチンで機械から読みます（モデルに従わないフレームでの新しいフィールド `read_stop`）。それでフィールド `air_in` も証明します。
 
 記号は [部屋での最初の落下](c-7-5-4-FirstFall-ja.md) のものです。`R` はプレイヤーのルーチン、`tr(j)` はフレームの `j` 命令目の機械、`end` はフレームの終わりの機械、`rt` はルーチンのバイトです。`V_S` は高さの端数、2 つの力、ジャンプの起点です。`V_3` は高さ `y`、縦の速さ `vy`、その端数 `mf` です。`A(x)` はジョイパッドのビットのビット 7、`A'(x)` は前のフレームの A のビット 7 です。`jump(n)` はフレーム `n` の入力（`Frames.inp`）のジャンプのビットです。`readIn` は `R` でモデルが読む入力です。
 
@@ -27,7 +27,7 @@ noJump_ok     :  q(0) ∈ vStart,  ∀ j < n: q(j + 1) ∈ next(q(j)),  n + 1 < 
 nj_next       :  d + 1 < 51,  jump(C + d + 1) = false   →   vs(C + d + 1) ∈ next(vs(C + d))
 vfall_of      :  C ≤ n,  n + 1 < C + 51,  st(vs(n)) ≠ 1,  ∀ j ∈ [C, n]: jump(j + 1) = false   →   VDrop(vs(n), vs(n + 1))
 fall_nojump   :  C ≤ n < C + 34,  ∀ j ∈ [C, n): jump(j + 1) = false   →   ¬OnFloor(vs(n))
-fall_long_of  :  C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                    （fall_nojump。跳んだあとはフィールド fall_jump）
+fall_long_of  :  C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                    （fall_nojump。跳んだあとは fall_any、項目 1-1-c-7-5-6）
 ```
 
 ## フィールド
@@ -101,14 +101,14 @@ read_stop  :  C ≤ n < t₀,  ¬CleanR(フレーム n + 1)   →   inp(n + 1) =
 
 ## 仮定（Lean で証明していないもの）
 
-* `fall_jump`（上）: `C + 34` より前に跳ぶ入力のある走りだけ。
+* `fall_jump`（上）はここでは仮定でした: `C + 34` より前に跳ぶ入力のある走りだけ。項目 1-1-c-7-5-6 から定理です。
 * `read_stop`（上）: モデルに従わないフレームでの入力の読み。
 * `land_at`（変わらず）: 壁に触らなければ `C + 34` で立つ。
 * 部屋のフレームの各命令での `SiteOK`。[ブロックの地図](c-7-12-RoomMap-ja.md) と同じです。
 
 ## まだ要るもの
 
-* `fall_jump`: 壁からのジャンプは覚えている速さを読みます（ジャンプの 5 つの組）。新しく押した `R` からの歩きがあれば、組ごとに跳ぶ状態が出ます。そのあとの状態は、集合のそれぞれの立つところからのジャンプです。状態はずっと多くなります（立つところが約 688、組が 5、それにジャンプのフレーム）。
+* `fall_jump`: 項目 1-1-c-7-5-6 で済みました。跳ぶ状態は高さと覚えている速さだけで決まり（この ROM では 1 つの高さに 3 通り）、部屋の新しい歩きは要りませんでした。ただし縦のバイトだけでは出ません。最初の操作からの集まりは、フレーム 31 で床に着きます。最初に立つのがフレーム `C + 15` 以降であることが要り、それは `stand_wall` と `wall` から出ます。
 * `land_at`: どのフレームで着地するかには、ブロックの地図の上での当たり判定の足の確かめが要ります。
 
 **ファイル.** `Theorems/RoomStand.lean`（`vRestS`、`vLand3`、`StandAt`、`standP0`、`standP1`、`newP`、`piecesS`、`phS`、`outR`、`finS`、`checkS`、`piecesS_class`、`piecesS_cover`、`apartS`、`after_RS`、`nopress_of`、`stand_frame`、`SChecks`、`stand_room`）、`Theorems/RoomJoin.lean`（`StandNext`、`StandNext.vdrop`、`noJumpNext`、`noJumpOk`、`njStep`、`njAdd`、`njRun`、`noJumpCheck`、`njStep_eq`、`njAdd_spec`、`NjDone`、`njRun_sound`、`noJump_ok`、`mem_noJumpNext_air`、`mem_noJumpNext_stand`、`joyOf_mem`、`readIn_mem`、`InRoom.stand`、`InRoom.stR`、`RoomRun.read_inp`、`jump_read`、`air_in_of`、`vstand_of`、`nj_next`、`nj_ok`、`vfall_of`、`fall_nojump`、`fall_long_of`、`drop_run`）、`Theorems/RoomVert.lean`（`st_at_R`）、`Theorems/RoomPair.lean`（`RoomWalks.stand`）、`Theorems/Route.lean`（`Run.roomStand`、`Run.roomStR`、`Run.inRoom`）。非公開の `Proof/RoomStand.lean`（`room_stand`）、`Proof/RoomJoin.lean`（`room_checks.nojump`）。

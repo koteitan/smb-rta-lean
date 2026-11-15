@@ -17,8 +17,8 @@ The case split, exhaustive in Lean (`direct_castle`, `castle_ge`). `T'` is the t
 | the touch | what the proof gives | castle |
 |---|---|---|
 | not a direct grab | `g ≥ T + 1` (`touch_ge`) | `c ≥ g + N + 6` (`castle_of_other`) |
-| direct, fast jump, `T' = L + 1` | `P₂(g) < P₀` at any frame (`fast_near`), so no such grab | |
-| direct, fast jump, `T' > L + 1` | `P₂(g) < P₀` at any frame (`fast_late`), so no such grab | |
+| direct, fast jump, no frame since the landing wrote the stored speed | `P₂(g) < P₀` at any frame (`fast_near`), so no such grab | |
+| direct, fast jump, a frame after the landing wrote the stored speed | `P₂(g) < P₀` at any frame (`fast_late`), so no such grab | |
 | direct, slow jump, `g ≤ T + 6` | `P₂(g) < P₀` (`slow_short`), so no such grab | |
 | direct, slow jump, `g = T + 7`, `T + 8` | `v₂(g − 1) < 0` and `P₂(g) < P₀ + F` (`slow_tight`) | `c ≥ g + N` |
 | direct, slow jump, `g ≥ T + 9` | | `c ≥ g + N − 1` |
@@ -30,7 +30,7 @@ Before the landing, every `k`. `e` is the last frame he moves over the block and
 | no such `e`, or `k ≤ 1` | `P'(L) < P_f + 16·v_top − 256` |
 | `k = 2` | `P'(L) ≤ P₂(e) − 224`, and `P₂(e) < P_f + 16·v_top` |
 | `k ≥ 3` | `P'(L) ≤ P₂(e) + 256·(k − 2) − 224`, and `P₂(e) + 16·v_top·(T − e) ≤ B` |
-| a fast jump on the frame after `L`, `k ≥ 2` | a frame that writes the stored speed would leave it below the air threshold. So no frame writes it, and every frame pushes him back: `P(L) ≤ P₂(e) − 256` (`fast_pushes`) |
+| a fast jump with no write of the stored speed since `L`, `k ≥ 2` | a frame that writes the stored speed would leave it below the air threshold. So no frame writes it, and every frame pushes him back: `P(L) ≤ P₂(e) − 256` (`fast_pushes`) |
 
 After the landing (`hop_short`), with `m = g − L − 1`: if `P'(L) − 16·m + 32 < P₀`, then `P₂(g) < P₀`. A frame may be at the side of the block or left of it.
 
@@ -49,25 +49,26 @@ Lean: `Theorems/PoleJoin.lean`, private `pole_join_numbers`, `pole_falls`, `pole
 * **A grab by a fast jump is a different event.** On its frame 1 a fast jump is 2 px lower than a slow jump on its frame 2. On the next frame his feet are inside the block and the block stops his Right, and the end routine enters the castle at once. With the position overwritten on real frames, the castle comes at the touch + 1 or + 2. [From touching the pole to the castle](f-4-CastleWalk.md) ran only slow jumps. So the bound needs that no fast grab happens at any frame, not only before 1092. `fast_short` proves this, with no time in it. The real fast hop from the TAS at 1085 ends 912/256 px short of `P₀`.
 * **The touch + 126 is not a lower bound.** A slow grab not moving left, with a fraction of 176/256 px or more, gives the touch + 125 on real frames, position overwritten. On `g = T + 7` and `T + 8` this cannot happen: `slow_tight` gives a move to the left on the frame before and a fraction below `F = 176/256` px, with a fall of at most three frames in the block's rows. `g = T + 8` is needed for the timer: the touch + 125 there would keep `E` at 1218 with one more tick, so the sum would be 1 smaller and 1-2 would start at 1727. On later grabs the touch + 125 does not lower the sum. From the TAS's state at 1085 with the position moved by 16/256 to 160/256 px, over every input of A, B, Left and Right, no touch on 1092 or 1093 gave + 125 (`touch-search-at`).
 * **Another touch can take less than 160 frames.** A real run (the TAS with A held longer on the last jump) touches at 1086 near the top of the pole and enters the castle at 1239, the touch + 153. The route page's 1246 is wrong. `castle_ge` needs only `N + 6 = 132`.
-* **A fast jump need not start on the frame after the landing.** Running on the ground into the block's side leaves the stored speed high, as a hit does not clear it. A jump on the next frame is fast. `fast_late` covers this.
+* **A fast jump need not start on the frame after the landing.** Running on the ground into the block's side leaves the stored speed high, as a hit does not clear it. A jump on the next frame is fast. `fast_late` covers this: it takes any frame after the landing that ends its move with a speed of 13 or more. A fast jump after frames in the air with no Left or Right reads the stored speed of the landing, and `fast_near` covers it on any frame ([The frames between the landing and a fast jump](f-6-9-2-StoredStep.md)).
 * **Real hops leave the block's side.** `PoleGrab.no_grab_far`, `no_grab_near` and `FastHop.fast_hop_short` take every hop frame at the side of the block, and every frame from `e` to `L` with the feet inside. A real run breaks both, for example the fast hop above is 144/256 px left of the side when it takes off. `hop_short` and `crossed` have neither hypothesis.
 
 ## How
 
 `hop_short` follows a state on each frame after the landing: pushed back from the landing's position, left of `P_s`, or pushed back from there. `crossed` follows frames from one left of `P_f`: he is left of it, or he moved over it on `e` and has been inside since.
 
-`fast_pushes` goes back from the landing. After `e` every frame starts stopped, so `−12 ≤ v₂ ≤ 2`. A frame that writes the stored speed writes `|v₂|`, which is below the air threshold `A`. The takeoff reads at least `A`. So each frame kept the stored speed and the moving direction, which stays right.
+`fast_pushes` goes back from the landing. After `e` every frame starts stopped, so `−12 ≤ v₂ ≤ 2`. A frame that writes the stored speed writes `|v₂|`, which is below the air threshold `A`. The stored speed at the landing's end is at least `A`. So each frame kept the stored speed and the moving direction, which stays right.
+
+`approach_of_cases` goes back from the takeoff to the landing. The takeoff reads at least `A` (`reads`). Each frame wrote `|v₂|` into the stored speed or kept it (`Run.stored_step`). So a frame after the landing has `|v₂| ≥ A` (`fast_late`), or the stored speed at the landing's end is at least `A` (`fast_near`, with `fast_pushes`).
 
 `line` is the position bound on a real run. Before the first hit `h` it is `Statement.after`. On frame `h` it is the hit's two kinds. After it, `hit_bound` with the frames as a `Chain`. The first `N + E` frames use only `16·v_top` per frame, far short of `P_f`.
 
 `side_of_rule`, `inBlock_of_rule`, `md_of_right` and `push_of_rule` read `Side`, `InBlock`, the moving direction and the push from `PoleGrab.ruleOk` on a case, so `poleCheck` gives them from `Collides`. `maskL_of_step` does the same with `maskCheck`. `grab_frame` reads `g = T' + 1` or `T' + 2` from `Jump.arc_spec` on the jump's path.
 
-Four facts were hypotheses and are now theorems:
+Three facts were hypotheses and are now theorems:
 
 ```
 J ≤ h                       first_of_surface    box, off, SurfaceRun.noHitCheck
-FastLink (T' = L + 1)       fastLink_of_cases   reads, air, poleCheck, Run.stop_step
-A ≤ |v₂(T' − 1)|  (T' > L + 1)  approach_of_cases  reads, ground, Run.ground_step
+FastLink  ∨  ∃ j,  L < j < T',  13 ≤ |v₂(j)|     approach_of_cases, fastLink_of_cases   reads, air, poleCheck, Run.stop_step, Run.stored_step
 L ≤ e + 3                   rows_of_cases       fall, air, fallCheck, base_late
 ```
 
@@ -114,6 +115,7 @@ The fields changed:
 * Then added: `posKeep`: up to the write, a store through an index or a pointer that writes the position's pixel or page is one of the move routine's stores of them, with the index 0 (`PoleFrame.PosKeep`). `edge` now speaks only of the edge store (`PoleFrame.again` is only the place right after it); the walk follows the head's collision routine with the position kept. No signature of a theorem changed.
 * Then removed: `moved` (now the theorem `Run.moved`: the touch's frame comes to the end of the move at most once, [`SubsOnce`](f-6-18-2-SubsOnce.md)). `Run.inRange` takes `hN`, `hfr` after `R`, and `hg` at the end; `touch_ge` and `direct_castle` pass them. `PoleFrame.poleFrameCheck` also holds `SubsOnce.subsCheck`. No other signature changed.
 * Then removed in `ApproachCases`: `stopped` (now the theorem `Run.stop_step`) and `onGround` (with the new field, the theorem `Run.ground_step`). Added: `ground`: on a fast jump later than `L + 1`, the frame `T' − 1` starts on the ground (`st(T' − 2) = 0`) and its player's routine reads no jump (`jump(T' − 1) = false`). The track is read from the machines: `direct` gives `u` only, and the track is `trackOf sy keep.toFrames u` (`abs j`, `md j`, `st j` are the stored speed, the moving direction and the player's state of `seq j`; `jump j` is the jump that the player's routine of the counted frame `j` reads). `Track` has two more fields, `st` and `jump`. Gone: `Imposes`, `abs_of_imposes`, `keepCases`, `keepCheck`, `StopStep`, `stopStep_spec`. `direct_castle`, `castle_ge`, `touch_castle` no longer take `(hk : keepCheck sy m0 = true)`. `approach_of_cases` no longer takes `hf`, `hk`, and takes `hstop`, `hground` at the end; `fastLink_of_cases` no longer takes `hf`, `hk`, and takes `hstop` at the end ([The stored speed before a fast jump](f-6-9-1-StopRead.md)).
+* Then removed in `ApproachCases`: `ground`. Nothing is added. `Track` loses `st` and `jump`. `Approach` has one field `fastWay` in place of `fastLink` and `fastLate`: a fast jump has `FastLink`, or a frame `j` with `L < j < T'` and `13 ≤ |v₂(j)|`. `fast_near` takes `(hg : L + 2 ≤ g)` and `(hhop : ∀ j, L < j → j < g → Beside Ps (fr j))`. `fast_late` takes `{L j g}`, `(hLj : L < j)`, `(hjg : j < g)`, and `hfast` on frame `j`. `fastLink_of_cases` takes `(htake : sy.AirFastSpeed.toNat ≤ tk.abs L)` in place of `(hT : T = L + 1)`. `approach_of_cases` takes `hstop` without `T = L + 1 →`, and `(hkeep : fast = true → ∀ j, L < j → j < T → tk.abs j = (fr j).v₂.natAbs ∨ tk.abs j = tk.abs (j − 1))` in place of `hground`. `Run.ground_step` is gone; new `Run.stored_step`. `direct_castle`, `castle_ge`, `touch_castle` keep their signatures ([The frames between the landing and a fast jump](f-6-9-2-StoredStep.md)).
 
 On real frames (`pole-frac-check`, after the last change, exit 0, bad 0):
 
@@ -158,8 +160,7 @@ The hypotheses are the fields of `Run` and the structures in it. `pole_join` ass
 | `order`, `left`, `air` | he comes from the left, and from frame `q` he falls below the block's top. A fall cannot skip the landing window. On a frame with the feet over the block, the case has the frame's moving direction, height and fall speed | code; going over the pole and back is not covered |
 | `Collides`, `lowCase`, `inBlockCase` | a frame at the block runs `PlayerBGCollision` as `PoleGrab.collide` on a case of `cases` | routine checked alone; small Mario |
 | `mask` | after a push to the right, the next frame's speed is `hstep` with Left blocked. One frame's link; `maskCheck` is proved | real runs below |
-| `reads` | a fast jump: the stored speed before the takeoff is at least the air threshold | the code; `Jump.vstep` reads it |
-| `ground` | a fast jump later than `L + 1`: the frame `T' − 1` starts on the ground and reads no jump (two conditions on one state each). That it then ends with the stored speed `|v₂|` is the theorem `Run.ground_step`; that a frame from speed 0 ends with `|v₂|` or keeps the stored speed and the moving direction is the theorem `Run.stop_step` (the old field `stopped`) | `stop-read-check`: all 709 takeoffs after a landing more than one frame before, on the movie and on 233 own runs ([The stored speed before a fast jump](f-6-9-1-StopRead.md)) |
+| `reads` | a fast jump: the stored speed before the takeoff is at least the air threshold. It is the only link from the class of the model's jump to the machines. The frames before it need no field: each writes `\|v₂\|` into the stored speed or keeps it (the theorems `Run.stop_step`, `Run.stored_step`; the old fields `stopped`, `onGround`, `ground`) | the code; `Jump.vstep` reads it. `stop-read-check`: 76 takeoffs with a stored speed at the threshold or more, on the movie and on 233 own runs ([The frames between the landing and a fast jump](f-6-9-2-StoredStep.md)) |
 | `fall` | a slow jump: the fall began on `w ≤ q` by a start of `fallStarts`, or by stepping off the base; the frames follow `fallNext` | map facts below |
 | `flagAny`, `flagTight` | slow grab: for 124 frames, up to `c`, the flag of the counted frames is that of a checked direct grab with the fraction of `P₂(g)`; for 125 frames if the frame before moved left and the fraction is below `F` | measured below |
 
@@ -183,7 +184,7 @@ The new fields on other runs, by a scratch program. 500 runs of random inputs fr
 
 `hstep` sets the stored speed to `|v|`, and `X_Physics` reads it. After a hit the stored speed is not `|v|`. In those random runs `hstep` gives another `v₂` than the real frame on 59 of 126510 frames. For example the TAS up to 1066, then `0082828282c102c1c1...`: on frame 1088, `v = 0` with a stored speed of 35, Left gives `v₂ = −1`, and `hstep` gives 0. `Surface.model` is only about frames before the first hit. `mask` held on all these runs. `pole-join-check` now reads `v₂` with the real stored speed.
 
-Not proved: that every run satisfies `Run`. The bound `B` of the position is in a model with no map, so `fall` is needed: without it, `k = 4` is not excluded with `e = T` on `g = T + 7` and with `e = T + 1` on `g = T + 8`. The emulator search of [the route page](../docs/route-1-1.md) gives a smaller real bound, which would exclude it. The structures `box`, `ground` and `fall` say what frames do. Nothing proves that every frame of a real run does this.
+Not proved: that every run satisfies `Run`. The bound `B` of the position is in a model with no map, so `fall` is needed: without it, `k = 4` is not excluded with `e = T` on `g = T + 7` and with `e = T + 1` on `g = T + 8`. The emulator search of [the route page](../docs/route-1-1.md) gives a smaller real bound, which would exclude it. The structures `box` and `fall` say what frames do. Nothing proves that every frame of a real run does this.
 
 **Files.** `Theorems/PoleJoin.lean`, private `Proof/PoleJoin.lean`.
 
@@ -194,5 +195,5 @@ Not proved: that every run satisfies `Run`. The bound `B` of the position is in 
 .lake/build/bin/smbrta pole-frac-check FM2 300               # 16 ∣ P' − P, fracCheck, no castle flag on real runs (about 4 min)
 .lake/build/bin/smbrta keep-frames-check FM2 100            # the conditions of keep on real runs
 .lake/build/bin/smbrta castle-count-check FM2 200           # the counted frames from the touch to the castle, with pauses (about 1 min)
-.lake/build/bin/smbrta stop-read-check FM2 100              # Run.stop_step, Run.ground_step and the field ground on real frames (about 30 s)
+.lake/build/bin/smbrta stop-read-check FM2 100              # Run.stored_step, Run.stop_step and the two cases of a fast takeoff on real frames (about 30 s)
 ```

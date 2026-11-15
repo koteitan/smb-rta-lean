@@ -839,6 +839,19 @@ def AfterVS (sy : Syms) (m0 m : Machine) (i : UInt8) : Prop :=
 theorem afterV_of {sy : Syms} {m0 m : Machine} {i : UInt8} (h : AfterVS sy m0 m i) : OpenFlat.AfterV sy m0 m i :=
   fun k h1 h2 x hx => h k h1 h2 x (List.mem_append_left _ hx)
 
+/-- the bytes of `vsA` that stay assumed after the return of the collision routine: the height, its high byte, the vertical speed and its fraction
+(`OpenFlat.vertA`), the height's fraction, the vertical force and the state. The other four (the vertical force down, the jump's origin, A and B, the jump's halt
+value) are a theorem (`OpenAfter.keep_ret`, a walk that follows each). -/
+def vsR (sy : Syms) : List UInt16 := OpenFlat.vertA sy ++ [sy.Player_YMF_Dummy, sy.VerticalForce, sy.Player_State]
+
+/-- **From the return of the collision routine to the frame's end the seven bytes of `vsR` do not change**, on the frame from `m` with the input `i`: `AfterVS` for
+the bytes that no walk gives (the enemies' code, the platforms and the jumpspring may write them) -/
+def AfterVR (sy : Syms) (m0 m : Machine) (i : UInt8) : Prop :=
+  ∀ k, CtrlKeep.arrAt sy m i ≤ k → (trace m i k).pc = OpenFlat.collRet sy m0 → ∀ x ∈ vsR sy, peek (frame m i) x = peek (trace m i k) x
+
+theorem afterV_ofR {sy : Syms} {m0 m : Machine} {i : UInt8} (h : AfterVR sy m0 m i) : OpenFlat.AfterV sy m0 m i :=
+  fun k h1 h2 x hx => h k h1 h2 x (List.mem_append_left _ hx)
+
 /-! ## A real frame -/
 
 /-- **The checks on the ROM of a frame's walk**: the walk (`airCheck`), the ground's height and `LandDepth` within a byte, four distinct bytes, and the walk of

@@ -4,8 +4,9 @@ import Theorems.SurfaceFrames
 # Above ground: the stored speed of the frames before the touch, read from the machines
 
 `PoleJoin.ApproachCases` had two fields on the stored speed of the frames before a fast jump: `stopped` (a frame from a stopped Mario writes `|v₂|` into the stored speed,
-or keeps the stored speed and the moving direction) and `onGround` (the frame before the jump runs `ImposeFriction`). Here both are read from the machines of the frames
-of `FrameKeep.Frames` (the field `keep` of `PoleJoin.Run`).
+or keeps the stored speed and the moving direction) and `onGround` (the frame before the jump runs `ImposeFriction`; then the field `ground`: it starts on the ground
+and reads no jump). Here the stored speed is read from the machines of the frames of `FrameKeep.Frames` (the field `keep` of `PoleJoin.Run`), and all three fields are
+gone: every frame writes `|v₂|` into the stored speed or keeps it (`stored_step`), and `PoleJoin.approach_of_cases` closes both cases.
 
 * `stored_c4N`: `FrameModel.stored_c4` without its hypothesis that the stored speed is `|v|` at the player's routine. On the ground, and in the air with Left or Right,
   `ImposeFriction` writes `|v|` into the stored speed (the same walks); in the air with neither, the speed, the stored speed and the moving direction stay up to the mover.
@@ -14,8 +15,10 @@ of `FrameKeep.Frames` (the field `keep` of `PoleJoin.Run`).
 * `OnFrames.stored_end`: on a counted frame before the touch: with `SurfaceRead.frameE_move` (`v₂` is the speed at the scroll handler), the walk of `CtrlKeep` up to the
   player's routine and the `lag` frames before it (`OnFrames.lagKeep`), and `GuardE.keepHE` from the scroll handler to the frame's end (the stored speed and the moving
   direction at the end are those there).
-* `OnFrames.stop_step` (the old field `stopped`): a frame from a stopped Mario ends with the stored speed `|v₂|`, or with the stored speed and the moving direction of the
-  frame before. `OnFrames.ground_step` (the old field `onGround`): a frame that starts on the ground and reads no jump ends with the stored speed `|v₂|`.
+* `stop_step` (the old field `stopped`): a frame from a stopped Mario ends with the stored speed `|v₂|`, or with the stored speed and the moving direction of the
+  frame before. `stored_step`: any frame ends with the stored speed `|v₂|`, or with the stored speed of the frame before (the old fields `onGround`, `ground`: the
+  frames between the landing and a fast jump need nothing more). `ground_step`: a frame that starts on the ground and reads no jump ends with the stored speed `|v₂|`;
+  the route no longer uses it.
 
 There is no game data in this file. Page: `1-1/f-6-9-1-StopRead.md`.
 -/
@@ -298,6 +301,25 @@ theorem stop_step (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : modelOK sy m0 (
       · exact absurd (Or.inr e) hc
     obtain ⟨e1, e2⟩ := H.2 c1 c2
     exact Or.inr ⟨e1, e2 h0⟩
+
+/-- **A frame writes the stored speed or keeps it**: a counted frame before the touch ends with the stored speed `|v₂|` (on the ground, and in the air with Left or
+Right), or with the stored speed of the end of the frame before (in the air with neither). The two cases of `stored_end`; nothing is asked of the frame's speed, state
+or jump. With it the frames between a landing and a fast jump need no field (`PoleJoin.approach_of_cases`). -/
+theorem stored_step (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : modelOK sy m0 (ctrlStack sy m0) = true)
+    (hfr : TopSpeed.frictionCheck sy m0 = true) (hso : storedOK sy m0 (ctrlStack sy m0) = true) (hidle : idleAt (Rom.of m0) sy.EndlessLoop = true)
+    (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v)
+    (hv0 : vOf sy (seq 0) = 0) (hP0 : posP sy (seq 0) = posP sy B.m) (hg : g ≤ farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
+    (peek (seq j) sy.Player_XSpeedAbsolute).toNat = (frOf sy m0 K j).v₂.natAbs ∨
+      peek (seq j) sy.Player_XSpeedAbsolute = peek (seq (j - 1)) sy.Player_XSpeedAbsolute := by
+  have H := stored_end hck hOK hfr hso hidle O hst Ar hv0 hP0 hg h1 h3
+  by_cases hc : stOf (caseOf sy (atR sy K j)).n = 0 ∨ lrOf (caseOf sy (atR sy K j)).n ≠ 0
+  · exact Or.inl (H.1 hc)
+  · have c1 : stOf (caseOf sy (atR sy K j)).n ≠ 0 := fun e => hc (Or.inl e)
+    have c2 : lrOf (caseOf sy (atR sy K j)).n = 0 := by
+      by_cases e : lrOf (caseOf sy (atR sy K j)).n = 0
+      · exact e
+      · exact absurd (Or.inr e) hc
+    exact Or.inr (H.2 c1 c2).1
 
 /-- on the ground with no jump read, the case of the player's routine is on the ground -/
 theorem stOf_ground {R : Machine} (h0 : peek R sy.Player_State = 0) (hj : (readIn sy R).jump = false) : stOf (caseOf sy R).n = 0 := by

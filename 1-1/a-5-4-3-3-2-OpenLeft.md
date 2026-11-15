@@ -38,20 +38,27 @@ The program `open-left-check N T`:
 |---|---|---|---|
 | 31 | 10240 | true | 1.3 s |
 | 31 | 10100 | true | 1.2 s |
+| 31 | 9664 | true | 1.5 s |
 | 31 | 9600 | false | 1.6 s |
 | 32 | 10240 | false | 1.8 s |
+| 32 | 10304 | true | 1.7 s |
 | 32 | 10500 | true | 1.8 s |
 
-So in 32 frames the model can get between 10241 and 10500 to the left: at the end of frame 32 the model can be left of position 0. On the real machine the screen's left
-edge stops him: the scroll handler writes the position back to the edge. The model does not have the edge. The best of the real runs that we tried (an A press with B
-and Left on the first frame, then B and Left) begins the counted frame 33 at `P = 320`, without the edge.
+So in 31 frames the model gets at most 9664 to the left (`P ≥ 576`), and in 32 frames at most 10304: at the end of frame 32 the model can be up to 64 left of
+position 0. On the real machine the screen's left edge stops him: the scroll handler writes the position back to the edge, and sets the speed to 0 if Left is held.
+The model does not have the edge.
+
+Round 20: a search of own inputs on the real machine (`open-left-real FM2 60`, a beam search) reaches both bounds. The smallest position at the end of frame 31 is
+576, and at frame 32 the movement goes to `P = −64` and the frame ends at the left end of the level (`P = 192`, the speed 0). So frame 32 of such a run is no step
+of the model. The old condition `after` was false there; see [OpenAfter](a-5-4-3-3-4-OpenAfter.md).
 
 `dl` alone is too weak here: `dl(Φ(start), 32) = 11328 > 10240`. The search is needed.
 
 ## Use
 
 [The opening on real frames](a-5-4-OpenFrames.md) uses it: the position at the end of each of the first 31 frames is exact (no wrap). For the end of frame 32 a
-condition stays (`Real.page`: the page is not 255 when the counted frame 33 begins).
+condition stays (`Real.page`: the page is not 255 when the counted frame 33 begins), and frame 32 may end at the left end of the level
+(`OpenFrames.AtEdge`, `OpenRunM.endB`).
 
 ## Assumed (not proved in Lean)
 
@@ -61,4 +68,5 @@ Nothing new. The model is that of [the opening](a-3-Opening.md).
 ```
 .lake/build/bin/smbrta open-left-check 31 10240     # true
 .lake/build/bin/smbrta open-left-check 32 10240     # false
+.lake/build/bin/smbrta open-left-real FM2 60        # own inputs to the left on the real machine (1 min)
 ```

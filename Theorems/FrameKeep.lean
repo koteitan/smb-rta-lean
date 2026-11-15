@@ -29,10 +29,10 @@ frames before the touch end in control (`Frames.noStore`, `Frames.ctlAll`).
 
 A frame of `Frames` is counted when it ends with the game not paused (the low bit of the pause byte 0, `upAt`): the counted frame `j` is the `j`-th such frame (`ixOf`, by
 a count `upTo` and a search `firstLe`). So the counted frames come in order (`Frames.order`), each ends not paused (`Frames.up`), and the frames between them end paused
-(`Frames.down`); these are theorems from the definition. The condition on each instruction of the frames of a run is `CleanK` of `guardE`: `guardK` with fourteen more bytes
+(`Frames.down`); these are theorems from the definition. The condition on each instruction of the frames of a run is `CleanK` of `guardE`: `guardK` with eighteen more bytes
 protected (`spareK`: the pause byte, the area's type, the swimming flag, the change of size; `spareE`: A and B, A and B of the frame before, the moving direction, the
 running speed, the stored speed; `collE`: the player's collision bits; `speedE`: the player's speed; `vertE`: the vertical force down, the jump's origin, the jump's halt
-value). The walks of this file use `guardK`; `CleanK` of `guardE` gives `CleanK` of `guardF`
+value; `faceE`: the player's facing and subspeed; `stateE`: the player's state and the vertical force). The walks of this file use `guardK`; `CleanK` of `guardE` gives `CleanK` of `guardF`
 (`cleanK_of_E`), and that gives `CleanK` of `guardK` (`cleanK_of_F`).
 There is no game data in this file. Page: `1-1/f-6-19-FrameKeep.md`.
 -/
@@ -1373,10 +1373,19 @@ def speedE (sy : Syms) : List Nat := [(sy.Player_X_Speed &&& 0x7FF).toNat]
 def vertE (sy : Syms) : List Nat :=
   [(sy.VerticalForceDown &&& 0x7FF).toNat, (sy.JumpOrigin_Y_Position &&& 0x7FF).toNat, (sy.DiffToHaltJump &&& 0x7FF).toNat]
 
-/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the bytes of `spareE`, the collision bits (`collE`),
-the speed (`speedE`) and three vertical bytes (`vertE`) protected too. The walks of this file use `guardK` or `guardF`, and `CleanK` of `guardE` gives both
-(`cleanK_of_E`, `cleanK_sub`); the walk of `PhaseFrame` uses `guardE` with two more bytes. -/
-def guardE (sy : Syms) (m0 : Machine) : Guard := { guardF sy m0 with prot := spareE sy ++ collE sy ++ speedE sy ++ vertE sy ++ (guardF sy m0).prot }
+/-- **The player's facing and subspeed**, which no frame of a run writes through an index or a pointer (`FaceKeep.zI`: the facing of the old field `after` and the
+subspeed of the old field `collide` of the frames above ground) -/
+def faceE (sy : Syms) : List Nat := [(sy.PlayerFacingDir &&& 0x7FF).toNat, (sy.Player_X_MoveForce &&& 0x7FF).toNat]
+
+/-- **The player's state and the vertical force**, which no frame of a run writes through an index or a pointer (the walk of the vertical force, `FaceKeep.vf_end`:
+a part of the old field `vAfter` of the frames above ground) -/
+def stateE (sy : Syms) : List Nat := [(sy.Player_State &&& 0x7FF).toNat, (sy.VerticalForce &&& 0x7FF).toNat]
+
+/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the player's state and the vertical force (`stateE`), the facing and the
+subspeed (`faceE`), the bytes of `spareE`, the collision bits (`collE`), the speed (`speedE`) and three vertical bytes (`vertE`) protected too. The walks of this file use `guardK` or `guardF`, and
+`CleanK` of `guardE` gives both (`cleanK_of_E`, `cleanK_sub`); the walk of `PhaseFrame` uses `guardE` with two more bytes. -/
+def guardE (sy : Syms) (m0 : Machine) : Guard :=
+  { guardF sy m0 with prot := stateE sy ++ faceE sy ++ spareE sy ++ collE sy ++ speedE sy ++ vertE sy ++ (guardF sy m0).prot }
 
 /-- `CleanK` of `guardE` gives `CleanK` of `guardF` -/
 theorem cleanK_of_E {sy : Syms} {m0 : Machine} {q : UInt16} {m : Machine} (h : CleanK (guardE sy m0) q m) : CleanK (guardF sy m0) q m := cleanK_weak h
@@ -1407,8 +1416,8 @@ structure Frames (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) (s
   noStore : ∀ n, n + 1 < ixOf sy m0 S a top g → ∀ k, CtlStore sy (trace (S.seq (a + n)) (S.inp (a + n)) k) = false
   /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardE`: no store through an index or a pointer writes the bytes of
   `guardK` (but the player's own store of the fraction), the pause byte, the area's type, the swimming flag, the change of size, A and B, A and B of the frame before,
-  the moving direction, the running speed, the stored speed, the player's collision bits, the player's speed, the vertical force down, the jump's origin or the jump's
-  halt value -/
+  the moving direction, the running speed, the stored speed, the player's collision bits, the player's speed, the vertical force down, the jump's origin, the jump's
+  halt value, the player's facing, the player's subspeed, the player's state or the vertical force -/
   cleanE : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardE sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section

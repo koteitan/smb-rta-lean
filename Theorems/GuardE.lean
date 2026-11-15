@@ -6,7 +6,8 @@ import Theorems.AfterKeep
 Each instruction of the frames of a run meets `CleanK` of `FrameKeep.guardE` (the field `cleanE` of `FrameKeep.Frames`): no store through an index or a pointer writes the
 bytes of `FrameKeep.guardF`, nor A and B, A and B of the frame before, the moving direction, the running speed or the stored speed (`FrameKeep.spareE`), nor the
 player's collision bits (`FrameKeep.collE`, used by `CollKeep.cleanC_of`), nor the player's speed (`FrameKeep.speedE`, used by `CollideKeep.cleanV_of`), nor three
-vertical bytes (`FrameKeep.vertE`, used by `VertKeep.cleanK_of_kI`), but the player's own store of the fraction (`CleanK` does not ask that store: the walks know its
+vertical bytes (`FrameKeep.vertE`, used by `VertKeep.cleanK_of_kI`), nor the player's facing and subspeed (`FrameKeep.faceE`, used by `FaceKeep.cleanZ_of`), nor the
+player's state and the vertical force (`FrameKeep.stateE`, used by `FaceKeep.cleanVF_of`), but the player's own store of the fraction (`CleanK` does not ask that store: the walks know its
 target).
 
 `PrevKeep.prev_end` and `AfterKeep.keepH` ask `CleanK` of `FrameKeep.guardF` and, of every instruction, `SpareAB` or `SpareH`: no store through an index or a pointer
@@ -59,7 +60,7 @@ with the index 0), where `CleanK` asks nothing -/
 theorem spareE_of {q : UInt16} {m : Machine} (h : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) (hq : ¬ (m.pc = q ∧ m.x = 0)) : AfterKeep.SpareE sy m := by
   intro t ht hlt hm
   rcases h.store t ht hq with ⟨_, h2⟩ | ⟨h1, _⟩
-  · exact h2 (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (eI_eq (sy := sy) ▸ hm)))))
+  · exact h2 (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ (eI_eq (sy := sy) ▸ hm))))))
   · have a1 := UInt16.lt_iff_toNat_lt.1 hlt
     have a2 := UInt16.le_iff_toNat_le.1 h1
     simp at a1 a2

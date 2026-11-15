@@ -1,6 +1,7 @@
 import Theorems.RoomVert
 import Theorems.RoomFall
 import Theorems.RoomStand
+import Theorems.RoomJump
 import Theorems.RoomStart
 
 /-!
@@ -578,6 +579,8 @@ structure RoomWalks (sy : Syms) (nmS : Names) (m0 : Machine) (h k : Nat) (nm : N
   pair : Checks sy nmS m0 nm d v0
   quad : QuadWalks sy nmS m0
   idle : FrameModel.idleAt (FrameModel.Rom.of m0) (placesR sy nmS m0).idle = true
+  /-- the walk of two machines on the takeoff frame of a jump from a stand (`VertJump`, `RoomJump`) -/
+  jump : VertJump.jumpOK sy m0 (FrameModel.ctrlStack sy m0) = true
 
 end
 

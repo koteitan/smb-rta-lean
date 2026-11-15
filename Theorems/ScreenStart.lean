@@ -25,10 +25,14 @@ def rowR (sy : Syms) (r : Machine) (K : List (Nat × UInt8)) (S : AS) : Bool :=
 /-- every state of the rows -/
 def rowsR (sy : Syms) (r : Machine) (K : List (Nat × UInt8)) (l : List Row) : Bool := l.all fun w => w.R.all (rowR sy r K)
 
-/-- **The check on the ROM**: the mask of the bits, the same ROM in both environments, and the states of the rows of the time -/
+/-- the level's number in the room's names, as a RAM index (`AreaKeep.areaI` is this number) -/
+def areaI (nmS : Names) : Nat := (nmS.ad "AreaNumber").toNat &&& 0x7FF
+
+/-- **The check on the ROM**: the mask of the bits, the same ROM in both environments, and the states of the rows of the time; and the two lists of names agree on the
+level's number: its index in the room's names is a byte that the vertical pipe's entry knows (round 15, for `Route.Run.area₁`) -/
 def roomCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (nmS : Names) (m0 : Machine) : Bool :=
   maskOK (refR m0) (knownOf nmS) && decide ((timeEnv d e).prg.data = (envR sy nmS m0).prg.data) && (timeEnv d e).mask == (envR sy nmS m0).mask &&
-    rowsR sy (refR m0) (knownOf nmS) (timeRows (timeCtx sy nm d e) d e)
+    rowsR sy (refR m0) (knownOf nmS) (timeRows (timeCtx sy nm d e) d e) && d.known.contains (areaI nmS)
 
 variable {sy : Syms} {nm nmS : Names} {d : Data} {e m0 : Machine}
 
@@ -66,10 +70,18 @@ theorem ba_eq {a b : ByteArray} (h : a.data = b.data) : a = b := by
 /-- **The condition at the first control in the room**, for a machine with control in the rows of the time. -/
 theorem room_of_rows (hc : roomCheck sy nm d e nmS m0 = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) : Room sy nmS m0 m := by
   simp only [roomCheck, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
-  obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hc
+  obtain ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, _⟩ := hc
   have hM := maskOK_spec h1
   have hp := ba_eq h2
   have hc0 : RoomCond (timeEnv d e) (refR m0) (knownOf nmS) m := room_of_invL hM h4 h hm
   exact roomCond_env hc0 hp h3
+
+/-- **The level's number is a byte that the vertical pipe's entry knows**: a machine with the condition at the entry (`PipeChangeEnd.Entry`) has it with the reference
+entry's value -/
+theorem area_of_entry (hc : roomCheck sy nm d e nmS m0 = true) {m : Machine} (h : Entry d e m) : m.ram.get! (areaI nmS) = e.ram.get! (areaI nmS) := by
+  simp only [roomCheck, Bool.and_eq_true] at hc
+  obtain ⟨v, hv, _, _, hb⟩ := h.1.ref
+  cases List.mem_singleton.1 hv
+  exact hb _ (List.contains_iff_mem.1 hc.2)
 
 end Smbrta.ScreenStart

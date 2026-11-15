@@ -11,14 +11,12 @@
 ```
 GU        :=  PipeWrites のガードで  prot(GU) = prot(EntryKeep.guardOf) ++ prot(LagPause.guardP p) ++ prot(FrameKeep.guardE)
               p = NMI が調べるポーズのバイト（CtrlKeep.pauseI）
-CleanU(m) :=  CleanK(GU, q, m)     qCheck のとき
-              Clean(GU, m)         qCheck でないとき
-upCleanU  :   ∀ n,  1 ≤ n < a₁  →  ∀ j,  CleanU(tr(n, j))
+upCleanU  :   ∀ n,  1 ≤ n < a₁  →  ∀ j,  CleanK(GU, q, tr(n, j))
 ```
 
 `CleanK(G, q, m)` は `Clean(G, m)` ですが、`q` で添字 `X = 0` の書き込みは求めません。`qCheck` は ROM の確認です。`q` の命令は `STA abs,X` で、`X = 0` での
-行き先は RAM のバイトで、`EntryKeep` のガードはそれを守らず、それは `p` ではありません。この ROM では `qCheck` が成り立ちます（非公開の `up_q_check`）。
-なので `CleanU = CleanK(GU, q)` です（非公開の `up_clean_iff`）。
+行き先は RAM のバイトで、`EntryKeep` のガードはそれを守らず、それは `p` ではありません。`qCheck` は `EntryKeep.Checks` の確認の 1 つです
+（フィールド `q`。非公開の `up_q_check`）。なので `hK` を受け取る定理はどれもこれを持っています。
 
 これから（`Route.lean`、`UpClean.lean`）:
 
@@ -33,9 +31,9 @@ Run.pipeReal   :  ∀ t, 1 ≤ t ≤ N, t < E → ∀ k,  CleanK(guardE, q, tr(i
 `E` は `pipe.E`（数えたときの入るフレーム）、`ix(t)` は数えるフレーム `t` が始まる走りのフレームです。`g` は `pipe` のポーズのバイトで、`hg : p = g` は出だしの
 確認のフィールドです（`OpenFrames.Checks.pause`）。
 
-Lean: `Theorems/UpClean.lean`（`guardU`、`qCheck`、`CleanU`、`at_q`、`clean_of_U`、`cleanE_of_U`、`upClean₁_of`）、`Theorems/StepPrg.lean`（`step_prg`、`trace_prg`、
+Lean: `Theorems/UpClean.lean`（`guardU`、`at_q`、`clean_of_U`、`cleanE_of_U`、`upClean₁_of`。`qCheck` は `Theorems/EntryKeep.lean` にある）、`Theorems/StepPrg.lean`（`step_prg`、`trace_prg`、
 `run_prg`）、`Theorems/Route.lean`（`Run.prg₁`、`Run.upClean₁`、`Run.entryIx`、`Run.lagsClean`、`Run.pipeClean`、`Run.pipeReal`）、非公開の `Proof/UpClean.lean`
-（`up_q_check`、`up_clean_iff`。`native_decide`、1 秒かからない）。
+（`up_q_check`。`native_decide`、1 秒かからない）。
 
 ## しくみ
 
@@ -56,16 +54,16 @@ Lean: `Theorems/UpClean.lean`（`guardU`、`qCheck`、`CleanU`、`at_q`、`clean
   フレーム `a₁` は操作のルーチンで始まります。でもそれは土管のルーチンで始まります: ルーチンのバイトは `entryRest₁` のバイトで、入口の手本はそこに土管の
   ルーチンを持ちます（`EntryKeep` のリストの確認）。2 つのルーチンは違います。なので `ix(E) < a₁` です。`a₁` の定義とあわせると `ix(E) + 1 = a₁` です。
   使うのは上限だけです。
-* **`if` がある理由.** `Run.upStart₁` と `Run.entry₁` は確認 `hB` と `hK` だけを受け取り、ほかのパートの 20 ほどの定理がそれを使います。`qCheck` はその確認に
-  入っていません。`if` があれば新しい引数は要りません。`qCheck` が成り立たないとき、`CleanU` は何も除きません。この ROM では成り立つので、フィールドは
-  `CleanK(GU, q)` を求めます。
+* **`if` はなくなりました（15 回目）.** 14 回目のフィールドは、`qCheck` が成り立てば `CleanK(GU, q)`、成り立たなければ `Clean(GU)` でした。`Run.upStart₁` と
+  `Run.entry₁` が確認 `hB` と `hK` だけを受け取り、ほかのパートの 20 ほどの定理がそれを使うからです。今は `qCheck` が `EntryKeep.Checks` のフィールドなので、
+  `hK` がそれを運び、フィールドはただの `CleanK` です。
 
 ## 本物のフレームで測ったこと
 
 `up-clean-u FM2`（exit 0）は、`up-clean-union`（パート b、13 回目）の走りを、Lean の文の `GU` で動かします。もう一度、この回のパート e の新しいバイト
 （速さ、`FrameKeep.guardE` の `speedE`）を足したガード（合わせたガード）でも動かします。
 
-| 走り | フレーム（ポーズ） | 命令 | `CleanU` に反する | 合わせたガードに反する | `q` で `X = 0` の書き込み（`EntryKeep` と `guardP` に `Plain`） |
+| 走り | フレーム（ポーズ） | 命令 | `upCleanU` に反する | 合わせたガードに反する | `q` で `X = 0` の書き込み（`EntryKeep` と `guardP` に `Plain`） |
 |---|---|---|---|---|---|
 | TAS、入るまでの 368 フレーム | 368 (0) | 1,917,255 | 0 | 0 | 368 (368) |
 | 入口の手本 | 440 (0) | 2,256,005 | 0 | 0 | 440 (440) |
@@ -86,12 +84,12 @@ Lean: `Theorems/UpClean.lean`（`guardU`、`qCheck`、`CleanU`、`at_q`、`clean
 | `chg.upClean₁` | `EntryKeep.guardOf`（124 バイト） | `1 ≤ n < a₁` |
 | `pipe.lags.clean` | `LagPause.guardP`（48 バイト） | `1 ≤ n < ix(E)` |
 | `pipe.clean` | `PipeWrites.guardOf` | 入るフレーム `ix(E)` の書き込みまで |
-| `pipe.opening.cleanK` | `FrameKeep.guardE`（59 バイト）、`CleanK` | 数えるフレーム 1 から 32 |
+| `pipe.opening.cleanK` | `FrameKeep.guardE`（67 バイト）、`CleanK` | 数えるフレーム 1 から 32 |
 
-`GU` は 134 バイトを守ります（パート e の速さのバイトを足すと 135）。`EntryKeep` のガードは `guardP` のポーズのバイト（同じバイト）をもう守るので、入るフレームでも
-新しいことはありません。新しいのは次のことです: **`EntryKeep` のガードも `guardP` も守らない `guardE` の 10 バイトを、添字やポインタを通った書き込みが書かない**
+`GU` は 143 バイトを守ります。`EntryKeep` のガードの 125 バイト（15 回目からレベルの番号を含む）と、ほかの 2 つが守らない `guardE` の 18 バイトです。`EntryKeep` のガードは `guardP` のポーズのバイト（同じバイト）をもう守るので、入るフレームでも
+新しいことはありません。新しいのは次のことです: **`EntryKeep` のガードも `guardP` も守らない `guardE` の 18 バイトを、添字やポインタを通った書き込みが書かない**
 （A と B、前のフレームの A と B、動く向き、走る速さ、覚えている速さ `|v|`、当たりのビット、泳ぎのフラグ、大きさの変化、城の旗、プレイヤーの端数（`q` で `X = 0`
-のところを除く）。パート e の速さを足すと 11）。**それを、数えるフレーム 1 から 32 でないフレームで求めます**: 数えるフレーム 32 より前の数えないフレームと、
+のところを除く）。14 回目と 15 回目から、速さ、ジャンプの 3 バイト、プレイヤーの状態、縦の力、向き、サブ速さ）。**それを、数えるフレーム 1 から 32 でないフレームで求めます**: 数えるフレーム 32 より前の数えないフレームと、
 そのあと入るまでのすべてのフレームです。`q` で `X = 0` のところでは、合わせた条件は `upClean₁` より求めることが少ないです（何も求めません）。この ROM では
 その書き込みは `EntryKeep` のガードに `Plain` なので（`qCheck`）、同じです。
 

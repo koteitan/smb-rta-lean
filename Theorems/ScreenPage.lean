@@ -1292,7 +1292,7 @@ def asmValue2 (lines : List String) (n : String) : Option Nat :=
 /-- the names this file needs -/
 def namesOf (text : String) : Names :=
   let ls := text.splitOn "\n"
-  ((["VRAM_Buffer1_Offset", "ScreenLeft_PageLoc", "ScrollLock", "ChangeAreaTimer", "FrameCounter", "GamePauseStatus", "PlayerStatus", "CoinTally", "PlayerScoreDisplay", "GameTimerDisplay", "HalfwayPage", "Hidden1UpFlag", "PseudoRandomBitReg", "NoiseSoundQueue", "TimeRunningOutMusic"] ++ roomNames.map (·.1) ++ restNames.map (·.1)).eraseDups).filterMap fun n =>
+  ((["VRAM_Buffer1_Offset", "ScreenLeft_PageLoc", "ScrollLock", "ChangeAreaTimer", "FrameCounter", "GamePauseStatus", "PlayerStatus", "CoinTally", "PlayerScoreDisplay", "GameTimerDisplay", "HalfwayPage", "Hidden1UpFlag", "PseudoRandomBitReg", "NoiseSoundQueue", "TimeRunningOutMusic", "VRAM_Buffer_AddrCtrl"] ++ roomNames.map (·.1) ++ restNames.map (·.1)).eraseDups).filterMap fun n =>
     (asmValue2 ls n).map (n, ·)
 
 /-- the references `V` of the condition at the entry, without the bytes `restIdx`, as known bits -/

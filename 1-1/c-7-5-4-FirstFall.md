@@ -20,7 +20,7 @@ fall_mem   :  d < 51,   ∀ j ∈ (C, C + d]: st(vs(j)) ≠ 0   →   vs(C + d) 
 fall_next  :  the same   →   vs(C + d + 1) = t  ∨  (falling(t) ∧ vs(C + d + 1) = land(t)),     t = vstepR(vs(C + d), a(C + d + 1))
 vfall_first:  C ≤ n,  n + 1 < C + 51,  ∀ j ∈ (C, n]: st(vs(j)) ≠ 0   →   VDrop(vs(n), vs(n + 1))
 fall_first :  C ≤ n < C + 34,  ∀ j ∈ (C, n): st(vs(j)) ≠ 0   →   ¬OnFloor(vs(n))
-fall_long_of: C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                           (now from the frames with no jump, and fall_jump)
+fall_long_of: C ≤ n < C + 34   →   ¬OnFloor(vs(n))                                           (now from the frames with no jump, and fall_any of item 1-1-c-7-5-6)
 vfall_of   :  C ≤ n,  n + 1 < C + 51,  st(vs(n)) ≠ 1,  no jump on frames C + 1 … n + 1   →   VDrop(vs(n), vs(n + 1))   (now from the frames with no jump)
 floor_at_of:  NoWall   →   OnFloor(vs(C + 34))                                               (with stand_wall, land_at)
 ```
@@ -47,7 +47,7 @@ land_at    :  NoWall   →   st(vs(C + 34)) = 0
 * `vfall_stand` is `vfall` from the first stand on.
 * `land_at` is `floor_at` without the height: the first fall gives the floor's height at `C + 34`; that he stands there is the collision routine's feet check, not proved.
 
-Since item 1-1-c-7-5-5 ([Frames that start standing in the room](c-7-5-5-RoomStand.md)) `vfall_stand` is gone and `fall_stand` is the smaller field `fall_jump`: a walk of the frames that start standing makes the states with no jump a finite set again. `vfall` is now asked only with no jump since first control.
+Since item 1-1-c-7-5-5 ([Frames that start standing in the room](c-7-5-5-RoomStand.md)) `vfall_stand` is gone and `fall_stand` is the smaller field `fall_jump`: a walk of the frames that start standing makes the states with no jump a finite set again. Since item 1-1-c-7-5-6 ([A jump from a stand during the fall in the room](c-7-5-6-RoomJump.md)) `fall_jump` is a theorem, with `stand_wall` and `wall`. `vfall` is now asked only with no jump since first control.
 
 New in `InRoom`: `vstart` (proved, `Route.Run.roomV0`). New in `Checks`: `first` (the check `fallCheck`). New in `Nums`: `vStart`, the vertical states at first control.
 
@@ -89,12 +89,12 @@ Program `room-first-fall-check FM2 [N]`: the two checks, then from the movie's f
 
 ## Assumptions (not proved in Lean)
 
-* `fall_jump` (once `fall_stand`, [Frames that start standing in the room](c-7-5-5-RoomStand.md)), `land_at` (above). They speak only of the frames after a jump from the wall, and of the one state at `C + 34`.
+* `land_at` (above): it speaks only of the one state at `C + 34`. `fall_jump` (once `fall_stand`) is a theorem since item 1-1-c-7-5-6, which uses the fields `stand_wall` and `wall`.
 * `SiteOK` on each instruction of the room's frames, as for [the block map](c-7-12-RoomMap.md) (through `vair_of`).
 
 ## What is still needed
 
-* The frames after a stand on the wall: done for the runs with no jump in [Frames that start standing in the room](c-7-5-5-RoomStand.md). The jumps from the wall stay (`fall_jump`).
+* The frames after a stand on the wall: done for the runs with no jump in [Frames that start standing in the room](c-7-5-5-RoomStand.md). The jumps from the wall are done in [A jump from a stand during the fall in the room](c-7-5-6-RoomJump.md).
 * `land_at`: which frame lands needs the collision routine's feet check on the block map, as in [Every frame of a jump in the room](c-7-11-1-RoomFall.md).
 
 **Files.** `Theorems/RoomJoin.lean` (`fallNext`, `fallLayer`, `vdropB`, `fallStep`, `fallOk`, `fallRun`, `fallCheck`, `fall_ok`, `fallStep_spec`, `first_of`, `RoomRun.vs_start`, `t0_far`, `fall_mem`, `fall_next`, `vfall_first`, `fall_first`, `fall_long_of`, `vfall_of`, `floor_at_of`), `Theorems/RoomPair.lean` (`vsBytes`, `rowV`, `rowsCheck`, `of_invL`, `v_of_state`, `v_of_rows`), `Theorems/Route.lean` (`Run.roomV0`, `Run.inRoom`); private `Proof/RoomJoin.lean` (`room_checks.first`), `Proof/RoomVert.lean` (`room_pair_rows`).

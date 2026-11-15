@@ -2,16 +2,18 @@
 
 # The state at the vertical pipe's entry, from the title
 
-**Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 97 bytes and 12 bytes under a mask have the values of the reference entry (115 and 13 before round 12). Here the idle loop, the pipe's timer and 73 of these 109 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has two fields:
+**Claim.** This is a partial result. `Entry` is the condition on the state at the end of the frame that enters the vertical pipe ([the change into the room without `fall`](b-3-2-PipeChangeEnd.md)). The frame has ended in the idle loop, the pipe's timer is at least 48, and 98 bytes and 12 bytes under a mask have the values of the reference entry (97 and 12 before round 15, 115 and 13 before round 12). Here the idle loop, the pipe's timer and 74 of these 110 bytes come from the press of Start on the title and from the frames from control to the entry. The field `entry₁` of [the whole route](0-1-Route.md) is gone. In its place `Changes` has two fields:
 
 * `entryRest₁`: the condition `Entry` on the other 36 bytes only (`Rest`). This is a condition on one state.
-* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 71 bytes of `held`, the pipe's timer and the six bytes of the pause among the bytes that a store through an index or a pointer does not touch. Since round 14 it is the theorem `Run.upClean₁` from the one field `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
+* `upClean₁`: each instruction of the frames from control to the entry meets `Clean` with the 72 bytes of `held`, the pipe's timer and the six bytes of the pause among the bytes that a store through an index or a pointer does not touch. Since round 14 it is the theorem `Run.upClean₁` from the one field `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
 
 In round 10, item 1-1-b-3-4-2 shrank from 61 bytes and the timer to 56 bytes: the frames keep 4 more bytes (the kind of enemy slot 4, the place of cannon 0: 3 bytes), and the walk of the entry frame gives one more byte (the buttons left and right) and the timer. Each byte that stays has a measured reason below.
 
 **Round 11.** Two changes. (1) The bits 1 to 6 of the pause byte (`GamePauseStatus`, under the mask `0x7E`) are no longer in `restNames`: the near states of `TitleStart` now know the pause byte (the press condition knows it since round 5), and the walk of a frame from control keeps these bits, because the pause routine writes the byte only with bit 0 flipped and bit 7 set, or with bit 7 cleared. So `Rest` has 55 bytes, `atEntry` 73, `held` 71, `kept` 70. (2) The guard also lists the six bytes of the pause (`pauseSix`), and `Checks` has two more checks, for [the pause at the entry](b-3-7-3-EntryPause.md). The walk of a frame hardly changes: 1,176,671 steps and a table of 53,438 states (53,437 before).
 
 **Round 12.** `Entry` no longer asks 19 bytes, and these left `Rest`: the walks of the pipe's frames do not need them (`PipeChangeEnd.entryDropped`). So `Rest` has 36 bytes, and `Entry` 97 bytes and 12 under a mask. `atEntry`, `held`, `kept`, the guard and the walk of this page do not change, because the 19 bytes were all in `Rest`. They are the buttons up and down, the enemies' page, the screen's timer, the demo's timer, three bytes after the world's number in the menu, the byte after the mode, the height of misc object 8, Mario's state, the state of enemy slot 5, the second square's effect queue, the flagpole's number, the vine's height, the first cannon's offset, the duplicate, the colours, the loop, and the flag of a new game timer. How they were found: for each byte of `Rest` alone, the start states of the walks of [the change into the room without `fall`](b-3-2-PipeChangeEnd.md) were made without it, and the old walk (`zcheck`), the walk with the pause's class beside it (`pcheck`, [b-3-7-2](b-3-7-2-PipePause.md)) and `leftCheck` ran again (`entry-need`). 20 bytes pass alone. 19 of them pass together too; the tables are then 38,253 and 23,238 states for the old walk (36,062 and 23,135 before), and 58,850 and 43,229 for `pcheck` (56,816 and 43,120 before). The 20th is the first square's effect queue: the walks pass without it, but the tables of `pcheck` grow to 156,721 and 143,033 states (with the 19 too: 158,808 and 143,194, about 63 s in a program instead of 27 s), so it stays. The private build of `Proof/PipeChangeEnd.lean` is the check that the walks pass with the new `Entry`.
+
+**Round 15.** Two changes; the section "Round 15" below has the details. (1) `Entry` asks one more byte, the level's number (`AreaNumber`), and this page proves it: it is not in `restNames`. So `Entry` has 98 bytes and 12 under a mask, `atEntry` 74, `held` 72, `kept` 71, and `Rest` still 36. With it the field `area₁` of [the whole route](0-1-Route.md) (the level's number at the vertical pipe's entry is that of the reference entry, [1-1-d-2-5-3](d-2-5-3-AreaKeep.md)) is the theorem `Run.area₁`. (2) `Checks` has a sixth check, `q`: a fact of the ROM about the move routine's store of the player's fraction. With it the field `chg.upCleanU` is a plain `CleanK` of the union guard; before, it had an `if` on this fact inside.
 
 That each of these frames starts in the idle loop in control (`FrameStart`) is proved too (item 1-1-b-3-4-3): by induction from the press of Start, under `upClean₁`. The field `upStart₁` is gone. For this, the entry `a₁` is now the first frame from control on whose machine has no control (as `a₂` and `b₂` are first frames), and `Changes` has the bound `dA` in place of the number `a₁`.
 
@@ -24,9 +26,9 @@ a₁ = upEnd(seq, dA) = the least n with 1 ≤ n ≤ 1 + dA and (¬ctl(seq n) or
 
 ```
 Watched(W, m)  :  ∀ (i, k, v) ∈ W,  m[i] & k = v & k
-atEntry        :  the 109 bytes of Entry but those of restNames          (73)
-held           :  atEntry but OperMode and OperMode_Task                  (71)
-kept           :  held but those of endNames (the buttons left and right) (70)
+atEntry        :  the 110 bytes of Entry but those of restNames          (74)
+held           :  atEntry but OperMode and OperMode_Task                  (72)
+kept           :  held but those of endNames (the buttons left and right) (71)
 rt(m)          :  m[GameEngineSubroutine]
 IdleAt(m)      :  m has ended a frame in the idle loop, with the pc and the stack of e
 Rest(m)        :  Entry's bytes of restNames have the values of e      (36)
@@ -73,11 +75,11 @@ entry_of_rest  :  IdleAt(m) ∧ Watched(atEntry, m) ∧ T(m) ∧ Rest(m) → Ent
 
 In `Route`, `Changes.upStay` gives `ctl(seq n)` for `1 ≤ n < a₁` from the choice of `a₁`. `Run.upStart₁` gives `FrameStart(seq n)` for `1 ≤ n < a₁` from `title` and `upClean₁`. `Run.entry₁` gives `Entry(base.seq a₁)` from `title`, `Run.upStart₁`, `upClean₁` and `entryRest₁`. `Changes.run₁` takes it as an argument. `Run.change₁`, `Run.change₂`, `Run.start`, `Run.roomStart` and `level_ge_of_parts` take the two checks. `route_1_1` still concludes `1748 + j ≤ L`.
 
-Lean: `Theorems/PipeChangeEnd.lean` (`entryDropped`, `entryKnown`), `Theorems/EntryKeep.lean` (`restNames`, `endNames`, `atEntry`, `held`, `kept`, `Rest`, `timerI`, `timerOK`, `IdleAt`, `guardOf`, `finE`, `walkE`, `keepCheck`, `nearCheck`, `listCheck`, `Checks`, `fin_frame`, `keep_frame`, `keep_start`, `start_to`, `Begin.start`, `Begin.watched`, `watched_up`, `watched_entry`, `timer_of`, `pipe_end`, `watched_entryT`, `start_up`, `starts_of_title`, `entry_of_rest`, `entry_of_title`), `Theorems/Route.lean` (`upEnd`, `Base.dA`, `Base.a₁`, `Changes.upStay`, `Changes.entryRest₁`, `Changes.upClean₁`, `Changes.one_le`, `Changes.run₁`, `Run.upStart₁`, `Run.entry₁`). The private proof: `entry_near`, `entry_keep`, `entry_lists` by `native_decide`, and `entry_checks`.
+Lean: `Theorems/PipeChangeEnd.lean` (`entryDropped`, `entryKnown`), `Theorems/EntryKeep.lean` (`restNames`, `endNames`, `atEntry`, `held`, `kept`, `Rest`, `timerI`, `timerOK`, `IdleAt`, `guardOf`, `finE`, `walkE`, `keepCheck`, `nearCheck`, `listCheck`, `qOf`, `tq`, `qCheck`, `Checks`, `fin_frame`, `keep_frame`, `keep_start`, `start_to`, `Begin.start`, `Begin.watched`, `watched_up`, `watched_entry`, `timer_of`, `pipe_end`, `watched_entryT`, `start_up`, `starts_of_title`, `entry_of_rest`, `entry_of_title`), `Theorems/Route.lean` (`upEnd`, `Base.dA`, `Base.a₁`, `Changes.upStay`, `Changes.entryRest₁`, `Changes.upClean₁`, `Changes.one_le`, `Changes.run₁`, `Run.upStart₁`, `Run.entry₁`, `Run.area₁`), `Theorems/ScreenStart.lean` (`areaI`, `roomCheck`, `area_of_entry`), `Theorems/TitleStart.lean` (`areaNames`). The private proof: `entry_near`, `entry_keep`, `entry_lists`, `up_q_check` by `native_decide`, and `entry_checks`.
 
 ## How it works
 
-**Frame 0.** `TitleStart` makes a set of frame-start states that covers every machine from the press to frame 0. Frame 0 begins in a near or held state. `nearCheck` (`TitleStart.frame0Check`) walks frame 0 from these states again with any input, Start included, and asks at each end with control, besides the speed 0, that the 69 kept bytes are known with the values of `e`, and that the state is in the idle loop as a frame in control starts (`FrameKeep.endOK`: the program counter and the stack, the dot and its flags, NMI on, no strobe). It also asks that the title's program is the program of the frames from control. The near states know these bytes, because the game writes them with known values between the press and control.
+**Frame 0.** `TitleStart` makes a set of frame-start states that covers every machine from the press to frame 0. Frame 0 begins in a near or held state. `nearCheck` (`TitleStart.frame0Check`) walks frame 0 from these states again with any input, Start included, and asks at each end with control, besides the speed 0, that the 71 kept bytes are known with the values of `e`, and that the state is in the idle loop as a frame in control starts (`FrameKeep.endOK`: the program counter and the stack, the dot and its flags, NMI on, no strobe). It also asks that the title's program is the program of the frames from control. The near states know these bytes, because the game writes them with known values between the press and control.
 
 **One frame from control.** The walk is that of [FrameKeep](f-6-19-FrameKeep.md). The frame starts in the idle loop with the player's routine, the mode and the task known, and the kept bytes known. Every other byte is not known. A store through an index or a pointer forgets every byte but those of the guard's list (`held` and the list of `PipeWrites`). `Clean` says that it does not touch them. The end of a frame is good if the routine is known and:
 
@@ -156,9 +158,57 @@ What would change in part a's files (not done here):
 
 Fields removed: `chg.upClean₁`, `pipe.lags.clean`, `pipe.clean`, `pipe.opening.cleanK`. Field added: `chg.upCleanU`.
 
+## Round 15: the level's number at the entry, and the check of the move routine's store
+
+**The level's number.** `i` is the index of `AreaNumber`. The field `area₁` of the route is now a theorem:
+
+```
+Run.area₁  :  seq(a₁)[i] = e[i]
+```
+
+It follows from `Entry(seq a₁)` (`Run.entry₁`), because `Entry` now lists the byte. Four links give it:
+
+* The press. `K` is the list of bytes that the condition at the press of Start knows ([From Start on the title to control](0-5-3-TitleStart.md)). The run from the press does not read the level's number before control: the code reads it only where the area's data has a pipe, and when it looks up the next area. So `K` did not have it. Now `K` lists it (`TitleStart.areaNames`): 54 bytes, 53 before. No frame from the press to control stores to it, so the near and held states know it.
+* Frame 0. `nearCheck` asks the kept bytes at the end of frame 0, and the level's number is one of them.
+* The frames from control. The walk of one frame asks the kept bytes at each end with the player's routine, and the bytes of `atEntry` at each end with the pipe's routine. It passes with the byte kept, with the same search as before (1,176,671 steps, a table of 53,438 states): no path of a frame in control stores to the byte by its address. The guard protects it, so a store through an index or a pointer does not forget it.
+* The names. `Entry` reads its indices from the names of part b, and `Run.area₂` reads the index from the room's names. `ScreenStart.roomCheck` has one more small check: the room's index of the level's number is a byte that `Entry` knows. `ScreenStart.area_of_entry` reads the byte from `Entry`.
+
+What this changes in the assumptions:
+
+```
+gone :  area₁       seq(a₁)[i] = e[i]                                        (one state, at the entry)
+more :  press       tm(0)[i] = x[i]         x = the reference machine after the press     (one byte more, at one state)
+more :  upCleanU    the union guard protects i (one more byte; 143 bytes in all after round 15):
+                    ∀ n, 1 ≤ n < a₁ → ∀ j, a store of trace(seq n, inp n, j) through an index or a pointer with the target t :  t < 0x2000 → t & 0x7FF ≠ i
+```
+
+The other parts of `upCleanU` do not change. On the title screen the byte has the reference's value on every run measured: the title's first task clears it with the game's memory, and the code that picks a world on the title stores to it.
+
+**The check of the move routine's store.** `q` is the move routine's store of the player's fraction (`STA abs,X`, the index 0 for the player), `tq` its target with the index 0, `p` the pause byte that the NMI tests:
+
+```
+qCheck    :=  rom[q] = STA abs,X  ∧  0x8000 ≤ q, q+1, q+2  ∧  tq < 0x2000  ∧  tq & 0x7FF ∉ prot(guardOf)  ∧  tq & 0x7FF ≠ p
+Checks.q  :   qCheck = true                                                   (native_decide, at once)
+upCleanU  :   ∀ n, 1 ≤ n < a₁ → ∀ j,  CleanK(GU, q, trace(seq n, inp n, j))    (no `if`)
+```
+
+In round 14 the field was `CleanU(m) := if qCheck then CleanK(GU, q, m) else Clean(GU, m)`, because `Run.upStart₁` and `Run.entry₁` take only the checks `hB` and `hK`, and about 20 theorems call them. Now `hK` carries `qCheck`, so the theorems of [One condition on each instruction up to the pipe](a-5-10-UpClean.md) take it as an argument (`UpClean.cleanE₁_of_U`, `cleanP_of_U`, `cleanW_of_U`, `upClean₁_of`), and no caller changes. `Run.upClean₁`, `Run.lagsClean`, `Run.pipeClean` and `Run.pipeReal` have the same conclusions.
+
+**Measured in round 15** (all exit 0):
+
+* `entry-area-check`: the level's number has the same index in the room's names and in the entry's list. The press knows it (54 bytes), `Entry` knows it (98 bytes and 12 masks), it is in `atEntry` (74), `held` (72) and `kept` (71), and not in `Rest`. The guard of this page protects 125 different bytes (124 without it), the union guard 143 (142 without it; these numbers are with part e's four bytes of round 15). The walks of the pipe's frames do not notice the byte: with it known at the entry and without it, `leftCheck`, `zcheck` and `pcheck` pass with the same tables (38,253 and 23,238 states; 58,850 and 43,229) in the same time (13 s and 22 to 24 s).
+* `entry-walk-check`: `keepCheck` 5.0 s, `nearCheck` 1.8 s, no failing end.
+* `title-check FM2`: the check passes with the 54 bytes; of 392 runs, 339 meet the condition at the press, as before, and none is against the check. The movie's press meets it.
+* `entry-keep-check FM2`: the lists are 110, 74, 71 and 36; on its runs (221,490 frames, the runs of the section "Measured") no frame loses a kept byte, and each of the 40 entries has `Rest`, `atEntry`, `IdleAt` and `Entry`.
+* `up-clean-u FM2` (14 min): 221,490 frames, 978,397,731 instructions, none against the union guard with the level's number; `qCheck` is true.
+* `area-real FM2 10 7`: on the movie the byte is 0 from power-on to the change to 1-2; 130 room first controls and 130 side entries from real vertical entries all have 0.
+
+**Could the rows of part b carry the byte to the room?** Yes, but it is not done. The exit's list does not have the byte, so the rows from the exit do not know it (`area-links-check rows`: not known at control in part b's rows, known in rows from a copy of the exit that knows it). `entry-area-check` asked the pipe's walks to end at the exit in a state that knows the byte: `zcheck` and `pcheck` pass with the same tables. So with the byte in the exit's list, part b's walk and rows would give it at the room's first control, and two of the three copied walks of [1-1-d-2-5-3](d-2-5-3-AreaKeep.md) (the pipe's frames and the rows, about 140 s) would not be needed.
+
 ## Assumptions (not proved in Lean)
 
+* `title.press`: the condition at the press of Start knows one more byte since round 15, the level's number.
 * `entryRest₁`: `Rest` at the entry: 36 bytes (55 in round 11; 56 before, with the pause's bits). Before this round it also asked the pipe's timer and 5 more bytes; before that, `entry₁` asked the idle loop, the timer and 128 bytes.
-* `upClean₁`: each instruction of these frames is `Clean`; a store through an index or a pointer does not touch the 71 bytes of `held`, the pipe's timer and the six bytes of the pause (round 11). A run that fills one of these slots before the entry is outside the theorem: the enemy slots 3 and 6 and the kind and the state of slot 4, the fireballs, the blocks 2 and 3, the misc objects 0 to 7, the cannons 0 to 5, the scores 3, 4 and 6. No real run here does. This round added the kind of slot 4, the place of cannon 0, the buttons left and right and the pipe's timer to these bytes. On real frames no store through an index touches them (`entry-keep-check`).
+* `upClean₁`: each instruction of these frames is `Clean`; a store through an index or a pointer does not touch the 72 bytes of `held` (71 before round 15; the level's number is new), the pipe's timer and the six bytes of the pause (round 11). A run that fills one of these slots before the entry is outside the theorem: the enemy slots 3 and 6 and the kind and the state of slot 4, the fireballs, the blocks 2 and 3, the misc objects 0 to 7, the cannons 0 to 5, the scores 3, 4 and 6. No real run here does. This round added the kind of slot 4, the place of cannon 0, the buttons left and right and the pipe's timer to these bytes. On real frames no store through an index touches them (`entry-keep-check`).
 
 `upClean₁` is not reduced here. `entry-clean-use` (exit 0) counts the places where the walk leaves an instruction to `Clean`, because its state does not decide it. The bound on the dot (`late`) is used at all 9,068 places that the walk passes. A store through an index or a pointer with a target not known: 710 places, in 324 routines of objects, drawings, the vine, the fireworks, the bridge, the scores and others. `LDA (zp),Y` with a pointer not known: 47 places (the area parser, the enemy data, the music). The jump with an index not known: 1 place. Of the 724 places with such a store, the walk knows the target on every visit at 14 places only. So asking `Clean` only where the walk does not know it would take 14 places off.

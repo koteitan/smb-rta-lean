@@ -7,6 +7,7 @@ import Theorems.FrameModel
 import Theorems.FrameTime
 import Theorems.SurfaceFrames
 import Theorems.VertAir
+import Theorems.VertJump
 
 /-!
 # Joining the bonus room
@@ -33,8 +34,12 @@ The vertical state at first control is one of `Nums.vStart` (`InRoom.vstart`), s
 `fallCheck`): `floor_at` is proved there (`RoomRun.floor_at_of`; page `1-1/c-7-5-4-FirstFall.md`). A frame that starts standing with no new press of A keeps the height and
 the speed, or lands (`InRoom.stand`, `RoomRun.vstand_of`: the walk of `RoomStand`); so with no jump since first control the vertical states are again a finite set
 (`noJumpCheck`), and `vfall` (now asked only with no jump since first control) and `fall_long` with no jump are proved (`RoomRun.vfall_of`, `RoomRun.fall_nojump`,
-`RoomRun.fall_long_of`; page `1-1/c-7-5-5-RoomStand.md`). The jump bit of a frame that does not follow the model is read from the machine (the field `jump_stop`). The fields
-`fall_jump` (after a jump from the wall he is not on the floor before `C + fall`) and `land_at` (he stands at the end of the fall) stay.
+`RoomRun.fall_long_of`; page `1-1/c-7-5-5-RoomStand.md`). The input of a frame that does not follow the model is read from the machine (the field `read_stop`). A frame
+that starts standing with a new press of A ends on the takeoff of its height and stored speed (`InRoom.jump`, `RoomRun.vjump_of`: `RoomJump.jump_room`). The vertical bytes
+alone do not keep him off the floor after a jump: the landing that the walks give is at any height. With the fields `stand_wall` and `wall` the first stand away from the
+floor is at frame `C + wallF` or later (`RoomRun.stand_late`), and from the landings of the first fall at these frames the vertical states with any input are a finite set
+with no state on the floor before `C + fall` (`anyCheck`, `RoomRun.fall_any`): the old field `fall_jump` (page `1-1/c-7-5-6-RoomJump.md`). The field `land_at` (he stands
+at the end of the fall) stays.
 
 The case split, all by `cases` and `by_cases`:
 * over the block in one jump (no landing): impossible, `no_landing`;
@@ -358,7 +363,7 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m 
   stand_row : ∀ n, C ≤ n → n + 1 < t0 → (fr.vs n).st ≠ 0 → (fr.vs (n + 1)).st = 0 →
     (fr.vs (n + 1)).y.toNat % 16 = 0 ∧ VW (fr.vs (n + 1)) = 0
   /-- he is not on the floor during the fall. Once a field of `RoomRun`; now `RoomRun.fall_long_of` proves it: with no jump from the finite set of the states with no
-  jump (`noJumpCheck`), after a jump from the field `fall_jump` -/
+  jump (`noJumpCheck`), after a jump from the set of the states with any input from the first stand on (`anyCheck`, `RoomRun.fall_any`: with `stand_wall` and `wall`) -/
   fall_long : ∀ n, C ≤ n → n < C + N.fall → ¬OnFloor sy (fr.vs n)
   /-- a frame with no jump, from a state that is not in a jump, with no jump since first control. Once a field of `RoomRun` (without the frames before); now
   `RoomRun.vfall_of` proves it: with no jump since first control the states are those of a finite set (`noJumpCheck`) -/
@@ -475,9 +480,6 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (
       (PipeEntryRule.trace (startAt sy m S b lim C n) (inpAt sy m S b lim C n) j).pc ≠ SideFrame.bumpAt sy m) → OnFloor sy (fr.vs n) → VFrame sy m N fr n
   /-- `P(E)` is read at the end of frame `E`, as the other frames are read (`read_P`): the position of the machine when the frame that enters ends -/
   read_PE : fr.P E = posP sy (PipeTransition.frame (startAt sy m S b lim C (E - 1)) (inpAt sy m S b lim C (E - 1)))
-  /-- after a jump in the fall (from a stand on the wall), he is not on the floor before `C + fall`. The old field `fall_stand` on the runs with a jump: with no jump
-  the finite set of the states with no jump gives it (`RoomRun.fall_nojump`) -/
-  fall_jump : ∀ j n, C ≤ j → j < n → n < C + N.fall → (fr.inp (j + 1)).jump = true → ¬OnFloor sy (fr.vs n)
   /-- a frame up to `t0` that does not follow the model (a side stops him) has the input read from the machine at the player's routine, as `read_in` reads the input of a
   frame that follows the model -/
   read_stop : ∀ n, C ≤ n → n < t0 → ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (startAt sy m S b lim C n) (inpAt sy m S b lim C n)
@@ -738,6 +740,54 @@ def njRun (sy : Syms) (m : Machine) (N : Nums) : Nat → Nat → Std.HashSet VS 
 def noJumpCheck (sy : Syms) (m : Machine) (N : Nums) : Bool :=
   njRun sy m N (N.standF - 1) 0 (Std.HashSet.ofList N.vStart) N.vStart
 
+/-! ### The frames from the first stand on, with any input
+
+A frame that starts standing with a new press of A ends on the takeoff `VertJump.jumpOff` of its height and of the stored speed that the frame reads (`InRoom.jump`). So
+with any input the next vertical states are those of `noJumpNext` and, standing, the takeoffs of the height for every stored speed (`anyNext`). From the vertical states at
+first control alone this set reaches the floor before `fall`: the walks give a landing at any height, and from such a landing a jump. The first stand away from the floor
+is at frame `wallF` or later (`RoomRun.stand_late`: the fields `stand_wall` and `wall`), and it is the landing of a state of the first fall (`fallLands`). The check
+`anyCheck` goes frame by frame up to frame `fall − 1` through the states from such a first stand on (`ajRun`): each state first seen at a frame is not on the floor and,
+standing, is on a whole row (`anyOk`); its next states, and the landings of the first fall's layer if the next frame is `wallF` or later, are the states first seen at the
+next frame. -/
+
+/-- the takeoff frame from a stand at the height `y` with the stored speed `abs`, on the machine of the player's routine -/
+abbrev jumpOffR (sy : Syms) (m : Machine) (y abs : UInt8) : VS := VertJump.jumpOff sy m (FrameModel.ctrlStack sy m) y abs
+
+/-- the takeoffs from the height `y`, for every stored speed -/
+def jumpOffs (sy : Syms) (m : Machine) (y : UInt8) : List VS := ((List.range 256).map fun v => jumpOffR sy m y v.toUInt8).eraseDups
+
+/-- the takeoffs from the whole row `r` -/
+def offRow (sy : Syms) (m : Machine) (r : Nat) : List VS := jumpOffs sy m (16 * r).toUInt8
+
+/-- the takeoffs from each of the 16 whole rows -/
+def offTable (sy : Syms) (m : Machine) : Array (List VS) := Array.ofFn (n := 16) fun r => offRow sy m r.val
+
+/-- the vertical states one frame later with any input: those of `noJumpNext` and, standing, the takeoffs of the row from the table `T` -/
+def anyNext (sy : Syms) (m : Machine) (T : Array (List VS)) (s : VS) : List VS :=
+  noJumpNext sy m s ++ (if s.st == 0 then T[(s.y >>> 4).toNat]! else [])
+
+/-- a state from the first stand on: not on the floor, and standing on a whole row -/
+def anyOk (sy : Syms) (s : VS) : Bool := !onFloorB sy s && (s.st != 0 || s.y &&& 0x0F == 0)
+
+/-- the landings one frame after the states of a layer of the first fall -/
+def fallLands (sy : Syms) (m : Machine) (L : List VS) : List VS :=
+  L.flatMap fun s => [true, false].flatMap fun a => if falling (vstepR sy m s a) then [VertAir.land (vstepR sy m s a)] else []
+
+/-- **The check, frame by frame**: `Lf` is the layer of the first fall at frame `d`, `F` holds the states first seen at frame `d`, `H` the states seen so far. Each state of
+`F` meets `anyOk`; its next states and, if `wallF ≤ d + 1`, the landings of `Lf`, not yet seen, make the states first seen at frame `d + 1`. For `k` frames -/
+def ajRun (sy : Syms) (m : Machine) (N : Nums) (T : Array (List VS)) : Nat → Nat → List VS → Std.HashSet VS → List VS → Bool
+  | 0, _, _, _, _ => true
+  | k + 1, d, Lf, H, F =>
+    F.all (anyOk sy) &&
+      ajRun sy m N T k (d + 1) (fallNext sy m Lf)
+        (njAdd H [] (F.flatMap (anyNext sy m T) ++ if N.wallF ≤ d + 1 then fallLands sy m Lf else [])).1
+        (njAdd H [] (F.flatMap (anyNext sy m T) ++ if N.wallF ≤ d + 1 then fallLands sy m Lf else [])).2
+
+/-- **The check on the ROM of the frames from the first stand on**: from no state at first control, with the landings of the first fall from frame `wallF` on, frame by
+frame up to frame `fall − 1` -/
+def anyCheck (sy : Syms) (m : Machine) (N : Nums) : Bool :=
+  ajRun sy m N (offTable sy m) N.fall 0 N.vStart {} []
+
 /-- the numbers fit together -/
 structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   air_pos : 1 ≤ sy.AirFastSpeed.toNat
@@ -858,6 +908,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   first : fallCheck sy m N = true
   /-- the frames with no jump since first control -/
   nojump : noJumpCheck sy m N = true
+  /-- the frames from the first stand on, with any input -/
+  anyin : anyCheck sy m N = true
 
 /-! ## Lists of frames -/
 
@@ -3328,6 +3380,118 @@ theorem mem_noJumpNext_stand {s t : VS} (hs : s.st = 0) (h : StandNext s t) : t 
   · subst e1 e2 e3 e4
     simp [VertAir.land]
 
+/-! ### The frames from the first stand on, with any input -/
+
+theorem offTable_get (i : Nat) (h : i < 16) : (offTable sy m)[i]! = offRow sy m i := by
+  have hs : i < (offTable sy m).size := by
+    unfold offTable
+    rw [Array.size_ofFn]
+    exact h
+  rw [getElem!_pos (offTable sy m) i hs]
+  unfold offTable
+  rw [Array.getElem_ofFn]
+
+theorem row_all : ∀ n : Fin 256, UInt8.ofNat n.val &&& 0x0F = 0 →
+    (UInt8.ofNat n.val >>> 4).toNat < 16 ∧ UInt8.ofNat (16 * (UInt8.ofNat n.val >>> 4).toNat) = UInt8.ofNat n.val := by decide +kernel
+
+/-- the takeoff from the height `y` with any stored speed is one of `jumpOffs y` -/
+theorem mem_jumpOffs (y abs : UInt8) : jumpOffR sy m y abs ∈ jumpOffs sy m y := by
+  refine List.mem_eraseDups.2 (List.mem_map.2 ⟨abs.toNat, List.mem_range.2 abs.toNat_lt, ?_⟩)
+  show jumpOffR sy m y (UInt8.ofNat abs.toNat) = _
+  rw [UInt8.ofNat_toNat]
+
+/-- a takeoff from a stand on a whole row is a next state -/
+theorem mem_anyNext_jump {s : VS} (hs : s.st = 0) (hy : s.y &&& 0x0F = 0) (abs : UInt8) : jumpOffR sy m s.y abs ∈ anyNext sy m (offTable sy m) s := by
+  have h := row_all ⟨s.y.toNat, s.y.toNat_lt⟩
+  simp only [UInt8.ofNat_toNat] at h
+  obtain ⟨h1, h2⟩ := h hy
+  unfold anyNext
+  rw [hs, if_pos (by decide), offTable_get _ h1]
+  refine List.mem_append_right _ ?_
+  show jumpOffR sy m s.y abs ∈ jumpOffs sy m (UInt8.ofNat (16 * (s.y >>> 4).toNat))
+  rw [h2]
+  exact mem_jumpOffs s.y abs
+
+/-- a next state with no jump is a next state with any input -/
+theorem mem_anyNext_of {T : Array (List VS)} {s t : VS} (h : t ∈ noJumpNext sy m s) : t ∈ anyNext sy m T s := List.mem_append_left _ h
+
+theorem anyOk_spec {s : VS} (h : anyOk sy s = true) : ¬OnFloor sy s ∧ (s.st = 0 → s.y &&& 0x0F = 0) := by
+  simp only [anyOk, Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true, bne_iff_ne, ne_eq, beq_iff_eq] at h
+  refine ⟨not_onFloor_of h.1, fun h0 => ?_⟩
+  rcases h.2 with e | e
+  · exact absurd h0 e
+  · exact e
+
+/-- the landing of a state one frame after a state of the layer `L` is in `fallLands L` -/
+theorem mem_fallLands {L : List VS} {s : VS} (hs : s ∈ L) {a : Bool} (hf : falling (vstepR sy m s a) = true) :
+    VertAir.land (vstepR sy m s a) ∈ fallLands sy m L := by
+  refine List.mem_flatMap.2 ⟨s, hs, List.mem_flatMap.2 ⟨a, by cases a <;> simp, ?_⟩⟩
+  rw [if_pos hf]
+  exact List.mem_singleton.2 rfl
+
+/-- a state seen whose frame is done: it meets `anyOk`, and its next states are in `H` -/
+def AjDone (sy : Syms) (m : Machine) (T : Array (List VS)) (H : Std.HashSet VS) (x : VS) : Prop :=
+  anyOk sy x = true ∧ ∀ t ∈ anyNext sy m T x, H.contains t = true
+
+/-- **What the check frame by frame gives**: a sequence of states that at a frame `d'` is in `H` (if `d' = d`) or is a landing of the first fall's layer of frame
+`d' − 1` (if `d < d'` and `wallF ≤ d'`), and from there goes from each state to one of its next states, meets `anyOk` at each frame from `d'` up to `d + k − 1`. `Lf` is
+the layer of the first fall at frame `d`, `H` holds `F`, and every state of `H` is in `F` or done -/
+theorem ajRun_sound {T : Array (List VS)} : ∀ (k d : Nat) (Lf : List VS) (H : Std.HashSet VS) (F : List VS), ajRun sy m N T k d Lf H F = true →
+    Lf = fallLayer sy m N.vStart d → (∀ x ∈ F, H.contains x = true) → (∀ x, H.contains x = true → x ∈ F ∨ AjDone sy m T H x) →
+    ∀ (q : Nat → VS) (d' n : Nat), d' ≤ n → n < d + k →
+      ((d' = d ∧ H.contains (q d') = true) ∨ (d < d' ∧ N.wallF ≤ d' ∧ q d' ∈ fallLands sy m (fallLayer sy m N.vStart (d' - 1)))) →
+      (∀ j, d' ≤ j → j < n → q (j + 1) ∈ anyNext sy m T (q j)) → anyOk sy (q n) = true
+  | 0, _, _, _, _, _, _, _, _, _, _, _, h1, h2, h3, _ => by
+    rcases h3 with ⟨e, _⟩ | ⟨e, _⟩ <;> omega
+  | k + 1, d, Lf, H, F, h, hL, hF, hI, q, d', n, h1, h2, h3, h4 => by
+    unfold ajRun at h
+    simp only [Bool.and_eq_true, List.all_eq_true] at h
+    obtain ⟨hall, hrest⟩ := h
+    generalize hLL : (F.flatMap (anyNext sy m T) ++ if N.wallF ≤ d + 1 then fallLands sy m Lf else []) = L at hrest
+    obtain ⟨a1, a2, a3, a4, _⟩ := njAdd_spec H [] L
+    have doneF : ∀ x ∈ F, AjDone sy m T (njAdd H [] L).1 x := fun x hx =>
+      ⟨hall x hx, fun t ht => a2 t (by rw [← hLL]; exact List.mem_append_left _ (List.mem_flatMap.2 ⟨x, hx, ht⟩))⟩
+    have doneH : ∀ x, H.contains x = true → AjDone sy m T (njAdd H [] L).1 x := by
+      intro x hx
+      rcases hI x hx with h5 | h5
+      · exact doneF x h5
+      · exact ⟨h5.1, fun t ht => a1 t (h5.2 t ht)⟩
+    have hL' : fallNext sy m Lf = fallLayer sy m N.vStart (d + 1) := by rw [hL]; rfl
+    have hF' : ∀ x ∈ (njAdd H [] L).2, (njAdd H [] L).1.contains x = true := fun x hx => by
+      rcases a4 x hx with h5 | h5
+      · exact absurd h5 List.not_mem_nil
+      · exact h5
+    have hI' : ∀ x, (njAdd H [] L).1.contains x = true → x ∈ (njAdd H [] L).2 ∨ AjDone sy m T (njAdd H [] L).1 x := fun x hx => by
+      rcases a3 x hx with h5 | h5
+      · exact Or.inr (doneH x h5)
+      · exact Or.inl h5
+    rcases h3 with ⟨e, h3⟩ | ⟨e, hw, h3⟩
+    · subst e
+      by_cases hn : n = d'
+      · subst hn
+        exact (doneH _ h3).1
+      · have hq : (njAdd H [] L).1.contains (q (d' + 1)) = true := (doneH _ h3).2 _ (h4 d' (Nat.le_refl _) (by omega))
+        exact ajRun_sound k (d' + 1) _ _ _ hrest hL' hF' hI' q (d' + 1) n (by omega) (by omega) (Or.inl ⟨rfl, hq⟩) (fun j hj1 hj2 => h4 j (by omega) hj2)
+    · by_cases he : d' = d + 1
+      · subst he
+        have hq : (njAdd H [] L).1.contains (q (d + 1)) = true := by
+          refine a2 _ ?_
+          rw [← hLL, if_pos hw]
+          refine List.mem_append_right _ ?_
+          rw [hL]
+          rw [Nat.add_sub_cancel] at h3
+          exact h3
+        exact ajRun_sound k (d + 1) _ _ _ hrest hL' hF' hI' q (d + 1) n h1 (by omega) (Or.inl ⟨rfl, hq⟩) h4
+      · exact ajRun_sound k (d + 1) _ _ _ hrest hL' hF' hI' q d' n h1 (by omega) (Or.inr ⟨by omega, hw, h3⟩) h4
+
+/-- **What the check of the frames from the first stand on gives**: a sequence of states that at a frame `d'`, `wallF` or later, is a landing of the first fall's layer of
+frame `d' − 1`, and from there goes from each state to one of its next states with any input, meets `anyOk` at each frame from `d'` on before `fall`: not on the floor, and
+standing on a whole row -/
+theorem any_ok (h : anyCheck sy m N = true) (q : Nat → VS) {d' n : Nat} (hd : 1 ≤ d') (hw : N.wallF ≤ d') (h1 : d' ≤ n) (h2 : n < N.fall)
+    (h0 : q d' ∈ fallLands sy m (fallLayer sy m N.vStart (d' - 1))) (hq : ∀ j, d' ≤ j → j < n → q (j + 1) ∈ anyNext sy m (offTable sy m) (q j)) :
+    anyOk sy (q n) = true :=
+  ajRun_sound N.fall 0 _ _ _ h rfl (fun x hx => absurd hx List.not_mem_nil) (fun x hx => by simp at hx) q d' n h1 (by omega) (Or.inr ⟨by omega, hw, h0⟩) hq
+
 theorem joyOf_mem : ∀ n : Fin 256, FrameModel.joyOf (UInt8.ofNat n.val) ∈ groundInputs := by decide +kernel
 
 /-- **Every input read from a machine is one of `inputs`**: the state 0 or 1, a jump only in the state 0, and the buttons B, Up, Down, Left, Right -/
@@ -3443,6 +3607,14 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
   routine keeps the bytes of `vKeepA`) -/
   stR : ∀ n, r.C ≤ n → n < r.E → ∀ j, (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerCtrlRoutine →
     peek (PipeEntryRule.trace (r.fm n) (r.inAt n) j) sy.Player_State = peek (r.fm n) sy.Player_State
+  /-- a frame of the room before the entering frame that comes to the player's routine at `k` in the state `VertAir.AtV` with a jump in the input that the model reads
+  there (standing, a new press of A) ends on the takeoff `VertJump.jumpOff` of the height at the frame's start and of the stored speed at the player's routine
+  (`RoomJump.jump_room`: the two walks of the room's frames of `RoomVert`, and the walk of two machines on a takeoff) -/
+  jump : ∀ n, r.C ≤ n → n + 1 < r.E → ∀ k, VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) k) →
+    (FrameModel.readIn sy (PipeEntryRule.trace (r.fm n) (r.inAt n) k)).jump = true →
+    VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) =
+      VertJump.jumpOff sy m (FrameModel.ctrlStack sy m) (peek (r.fm n) sy.Player_Y_Position)
+        (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.Player_XSpeedAbsolute)
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `P(E)` is read at the frame's end (`read_PE`), and the walks of the room's frames put the position
 there (`InRoom.mouthE`) -/
@@ -4078,13 +4250,143 @@ theorem fall_nojump (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe
   obtain ⟨_, hfs, _, _⟩ := fall_ok H.first
   exact (r.nj_ok H hr st hC (by omega) hj).2 h1
 
-/-- **`fall_long`**: he is not on the floor during the fall. With no jump from the set of the states with no jump (`fall_nojump`), after a jump from the field
-`fall_jump` -/
+/-! ### The frames from the first stand on, with any input -/
+
+/-- **The first frames have no stand away from the floor**: a stand away from the floor at the end of frame `n + 1`, before the end of the fall, is at frame `C + wallF` or
+later. The frame does not follow `hstep` (the field `stand_wall`), so the first frame that does not is by then; it is stopped at the left wall (the field `wall`), and the
+wall is too far from the start for the frames before `wallF − 1` (`wall_far`) -/
+theorem stand_late (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) {n : Nat} (hC : r.C ≤ n) (h1 : n + 1 < r.C + N.fall) (h0 : (r.fr.vs (n + 1)).st = 0)
+    (hf : ¬OnFloor sy (r.fr.vs (n + 1))) : r.C + N.wallF ≤ n + 1 := by
+  have hN := H.nums
+  have hfl := hN.fall_le
+  have hhit := hN.hit_ge
+  have hnf : ¬Follow sy m r.fr n := r.stand_wall n hC (by omega) h0 hf
+  obtain ⟨h, h4, h5, h6, h7⟩ := RoomCore.first_hit (sy := sy) (m := m) (fr := r.fr) (C := r.C) (n + 1) (fun hall => hnf (hall n hC (by omega)))
+  have hw := r.wall h h4 (by omega) h6
+  -- the wall is far from the start
+  have hF := H.air.pot
+  have hd0 : inD sy (room sy N).s0 = true := by
+    have h1 := H.roomOk
+    simp only [roomCheck, Bool.and_eq_true] at h1
+    exact h1.1.1
+  have hfol : ∀ j, r.C ≤ j → j < r.C + (h - r.C) → Follow sy m r.fr j := fun j h8 h9 => h7 j h8 (by omega)
+  have h8 := hdist_seg r.C (h - r.C) hfol
+  rw [show r.C + (h - r.C) = h by omega] at h8
+  have hJ : J sy m (r.fr.hs r.C) (phi sy m (room sy N).s0) := by
+    rw [r.start_hs st]
+    exact ⟨hd0, Int.le_refl _, fun h9 => absurd rfl h9⟩
+  have h9 := left_dist_le hF _ _ _ hJ (inputs_seg r.C (h - r.C) hfol)
+  rw [length_seg] at h9
+  by_cases hc : r.C + (N.wallF - 2) < h
+  · have := hN.wall_two
+    omega
+  · exfalso
+    obtain ⟨k, hk⟩ : ∃ k, N.wallF - 2 = (h - r.C) + k := ⟨N.wallF - 2 - (h - r.C), by omega⟩
+    have h10 := leftDist_mono hF (h - r.C) k _ (RoomCore.phi0_nonneg H)
+    rw [← hk] at h10
+    have h11 := (r.start_P st).1
+    have h12 := hN.wall_far
+    have h13 := hw.before
+    omega
+
+/-- **A frame with a jump in its input ends on the takeoff of its height**, for the stored speed that the frame reads at the player's routine: from the reading of the
+vertical state and of the input (`read_inp`), and the walks of the room's frames (`InRoom.jump`) -/
+theorem vjump_of (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) (hE : n + 1 < r.E) (hj : (r.fr.inp (n + 1)).jump = true) :
+    ∃ abs, r.fr.vs (n + 1) = jumpOffR sy m (r.fr.vs n).y abs := by
+  have hv0 : r.fr.vs n = VertModel.vsOf sy (r.fm n) := r.vs_fm hr hC (by omega) (by omega)
+  have hv1 : r.fr.vs (n + 1) = VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) := by
+    rw [r.vs_fe (n := n + 1) (by omega) (by omega), r.next hC (r.ups_lt hr hC (by omega))]
+  have hjr : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n))).jump = true := by
+    rw [← r.read_inp hC ht]
+    exact hj
+  refine ⟨peek (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) sy.Player_XSpeedAbsolute, ?_⟩
+  rw [hv1, hv0]
+  exact hr.jump n hC hE (r.arr n) (r.atV_of H hr hC ht) hjr
+
+/-- **With any input the frame goes to a next state of `anyNext`**, from a state that meets `anyOk`: standing with no jump as `StandNext` allows (`vstand_of`), standing
+with a jump the takeoff of the row (`vjump_of`), in the air `vstepR` or its landing (`vair_of`) -/
+theorem any_next (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) {n : Nat} (hC : r.C ≤ n) (h1 : n + 1 < r.C + N.fall)
+    (hok : anyOk sy (r.fr.vs n) = true) : r.fr.vs (n + 1) ∈ anyNext sy m (offTable sy m) (r.fr.vs n) := by
+  have hfar := r.t0_far H hr st
+  have hE := r.t0_le_E H hr
+  have hfl := H.nums.fall_le
+  by_cases hs : (r.fr.vs n).st = 0
+  · cases hj : (r.fr.inp (n + 1)).jump with
+    | false => exact mem_anyNext_of (mem_noJumpNext_stand hs (r.vstand_of H hr hC (by omega) (by omega) hs hj))
+    | true =>
+      obtain ⟨abs, e⟩ := r.vjump_of H hr hC (by omega) (by omega) hj
+      rw [e]
+      exact mem_anyNext_jump hs ((anyOk_spec hok).2 hs) abs
+  · exact mem_anyNext_of (mem_noJumpNext_air hs (r.vair_of H hr hC (by omega) (by omega) hs).2)
+
+/-- **From a first stand at frame `i`, the landing of a state of the first fall at `C + wallF` or later, each frame before `C + fall` meets `anyOk`**, and each frame goes
+to a next state with any input -/
+theorem any_chain (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) {i : Nat} (hi : r.C < i) (hw : r.C + N.wallF ≤ i)
+    (hm : r.fr.vs i ∈ fallLands sy m (fallLayer sy m N.vStart (i - r.C - 1))) :
+    ∀ e, i + e < r.C + N.fall → (∀ j, i ≤ j → j < i + e → r.fr.vs (j + 1) ∈ anyNext sy m (offTable sy m) (r.fr.vs j)) ∧ anyOk sy (r.fr.vs (i + e)) = true := by
+  have key : ∀ n, i ≤ n → n < r.C + N.fall → (∀ j, i ≤ j → j < n → r.fr.vs (j + 1) ∈ anyNext sy m (offTable sy m) (r.fr.vs j)) →
+      anyOk sy (r.fr.vs n) = true := by
+    intro n h1 h2 hch
+    have h := any_ok H.anyin (fun d => r.fr.vs (r.C + d)) (d' := i - r.C) (n := n - r.C) (by omega) (by omega) (by omega) (by omega)
+      (by
+        show r.fr.vs (r.C + (i - r.C)) ∈ _
+        rw [show r.C + (i - r.C) = i by omega]
+        exact hm)
+      (fun j hj1 hj2 => by
+        have := hch (r.C + j) (by omega) (by omega)
+        rwa [show r.C + j + 1 = r.C + (j + 1) by omega] at this)
+    simp only [show r.C + (n - r.C) = n by omega] at h
+    exact h
+  intro e
+  induction e with
+  | zero => exact fun h => ⟨fun j h1 h2 => absurd h2 (by omega), key i (Nat.le_refl _) (by omega) (fun j h1 h2 => absurd h2 (by omega))⟩
+  | succ e ih =>
+    intro h
+    obtain ⟨c1, c2⟩ := ih (by omega)
+    have hn := r.any_next H hr st (n := i + e) (by omega) (by omega) c2
+    have hch : ∀ j, i ≤ j → j < i + (e + 1) → r.fr.vs (j + 1) ∈ anyNext sy m (offTable sy m) (r.fr.vs j) := by
+      intro j h1 h2
+      by_cases hje : j < i + e
+      · exact c1 j h1 hje
+      · rw [show j = i + e by omega]
+        exact hn
+    exact ⟨hch, key (i + (e + 1)) (by omega) h hch⟩
+
+/-- **He is not on the floor during the fall, with any input.** Up to the first stand the first fall gives it (`fall_first`). After it: the first stand is away from the
+floor, so it is at frame `C + wallF` or later (`stand_late`: the fields `stand_wall` and `wall`), and it is the landing of a state of the first fall; from there the
+states with any input are those of `anyCheck`, none on the floor. The old field `fall_jump` -/
+theorem fall_any (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) {n : Nat} (hC : r.C ≤ n) (h1 : n < r.C + N.fall) :
+    ¬OnFloor sy (r.fr.vs n) := by
+  obtain ⟨_, hfs, _, _⟩ := fall_ok H.first
+  by_cases hs : ∃ j, r.C < j ∧ j < n ∧ (r.fr.vs j).st = 0
+  · obtain ⟨i, i1, i2, i3, i4⟩ := first_of (P := fun j => (r.fr.vs j).st = 0) n hs
+    have h5 := r.fall_first H hr st (n := i) (by omega) (by omega) (fun k a b => i4 k a b)
+    obtain ⟨i', rfl⟩ : ∃ i', i = i' + 1 := ⟨i - 1, by omega⟩
+    have hlate := r.stand_late H st (n := i') (by omega) (by omega) i3 h5
+    obtain ⟨d, rfl⟩ : ∃ d, i' = r.C + d := ⟨i' - r.C, by omega⟩
+    have hns : ∀ j, r.C < j → j ≤ r.C + d → (r.fr.vs j).st ≠ 0 := fun j a b => i4 j a (by omega)
+    have hmem := r.fall_mem H hr st d (by omega) hns
+    obtain ⟨hok, h2⟩ := r.fall_next H hr st (d := d) (by omega) hns
+    obtain ⟨s1, _, _, _, _⟩ := fallStep_spec ((fallOk_spec hok).2 (r.fr.a (r.C + d + 1)))
+    have hland : r.fr.vs (r.C + d + 1) ∈ fallLands sy m (fallLayer sy m N.vStart (r.C + d + 1 - r.C - 1)) := by
+      rw [show r.C + d + 1 - r.C - 1 = d by omega]
+      rcases h2 with e | ⟨hf, e⟩
+      · have i3' : (r.fr.vs (r.C + d + 1)).st = 0 := i3
+        rw [e, s1] at i3'
+        exact absurd i3' (by decide)
+      · rw [e]
+        exact mem_fallLands hmem hf
+    obtain ⟨_, hok2⟩ := r.any_chain H hr st (i := r.C + d + 1) (by omega) hlate hland (n - (r.C + d + 1)) (by omega)
+    rw [show r.C + d + 1 + (n - (r.C + d + 1)) = n by omega] at hok2
+    exact (anyOk_spec hok2).1
+  · exact r.fall_first H hr st hC h1 (fun j a b c => hs ⟨j, a, b, c⟩)
+
+/-- **`fall_long`**: he is not on the floor during the fall. With no jump from the set of the states with no jump (`fall_nojump`), after a jump from the set of the
+states with any input from the first stand on (`fall_any`) -/
 theorem fall_long_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ n, r.C ≤ n → n < r.C + N.fall → ¬OnFloor sy (r.fr.vs n) := by
   intro n hC h1
   by_cases h : ∃ j, r.C ≤ j ∧ j < n ∧ (r.fr.inp (j + 1)).jump = true
-  · obtain ⟨j, j1, j2, j3⟩ := h
-    exact r.fall_jump j n j1 j2 h1 j3
+  · exact r.fall_any H hr st hC h1
   · exact r.fall_nojump H hr st hC h1 (fun j a b => by
       cases e : (r.fr.inp (j + 1)).jump with
       | false => rfl

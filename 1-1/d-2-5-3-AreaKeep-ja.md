@@ -22,7 +22,7 @@ area_run       :  Room(seq c),  seq(c)[i] = v,
                   ∀ n ∈ [c, e):  (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r),     rt(seq e) ≠ rt(r)
                   →  seq(e)[i] = v
 
-Run.area₁       :  seq(a₁)[i] = v                                         （フィールド、新しい）
+Run.area₁       :  seq(a₁)[i] = v                                         （15 回目から定理、1-1-b-3-4-5。14 回目はフィールド）
 Run.area₂       :  seq(a₂)[i] = v                                         （定理）
 entryAt_of_area :  m[i] = v  ∧  EntryAt(R₉, m)  →  EntryAt(R₁₀, m)
 chg.entry₂      :  EntryAt(R₉, seq a₂)                                    （9 バイト。前は R₁₀）
@@ -94,15 +94,15 @@ Lean: `Theorems/AreaKeep.lean`（`areaI`、`setA`、`startsA`、`baseA`、`cfgRa
 ## 道筋で変わったこと
 
 * `Run.chg : ChangesK … (restIdxA sy nmS m0)`: 横の土管の入口で 9 バイト（前は `restIdxR`、10 バイト）。`Run.chgK` は `Run.area₂` と `Run.rt₂` から 11 バイトの切り替えを出します。`Run.change₂`、`Run.start`、`Run.atCtl₀` は前と同じです。
-* `Run` に新しいフィールド `area₁` があります。
+* 14 回目には `Run` に新しいフィールド `area₁` がありました。15 回目からは定理 `Run.area₁` です。縦の土管の入口の条件がこのバイトを載せています（1-1-b-3-4-5）。
 * `RoomChecks` に新しいフィールド `area : AreaKeep.Facts …` があります。道筋の非公開のファイル（5 回）と急ぎの音楽の非公開のファイル（1 回）で `area_facts` から作ります。
 
-仮定からなくなったもの: `entry₂` のレベルの番号。加わったもの: `area₁`、縦の土管の入口でのレベルの番号。
+仮定からなくなったもの: `entry₂` のレベルの番号。14 回目に加わったもの: `area₁`、縦の土管の入口でのレベルの番号。15 回目になくなりました。
 
 ## 仮定（Lean で証明していない）
 
-* `area₁`: 縦の土管の入口でレベルの番号は基準のもの。フレーム 0 はこれを知りません（`TitleStart`）。操作から入口までのフレームは、`upClean₁` のガードが守れば保ちます（測った）。
-* `chg.entry₂`: 横の土管の入口で 9 バイト: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ。
+* `area₁` はもう仮定ではありません（15 回目）。タイトルで Start を押したときの条件がこのバイトを求め（`title.boot`）、`upCleanU` のガードがそれを守り、`EntryKeep` の歩きが入口まで保ちます。そのぶん、この 2 つの仮定は 1 バイトずつ多く求めます。
+* `chg.entry₂`: 横の土管の入口で 9 バイト: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ。 回 15 から、高さと画面のバッファの 5 バイトは入るフレームから出ます。入るフレームが小さいプレイヤーで、画面のバッファの制御が 0 で始まるときです（[1-1-d-2-5-4](d-2-5-4-EntryHeight-ja.md)、[1-1-d-2-5-5](d-2-5-5-EntryBuffer-ja.md)）。`chg.entry₂` は 3 バイトを求め、ほかの走りのために `Run` に 2 つのフィールド `height₂`、`buffer₂` があります。
 * `chg.time₂`: 横の土管の入口でゲームタイマーは 000 でない。
 
 **ファイル.** `Theorems/AreaKeep.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/AreaKeep.lean` と `Proof/AreaJoin.lean`（`Main.lean` の `genAreaKeep`）。

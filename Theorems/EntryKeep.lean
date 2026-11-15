@@ -1,5 +1,6 @@
 import Theorems.TitleStart
 import Theorems.FrameKeep
+import Theorems.CtrlKeep
 import Theorems.PipeChangeEnd
 
 /-!
@@ -19,6 +20,11 @@ but the walk of the entry frame knows them at its end. What stays assumed at the
 `restNames` are those that change on the way on real runs; those that frame 0 does not know; those that a frame may write when nothing on the screen is known (a new object, the
 music of an event, a new area, a warp pipe); and those that real frames store to through an index. The walks of the pipe's frames need each of them
 (`PipeChangeEnd.entryDropped` lists the bytes that left `Entry` in round 12, because they do not).
+
+Round 15: the level's number (`AreaNumber`) is a byte of `Entry` (`PipeChangeEnd.entryNames`) and not of `restNames`, so it is one of the kept bytes: the condition at
+the press on the title knows it (`TitleStart.areaNames`), frame 0 ends with it, the walk of a frame from control does not store to it, and the guard protects it from the
+stores through an index or a pointer. With it `Route.Run.area₁` is a theorem. The checks (`Checks`) also have the check of the store of the move routine (`qCheck`), so
+that the condition on the frames' instructions is a plain `CleanK` of the union guard of `UpClean`.
 
 The searches are no part of the proof: the checks walk every state of their tables. There is no game data in this file. Page: `1-1/b-3-4-EntryKeep.md`.
 -/
@@ -115,6 +121,26 @@ def guardOf (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : 
 
 /-- no store of the move routine is set apart -/
 def spot : Spot := { entry := 0, store := 0, temps := [] }
+
+/-! ## The store of the move routine
+
+The move routine stores the fraction of the player's position with `STA abs,X`, the index 0 for the player. A store through an index is asked to miss the guard's bytes
+(`PipeWrites.Clean`), but the fraction is not one of them. `qCheck` reads this from the ROM. With it the one condition on the frames from control to the entry
+(`Route.ChangesBase.upCleanU`, `CleanK` of the union guard of `UpClean`, which sets this store apart) gives `Clean` of this file's guard (`UpClean.cleanE₁_of_U`). -/
+
+/-- the store of the move routine (`FrameKeep.spotOf`) -/
+abbrev qOf (sy : Syms) (m0 : Machine) : UInt16 := (FrameKeep.spotOf sy m0).store
+
+/-- the operand of the instruction at `q`: with `STA abs,X` and the index 0, its target -/
+def tq (sy : Syms) (m0 : Machine) : UInt16 :=
+  (romByte m0 (qOf sy m0 + 1)).toUInt16 ||| ((romByte m0 (qOf sy m0 + 2)).toUInt16 <<< 8)
+
+/-- **The check of the store of the move routine**: the instruction at `q` is `STA abs,X` (opcode 157) in the program's part of memory, its target with the index 0 is a
+byte of RAM, the guard does not protect it, and it is not the pause byte that the NMI tests (`CtrlKeep.pauseI`) -/
+def qCheck (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (e : Machine) : Bool :=
+  romByte m0 (qOf sy m0) == 0x9D && decide (0x8000 ≤ qOf sy m0) && decide (0x8000 ≤ qOf sy m0 + 1) && decide (0x8000 ≤ qOf sy m0 + 2) &&
+    decide (tq sy m0 < 0x2000) && !((guardOf sy m0 d e).prot.contains (tq sy m0 &&& 0x7FF).toNat) &&
+    (tq sy m0 &&& 0x7FF).toNat != CtrlKeep.pauseI sy m0
 
 /-! ## The walk of one frame -/
 
@@ -464,6 +490,9 @@ structure Checks (sy : Syms) (m0 : Machine) (d : PipeChangeEnd.Data) (c : TitleS
   pauseNear : nearPauseCheck sy c d = true
   /-- the frames from control with the class beside the walk -/
   pause : pauseCheck sy m0 d (PipeTransition.entry m0) = true
+  /-- the store of the move routine with the index 0 goes to a byte of RAM that the guard does not protect (round 15: with it `Route.ChangesBase.upCleanU` is a plain
+  `CleanK`, and the theorems that take these checks have the ROM fact that `UpClean` needs) -/
+  q : qCheck sy m0 d (PipeTransition.entry m0) = true
 
 /-! ## The walk covers the frame -/
 

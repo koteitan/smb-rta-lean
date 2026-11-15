@@ -74,12 +74,15 @@ the frame's end. The walk asks that the frame comes to `Q` only once after the p
 from the ROM (the operand of the routine's first load). [The block buffers](a-5-4-3-3-3-OpenMap.md) now also keep it 0 on every frame, and a walk of `CtrlKeep` follows
 it to the player's routine.
 
-**After the return.** The bytes of `vsA` (11: the vertical bytes, the high byte, the state, A and B, the halt value) do not change: the field `afterV`, assumed (as
-before, for more bytes). The frames not counted keep them: [LagFrames](a-5-5-3-LagFrames.md) follows 7 more bytes.
+**After the return.** The bytes of `vsA` (11: the vertical bytes, the high byte, the state, A and B, the halt value) do not change (`Real.afterVS`). Seven of them
+are the field `afterV`, assumed (the height, its high byte, the vertical speed and its fraction, the height's fraction, the vertical force, the state). Since round
+20 the other four (the vertical force down, the jump's origin, A and B, the halt value) are a theorem: the walks of
+[OpenAfter](a-5-4-3-3-4-OpenAfter.md) follow each from the return to the frame's end. The frames not counted keep them:
+[LagFrames](a-5-5-3-LagFrames.md) follows 7 more bytes.
 
 **The two relations.** The halt relation is carried along each jump: at the takeoff the walk knows the halt value 1, in the air the walk checks it at `cR`.
 `PrevOK` holds at every counted frame by the walk of part e (`GuardE.prev_endE`): it asks `CleanK` of `guardE` and no store by address to the routine, the mode or the
-task (the field `cleanK` with 5 more protected bytes, and the new field `noStore`), and `PrevOK` at the counted frame 1 (the title's check of the state at control now
+task (`cleanK`, from `chg.upCleanU`, and `Real.noStore`, since round 20 a theorem: [OpenStore](a-5-4-3-3-5-OpenStore.md)), and `PrevOK` at the counted frame 1 (the title's check of the state at control now
 also asks A and B and A and B of the frame before, `StartRun.stI`).
 
 **The horizon.** A jump that has not landed by `H` is given `max(L_tap − 1, H − t − 1)` frames in the air (`airT`); `arcOK` gives `H − t < L_hold`. The model's steps up
@@ -97,8 +100,8 @@ to `N` do not need more.
 
 ## Checked on real frames
 
-`open-real-check FM2 300` checks on each counted frame up to `N` the fields of `Real` (`cleanK` with `guardE`, `noStore`, `afterV` with the 11 bytes, `map`,
-`after`), what the proof derives at the frame's start (`PrevOK`, the halt relation, the collision flag 0), and on the frames in the air or jumping the step `VStep`:
+`open-real-check FM2 300` checks on each counted frame up to `N` the fields of `Real` (`cleanK` with `guardE`, `afterV` with its 7 bytes, `map`,
+`after`), what the walks say (no store to the routine, the mode or the task, the four other bytes of `vsA` after the return), what the proof derives at the frame's start (`PrevOK`, the halt relation, the collision flag 0), and on the frames in the air or jumping the step `VStep`:
 
 | runs | counted frames | in the air or jumping | jump starts | frames failing a condition |
 |---|---|---|---|---|
@@ -115,6 +118,8 @@ to `N` do not need more.
 * **Wider**: `cleanK` asks `CleanK` of `guardE` (5 more protected bytes: A and B, A and B of the frame before, the moving direction, the running speed, the stored
   speed); `afterV` asks 11 bytes (it asked 4); `map` (`MapOK`) protects the collision flag too.
 * Round 19: `cleanK` is no longer a field: `Route.Run.pipeReal` proves it from `chg.upCleanU` ([One condition on each instruction up to the pipe](a-5-10-UpClean.md)).
+* Round 20: `noStore` is no longer a field ([OpenStore](a-5-4-3-3-5-OpenStore.md)); `afterV` asks 7 bytes, the other 4 are a theorem
+  ([OpenAfter](a-5-4-3-3-4-OpenAfter.md)).
 
 **Files.** `Theorems/OpenAir.lean`, `Theorems/OpenAirFrame.lean`, `Theorems/OpenWalk.lean`, `Theorems/OpenVert.lean`, `Theorems/OpenFrames.lean`, private
 `Proof/OpenAir.lean`.

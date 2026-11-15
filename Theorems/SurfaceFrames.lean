@@ -8,6 +8,7 @@ import Theorems.GuardE
 import Theorems.CollKeep
 import Theorems.CollideKeep
 import Theorems.VertKeep
+import Theorems.FaceKeep
 import Theorems.SurfaceRead
 
 /-!
@@ -20,7 +21,8 @@ they can come between `seq j` and the frame `j + 1`, and they change none of the
 * The model's input of a frame is the one the player's routine reads (`inAt`); it is always in `Potential.inputs`. `readIn` reads it from the machines around the frame,
   for the programs.
 * `Clean` is a condition on one state: the stored speed is `|v|`, and the collision bits block nothing, or only Left while he moves right.
-* `OneFrame`: from a clean state, the frame is `hstep` up to the collision routine (`Pre`), and the routine leaves one of three things (`Coll`): nothing, a block of Left, or a hit.
+* `OneFrame`: from a clean state, the frame is `hstep` up to the collision routine (`Pre`), and the routine leaves one of three things (`Coll`): nothing, a block of Left, or a hit;
+  or the frame is a hit with no `Pre` (a frame that ends with the speed 0 can have another facing than `hstep` gives).
   A hit (`Hit`) leaves a speed of at most 0, and `P` at most `P₂ − 256` or at most `P + 256`. The screen's left edge is a hit of the second kind.
 * `one_of_moves`: a real frame is a `OneFrame`. The movement, from the player's routine to the scroll handler, is `FrameModel.move_model`, proved. The state at the player's routine
   (`FrameModel.AtCtrl0`, and that nothing writes the horizontal bytes before it) is a theorem too (`Moves.toAt`): the walk of `CtrlKeep` from the frame's start in control.
@@ -32,12 +34,16 @@ they can come between `seq j` and the frame `j + 1`, and they change none of the
   direction, the running speed and the stored speed from the scroll handler to its end (`AfterKeep.keepH`); their condition on each instruction is `CleanK` of
   `FrameKeep.guardE`, the field `cleanE` (`GuardE.prev_endE`, `GuardE.keepHE`: the field `spareE` is gone). At the scroll
   handler the stored speed is `|v|` (`storedQ_of`: the walks of `FrameModel.stored_path`, and the frame comes there once, `GuardE.subs_onceE`). What is assumed is
-  the rest of the state at the end of the frame before (`OnFrames.state`) and the rest of what the frame does from the scroll handler on (`OnFrames.collide`, and
-  `AfterR` for the frames that move right there: `After.of`). Of `collide`, the speed's part is a theorem (`OnFrames.collideAt`: the walk of `CollideKeep`, with the
-  condition `cleanE` on each instruction, which protects the speed; the old field `spareV`), so the field is `SurfaceRead.CollideR`: the subspeed and the position.
+  the rest of the state at the end of the frame before (`OnFrames.state`) and the rest of what the frame does from the scroll handler on: the position
+  (`OnFrames.collide`, and `AfterP` for the frames that move right there: `After.of`). Of `collide`, the speed's part is a theorem (`OnFrames.collideAt`: the walk of
+  `CollideKeep`, with the condition `cleanE` on each instruction, which protects the speed; the old field `spareV`), and so is the subspeed on every frame that does
+  not end with the speed 0 and the subspeed 0 (the walk of `FaceKeep`), so the field is `CollideS`: the position, and the subspeed on the frames that end so. The
+  facing is a theorem on every frame that does not end so (`FaceKeep.keepZ_end`; such a frame is a hit, and a hit needs no facing), but on the frames before `J`,
+  which must follow `hstep`: there the field `faceJ` asks it. The collision bits of a frame that moves right at the scroll handler are a theorem
+  (`FaceKeep.bits_end`). So `AfterR`, which asked the facing and the collision bits, is now `AfterP`.
   A frame with the pressed side masked (`Masked`) is a `OneFrame` too: `FrameModel.move_masked` follows `hstep`, or leaves the speed 0 (`MaskStop`).
 * `BoxRun`: the frames before `J` run the collision routine as on the machine at control, from the machine at the scroll handler, on its pixel and the height of `vstep`. The height comes from
-  `vert_of`, one frame of `Jump.vstep` (the movement routine by `VertModel.vert_model`, the part before it by the walk of `CtrlKeep` (`vBefore`), the part after it by `OnFrames.vAfter` for six bytes and by the walk of `VertKeep` for the other four, `OnFrames.kAt`), and a small search (`vCheck`).
+  `vert_of`, one frame of `Jump.vstep` (the movement routine by `VertModel.vert_model`, the part before it by the walk of `CtrlKeep` (`vBefore`), the part after it by `OnFrames.vAfter` for five bytes, by the walk of `VertKeep` for four others, `OnFrames.kAt`, and by the walk of `FaceKeep` for the vertical force, `OnFrames.vfAt`: it stays, or the frame ends on the ground with the value of a jumpspring's landing, which `VStep` allows), and a small search (`vCheck`).
   The pixel comes from the distance bound (`dist_abs`).
 * `frOf`: the frames as `TopSpeed.Frame`s are a definition on the machines: a frame before the touch is `SurfaceRead.frameE` of the real frame, the touch's frame
   `SurfaceRead.frameH`. From conditions on one frame or one machine (`OnFrames.state`, `collide`) each one is read from its machines
@@ -235,9 +241,11 @@ def Coll (sy : Syms) (m0 : Machine) (i : HIn) (a b : Machine) : Prop :=
 def MaskStop (sy : Syms) (a b : Machine) : Prop :=
   bitsOf sy a = sy.noLeft ∧ vOf sy b ≤ 0 ∧ posP sy b ≤ posP sy a + 256
 
-/-- **One frame from a clean state**, on the input `i`. -/
+/-- **One frame from a clean state**, on the input `i`: a stop with Left blocked; or the frame of `hstep` up to the collision routine and what that routine leaves;
+or a hit. A hit needs no `Pre`: a frame that ends with the speed 0 can have another facing than `hstep` gives (a climbing tile turns him), and the run leaves the
+model at a hit anyway (`step_of_one`). -/
 def OneFrame (sy : Syms) (m0 : Machine) (i : HIn) (a b : Machine) : Prop :=
-  MaskStop sy a b ∨ (Pre sy m0 i a b ∧ Coll sy m0 i a b)
+  MaskStop sy a b ∨ (Pre sy m0 i a b ∧ Coll sy m0 i a b) ∨ Hit sy m0 i a b
 
 /-- the frame's own pixel -/
 def pix (P : Int) : UInt8 := (P / 256).toNat.toUInt8
@@ -259,10 +267,16 @@ def vKeep (sy : Syms) : List UInt16 :=
   [sy.Player_Y_Position, sy.Player_Y_MoveForce, sy.Player_Y_Speed, sy.Player_YMF_Dummy, sy.VerticalForce, sy.VerticalForceDown, sy.JumpOrigin_Y_Position,
    sy.Player_State, sy.DiffToHaltJump]
 
-/-- **the bytes of `vKeep` that `OnFrames.vAfter` asks**: the height, its fraction, the vertical speed, the fraction counter, the vertical force, the state. The other three
-(the vertical force down, the jump's origin, the jump's halt value) and A are kept by a walk (`VertKeep.keep_end`, `OnFrames.kAt`). -/
+/-- **the bytes of `vKeep` that `OnFrames.vAfter` asks**: the height, its fraction, the vertical speed, the fraction counter, the state. Three others (the vertical
+force down, the jump's origin, the jump's halt value) and A are kept by a walk (`VertKeep.keep_end`, `OnFrames.kAt`). The vertical force is kept by a walk too, or the
+frame ends on the ground with the vertical force of a jumpspring (`FaceKeep.vf_end`, `OnFrames.vfAt`); the vertical model allows that (`VStep`, `vVar`). -/
 def vHard (sy : Syms) : List UInt16 :=
-  [sy.Player_Y_Position, sy.Player_Y_MoveForce, sy.Player_Y_Speed, sy.Player_YMF_Dummy, sy.VerticalForce, sy.Player_State]
+  [sy.Player_Y_Position, sy.Player_Y_MoveForce, sy.Player_Y_Speed, sy.Player_YMF_Dummy, sy.Player_State]
+
+/-- **One vertical step of a real frame**, from `a` to `b`: the vertical bytes of `b` are those of `vNext`, or `vNext` ends on the ground (the state 0) and they are
+those of `vNext` with the vertical force `cv` (the landing on a jumpspring stores it; on the ground no step reads it) -/
+def VStep (sy : Syms) (m0 : Machine) (cv : UInt8) (a b : Machine) : Prop :=
+  vsOf sy b = vNext sy m0 a b ∨ ((vNext sy m0 a b).st = 0 ∧ vsOf sy b = { vNext sy m0 a b with vf := cv })
 
 /-- in a jump the jump's halt value is 1 -/
 def HaltOK (sy : Syms) (m : Machine) : Prop := peek m sy.Player_State = 1 → peek m sy.DiffToHaltJump = 1
@@ -326,14 +340,26 @@ def boxVB (sy : Syms) (B : Box) (t : Jump.VS) : Bool :=
   (t.y == (peek B.m sy.Player_Y_Position).toNat.toUInt8 && t.vy == 0 && t.st == 0) ||
     ((List.range (B.dy + 1)).any fun b => t.y == ((peek B.m sy.Player_Y_Position).toNat - b).toUInt8) && (SurfaceRun.vyStates sy).contains (t.vy, t.st)
 
-/-- the next frames of the vertical bytes: A pressed or not, and every stored speed up to the top -/
-def vNextAll (sy : Syms) (m0 : Machine) (l : List Jump.VS) : List Jump.VS :=
-  (l.flatMap fun s => [true, false].flatMap fun a => (List.range (top sy + 1)).map fun ab => VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) s a ab.toUInt8).eraseDups
+/-- a state of the vertical bytes, and on the ground (the state 0) also the same state with the vertical force `cv` -/
+def vVar (cv : UInt8) (w : Jump.VS) : List Jump.VS := if w.st == 0 then [w, { w with vf := cv }] else [w]
+
+theorem mem_vVar_self (cv : UInt8) (w : Jump.VS) : w ∈ vVar cv w := by
+  unfold vVar
+  split <;> simp
+
+theorem mem_vVar_c (cv : UInt8) {w : Jump.VS} (h : w.st = 0) : { w with vf := cv } ∈ vVar cv w := by
+  unfold vVar
+  simp [h]
+
+/-- the next frames of the vertical bytes: A pressed or not, and every stored speed up to the top; a frame that ends on the ground also with the vertical force `cv` -/
+def vNextAll (sy : Syms) (m0 : Machine) (cv : UInt8) (l : List Jump.VS) : List Jump.VS :=
+  (l.flatMap fun s => [true, false].flatMap fun a => (List.range (top sy + 1)).flatMap fun ab =>
+    vVar cv (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) s a ab.toUInt8)).eraseDups
 
 /-- `n` more frames from the states `l` stay in the box's height -/
-def vCheck (sy : Syms) (m0 : Machine) (B : Box) : Nat → List Jump.VS → Bool
+def vCheck (sy : Syms) (m0 : Machine) (B : Box) (cv : UInt8) : Nat → List Jump.VS → Bool
   | 0, _ => true
-  | n + 1, l => (vNextAll sy m0 l).all (boxVB sy B) && vCheck sy m0 B n (vNextAll sy m0 l)
+  | n + 1, l => (vNextAll sy m0 cv l).all (boxVB sy B) && vCheck sy m0 B cv n (vNextAll sy m0 cv l)
 
 /-- the machine at control is stopped, clean, not in a jump, and the frames before `J` stay within `dx` px and in the box's height; and the checks on the ROM of `FrameModel`
 and `VertModel`, for the movement -/
@@ -345,12 +371,13 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     peek c sy.Player_XSpeedAbsolute == absB (peek c sy.Player_X_Speed) && peek c sy.Player_CollisionBits == 0xFF && sy.noLeft != 0xFF &&
     decide (B.dx ≤ (peek c sy.Player_X_Position).toNat) &&
     ((List.range J).all fun j => decide (dl sy m0 (Opening.pOf sy m0 (startHS sy m0)) j ≤ 256 * (B.dx : Int))) &&
-    vCheck sy m0 B (J - 1) [vsOf sy c] &&
+    vCheck sy m0 B (FaceKeep.vfC sy m0 (peek c sy.AreaType)) (J - 1) [vsOf sy c] &&
     CtrlKeep.afterCheck sy m0 (peek c sy.AreaType) && [(1 : UInt8), 2, 3].contains (peek c sy.AreaType) && peek c sy.SwimmingFlag == 0 &&
     peek c sy.PlayerChangeSizeFlag == 0 && FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop &&
     PrevKeep.prevCheck sy m0 (peek c sy.AreaType) && PrevKeep.prevOKB sy c && AfterKeep.hCheck sy m0 (peek c sy.AreaType) &&
     FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) && CollKeep.collCheckAll sy m0 (peek c sy.AreaType) && CollideKeep.vCheck sy m0 (peek c sy.AreaType) &&
-    VertKeep.kCheck sy m0 (peek c sy.AreaType)
+    VertKeep.kCheck sy m0 (peek c sy.AreaType) && FaceKeep.zCheck sy m0 (peek c sy.AreaType) && FaceKeep.bCheck sy m0 (peek c sy.AreaType) &&
+    FaceKeep.vfCheck sy m0 (peek c sy.AreaType) (FaceKeep.vfC sy m0 (peek c sy.AreaType))
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -369,7 +396,7 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   noLeft : sy.noLeft ≠ 0xFF
   dx : B.dx ≤ (peek B.m sy.Player_X_Position).toNat
   dist : ∀ j, j < J → dl sy m0 (Opening.pOf sy m0 (startHS sy m0)) j ≤ 256 * (B.dx : Int)
-  vert : vCheck sy m0 B (J - 1) [vsOf sy B.m] = true
+  vert : vCheck sy m0 B (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (J - 1) [vsOf sy B.m] = true
   /-- the walk of the whole frame (`CtrlKeep.area_end`), with the area's type of `B.m` -/
   after : CtrlKeep.afterCheck sy m0 (peek B.m sy.AreaType) = true
   area3 : peek B.m sy.AreaType ∈ [(1 : UInt8), 2, 3]
@@ -391,11 +418,17 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   vkeep : CollideKeep.vCheck sy m0 (peek B.m sy.AreaType) = true
   /-- the walks of four vertical bytes from the scroll handler to the frame's end (`VertKeep.keep_end`), with the area's type of `B.m` -/
   vk : VertKeep.kCheck sy m0 (peek B.m sy.AreaType) = true
+  /-- the walks of the facing and of the subspeed from the scroll handler to the frame's end (`FaceKeep.keepZ_end`), with the area's type of `B.m` -/
+  zk : FaceKeep.zCheck sy m0 (peek B.m sy.AreaType) = true
+  /-- the walks of the collision bits on a frame that moves right at the scroll handler (`FaceKeep.bits_end`), with the area's type of `B.m` -/
+  bk : FaceKeep.bCheck sy m0 (peek B.m sy.AreaType) = true
+  /-- the walk of the vertical force from the scroll handler to the frame's end (`FaceKeep.vf_end`), with the area's type of `B.m` and the value `FaceKeep.vfC` -/
+  vfk : FaceKeep.vfCheck sy m0 (peek B.m sy.AreaType) (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) = true
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, PrevKeep.prevOKB, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩ := h
-  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩ := h
+  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24⟩
 
 theorem absB_natAbs (v : UInt8) : (absB v).toNat = (sbyte v).natAbs := by
   have h1 := v.toNat_lt
@@ -416,19 +449,20 @@ theorem boxV_of_B {B : Box} {t : Jump.VS} (h : boxVB sy B t = true) : BoxV sy B 
   · exact Or.inr ⟨b, hb, h1, h2⟩
 
 /-- **The search of the height.** Frames that are steps of `vstep`, with a stored speed up to the top, from a state of `l`, stay in the box. -/
-theorem vCheck_spec {B : Box} : ∀ (n : Nat) (l : List Jump.VS), vCheck sy m0 B n l = true → ∀ (u : Nat → Jump.VS) (a : Nat → Bool) (ab : Nat → UInt8), u 0 ∈ l →
-    ∀ k, 1 ≤ k → k ≤ n → (∀ i, i < k → (ab i).toNat ≤ top sy ∧ u (i + 1) = VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u i) (a i) (ab i)) →
+theorem vCheck_spec {B : Box} {cv : UInt8} : ∀ (n : Nat) (l : List Jump.VS), vCheck sy m0 B cv n l = true → ∀ (u : Nat → Jump.VS) (a : Nat → Bool) (ab : Nat → UInt8), u 0 ∈ l →
+    ∀ k, 1 ≤ k → k ≤ n → (∀ i, i < k → (ab i).toNat ≤ top sy ∧ u (i + 1) ∈ vVar cv (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u i) (a i) (ab i))) →
       boxVB sy B (u k) = true
   | 0, _, _, _, _, _, _, _, h1, h2, _ => by omega
   | n + 1, l, h, u, a, ab, h0, k, h1, h2, hs => by
     simp only [vCheck, Bool.and_eq_true, List.all_eq_true] at h
-    have hm : u 1 ∈ vNextAll sy m0 l := by
+    have hm : u 1 ∈ vNextAll sy m0 cv l := by
       obtain ⟨h3, h4⟩ := hs 0 (by omega)
       unfold vNextAll
-      refine List.mem_eraseDups.2 (List.mem_flatMap.2 ⟨u 0, h0, List.mem_flatMap.2 ⟨a 0, ?_, List.mem_map.2 ⟨(ab 0).toNat, List.mem_range.2 (by omega), ?_⟩⟩⟩)
+      refine List.mem_eraseDups.2 (List.mem_flatMap.2 ⟨u 0, h0, List.mem_flatMap.2 ⟨a 0, ?_, List.mem_flatMap.2 ⟨(ab 0).toNat, List.mem_range.2 (by omega), ?_⟩⟩⟩)
       · cases a 0 <;> simp
-      · rw [h4]
-        simp
+      · have e : (ab 0).toNat.toUInt8 = ab 0 := by simp
+        rw [e]
+        exact h4
     by_cases hi : k = 1
     · subst hi
       exact h.1 _ hm
@@ -503,7 +537,7 @@ theorem clean_of_follow (F : Facts sy m0) (hc : Clean sy a) (hf : Follow sy m0 i
 /-- **One frame from a clean state**: it follows `hstep` and leaves a clean state, or it is a hit. -/
 theorem step_of_one (F : Facts sy m0) (hi : i ∈ inputs) (hc : Clean sy a) (h : OneFrame sy m0 i a b) :
     (Follow sy m0 i a b ∧ Clean sy b) ∨ Hit sy m0 i a b := by
-  rcases h with ⟨_, h1, h2⟩ | ⟨hP, hq | ⟨h0, hq⟩ | hH⟩
+  rcases h with ⟨_, h1, h2⟩ | ⟨hP, hq | ⟨h0, hq⟩ | hH⟩ | hH
   · exact Or.inr ⟨h1, Or.inr h2⟩
   · obtain ⟨h1, h2, h3⟩ := hq
     have hf := follow_of_pre hi hP h2 h1
@@ -511,6 +545,7 @@ theorem step_of_one (F : Facts sy m0) (hi : i ∈ inputs) (hc : Clean sy a) (h :
   · obtain ⟨h1, h2, h3⟩ := hq
     have hf := follow_of_pre hi hP h2 h1
     exact Or.inl ⟨hf, clean_of_follow F hc hf hP (Or.inr ⟨h3, by rw [h2]; exact h0⟩)⟩
+  · exact Or.inr hH
   · exact Or.inr hH
 
 end Step
@@ -548,34 +583,49 @@ theorem ff_and (x : UInt8) : (0xFF : UInt8) &&& x = x := by
   simpa using h
 
 /-- **The frame from the scroll handler to its end.** `a` is the machine at the frame's start, `Q` when the frame comes to the scroll handler, `b` at the frame's end. The rest of the frame
-changes neither the subspeed nor the facing, and the screen's edge and the collision routine leave one of three things: nothing, a block of Left moving right, or a hit. The
-moving direction, the running speed and the stored speed at the frame's end are those at the scroll handler: that is proved (`AfterKeep.keepH`, `AfterK`), no longer a
-field here (`md`, `rs` are gone). The stored speed at the scroll handler is that of the speed there: proved too (`MovesAt.stored`, by `FrameModel.stored_path`), so the
-field `storedQ` is gone. -/
+does not change the subspeed; it keeps the facing, or the frame ends with the speed 0 and the subspeed 0; and the screen's edge and the collision routine leave one of three things:
+nothing, a block of Left moving right, or a hit. The moving direction, the running speed and the stored speed at the frame's end are those at the scroll handler: that is
+proved (`AfterKeep.keepH`, `AfterK`). The stored speed at the scroll handler is that of the speed there: proved too (`MovesAt.stored`, by `FrameModel.stored_path`).
+The facing is proved too (`MovesAt.face`, by `FaceKeep.keepZ_end`): the field `fd` used to ask that it stays on every frame, which a walk cannot give (a climbing
+tile near the screen's left edge turns him and sets the speed and the subspeed to 0). -/
 structure After (sy : Syms) (a Q b : Machine) : Prop where
   f : peek b sy.Player_X_MoveForce = peek Q sy.Player_X_MoveForce
-  fd : peek b sy.PlayerFacingDir = peek Q sy.PlayerFacingDir
+  fd : peek b sy.PlayerFacingDir = peek Q sy.PlayerFacingDir ∨ (peek b sy.Player_X_Speed = 0 ∧ peek b sy.Player_X_MoveForce = 0)
   coll : (posP sy b = posP sy Q ∧ peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∧ bitsOf sy b = 0xFF) ∨
     (0 < vOf sy Q ∧ posP sy b = posP sy Q ∧ peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∧ bitsOf sy b = sy.noLeft) ∨
     (vOf sy b ≤ 0 ∧ (posP sy b ≤ posP sy Q - 256 ∨ posP sy b ≤ posP sy a + 256))
 
-/-- **What `After` asks beyond `SurfaceRead.CollideE`** (the field `collide` of `OnFrames`, on every frame before the touch): the facing stays, and when he moves right at
-the scroll handler, the screen's edge and the collision routine leave nothing, the block of Left, or a hit. When he moves left or not at all there, `CollideE` and the
-move give `After.coll`; the subspeed is `CollideE.f` (`After.of`). This is the field `after` of `Moves` now: `After.f` and the half of `After.coll` for a speed of at most 0
-are gone from it. -/
-structure AfterR (sy : Syms) (a Q b : Machine) : Prop where
-  fd : peek b sy.PlayerFacingDir = peek Q sy.PlayerFacingDir
-  coll : 0 < vOf sy Q → (posP sy b = posP sy Q ∧ peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∧ (bitsOf sy b = 0xFF ∨ bitsOf sy b = sy.noLeft)) ∨
-    (vOf sy b ≤ 0 ∧ (posP sy b ≤ posP sy Q - 256 ∨ posP sy b ≤ posP sy a + 256))
+/-- **What `After` still asks of a frame that moves right at the scroll handler** (the field `after` of `Moves`): the position. If the speed stays, the position
+stays. If the speed ends 0, the position ends 1 px behind the move, or at most 1 px past the frame's start (the screen's left edge, where he stops only at a low
+speed). The other parts of `After` are theorems: the speed stays or ends 0 (`CollideKeep.speed_end`), the facing stays or the speed ends 0 (`FaceKeep.keepZ_end`), the
+collision bits end `FF` or those of a block of Left or the speed ends 0 (`FaceKeep.bits_end`), and when he moves left or not at all there, `CollideE` and the move
+give `After.coll` (`After.of`). This was `AfterR`, which asked the facing and the collision bits too. -/
+structure AfterP (sy : Syms) (a Q b : Machine) : Prop where
+  keep : 0 < vOf sy Q → peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed → posP sy b = posP sy Q
+  stop : 0 < vOf sy Q → peek b sy.Player_X_Speed = 0 → posP sy b ≤ posP sy Q - 256 ∨ posP sy b ≤ posP sy a + 256
 
-/-- **`After` from `AfterR` and `CollideE`**, at a machine `Q` at the scroll handler that the move put at `P(a) + 16·v(Q)` -/
-theorem After.of {a Q b : Machine} (h : AfterR sy a Q b) (c : SurfaceRead.CollideE sy a Q b) (hP : posP sy Q = posP sy a + 16 * vOf sy Q) : After sy a Q b := by
-  refine ⟨c.f, h.fd, ?_⟩
+/-- **`After` from `AfterP`, `CollideE`, the facing and the collision bits**, at a machine `Q` at the scroll handler that the move put at `P(a) + 16·v(Q)`. `hfd` is
+what `FaceKeep.keepZ_end` proves of the facing, `hbits` what `FaceKeep.bits_end` proves of the collision bits. -/
+theorem After.of {a Q b : Machine} (h : AfterP sy a Q b) (c : SurfaceRead.CollideE sy a Q b)
+    (hfd : peek b sy.PlayerFacingDir = peek Q sy.PlayerFacingDir ∨ (peek b sy.Player_X_Speed = 0 ∧ peek b sy.Player_X_MoveForce = 0))
+    (hbits : 0 < vOf sy Q → (bitsOf sy b = 0xFF ∨ bitsOf sy b = sy.noLeft) ∨ peek b sy.Player_X_Speed = 0)
+    (hP : posP sy Q = posP sy a + 16 * vOf sy Q) : After sy a Q b := by
+  refine ⟨c.f, hfd, ?_⟩
+  have hz0 : sbyte (0 : UInt8) = 0 := by decide
   by_cases hv : 0 < vOf sy Q
-  · rcases h.coll hv with ⟨e1, e2, e3 | e3⟩ | e
-    · exact Or.inl ⟨e1, e2, e3⟩
-    · exact Or.inr (Or.inl ⟨hv, e1, e2, e3⟩)
-    · exact Or.inr (Or.inr e)
+  · rcases c.v with e | e
+    · have hp := h.keep hv e
+      rcases hbits hv with (b1 | b1) | z
+      · exact Or.inl ⟨hp, e, b1⟩
+      · exact Or.inr (Or.inl ⟨hv, hp, e, b1⟩)
+      · exfalso
+        have e1 : vOf sy Q = sbyte (peek Q sy.Player_X_Speed) := rfl
+        rw [← e, z] at e1
+        omega
+    · refine Or.inr (Or.inr ⟨?_, h.stop hv e⟩)
+      show sbyte (peek b sy.Player_X_Speed) ≤ 0
+      rw [e]
+      decide
   · have hv' : sbyte (peek Q sy.Player_X_Speed) ≤ 0 := by
       have : vOf sy Q = sbyte (peek Q sy.Player_X_Speed) := rfl
       omega
@@ -588,6 +638,23 @@ theorem After.of {a Q b : Machine} (h : AfterR sy a Q b) (c : SurfaceRead.Collid
         decide
     · have : vOf sy Q = sbyte (peek Q sy.Player_X_Speed) := rfl
       rcases c.P with e | e | ⟨_, e2, _⟩ <;> omega
+
+/-- **What the field `collide` asks of a frame before the touch, from the scroll handler `Q` to its end `b`** (`M` the machine at the end of the frame before): the
+position as in `SurfaceRead.CollideE`; and of the subspeed only this: a frame that ends with the speed 0 and the subspeed 0 has the subspeed 0 at the scroll handler.
+Every other frame keeps the subspeed, by a walk (`FaceKeep.keepZ_end`). This was `SurfaceRead.CollideR`, which asked that the subspeed stays on every frame. -/
+structure CollideS (sy : Syms) (M Q b : Machine) : Prop where
+  f : peek b sy.Player_X_Speed = 0 → peek b sy.Player_X_MoveForce = 0 → peek Q sy.Player_X_MoveForce = 0
+  P : posP sy b = posP sy Q ∨ posP sy b = posP sy Q - 256 ∨
+    (posP sy Q ≤ posP sy b ∧ posP sy b ≤ posP sy M + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
+
+/-- `CollideS` and what the walk of the subspeed proves give `SurfaceRead.CollideR` -/
+theorem CollideS.toR {M Q b : Machine} (h : CollideS sy M Q b)
+    (hf : peek b sy.Player_X_MoveForce = peek Q sy.Player_X_MoveForce ∨ (peek b sy.Player_X_Speed = 0 ∧ peek b sy.Player_X_MoveForce = 0)) :
+    SurfaceRead.CollideR sy M Q b := by
+  refine ⟨?_, h.P⟩
+  rcases hf with e | ⟨e1, e2⟩
+  · exact e
+  · rw [e2, h.f e1 e2]
 
 /-- **A real frame from the state `a`, at the player's routine**: the frame of `M` with the input `i`, which comes to the player's routine at the instruction `n₀`. `M` is `a`, or later
 by `lag` frames. The input of the model is the one the routine reads there (`inAt`), so it is no condition. The fields `at_ctrl`, `before`, `bits` are a theorem (`Moves.toAt`)
@@ -607,14 +674,21 @@ structure MovesAt (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Prop
   idle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true
   /-- the position is away from both ends of its range -/
   far : 2048 ≤ posP sy a ∧ posP sy a + 2048 < 0x1000000
-  /-- the rest of the frame, from the scroll handler: what `After` asks beyond `CollideE` -/
-  after : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → AfterR sy a (trace M i k) (frame M i)
-  /-- and `CollideE` there (the field `collide` of `OnFrames`) -/
+  /-- the rest of the frame, from the scroll handler: what `After` asks of the position when he moves right there -/
+  after : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → AfterP sy a (trace M i k) (frame M i)
+  /-- and `CollideE` there (the field `collide` of `OnFrames`, with the walks of the speed and of the subspeed) -/
   collide : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → SurfaceRead.CollideE sy a (trace M i k) (frame M i)
   /-- the moving direction, the running speed and the stored speed at the frame's end are those at the scroll handler (`AfterKeep.keepH`) -/
   keepH : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → ∀ x ∈ AfterKeep.hI sy, (frame M i).ram.get! x = (trace M i k).ram.get! x
   /-- at the scroll handler the stored speed is that of the speed (`storedQ_of`, from `FrameModel.stored_path` and `AfterKeep.subs_once`) -/
   stored : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → peek (trace M i k) sy.Player_XSpeedAbsolute = absB (peek (trace M i k) sy.Player_X_Speed)
+  /-- the facing at the frame's end is that at the scroll handler, or the frame ends with the speed 0 and the subspeed 0 (`FaceKeep.keepZ_end`) -/
+  face : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs →
+    peek (frame M i) sy.PlayerFacingDir = peek (trace M i k) sy.PlayerFacingDir ∨
+      (peek (frame M i) sy.Player_X_Speed = 0 ∧ peek (frame M i) sy.Player_X_MoveForce = 0)
+  /-- a frame that moves right at the scroll handler ends with the collision bits `FF` or those of a block of Left, or with the speed 0 (`FaceKeep.bits_end`) -/
+  bitsR : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → 0 < vOf sy (trace M i k) →
+    (bitsOf sy (frame M i) = 0xFF ∨ bitsOf sy (frame M i) = sy.noLeft) ∨ peek (frame M i) sy.Player_X_Speed = 0
 
 /-- **The frame from the scroll handler to its end**, as the movement needs it: `After`, the three bytes of `AfterKeep.hI` at the frame's end are those of `Q`, and the
 stored speed at `Q` is that of the speed there -/
@@ -663,30 +737,58 @@ theorem at_subs (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = t
     have a4 := h.far
     have ev2 : vOf sy (trace M i (n₀ + k)) = sbyte (peek (trace M i (n₀ + k)) sy.Player_X_Speed) := rfl
     omega
-  exact ⟨n₀ + k, by omega, hpc, h1, hmove, After.of (h.after (n₀ + k) (by omega) hpc) (h.collide (n₀ + k) (by omega) hpc) hmove,
-    h.keepH (n₀ + k) (by omega) hpc, h.stored (n₀ + k) (by omega) hpc⟩
+  exact ⟨n₀ + k, by omega, hpc, h1, hmove, After.of (h.after (n₀ + k) (by omega) hpc) (h.collide (n₀ + k) (by omega) hpc) (h.face (n₀ + k) (by omega) hpc)
+    (h.bitsR (n₀ + k) (by omega) hpc) hmove, h.keepH (n₀ + k) (by omega) hpc, h.stored (n₀ + k) (by omega) hpc⟩
 
-/-- **A real frame is a `OneFrame`.** From the movement, proved, and the rest of the frame, `Moves`. -/
+/-- **A frame that ends with the speed 0 is a hit**, if the rest of the frame is `After` and the move put `Q` at `P(a) + 16·v(Q)`: the collision routine or the
+screen's edge stopped him, or he did not move at all. -/
+theorem hit_of_stop {Q b : Machine} {u : HIn} (A : After sy a Q b) (hz : peek b sy.Player_X_Speed = 0) (ev : (modelS sy m0 a u).v = peek Q sy.Player_X_Speed)
+    (hP : posP sy Q = posP sy a + 16 * vOf sy Q) : Hit sy m0 u a b := by
+  have ev2 : vOf sy Q = sbyte (peek Q sy.Player_X_Speed) := rfl
+  have hz0 : sbyte (0 : UInt8) = 0 := by decide
+  have hb0 : vOf sy b = 0 := by
+    show sbyte (peek b sy.Player_X_Speed) = 0
+    rw [hz]
+    exact hz0
+  unfold Hit
+  rw [ev]
+  rcases A.coll with ⟨c1, c2, _⟩ | ⟨c0, _, c2, _⟩ | ⟨c1, c2⟩
+  · have e : sbyte (peek Q sy.Player_X_Speed) = 0 := by rw [← c2, hz]; exact hz0
+    exact ⟨by omega, Or.inr (by omega)⟩
+  · have e : sbyte (peek Q sy.Player_X_Speed) = 0 := by rw [← c2, hz]; exact hz0
+    omega
+  · exact ⟨c1, by omega⟩
+
+/-- **`Pre` from the movement and the rest of the frame**, when the facing at the frame's end is that at the scroll handler -/
+theorem pre_of_after {Q b : Machine} {u : HIn} (h1 : startHS sy Q = modelS sy m0 a u) (A : AfterK sy a Q b)
+    (hfd : peek b sy.PlayerFacingDir = peek Q sy.PlayerFacingDir) : Pre sy m0 u a b := by
+  have ev : (modelS sy m0 a u).v = peek Q sy.Player_X_Speed := by rw [← h1]; rfl
+  refine ⟨?_, ?_⟩
+  · rw [← h1]
+    simp only [startHS, PState.read, A.after.f, hfd, A.md, A.rs]
+    rfl
+  · rw [ev]
+    exact A.stored
+
+/-- **A real frame is a `OneFrame`.** From the movement, proved, and the rest of the frame, `Moves`: it is `hstep` up to the collision routine and what the routine
+leaves, or (when the facing is not that of the scroll handler, so the frame ends with the speed 0) a hit. -/
 theorem one_of_moves (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (h : MovesAt sy m0 a M i n₀) (hm : ¬ Masked sy (inAt sy M i n₀) a) :
-    Pre sy m0 (inAt sy M i n₀) a (frame M i) ∧ Coll sy m0 (inAt sy M i n₀) a (frame M i) := by
+    (Pre sy m0 (inAt sy M i n₀) a (frame M i) ∧ Coll sy m0 (inAt sy M i n₀) a (frame M i)) ∨ Hit sy m0 (inAt sy M i n₀) a (frame M i) := by
   obtain ⟨k, _, _, h1, h2, A⟩ := at_subs hOK h hm
   generalize trace M i k = Q at h1 h2 A
   generalize frame M i = b at h1 h2 A ⊢
   generalize inAt sy M i n₀ = u at h1 ⊢
   have ev : (modelS sy m0 a u).v = peek Q sy.Player_X_Speed := by rw [← h1]; rfl
   have ev2 : vOf sy Q = sbyte (peek Q sy.Player_X_Speed) := rfl
-  refine ⟨⟨?_, ?_⟩, ?_⟩
-  · rw [← h1]
-    simp only [startHS, PState.read, A.after.f, A.after.fd, A.md, A.rs]
-    rfl
-  · rw [ev]
-    exact A.stored
-  · unfold Coll Hit
+  rcases A.after.fd with hfd | ⟨hz, _⟩
+  · refine Or.inl ⟨pre_of_after h1 A hfd, ?_⟩
+    unfold Coll Hit
     rw [ev]
     rcases A.after.coll with ⟨c1, c2, c3⟩ | ⟨c0, c1, c2, c3⟩ | ⟨c1, c2⟩
     · refine Or.inl ⟨by omega, by show sbyte (peek b sy.Player_X_Speed) = _; rw [c2], c3⟩
     · refine Or.inr (Or.inl ⟨by omega, by omega, by show sbyte (peek b sy.Player_X_Speed) = _; rw [c2], c3⟩)
     · exact Or.inr (Or.inr ⟨c1, by omega⟩)
+  · exact Or.inr (hit_of_stop A.after hz ev h2)
 
 /-- a clean state with the pressed side masked has the bits of a block of Left and moves right -/
 theorem masked_clean {i : HIn} (hc : Clean sy a) (hm : Masked sy i a) : bitsOf sy a = sy.noLeft ∧ 0 < vOf sy a := by
@@ -707,6 +809,16 @@ theorem pos_of_v {v : UInt8} (h : 0 < sbyte v) : v ≠ 0 ∧ v < 0x80 := by
     have h2 := v.toNat_lt
     exfalso
     omega
+
+theorem lt80_all : ∀ n : Fin 256, n.val < 128 → UInt8.ofNat n.val &&& 0x80 = 0 := by decide +kernel
+
+/-- a speed to the right has the sign bit 0 -/
+theorem sign_of_pos {v : UInt8} (h : 0 < sbyte v) : v &&& 0x80 = 0 := by
+  have h1 := (pos_of_v h).2
+  have h2 := lt80_all ⟨v.toNat, v.toNat_lt⟩ (by
+    have := UInt8.lt_iff_toNat_lt.1 h1
+    simpa using this)
+  simpa using h2
 
 /-- **The movement of a real frame with the pressed side masked.** The frame comes to the scroll handler at a machine `Q` that follows `hstep`, or has the speed 0,
 and the position moved by `16·v(Q)`. `hmk` is the check on the ROM of the masked frames. -/
@@ -744,8 +856,8 @@ theorem at_subsM (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = 
     have a4 := h.far
     have ev3 : vOf sy (trace M i (n₀ + k)) = sbyte (peek (trace M i (n₀ + k)) sy.Player_X_Speed) := rfl
     omega
-  refine ⟨n₀ + k, by omega, hpc, ?_, hmove, ⟨After.of (h.after (n₀ + k) (by omega) hpc) (h.collide (n₀ + k) (by omega) hpc) hmove,
-    h.keepH (n₀ + k) (by omega) hpc, h.stored (n₀ + k) (by omega) hpc⟩⟩
+  refine ⟨n₀ + k, by omega, hpc, ?_, hmove, ⟨After.of (h.after (n₀ + k) (by omega) hpc) (h.collide (n₀ + k) (by omega) hpc) (h.face (n₀ + k) (by omega) hpc)
+    (h.bitsR (n₀ + k) (by omega) hpc) hmove, h.keepH (n₀ + k) (by omega) hpc, h.stored (n₀ + k) (by omega) hpc⟩⟩
   rcases h1 with h1 | h1
   · exact Or.inl h1
   · right
@@ -764,19 +876,16 @@ theorem one_of_movesM (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m
   · right
     generalize inAt sy M i n₀ = u at h1 ⊢
     have ev : (modelS sy m0 a u).v = peek Q sy.Player_X_Speed := by rw [← h1]; rfl
-    refine ⟨⟨?_, ?_⟩, ?_⟩
-    · rw [← h1]
-      simp only [startHS, PState.read, A.after.f, A.after.fd, A.md, A.rs]
-      rfl
-    · rw [ev]
-      exact A.stored
-    · unfold Coll Hit
+    rcases A.after.fd with hfd | ⟨hz, _⟩
+    · refine Or.inl ⟨pre_of_after h1 A hfd, ?_⟩
+      unfold Coll Hit
       rw [ev]
       have ev2 : vOf sy Q = sbyte (peek Q sy.Player_X_Speed) := rfl
       rcases A.after.coll with ⟨c1, c2, c3⟩ | ⟨c0, c1, c2, c3⟩ | ⟨c1, c2⟩
       · refine Or.inl ⟨by omega, by show sbyte (peek b sy.Player_X_Speed) = _; rw [c2], c3⟩
       · refine Or.inr (Or.inl ⟨by omega, by omega, by show sbyte (peek b sy.Player_X_Speed) = _; rw [c2], c3⟩)
       · exact Or.inr (Or.inr ⟨c1, by omega⟩)
+    · exact Or.inr (hit_of_stop A.after hz ev h2)
   · left
     obtain ⟨hb, _⟩ := masked_clean hc hm
     rw [h1] at h2
@@ -814,8 +923,9 @@ bytes (`OnFrames.arrive`, `OnFrames.lagKeep`); what is assumed is the rest of th
 `OnFrames`, on every frame (it was the field `Moves.state`). That the position is away from both ends of its range is not a field: on the frames where it is needed it
 comes from the frames before, which follow `hstep` (`far_of_follow`). -/
 structure Moves (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Prop where
-  /-- the rest of the frame, from the scroll handler: what `After` asks beyond `CollideE` (the subspeed and a speed of at most 0 are in the field `collide` of `OnFrames`) -/
-  after : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → AfterR sy a (trace M i k) (frame M i)
+  /-- the rest of the frame, from the scroll handler: the position on a frame that moves right there (`AfterP`). The facing and the collision bits are theorems
+  (`FaceKeep.keepZ_end`, `FaceKeep.bits_end`); the position on the other frames is in the field `collide` of `OnFrames`. -/
+  after : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → AfterP sy a (trace M i k) (frame M i)
 
 theorem keepA_mem {x : UInt16} (h : x ∈ FrameModel.hBytes sy ∨ x ∈ vKeep sy ∨ x = sy.Player_CollisionBits ∨ x = sy.Player_XSpeedAbsolute ∨ x = sy.AreaType ∨
     x = sy.JumpspringAnimCtrl ∨ x = sy.SwimmingFlag ∨ x = sy.PlayerChangeSizeFlag ∨ x = sy.A_B_Buttons ∨ x = sy.PreviousA_B_Buttons) : x ∈ CtrlKeep.keepA sy := by
@@ -872,6 +982,11 @@ theorem Moves.toAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.mod
     (hkh : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → ∀ x ∈ AfterKeep.hI sy, (frame M i).ram.get! x = (trace M i k).ram.get! x)
     (honce : ∀ k k', n₀ ≤ k → n₀ ≤ k' → (trace M i k).pc = sy.PlayerSubs → (trace M i k').pc = sy.PlayerSubs → k = k')
     (hs : CtlState sy a) (hco : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → SurfaceRead.CollideE sy a (trace M i k) (frame M i))
+    (hface : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs →
+      peek (frame M i) sy.PlayerFacingDir = peek (trace M i k) sy.PlayerFacingDir ∨
+        (peek (frame M i) sy.Player_X_Speed = 0 ∧ peek (frame M i) sy.Player_X_MoveForce = 0))
+    (hbitsR : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → 0 < vOf sy (trace M i k) →
+      (bitsOf sy (frame M i) = 0xFF ∨ bitsOf sy (frame M i) = sy.noLeft) ∨ peek (frame M i) sy.Player_X_Speed = 0)
     (h : Moves sy m0 a M i n₀) : MovesAt sy m0 a M i n₀ := by
   have A := CtrlKeep.ctrl_keep hck h0 hcl harr.1 harr.2.1 harr.2.2
   have kp : ∀ x ∈ CtrlKeep.keepA sy, peek (trace M i n₀) x = peek a x := fun x hx => (A.keep x hx).trans (hlag x hx)
@@ -893,7 +1008,7 @@ theorem Moves.toAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.mod
   have hbits : bitsOf sy (trace M i n₀) = bitsOf sy a := kp _ (keepA_mem (by simp))
   have htime : ∀ n, (trace M i n).pc ≠ sy.EndlessLoop → (trace M i n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hcl n).time hn
   exact ⟨hat, fun x hx => kp x (keepA_mem (Or.inl hx)), hbits, harr.2.1, htime, hidle, hfar, h.after, hco, hkh,
-    storedQ_of hOK hfr hso hat hc (kp _ (keepA_mem (Or.inl (by simp [FrameModel.hBytes])))) hbits harr.2.1 htime hidle honce⟩
+    storedQ_of hOK hfr hso hat hc (kp _ (keepA_mem (Or.inl (by simp [FrameModel.hBytes])))) hbits harr.2.1 htime hidle honce, hface, hbitsR⟩
 
 /-- **The vertical bytes at the player's routine**, from the frame's start, as `Moves.toAt`: the vertical bytes and A are those of `a`, and bit 7 of A of the frame before
 is that of A, if it is so on `a` (`hprev`, every frame keeps it: `OnFrames.prevAll`). -/
@@ -927,23 +1042,34 @@ swimming flag and the change of size (`OnFrames.areaAll`).
 The frames as `TopSpeed.Frame`s are a definition on these machines (`frOf`), no longer data with a field `reads`: from `state` and `collide` each frame up to the
 touch is read from its machines (`OnFrames.reads`), when the touch is not later than `farN` frames after control. The collision bits at each frame's start come from
 the walk of `CollKeep` with `FrameKeep.Frames.cleanE` (`OnFrames.collAll`; the field `spareC` is gone). The speed at the end of a frame is that of the scroll handler,
-or 0, by the walk of `CollideKeep` with `cleanE` too (`OnFrames.collideAt`; the field `spareV` is gone). -/
+or 0, by the walk of `CollideKeep` with `cleanE` too (`OnFrames.collideAt`; the field `spareV` is gone). The facing and the subspeed at the end of a frame are
+those of the scroll handler, or the frame ends with the speed 0 and the subspeed 0, by the walks of `FaceKeep` (`FaceKeep.keepZ_end`); so `collide` asks the subspeed
+only on a frame that ends so (`CollideS`), and the facing is asked only on such a frame before `J` (`faceJ`). The collision bits of a frame that moves right at the
+scroll handler come from a walk too (`FaceKeep.bits_end`), so `moves` asks the position only (`AfterP`). -/
 structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat → Machine)
     {S : FrameKeep.RealRun} {a : Nat} (K : FrameKeep.Frames sy m0 S a g seq) where
   /-- the values at the end of the frame before, on every frame up to the touch: the player's state is 0, 1 or 2, and no jumpspring (the old `Moves.state`, which was
   asked on the frames from a clean state up to `T`) -/
   state : ∀ j, 1 ≤ j → j ≤ g → CtlState sy (seq (j - 1))
-  /-- each counted frame before the touch, from the scroll handler on: the collision routine and the rest of the frame keep the subspeed, and keep the position, take
-  1 px off it, or push him right but not past 1 px right of the frame's start when he moves left or not at all (`SurfaceRead.CollideR`). That they keep the speed or set
-  it to 0 is a theorem (`OnFrames.collideAt`, the walk of `CollideKeep`); with it this is `SurfaceRead.CollideE`. -/
+  /-- each counted frame before the touch, from the scroll handler on: the collision routine and the rest of the frame keep the position, take 1 px off it, or push
+  him right but not past 1 px right of the frame's start when he moves left or not at all; and a frame that ends with the speed 0 and the subspeed 0 has the subspeed
+  0 at the scroll handler (`CollideS`). That they keep the speed or set it to 0 is a theorem (the walk of `CollideKeep`), and so is that every other frame keeps the
+  subspeed (the walk of `FaceKeep`); with them this is `SurfaceRead.CollideE` (`OnFrames.collideAt`). -/
   collide : ∀ j, 1 ≤ j → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
-    SurfaceRead.CollideR sy (seq (j - 1)) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (seq j)
+    CollideS sy (seq (j - 1)) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (seq j)
   /-- a frame from a clean state: the parts outside the movement -/
   moves : ∀ j, 1 ≤ j → j ≤ T → j < g → Clean sy (seq (j - 1)) → Moves sy m0 (seq (j - 1)) (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))
   /-- the frames before `J`, from the scroll handler on: the rest of the frame leaves the bytes of `vHard` as they are there (the height, its fraction, the vertical speed,
-  the fraction counter, the vertical force, the state); he does not land on these frames. The other three bytes of `vKeep` and A are a theorem (`OnFrames.kAt`). -/
+  the fraction counter, the state); he does not land on these frames. Three other bytes of `vKeep` and A are a theorem (`OnFrames.kAt`), and so is the vertical force
+  (`OnFrames.vfAt`). -/
   vAfter : ∀ j, 1 ≤ j → j < J → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
     ∀ x ∈ vHard sy, peek (seq j) x = peek (PipeEntryRule.trace (K.fm j) (K.pad j) k) x
+  /-- the frames before `J` that end with the speed 0 and the subspeed 0 have the facing of the scroll handler at their end. On every other frame the facing is
+  that of the scroll handler by a walk (`FaceKeep.keepZ_end`); here he stands still, and a walk does not know whether a climbing tile turned him. This is what is left
+  of the old `AfterR.fd`, which asked the facing on every frame from a clean state up to `T`. -/
+  faceJ : ∀ j, 1 ≤ j → j < J → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
+    peek (seq j) sy.Player_X_Speed = 0 → peek (seq j) sy.Player_X_MoveForce = 0 →
+    peek (seq j) sy.PlayerFacingDir = peek (PipeEntryRule.trace (K.fm j) (K.pad j) k) sy.PlayerFacingDir
   /-- the frames before `J` run the collision routine as on the machine at control, from the scroll handler on -/
   box : ∀ j, 1 ≤ j → j < J → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
     BoxRun sy m0 B (seq (j - 1)) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (seq j)
@@ -964,6 +1090,12 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   vkeep : CollideKeep.vCheck sy m0 v = true
   /-- the check of the walks of four vertical bytes from the scroll handler to the frame's end (`VertKeep.keep_end`) -/
   kv : VertKeep.kCheck sy m0 v = true
+  /-- the check of the walks of the facing and of the subspeed from the scroll handler to the frame's end (`FaceKeep.keepZ_end`) -/
+  zk : FaceKeep.zCheck sy m0 v = true
+  /-- the check of the walks of the collision bits on a frame that moves right at the scroll handler (`FaceKeep.bits_end`) -/
+  bk : FaceKeep.bCheck sy m0 v = true
+  /-- the check of the walk of the vertical force from the scroll handler to the frame's end (`FaceKeep.vf_end`), with the value `FaceKeep.vfC` -/
+  vfk : FaceKeep.vfCheck sy m0 v (FaceKeep.vfC sy m0 v) = true
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
 routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
@@ -1136,7 +1268,7 @@ theorem OnFrames.areaRun {J' : Nat} (Nm : Numbers sy m0 B J') (O : OnFrames sy m
     unfold CollKeep.CollOK
     rw [st.bits, Nm.bits]
     rfl
-  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk⟩
+  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk, Nm.zk, Nm.bk, Nm.vfk⟩
 
 /-- **What a counted frame before the touch does from the scroll handler on** (`SurfaceRead.CollideE`): the field `collide` (`SurfaceRead.CollideR`), and that the
 speed at the frame's end is that of the scroll handler, or 0 (`CollideKeep.speed_end`: the walk from the player's routine, through the first walk of `AfterKeep`, and
@@ -1154,10 +1286,12 @@ theorem OnFrames.collideAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames
   have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
   have hsv := CollideKeep.speed_end hck Ar.vkeep (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
     (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
+  have hz := FaceKeep.keepZ_end hck Ar.zk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
   intro k hk hpc
   have c := O.collide j h1 h3 k hk hpc
   rw [K.ends j h1 (by omega)] at c
-  exact c.toE (hsv k hk hpc)
+  exact (c.toR (hz k hk hpc (CollideKeep.sfI sy) (by simp [FaceKeep.zI]))).toE (hsv k hk hpc)
 
 /-- **Four vertical bytes of a counted frame before the touch, from the scroll handler on**: the vertical force down, the jump's origin, the jump's halt value and A and B
 at the frame's end are those at the scroll handler (`VertKeep.keep_end`: the walk from the player's routine, through the first walk of `AfterKeep`, and from the scroll
@@ -1177,6 +1311,37 @@ theorem OnFrames.kAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0
   intro k hk' hpc x hx
   rw [K.ends j h1 (by omega)]
   exact hk k hk' hpc x hx
+
+/-- **The vertical force of a counted frame before the touch, from the scroll handler on**: at the frame's end it is that at the scroll handler, or the frame ends on
+the ground (the player's state 0) with the vertical force `FaceKeep.vfC` (`FaceKeep.vf_end`: the walk that follows the vertical force, with the player's state
+protected; the state 3 at the frame's end is excluded by the field `state`). It was a part of the field `vAfter`. -/
+theorem OnFrames.vfAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
+    ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
+      peek (seq j) sy.VerticalForce = peek (PipeEntryRule.trace (K.fm j) (K.pad j) k) sy.VerticalForce ∨
+      (peek (seq j) sy.VerticalForce = FaceKeep.vfC sy m0 v ∧ peek (seq j) sy.Player_State = 0) := by
+  have a1 := K.order (j - 1) (by omega)
+  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+  rw [show j - 1 + 1 = j by omega] at a1
+  have harr := O.arrive hck hst h1 (by omega)
+  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
+  have hk := FaceKeep.vf_end hck Ar.vfk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
+  have hs3 : peek (seq j) sy.Player_State ≠ 3 := by
+    have hs := (O.state (j + 1) (by omega) (by omega)).st
+    rw [show j + 1 - 1 = j by omega] at hs
+    intro e
+    rw [e] at hs
+    exact absurd hs (by decide)
+  intro k hk' hpc
+  have e : peek (seq j) sy.VerticalForce = peek (PipeEntryRule.trace (K.fm j) (K.pad j) k) sy.VerticalForce ∨
+      (peek (seq j) sy.VerticalForce = FaceKeep.vfC sy m0 v ∧ (peek (seq j) sy.Player_State = 0 ∨ peek (seq j) sy.Player_State = 3)) := by
+    rw [K.ends j h1 (by omega)]
+    exact hk k hk' hpc
+  rcases e with e | ⟨e1, e2 | e2⟩
+  · exact Or.inl e
+  · exact Or.inr ⟨e1, e2⟩
+  · exact absurd e2 hs3
 
 /-- **The frames not counted before the counted frame `j` keep the bytes of `CtrlKeep.keepA`**: each starts in control and does not come to the player's routine
 (`OnFrames.lagNo`), and the walk of `CtrlKeep` shows that such a frame writes none of these bytes (`CtrlKeep.keep_of_noCut`). -/
@@ -1224,9 +1389,23 @@ theorem OnFrames.movesAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMod
     (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
   have honce := GuardE.subs_onceE hck Ar.keep (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
     (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
-  exact (O.moves j h1 h2 h3 hc).toAt hck hOK hfr hso (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) hc harr (O.lagKeep hck hst Ar h1 (by omega))
+  have hz := FaceKeep.keepZ_end hck Ar.zk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
+  have hlag := O.lagKeep hck hst Ar h1 (by omega)
+  have hbits0 : peek (O.fm j) sy.Player_CollisionBits &&& sy.noLeft = sy.noLeft := by
+    rw [hlag _ (keepA_mem (by simp))]
+    rcases hc.2.2 with e | ⟨e, _⟩
+    · have e' : peek (seq (j - 1)) sy.Player_CollisionBits = 0xFF := e
+      rw [e', ff_and]
+    · have e' : peek (seq (j - 1)) sy.Player_CollisionBits = sy.noLeft := e
+      rw [e', UInt8.and_self]
+  have hb := FaceKeep.bits_end hck Ar.bk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf hbits0 harr.1 harr.2.1 harr.2.2 honce
+  exact (O.moves j h1 h2 h3 hc).toAt hck hOK hfr hso (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) hc harr hlag
     harea hA.2.1 hA.2.2 hfar hidle hkh honce (O.state j h1 (by omega))
     (O.collideAt hck hst Ar h1 h3)
+    (fun k hk hpc => hz k hk hpc (FaceKeep.fdI sy) (by simp [FaceKeep.zI]))
+    (fun k hk hpc hv => hb k hk hpc (sign_of_pos hv))
 
 /-- **Each frame from a clean state is a `OneFrame`**, by the movement: `one_of_moves`, or with the side he presses masked `one_of_movesM`. -/
 theorem one_of_frames (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hmk : FrameModel.maskOK sy m0 (FrameModel.ctrlStack sy m0) = true)
@@ -1246,15 +1425,17 @@ theorem one_of_frames (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m
     exact Or.inr e
 
 /-- **The vertical step of a frame before `J`**: from the vertical model (`VertModel.vert_model`, proved), the state at the player's routine (`moves`, and the walk of
-`CtrlKeep` for the vertical bytes up to there: `vBefore`, and bit 7 of A of the frame before: `OnFrames.prevAll`), and the frame's part from the scroll handler on (`vAfter` for six bytes, the walk of `VertKeep` for the other four: `OnFrames.kAt`). In a jump the jump's halt value is 1 at the
-frame's start, and so at its end. -/
+`CtrlKeep` for the vertical bytes up to there: `vBefore`, and bit 7 of A of the frame before: `OnFrames.prevAll`), and the frame's part from the scroll handler on
+(`vAfter` for five bytes, the walk of `VertKeep` for four others: `OnFrames.kAt`, the walk of `FaceKeep` for the vertical force: `OnFrames.vfAt`). The step is
+`VStep`: that of `vNext`, or on the ground that of `vNext` with the vertical force of a jumpspring's landing. In a jump the jump's halt value is 1 at the frame's
+start, and so at its end. -/
 theorem vert_of (hv : VertModel.vertOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hck : CtrlKeep.ctrlCheck sy m0 = true)
     (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true) (O : OnFrames sy m0 B T J g seq K)
     (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j < J) (hT : j ≤ T) (h3 : j < g)
     (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
     (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (hh : HaltOK sy (seq (j - 1))) (hpv : PrevKeep.PrevOK sy (seq (j - 1))) :
-    vsOf sy (seq j) = vNext sy m0 (seq (j - 1)) (seq j) ∧ HaltOK sy (seq j) := by
+    VStep sy m0 (FaceKeep.vfC sy m0 v) (seq (j - 1)) (seq j) ∧ HaltOK sy (seq j) := by
   have hmv := O.movesAt hck hOK hfr hso hst Ar h1 hT h3 hc hfar hidle
   have hv0 : peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.Player_X_Speed = peek (seq (j - 1)) sy.Player_X_Speed := hmv.before _ (.head _)
   have hat := hmv.at_ctrl
@@ -1277,41 +1458,62 @@ theorem vert_of (hv : VertModel.vertOK sy m0 (FrameModel.ctrlStack sy m0) = true
   have hpc' : (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)).pc = sy.PlayerSubs := by rw [e0]; exact hpc
   have va0 := O.vAfter j h1 h2 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
   have vk := O.kAt hck hst Ar h1 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
-  have va1 : ∀ x ∈ vKeep sy, peek (seq j) x = peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)) x := by
+  have vf0 := O.vfAt hck hst Ar h1 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
+  have va1 : ∀ x ∈ vHard sy, peek (seq j) x = peek (FrameModel.stepN k R) x := by
     intro x hx
-    simp only [vKeep, List.mem_cons, List.not_mem_nil, or_false] at hx
-    rcases hx with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-    · exact va0 _ (by simp [vHard])
-    · exact va0 _ (by simp [vHard])
-    · exact va0 _ (by simp [vHard])
-    · exact va0 _ (by simp [vHard])
-    · exact va0 _ (by simp [vHard])
-    · exact vk _ (by simp [VertKeep.kI])
-    · exact vk _ (by simp [VertKeep.kI])
-    · exact va0 _ (by simp [vHard])
-    · exact vk _ (by simp [VertKeep.kI])
-  have va2 : peek (seq j) sy.A_B_Buttons &&& 0x80 = peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)) sy.A_B_Buttons &&& 0x80 := by
-    have e : peek (seq j) sy.A_B_Buttons = peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)) sy.A_B_Buttons := vk _ (by simp [VertKeep.kI])
-    rw [e]
-  rw [e0] at va1 va2
-  have eb : vsOf sy (seq j) = VertModel.vsOf sy (FrameModel.stepN k R) := by
-    show Jump.VS.mk _ _ _ _ _ _ _ _ _ = Jump.VS.mk _ _ _ _ _ _ _ _ _
-    rw [va1 _ (.head _), va1 _ (.tail _ (.head _)), va1 _ (.tail _ (.tail _ (.head _))), va1 _ (.tail _ (.tail _ (.tail _ (.head _)))), va1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))), va1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))), va1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))), va1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))), va2]
+    rw [← e0]
+    exact va0 x hx
+  have vk1 : ∀ x ∈ VertKeep.kI sy, (seq j).ram.get! x = (FrameModel.stepN k R).ram.get! x := by
+    intro x hx
+    rw [← e0]
+    exact vk x hx
+  have vf1 : peek (seq j) sy.VerticalForce = peek (FrameModel.stepN k R) sy.VerticalForce ∨
+      (peek (seq j) sy.VerticalForce = FaceKeep.vfC sy m0 v ∧ peek (seq j) sy.Player_State = 0) := by
+    rw [← e0]
+    exact vf0
+  have y1 : peek (seq j) sy.Player_Y_Position = peek (FrameModel.stepN k R) sy.Player_Y_Position := va1 _ (by simp [vHard])
+  have y2 : peek (seq j) sy.Player_Y_MoveForce = peek (FrameModel.stepN k R) sy.Player_Y_MoveForce := va1 _ (by simp [vHard])
+  have y3 : peek (seq j) sy.Player_Y_Speed = peek (FrameModel.stepN k R) sy.Player_Y_Speed := va1 _ (by simp [vHard])
+  have y4 : peek (seq j) sy.Player_YMF_Dummy = peek (FrameModel.stepN k R) sy.Player_YMF_Dummy := va1 _ (by simp [vHard])
+  have y6 : peek (seq j) sy.VerticalForceDown = peek (FrameModel.stepN k R) sy.VerticalForceDown := vk1 _ (by simp [VertKeep.kI])
+  have y7 : peek (seq j) sy.JumpOrigin_Y_Position = peek (FrameModel.stepN k R) sy.JumpOrigin_Y_Position := vk1 _ (by simp [VertKeep.kI])
+  have y8 : peek (seq j) sy.Player_State = peek (FrameModel.stepN k R) sy.Player_State := va1 _ (by simp [vHard])
+  have y9 : peek (seq j) sy.DiffToHaltJump = peek (FrameModel.stepN k R) sy.DiffToHaltJump := vk1 _ (by simp [VertKeep.kI])
+  have yA : peek (seq j) sy.A_B_Buttons = peek (FrameModel.stepN k R) sy.A_B_Buttons := vk1 _ (by simp [VertKeep.kI])
+  -- the vertical bytes at the frame's end are those at the scroll handler, but the vertical force
+  have eb : vsOf sy (seq j) = { VertModel.vsOf sy (FrameModel.stepN k R) with vf := peek (seq j) sy.VerticalForce } := by
+    unfold vsOf VertModel.vsOf
+    rw [y1, y2, y3, y4, y6, y7, y8, yA]
   have ea : VertModel.vsOf sy R = vsOf sy (seq (j - 1)) := by
     show Jump.VS.mk _ _ _ _ _ _ _ _ _ = Jump.VS.mk _ _ _ _ _ _ _ _ _
     rw [vb1 _ (.head _), vb1 _ (.tail _ (.head _)), vb1 _ (.tail _ (.tail _ (.head _))), vb1 _ (.tail _ (.tail _ (.tail _ (.head _)))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))), vb2]
   have eab : peek R sy.Player_XSpeedAbsolute = peek (seq (j - 1)) sy.Player_XSpeedAbsolute := by
     rw [hat.abs, hc.2.1, hv0]
   rw [ea, eab] at hvs
-  refine ⟨?_, ?_⟩
-  · have eA : (vsOf sy (seq j)).prevA = (peek R sy.SavedJoypadBits &&& 0x80 != 0) := by
-      rw [eb, hvs, VertModel.vstepV_eq]
+  have ePA : (vsOf sy (seq j)).prevA = (VertModel.vsOf sy (FrameModel.stepN k R)).prevA := by
+    show (peek (seq j) sy.A_B_Buttons &&& 0x80 != 0) = (peek (FrameModel.stepN k R) sy.A_B_Buttons &&& 0x80 != 0)
+    rw [yA]
+  have eXA : (VertModel.vsOf sy (FrameModel.stepN k R)).prevA = (peek R sy.SavedJoypadBits &&& 0x80 != 0) := by
+    rw [hvs, VertModel.vstepV_eq]
+  have eQ : VertModel.vsOf sy (FrameModel.stepN k R) = vNext sy m0 (seq (j - 1)) (seq j) := by
     unfold vNext
-    rw [eA, eb, hvs]
+    rw [ePA, eXA]
+    exact hvs
+  refine ⟨?_, ?_⟩
+  · rcases vf1 with e | ⟨e1, e2⟩
+    · left
+      rw [eb, e, ← eQ]
+      rfl
+    · right
+      refine ⟨?_, by rw [eb, e1, eQ]⟩
+      rw [← eQ]
+      show peek (FrameModel.stepN k R) sy.Player_State = 0
+      rw [← y8]
+      exact e2
   · intro e
     show peek (seq j) sy.DiffToHaltJump = 1
-    rw [va1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))))]
-    rw [va1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))))] at e
+    rw [y9]
+    rw [y8] at e
     exact hhk e
 
 /-! ### The frames as `TopSpeed.Frame`s, read from the machines -/
@@ -1649,7 +1851,7 @@ theorem quiet_upto (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy = true) 
     (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000) :
     ∀ d, d + 1 < Jn → d + 1 < g → (∀ i, i ≤ d → Follow sy m0 (O.inp (i + 1)) (seq i) (seq (i + 1))) ∧
       (∀ i, i ≤ d + 1 → Clean sy (seq i)) ∧ bitsOf sy (seq (d + 1)) = 0xFF ∧
-      (∀ i, i ≤ d → vsOf sy (seq (i + 1)) = vNext sy m0 (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → HaltOK sy (seq i)) := by
+      (∀ i, i ≤ d → VStep sy m0 (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → HaltOK sy (seq i)) := by
   have hb0 : bitsOf sy (seq 0) = 0xFF := by
     show peek (seq 0) sy.Player_CollisionBits = 0xFF
     rw [st.bits, Nm.bits]
@@ -1670,9 +1872,10 @@ theorem quiet_upto (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy = true) 
     exact one_frame (d + 1) h1 h2 (fun i hi => h3 i (by omega)) h4 h5 (fun i hi => h6 i (by omega)) h7
 where
   one_frame (d : Nat) (h1 : d + 1 < Jn) (h2 : d + 1 < g) (hf : ∀ i, i < d → Follow sy m0 (O.inp (i + 1)) (seq i) (seq (i + 1))) (hcl : ∀ i, i ≤ d → Clean sy (seq i))
-      (hb : bitsOf sy (seq d) = 0xFF) (hvt : ∀ i, i < d → vsOf sy (seq (i + 1)) = vNext sy m0 (seq i) (seq (i + 1))) (hho : ∀ i, i ≤ d → HaltOK sy (seq i)) :
+      (hb : bitsOf sy (seq d) = 0xFF) (hvt : ∀ i, i < d → VStep sy m0 (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (seq i) (seq (i + 1)))
+      (hho : ∀ i, i ≤ d → HaltOK sy (seq i)) :
       (∀ i, i ≤ d → Follow sy m0 (O.inp (i + 1)) (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → Clean sy (seq i)) ∧ bitsOf sy (seq (d + 1)) = 0xFF ∧
-      (∀ i, i ≤ d → vsOf sy (seq (i + 1)) = vNext sy m0 (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → HaltOK sy (seq i)) := by
+      (∀ i, i ≤ d → VStep sy m0 (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → HaltOK sy (seq i)) := by
     have hc' : Clean sy (seq (d + 1 - 1)) := by simpa using hcl d (Nat.le_refl d)
     have hnm : ¬ Masked sy (inAt sy (O.fm (d + 1)) (O.pad (d + 1)) (O.arr (d + 1))) (seq (d + 1 - 1)) := by
       have hb' : bitsOf sy (seq (d + 1 - 1)) = 0xFF := by simpa using hb
@@ -1694,7 +1897,7 @@ where
     have hvd := vert_of Nm.vmodel Nm.ctrl Nm.model hfr Nm.storedW O hst Ar (j := d + 1) (by omega) h1 (by omega) h2 hc' hfd Nm.idle (by simpa using hho d (Nat.le_refl d)) hpv
     simp only [Nat.add_sub_cancel] at hvd
     obtain ⟨hvd, hhd⟩ := hvd
-    have hvt' : ∀ i, i ≤ d → vsOf sy (seq (i + 1)) = vNext sy m0 (seq i) (seq (i + 1)) := by
+    have hvt' : ∀ i, i ≤ d → VStep sy m0 (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (seq i) (seq (i + 1)) := by
       intro i hi
       by_cases hid : i < d
       · exact hvt i hid
@@ -1702,9 +1905,16 @@ where
         subst this
         exact hvd
     have hend := O.ends (d + 1) (by omega) (by omega) h2
-    have hP := (one_of_moves Nm.model hmv hnm).1
+    obtain ⟨k, hk, hpc, h3, h4, Ak⟩ := at_subs Nm.model hmv hnm
+    have hfdJ : peek (PipeTransition.frame (O.fm (d + 1)) (O.pad (d + 1))) sy.PlayerFacingDir =
+        peek (PipeEntryRule.trace (O.fm (d + 1)) (O.pad (d + 1)) k) sy.PlayerFacingDir := by
+      rcases Ak.after.fd with e | ⟨z1, z2⟩
+      · exact e
+      · have hj := O.faceJ (d + 1) (by omega) h1 h2 k hk hpc
+        rw [hend] at hj
+        exact hj z1 z2
+    have hP := pre_of_after h3 Ak hfdJ
     rw [← hend] at hP
-    obtain ⟨k, hk, hpc, h3, h4, _⟩ := at_subs Nm.model hmv hnm
     have hbr := O.box (d + 1) (by omega) h1 h2 k hk hpc
     simp only [Nat.add_sub_cancel] at hc' hP h3 h4 hbr
     generalize PipeEntryRule.trace (O.fm (d + 1)) (O.pad (d + 1)) k = Q at h3 h4 hbr
@@ -1724,10 +1934,17 @@ where
     have hvs : boxVB sy B (vsOf sy (seq (d + 1))) = true := by
       refine vCheck_spec (Jn - 1) [vsOf sy B.m] Nm.vert (fun i => vsOf sy (seq i)) (fun i => (vsOf sy (seq (i + 1))).prevA) (fun i => peek (seq i) sy.Player_XSpeedAbsolute)
         (by simp only [List.mem_singleton]; exact st.vs) (d + 1) (by omega) (by omega) (fun i hi => ?_)
-      exact ⟨stored_le (hcl i (by omega)), hvt' i (by omega)⟩
-    have hnext : vsOf sy (seq (d + 1)) = vNext sy m0 (seq d) (seq (d + 1)) := hvd
+      refine ⟨stored_le (hcl i (by omega)), ?_⟩
+      rcases hvt' i (by omega) with e | ⟨e0, e⟩
+      · exact (congrArg (· ∈ vVar (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (vNext sy m0 (seq i) (seq (i + 1)))) e).mpr (mem_vVar_self _ _)
+      · exact (congrArg (· ∈ vVar (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (vNext sy m0 (seq i) (seq (i + 1)))) e).mpr (mem_vVar_c _ e0)
+    have hy3 : (vNext sy m0 (seq d) (seq (d + 1))).y = (vsOf sy (seq (d + 1))).y ∧ (vNext sy m0 (seq d) (seq (d + 1))).vy = (vsOf sy (seq (d + 1))).vy ∧
+        (vNext sy m0 (seq d) (seq (d + 1))).st = (vsOf sy (seq (d + 1))).st := by
+      rcases hvd with e | ⟨_, e⟩
+      · exact ⟨congrArg Jump.VS.y e.symm, congrArg Jump.VS.vy e.symm, congrArg Jump.VS.st e.symm⟩
+      · exact ⟨by rw [e], by rw [e], by rw [e]⟩
     obtain ⟨v, hv, hr⟩ := hbr
-    rw [← hnext] at hr
+    rw [hy3.1, hy3.2.1, hy3.2.2] at hr
     have hy := boxV_of_B hvs
     have hx0 : (peek B.m sy.Player_X_Position).toNat < 256 := (peek B.m sy.Player_X_Position).toNat_lt
     have hmf := (peek B.m sy.SprObject_X_MoveForce).toNat_lt
@@ -2037,6 +2254,28 @@ def afterB (sy : Syms) (a Q b : Machine) : Bool :=
    (decide (0 < vOf sy Q) && posP sy b == posP sy Q && peek b sy.Player_X_Speed == peek Q sy.Player_X_Speed && bitsOf sy b == sy.noLeft) ||
    (decide (vOf sy b ≤ 0) && (decide (posP sy b ≤ posP sy Q - 256) || decide (posP sy b ≤ posP sy a + 256))))
 
+/-- what `AfterP` says, as a check -/
+def afterPB (sy : Syms) (a Q b : Machine) : Bool :=
+  !decide (0 < vOf sy Q) ||
+    ((peek b sy.Player_X_Speed != peek Q sy.Player_X_Speed || posP sy b == posP sy Q) &&
+     (peek b sy.Player_X_Speed != 0 || decide (posP sy b ≤ posP sy Q - 256) || decide (posP sy b ≤ posP sy a + 256)))
+
+/-- what `CollideS` says, as a check -/
+def collideSB (sy : Syms) (M Q b : Machine) : Bool :=
+  (peek b sy.Player_X_Speed != 0 || peek b sy.Player_X_MoveForce != 0 || peek Q sy.Player_X_MoveForce == 0) &&
+  (posP sy b == posP sy Q || posP sy b == posP sy Q - 256 ||
+    (decide (posP sy Q ≤ posP sy b) && decide (posP sy b ≤ posP sy M + 256) && decide (sbyte (peek Q sy.Player_X_Speed) ≤ 0)))
+
+/-- what `FaceKeep.keepZ_end` proves, as a check: the facing and the subspeed at the frame's end are those at the scroll handler, or the frame ends with the speed 0
+and the subspeed 0 -/
+def keepZB (sy : Syms) (Q b : Machine) : Bool :=
+  (FaceKeep.zI sy).all fun x => b.ram.get! x == Q.ram.get! x || (peek b sy.Player_X_Speed == 0 && peek b sy.Player_X_MoveForce == 0)
+
+/-- what `FaceKeep.bits_end` proves, as a check, on a frame from a clean state: if the speed's sign bit is 0 at the scroll handler, the frame ends with the collision
+bits `FF` or those of a block of Left, or with the speed 0 -/
+def bitsEndB (sy : Syms) (Q b : Machine) : Bool :=
+  peek Q sy.Player_X_Speed &&& 0x80 != 0 || bitsOf sy b == 0xFF || bitsOf sy b == sy.noLeft || peek b sy.Player_X_Speed == 0
+
 /-- what `AfterKeep.keepH` proves, as a check: the moving direction, the running speed and the stored speed at the frame's end are those at the scroll handler -/
 def keepHB (sy : Syms) (Q b : Machine) : Bool := (AfterKeep.hI sy).all fun x => b.ram.get! x == Q.ram.get! x
 
@@ -2101,6 +2340,10 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
     if subs.isEmpty then f := "no scroll handler" :: f
     if !subs.all (fun Q => afterB sy a Q b) then f := "after" :: f
     if !subs.all (fun Q => keepHB sy Q b) then f := "keepH" :: f
+    if !subs.all (fun Q => afterPB sy a Q b) then f := "afterP" :: f
+    if !subs.all (fun Q => collideSB sy a Q b) then f := "collideS" :: f
+    if !subs.all (fun Q => keepZB sy Q b) then f := "keepZ (a theorem)" :: f
+    if !subs.all (fun Q => bitsEndB sy Q b) then f := "bits_end (a theorem)" :: f
     -- `Moves.state`, and what the walk of `CtrlKeep` proves: the `lag` frames keep `keepA` (`OnFrames.lagKeep`), the bytes at the routine
     if !(CtrlKeep.keepA sy).all (fun x => peek M x == peek a x) then f := "lag" :: f
     if !ctlStateB sy a then f := "state" :: f
@@ -2114,6 +2357,8 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
       if !subs.all (fun Q => (vHard sy).all (fun x => peek b x == peek Q x)) then bf := "vAfter" :: bf
       if !subs.all (fun Q => (VertKeep.kI sy).all (fun x => b.ram.get! x == Q.ram.get! x)) then bf := "kAt (a theorem)" :: bf
       if !(decide (HaltOK sy a) && decide (HaltOK sy b)) then bf := "halt" :: bf
+      if !subs.all (fun Q => peek b sy.Player_X_Speed != 0 || peek b sy.Player_X_MoveForce != 0 || peek b sy.PlayerFacingDir == peek Q sy.PlayerFacingDir) then
+        bf := "faceJ" :: bf
     return { fails := f, boxFails := bf, next := b, subs := subs.length, inp := some (FrameModel.readIn sy R), vMid }
 
 end Smbrta.SurfaceFrames

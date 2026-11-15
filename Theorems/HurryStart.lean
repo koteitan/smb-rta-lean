@@ -228,8 +228,9 @@ structure here. -/
 structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (B : Route.Base) (kind : Nat → Kind) : Prop where
   /-- the part of the condition at the entry that the press of Start and the frames from control do not give -/
   entryRest₁ : EntryKeep.Rest d₁ (PipeTransition.entry m0) (B.seq (B.a₁ sy))
-  /-- each instruction of the frames from control to the entry meets `CleanK` of the union guard (`UpClean.CleanU`) -/
-  upCleanU : ∀ n, 1 ≤ n → n < B.a₁ sy → ∀ j, UpClean.CleanU sy m0 d₁ (PipeTransition.entry m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
+  /-- each instruction of the frames from control to the entry meets `CleanK` of the union guard (`UpClean.guardU`) -/
+  upCleanU : ∀ n, 1 ≤ n → n < B.a₁ sy → ∀ j,
+    FrameKeep.CleanK (UpClean.guardU sy m0 d₁ (PipeTransition.entry m0)) (UpClean.qOf sy m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
   /-- control within `dB` frames of the entry -/
   ctlBy₁ : controllable sy (B.seq (B.a₁ sy + B.dB)) = true
   /-- a `lag` frame is a paused frame -/
@@ -263,7 +264,7 @@ theorem Chg₁.entry {tc : TitleStart.Ctx} {t0 : Nat} (hB : TitleStart.check sy 
   have stay : ∀ n, 1 ≤ n → n < B.a₁ sy → controllable sy (B.seq n) = true := fun n h1 h2 => by
     have h := Route.firstWith_first _ 1 B.dA n h1 h2
     simpa using h
-  have hc := UpClean.upClean₁_of (S := B.toRealRun) (UpClean.prg_of_start (EntryKeep.Begin.start hB hK.near T (B.next 0)).1) C.upCleanU
+  have hc := UpClean.upClean₁_of (S := B.toRealRun) hK.q (UpClean.prg_of_start (EntryKeep.Begin.start hB hK.near T (B.next 0)).1) C.upCleanU
   exact EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay hc) hc C.entryRest₁
 
 /-- the first change as `PipeChangeEnd.PipeRunK`, as `Route.ChangesK.run₁` -/
@@ -308,7 +309,7 @@ theorem changes_startLast {nm : Names} {es : List Machine} {rt : StepWrites.Rt} 
   have stay : ∀ n, 1 ≤ n → n < B.a₁ sy → controllable sy (B.seq n) = true := fun n h1 h2 => by
     have h := Route.firstWith_first _ 1 B.dA n h1 h2
     simpa using h
-  have hc := C.upClean₁ (UpClean.prg_of_start (EntryKeep.Begin.start hB hK.near T (B.next 0)).1)
+  have hc := C.upClean₁ hK.q (UpClean.prg_of_start (EntryKeep.Begin.start hB hK.near T (B.next 0)).1)
   have he := EntryKeep.entryV_of_title hB hK T B.next (Route.firstWith_ge _ 1 B.dA) (EntryKeep.starts_of_title hB hK T B.next stay hc) hc C.entryRest₁
   exact EndRunQ.startLast hS hT hQ (C.run₂ hR he) C.ctlFirst₂ hH
 

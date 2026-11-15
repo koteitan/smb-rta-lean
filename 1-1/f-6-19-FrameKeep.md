@@ -30,7 +30,7 @@ CleanK(m)        :=  store:  a store through an index or a pointer, with the tar
 Prot_F           :=  Prot_K  ∪  {pause, AreaType, SwimmingFlag, PlayerChangeSizeFlag}        (spareK; pause is the pause byte of CtrlKeep)
 CleanK_F(m)      :=  CleanK(m) with Prot_F for Prot_K                                          (CleanK of guardF)
 cleanK_of_F      :  CleanK_F(m)  →  CleanK(m)
-Prot_E           :=  Prot_F  ∪  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}   (spareE; and collE, speedE, vertE: 1-1-f-6-21)
+Prot_E           :=  Prot_F  ∪  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}   (spareE; and collE, speedE, vertE, faceE, stateE: 1-1-f-6-21)
 CleanK_E(m)      :=  CleanK(m) with Prot_E for Prot_K                                          (CleanK of guardE)
 cleanK_of_E      :  CleanK_E(m)  →  CleanK_F(m)
 ```

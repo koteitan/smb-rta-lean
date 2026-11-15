@@ -14,8 +14,9 @@ walk's guard (`cleanV_of`), and the one-instruction condition `SpareV` (the old 
 
 So (`speed_end`): at the frame's end the speed is the speed at the scroll handler, or 0. This is `SurfaceRead.CollideE.v`.
 
-The subspeed is not done here (an experiment, `collide-keep-check`): the climbing routine sets it to 0 and the player's state to climbing, and on one path of the walk a
-platform's collision then sets the state to normal in the same frame, so neither the walk nor the state at the frame's end excludes that path.
+The subspeed is in `FaceKeep`: the climbing routine sets it to 0 after the speed, so the same walk with the end "still followed, or the speed and the subspeed are known
+to be 0" closes. With the end "still followed, or the player's state is not 0, 1 or 2" it does not (an experiment, `collide-keep-check`): the climbing routine sets the
+player's state to climbing, and on one path of the walk a platform's collision then sets the state to normal in the same frame.
 
 The searches are no part of the proof. No game data. Page: `1-1/e-2-SurfaceFrames.md`.
 -/
