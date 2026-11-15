@@ -136,10 +136,11 @@ def hsI (sy : Syms) : List Nat := [(sy.Player_X_Speed &&& 0x7FF).toNat, (sy.Play
   (sy.Player_MovingDir &&& 0x7FF).toNat, (sy.RunningSpeed &&& 0x7FF).toNat]
 
 /-- the RAM indices of the rest of the state at control that the first frames need (`OpenFrames`): the stored speed, the collision bits, the player's state, the area's type,
-the swimming flag, the change of size, the height, its high byte, the vertical speed and its fraction -/
+the swimming flag, the change of size, the height, its high byte, the vertical speed and its fraction, A and B, A and B of the frame before -/
 def stI (sy : Syms) : List Nat := [(sy.Player_XSpeedAbsolute &&& 0x7FF).toNat, (sy.Player_CollisionBits &&& 0x7FF).toNat, (sy.Player_State &&& 0x7FF).toNat,
   (sy.AreaType &&& 0x7FF).toNat, (sy.SwimmingFlag &&& 0x7FF).toNat, (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat, (sy.Player_Y_Position &&& 0x7FF).toNat,
-  (sy.Player_Y_HighPos &&& 0x7FF).toNat, (sy.Player_Y_Speed &&& 0x7FF).toNat, (sy.Player_Y_MoveForce &&& 0x7FF).toNat]
+  (sy.Player_Y_HighPos &&& 0x7FF).toNat, (sy.Player_Y_Speed &&& 0x7FF).toNat, (sy.Player_Y_MoveForce &&& 0x7FF).toNat,
+  (sy.A_B_Buttons &&& 0x7FF).toNat, (sy.PreviousA_B_Buttons &&& 0x7FF).toNat]
 
 /-- **The check on the ROM of the state at control**: frame 0 from each near or held state of the set, with any input, ends with control and the speed 0 and with the
 position's bytes, the horizontal state's bytes and the bytes of `stI` known, with the values of `m0`, or without control in a state of the set -/

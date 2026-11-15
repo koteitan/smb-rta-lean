@@ -46,15 +46,17 @@ QuietV(m)  ∧  QuietRest(m)   →   QuietP(m)                     (quietP_of_V)
 
 ## The statement
 
-`DuringV(m) := During(m) ∧ ∃ t ∈ classesV, SIn(t, m)`. `EndStatement` has two new fields; the check `endCheck` now also runs `pipeCheckV` and `exitVOK` (`endStatement_of_check`). The first line below needs no ROM.
+`DuringV(m) := During(m) ∧ (∃ t ∈ classesV, SIn(t, m)) ∧ TimerOK(m)` (`TimerOK` since round 13). `EndStatement` has two new fields; the check `endCheck` now also runs `pipeCheckV` and `exitVOK` (`endStatement_of_check`). The first line below needs no ROM.
 
 ```
 class_of_pauseV :  PauseV(M)  →  ∃ t ∈ classesV, SIn(t, M)
 pauseStep       :  ∀ m, DuringV(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
                      DuringV(frame(m, i))
-                   ∨ ( ExitAt(frame(m, i))  ∧  QuietV(frame(m, i))  ∧  ( QuietP ∧ SongAt(shape) ∧ TimerOK at frame(m, i)  →  InRowsK(frame(m, i)) ) )
+                   ∨ ( ExitAt(frame(m, i))  ∧  QuietV(frame(m, i))  ∧  TimerOK(frame(m, i))  ∧  ( QuietP ∧ SongAt(shape) at frame(m, i)  →  InRowsK(frame(m, i)) ) )
 pauseExit       :  ∀ m,  QuietV(m) ∧ QuietRest(m)  →  QuietP(m)
 ```
+
+Since round 13, `DuringV` also has `TimerOK`, the walk has the game timer's digits as its bytes `D`, and `pauseStep` gives `TimerOK` at the exit with no premise: see [the game timer at the vertical pipe](b-3-9-1-PipeTime.md). Before, the last line asked `TimerOK` at the exit as a premise of `InRowsK`.
 
 **A run.** `PipeRunK` has the new field `pause : PauseV(seq a)`, and its field `quiet` asks `QuietRest ∧ SongAt(shape)` at the exit in place of `QuietP ∧ SongAt(shape)`. Its theorems are as before, with the same arguments. In their induction every machine from the entry is `DuringV` or in the rows with tables (`PipeRunK.stepD`, `PipeRunK.atEntry`):
 

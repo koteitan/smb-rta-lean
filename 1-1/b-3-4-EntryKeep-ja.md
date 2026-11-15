@@ -129,6 +129,33 @@ Lean: `Theorems/PipeChangeEnd.lean`（`entryDropped`、`entryKnown`）、`Theore
 * `entry-writers NAME ...`: そのバイトも保つとした歩きが、そのバイトを変える場所。表のルーチンはここからです。
 * 今回の変更の前のリストで同じ確認をすると、いま証明する 5 バイトは通りました: 敵の枠 4 の種類と大砲 0 の場所（失敗する終わりがなく、フレーム 0 で分かり、本物のフレームでインデックスを通して書かれない）、左右のボタン（土管の終わりでだけ求めると失敗する終わりがない）。
 
+## 第 13 回に測ったこと: これらのフレームとパート a の条件を 1 つに
+
+`upClean₁` と、パート a の 2 つの条件は、操作から入口までの同じフレームについて述べます。`pipe.lags.clean`（ポーズのバイトも守る `Clean`。入るフレームの前の、数えるものも数えないものも全部のフレーム）と、`pipe.opening.cleanK`（`FrameKeep.guardF` の `CleanK`。数えるフレーム 1〜32）です。`pipe.clean`（入るフレームの、ルーチンの書き込みまでの `Clean`）が 4 つ目です。4 つのガードはどれも `PipeWrites` のガードに守るバイトを足したもので、アイドルループ、`late`、跳ぶ表は同じです。なので 1 つの条件で置き換えられます。
+
+```
+GU        :=  PipeWrites のガードで、EntryKeep.guardOf、LagPause.guardP、FrameKeep.guardF の守るバイトを守るもの      （128 バイト）
+q         :=  移動のルーチンの端数の書き込み  （FrameKeep.spotOf.store）
+upCleanU  :   ∀ n, 1 ≤ n < a₁ → ∀ j,  CleanK(GU, q, trace(seq n, inp n, j))
+```
+
+2 つの小さな事実を証明すれば（していません）、ここから 4 つが出ます。
+
+* `FrameKeep.cleanK_sub` は `GU` の `CleanK` から `guardF` の `CleanK` を出します。これが `opening.cleanK` です。
+* ガードの `Clean` はどの書き込みにも `Plain` を求め、`CleanK` は `q` での添字 0 の書き込みを除きます。その書き込みはプレイヤーの端数に書きます。`EntryKeep` のガード、`guardP`、`PipeWrites` のガードはこれを守りません（ROM から読む: `q` の `STA abs,X` の `X = 0` での行き先）。この 1 命令についての補題があれば、`upCleanU` から `upClean₁`、`lags.clean`、`pipe.clean` が出ます。
+* フレームが同じでなければなりません。入るフレームはフレーム `a₁ − 1` なので `pipe.lags.ix pipe.E + 1 = a₁` です。これは帰納法になります。`ix E` までのフレームは操作できる状態で終わり（数えるフレームは `Lags.ctl`、ほかは `LagFrames.keeps_frame`。こちらはそのフレームの `Clean` が要るので、先に `n < a₁`）、入るフレームは土管のルーチンで終わり（`pipe.enter`）、`Rest` は `seq a₁` が土管のルーチンだと言います。
+
+`up-clean-union FM2`（exit 0、約 8 分。`quick` はガードだけを表示）: `entry-keep-check` の走り（TAS の 368 フレーム、基準の 440、操作からのでたらめな 300 回、TAS のフレームからの 300 回、0〜39 フレーム立つ基準）で、221,490 フレーム、978,397,731 命令。`upCleanU` に反する命令はなく、前の条件のどれにも反しません。`guardF` の `CleanK` を全部のフレームで見ても同じです。`q` での添字 0 の書き込みは 211,323 回走り、毎回 `EntryKeep` のガードと `guardP` で `Plain` でした。`GU` は、`guardF` だけが守る 4 バイトを守ります: 泳ぎのフラグ、大きさの変化、城のフラグ、プレイヤーの端数です。なので `upCleanU` が 4 つの条件より多く求めるのはこれだけです: 32 番目の数えるフレームよりあとのフレームと数えないフレームで、添字やポインタを通す書き込みがこの 4 バイトに書かない（端数は `q` での添字 0 を除く）。
+
+パート a のファイルで変わること（ここではしていません）:
+
+* `Theorems/PipeFrames.lean`: フィールド `Lags.clean` がなくなり、`Lags.cleanG`、`Lags.keepsP` と、それを使う定理（`Lags.no_call`、`Lags.known_end`、`Lags.starts`、`lags_keepI` と、そのあとの定理）が、フレーム `1 ≤ n < ix E` についての仮定としてとります。
+* `Theorems/OpenFrames.lean`: フィールド `Real.cleanK` がなくなり、`O.cleanK` を読む 2 つの定理（`Real.frame_step`、`Real.flat`）が、数えるフレーム `1 ≤ t ≤ N`、`t < E` についての仮定としてとります。
+* `Theorems/Route.lean`: フィールド `Pipe.clean` がなくなり、`ChangesBase.upClean₁` が `upCleanU` になります。そこから 4 つの条件を出す定理が新しくでき、`pipe` を使う `Run` の定理がそれを渡します。非公開の `route_1_1`（`Main.lean` の `genProofs`）は `R.pipe.clean` の代わりに新しい定理を渡します。
+* `Theorems/HurryStart.lean`: `Chg₁.upClean₁` も同じです。
+
+なくなるフィールド: `chg.upClean₁`、`pipe.lags.clean`、`pipe.clean`、`pipe.opening.cleanK`。増えるフィールド: `chg.upCleanU`。
+
 ## 仮定（Lean では証明していないこと）
 
 * `entryRest₁`: 入るときの `Rest`。36 バイトです（11 回目は 55。その前は、ポーズのビットを入れて 56）。今回の前は、土管のタイマーとさらに 5 バイトも仮定していました。その前の `entry₁` は、待ちの繰り返し、タイマー、128 バイトを仮定していました。

@@ -95,7 +95,7 @@ Lean: `Theorems/RoomFall.lean`（`phC`、`finC`、`piecesC`、`yPieces`、`after
 * どのフレームで着地するか: `varc_all` は着地が `vstep` の状態の `land` であることを言いますが、どのフレームで着地するかは言いません。`Approach` の窓（かたまりの上に着地する）と `Off` のフレーム `F`（床に着く）には、ブロックの地図の上での当たり判定の足の確かめが要ります。
 * 地面かそれより下で落下中に始まるフレーム（`varc_all` はそこにいないことを求めます）。
 * 空中のフレームの入力（`air_in`、`Approach.air`）。
-* 最初の操作からの落下（状態 2、ジャンプなし）は `vstepR` で `vair_of` に入りますが、`RoomJoin` はそこで `vfall` の不等式を使います。これは仮定のままです。どんな状態 2 でも成り立つ `vstep` の和が要り、有限の確かめではありません。
+* 最初の操作からの落下（状態 2、ジャンプなし）は `vstepR` で `vair_of` に入ります。[部屋での最初の落下](c-7-5-4-FirstFall-ja.md) がそれを使います。最初の操作での状態は分かっているので、最初に立つまでの状態は有限の集まりで、そこでは `vfall`、`fall_long`、`floor_at` を証明します。壁に立ったあとは小さな形で仮定のままです（`vfall_stand`、`fall_stand`）。`C + 34` での着地（`land_at`）も仮定のままです。
 
 **ファイル.** `Theorems/RoomFall.lean`、`Theorems/VertAir.lean`、非公開の `Proof/RoomFall.lean`。
 

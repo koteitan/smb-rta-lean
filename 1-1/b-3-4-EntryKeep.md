@@ -129,6 +129,33 @@ Each byte of `restNames` alone (all exit 0; round 12, with the 36 bytes):
 * `entry-writers NAME ...`: the places where the walk with the byte kept changes it. The routines in the table come from here.
 * Run with the lists before this round's change, the same tests passed for the 5 bytes that are now proved: the kind of enemy slot 4 and the place of cannon 0 (no failing end, known at frame 0, no store through an index on real frames), and the buttons left and right (no failing end when asked only at the pipe's end).
 
+## Measured in round 13: one condition for these frames and part a's
+
+`upClean₁` and two conditions of part a speak of the same frames from control to the entry: `pipe.lags.clean` (`Clean` with the pause byte protected, on the frames before the entering frame, counted or not) and `pipe.opening.cleanK` (`CleanK` of `FrameKeep.guardF`, on the counted frames 1 to 32). `pipe.clean` (`Clean` on the entering frame up to the routine's write) is a fourth. All four guards are the guard of `PipeWrites` with more protected bytes, and they have the same idle loop, the same `late` and the same jump tables. So one condition could take their place:
+
+```
+GU        :=  the guard of PipeWrites, protecting the bytes of EntryKeep.guardOf, LagPause.guardP and FrameKeep.guardF      (128 bytes)
+q         :=  the move routine's store of the fraction  (FrameKeep.spotOf.store)
+upCleanU  :   ∀ n, 1 ≤ n < a₁ → ∀ j,  CleanK(GU, q, trace(seq n, inp n, j))
+```
+
+It would give each of the four, if two small facts are proved (not done):
+
+* `FrameKeep.cleanK_sub` gives `CleanK` of `guardF` from `CleanK` of `GU`: this is `opening.cleanK`.
+* `Clean` of a guard asks every store to be `Plain`, and `CleanK` leaves out the store at `q` with the index 0. That store writes the player's fraction. The guard of `EntryKeep`, `guardP` and the guard of `PipeWrites` do not protect it (read from the ROM: the target of `STA abs,X` at `q` with `X = 0`). A lemma on this one instruction would give `upClean₁`, `lags.clean` and `pipe.clean` from `upCleanU`.
+* The frames must be the same: the entering frame is frame `a₁ − 1`, so `pipe.lags.ix pipe.E + 1 = a₁`. This would be an induction: the frames up to `ix E` end in control (`Lags.ctl` for the counted frames, `LagFrames.keeps_frame` for the others, which needs `Clean` on the frame, so `n < a₁` first), the entering frame ends with the pipe's routine (`pipe.enter`), and `Rest` says that `seq a₁` has the pipe's routine.
+
+`up-clean-union FM2` (exit 0, about 8 min; `quick` prints only the guards): on the runs of `entry-keep-check` (the TAS 368 frames, the reference 440, 300 random runs from control, 300 from frames of the TAS, the reference with 0 to 39 frames of standing): 221,490 frames, 978,397,731 instructions. No instruction is against `upCleanU`, and none against any of the old conditions, `CleanK` of `guardF` on every frame included. The store at `q` with the index 0 ran 211,323 times, and was `Plain` for the guard of `EntryKeep` and for `guardP` every time. `GU` protects 4 bytes that only `guardF` protects: the swimming flag, the change of size, the castle flag and the player's fraction. So `upCleanU` asks more than the four conditions only this: no store through an index or a pointer writes these 4 bytes on the frames after the 32nd counted frame and on the frames not counted (the fraction: but at `q` with the index 0).
+
+What would change in part a's files (not done here):
+
+* `Theorems/PipeFrames.lean`: the field `Lags.clean` goes; `Lags.cleanG`, `Lags.keepsP` and the theorems that use them (`Lags.no_call`, `Lags.known_end`, `Lags.starts`, `lags_keepI`, and those after them) take it as a hypothesis on the frames `1 ≤ n < ix E`.
+* `Theorems/OpenFrames.lean`: the field `Real.cleanK` goes; the two theorems that read `O.cleanK` (`Real.frame_step`, `Real.flat`) take it as a hypothesis on the counted frames `1 ≤ t ≤ N`, `t < E`.
+* `Theorems/Route.lean`: the field `Pipe.clean` goes; `ChangesBase.upClean₁` becomes `upCleanU`; new theorems give the four conditions from it, and the theorems of `Run` that use `pipe` pass them on. The private `route_1_1` (`genProofs` in `Main.lean`) passes the new theorem in place of `R.pipe.clean`.
+* `Theorems/HurryStart.lean`: `Chg₁.upClean₁` the same.
+
+Fields removed: `chg.upClean₁`, `pipe.lags.clean`, `pipe.clean`, `pipe.opening.cleanK`. Field added: `chg.upCleanU`.
+
 ## Assumptions (not proved in Lean)
 
 * `entryRest₁`: `Rest` at the entry: 36 bytes (55 in round 11; 56 before, with the pause's bits). Before this round it also asked the pipe's timer and 5 more bytes; before that, `entry₁` asked the idle loop, the timer and 128 bytes.

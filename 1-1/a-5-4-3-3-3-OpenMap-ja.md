@@ -11,12 +11,13 @@
 レンガ、中身のある 2 種類のブロックです。どれもジャンプ台でも、つかまれるタイルでもありません。
 
 `seq(n)` はフレーム `n` が始まるときの機械、`ix(t)` は数えるフレーム `t` が始まるフレーム、`fm(t) = seq(ix t)` です。`tr_n(k)` はフレーム `n` の `k` 命令あとの
-機械です。`st(m)` はプレイヤーの状態、`js(m)` はジャンプ台のバイトです。`R` はブロックバッファのルーチンの `LDA (zp),Y` の場所、`addr(m)` はそれが読む番地、
+機械です。`st(m)` はプレイヤーの状態、`js(m)` はジャンプ台のバイト、`dcd(m)` は当たりのルーチンを止める旗です（`DisableCollisionDet`。RAM の番号は ROM から読みます。
+ルーチンの最初の load の operand です: `OpenMap.dcdI`）。`R` はブロックバッファのルーチンの `LDA (zp),Y` の場所、`addr(m)` はそれが読む番地、
 `val(m)` はそれが読むバイトです。
 
 ```
-MapAt(m)    :=  ∀ d ∈ B,  m(d) = m₀(d)   ∧   js(m) = 0   ∧   st(m) ≤ 2
-MapOK(m)    :=  store:  m の添字やポインタを通った書き込みは st、js、B のバイトを書かない
+MapAt(m)    :=  ∀ d ∈ B,  m(d) = m₀(d)   ∧   js(m) = 0   ∧   dcd(m) = 0   ∧   st(m) ≤ 2
+MapOK(m)    :=  store:  m の添字やポインタを通った書き込みは st、js、dcd、B のバイトを書かない
                 read:   pc(m) = R  →  addr(m) は RAM にあり、そのバイトは最初のブロックバッファ（B₁ ⊂ B）にある
 ```
 
@@ -83,6 +84,8 @@ Lean: `Theorems/OpenMap.lean`（`map_reads`、`liveT_all` を使う）。`Theore
 * 地面の上では、どのフレームも同じ高さで、縦の速さとその端数 0 で始まります。
 * 添字やポインタを通った書き込みは、ポーズのバイトも `CtrlKeep.spareI` のバイトも書きません。
 * TAS の操作のときのブロックバッファは `m₀` のものです。
+* 13 回目に `MapAt` と `MapOK` の書き込みの部分に `dcd` を足しました。それでの `open-map-check FM2 30`: 91 回、9,997 フレーム、24,433,366 命令、`MapOK` でないもの 0。
+  [本物のフレームの上の縦のモデル](a-5-7-2-OpenAir-ja.md) が当たりのルーチンで `dcd = 0` を使います。
 
 ## 仮定（Lean で証明していないもの）
 
@@ -93,8 +96,9 @@ Lean: `Theorems/OpenMap.lean`（`map_reads`、`liveT_all` を使う）。`Theore
 * **もう仮定でないもの**: `st` と `spring`（1-1-a-5-4-3-3-3）。
 * **もう仮定でないもの**: `flat`（1-1-a-5-4-3-4-1）。番地の分かっているビットでタイルを読む歩きは足の下の地面が見えます
   （[出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md)）。
-* **もう仮定でないもの**: `jump` と `ground`（1-1-a-5-7）。1 フレームごとのフィールド `vert` と、出だしの縦のモデルのどのジャンプも調べる探索から出ます
-  （[出だしのジャンプ](a-5-7-OpenJump-ja.md)）。本物のフレームがモデルに従うこと（`vert`）は証明していません。
+* **もう仮定でないもの**: `jump` と `ground`（1-1-a-5-7）。`Real.vertOK` と、出だしの縦のモデルのどのジャンプも調べる探索から出ます
+  （[出だしのジャンプ](a-5-7-OpenJump-ja.md)）。本物のフレームがモデルに従うことも、いまは証明です（`Real.vertOK`、1-1-a-5-7-2、
+  [本物のフレームの上の縦のモデル](a-5-7-2-OpenAir-ja.md)）。
 
 **ファイル.** `Theorems/OpenMap.lean`、`Theorems/OpenFrames.lean`、`Theorems/Route.lean`、非公開の `Proof/OpenMap.lean`。
 

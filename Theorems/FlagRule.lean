@@ -582,8 +582,8 @@ def mainStages (c : Ctx) : List Main :=
     { st := { name := "sprites", cut := some sy.PlayerEndLevel, keep := sprK } },
     { st := { name := "move", cut := some sy.PlayerSubs, keep := sprK }, forget := [xI, pgI] },
     { st := { name := "scroll", cut := some sy.GetXOffscreenBits, keep := sprK ++ [tmI] }, refs := refsOf c 7, forget := [tmI] },
-    { st := { name := "offscreen", cut := some sy.GetPlayerOffscreenBits, spl := [(sy.GetXOffscreenBits, c.i "ScreenRight_X_Pos"), (sy.XLdBData, c.i "ScreenEdge_X_Pos")], rel := [(sy.XLdBData, c.i "ScreenRight_X_Pos", ⟨0, 0xC0⟩), (sy.ExXOfsBS, c.i "ScreenEdge_X_Pos", ⟨0, 0xC0⟩)], keep := sprK ++ [xI, c.i "ScreenRight_X_Pos", c.i "ScreenEdge_X_Pos"] },
-      refs := refsOf c 8, forget := [xI, pgI], forgetP := [(c.i "ScreenRight_X_Pos", ⟨0, 0xC0⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0xC0⟩)] },
+    { st := { name := "offscreen", cut := some sy.GetPlayerOffscreenBits, spl := [(sy.GetXOffscreenBits, c.i "ScreenRight_X_Pos"), (sy.XLdBData, c.i "ScreenEdge_X_Pos")], rel := [(sy.XLdBData, c.i "ScreenRight_X_Pos", ⟨0, 0x80⟩), (sy.ExXOfsBS, c.i "ScreenEdge_X_Pos", ⟨0, 0x80⟩)], keep := sprK ++ [xI, c.i "ScreenRight_X_Pos", c.i "ScreenEdge_X_Pos"] },
+      refs := refsOf c 8, forget := [xI, pgI], forgetP := [(c.i "ScreenRight_X_Pos", ⟨0, 0x80⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0x80⟩)] },
     { st := { name := "collision", cut := some sy.RunStarFlagObj, keep := sprK ++ [tI, vI, xI] },
       refs := refsOf c 9, forget := [tI, vI, tmI, c.i "Player_CollisionBits"] },
     { st := { name := "the flag", cut := some sy.FloateyNumbersRoutine, turns := true, keep := sprK ++ bufK ++ [tI] },
@@ -654,9 +654,10 @@ def startKnown (c : Ctx) : List Nat :=
 
 /-- what the seeds know of the bytes that the screen's position has, and of the pause: the status is 0, 1, 0x80 or 0x81, the pause's sound queue and mode 0 to 3,
 the pause timer any value. The height of the flagpole's floating number may have any value and the number of its score is below 8: both are set by the height of the
-touch, so the castle entries after touches at other heights are in the states too. -/
+touch, so the castle entries after touches at other heights are in the states too. Mario's `x` is `x0` or `x0 + 1`: a frame that ends in the castle entry may leave him
+one pixel inside the wall. -/
 def partials (c : Ctx) : List (Nat × AB) :=
-  [(c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0xC0⟩), (c.i "ScreenRight_X_Pos", ⟨0, 0xC0⟩), (c.i "VRAM_Buffer1", AB.known 0), (c.i "Square2SoundQueue", AB.known 0),
+  [(c.x, (AB.known c.x0).join (AB.known (c.x0 + 1))), (c.i "ScrollThirtyTwo", ⟨0, 0xE0⟩), (c.i "ScreenEdge_X_Pos", ⟨0, 0x80⟩), (c.i "ScreenRight_X_Pos", ⟨0, 0x80⟩), (c.i "VRAM_Buffer1", AB.known 0), (c.i "Square2SoundQueue", AB.known 0),
    (c.gps, ⟨0, 0x7E⟩), (c.i "GamePauseTimer", AB.top), (c.i "PauseModeFlag", ⟨0, 0xFC⟩), (c.i "PauseSoundQueue", ⟨0, 0xFC⟩),
    (c.i "FlagpoleFNum_Y_Pos", AB.top), (c.i "FlagpoleScore", ⟨0, 0xF8⟩)]
 
@@ -696,9 +697,12 @@ def mainRun (c : Ctx) (B0 : List AS) : List (Main × List AS × List AS × Array
   let e := (nxOf pl 13 ++ nxOf pl 15).map (endState c mask)
   (pl.toList, groupBy (endKey c) (e.filter (·.lo == 0)) ++ groupBy (endKey c) (e.filter (·.lo != 0)))
 
-/-- the states a frame can start from: the seeds and the ends of a frame from the seeds -/
+/-- Mario's `x` as `x0` or `x0 + 1` -/
+def wideX (c : Ctx) (A : AS) : AS := A.setK c.x ((AB.known c.x0).join (AB.known (c.x0 + 1)))
+
+/-- the states a frame can start from: the seeds and the ends of a frame from the seeds, with `x` as in the seeds -/
 def frameStarts (c : Ctx) : List AS :=
-  let nx := (mainRun c (seeds c)).2
+  let nx := (mainRun c (seeds c)).2.map (wideX c)
   let keyOf := fun (S : AS) => (endKey c).map (byteOf S)
   nx.foldl (fun (B : List AS) n =>
     if B.any (n.le ·) then B
@@ -722,12 +726,15 @@ structure Fact where
   deriving Inhabited
 
 /-- Mario's bytes that the frames carry -/
-def Ctx.mario (c : Ctx) : List Nat := [c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md]
+def Ctx.mario (c : Ctx) : List Nat := [c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x]
 
 def Ctx.digits (c : Ctx) : List Nat := [c.d 0, c.d 1, c.d 2]
 
 /-- the bytes that follow a rule -/
 def Ctx.ruled (c : Ctx) : List Nat := [c.ph, c.w, c.y, c.task] ++ c.digits ++ c.mario
+
+/-- the same but Mario's `x`: the stage of the offscreen bits reads `x` and gets it from its fact -/
+def Ctx.ruledNoX (c : Ctx) : List Nat := [c.ph, c.w, c.y, c.task] ++ c.digits ++ [c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md]
 
 /-! ### Mario on a frame -/
 
@@ -735,9 +742,12 @@ def Ctx.ruled (c : Ctx) : List Nat := [c.ph, c.w, c.y, c.task] ++ c.digits ++ c.
 def q5 (a b c d e : UInt8) : Nat := a.toNat + 256 * (b.toNat + 256 * (c.toNat + 256 * (d.toNat + 256 * e.toNat)))
 def byteN (n k : Nat) : UInt8 := (n / 256 ^ k % 256).toUInt8
 
-/-- `v, F, f, A, C` before the move, as a list of known bytes -/
+/-- the six bytes as a number: Mario's `v, F, f, A, C` and his `x` at a frame's start -/
+def q6 (a b c d e g : UInt8) : Nat := q5 a b c d e + 1099511627776 * g.toNat
+
+/-- `v, F, f, A, C` and `x` before the move, as a list of known bytes -/
 def moveIn (c : Ctx) (q : Nat) : Bytes :=
-  [(c.v, byteN q 0), (c.fF, byteN q 1), (c.ff, byteN q 2), (c.abs, byteN q 3), (c.coll, byteN q 4), (c.rs, c.r.ram.get! c.rs), (c.md, c.r.ram.get! c.md)]
+  [(c.v, byteN q 0), (c.fF, byteN q 1), (c.ff, byteN q 2), (c.abs, byteN q 3), (c.coll, byteN q 4), (c.rs, c.r.ram.get! c.rs), (c.md, c.r.ram.get! c.md), (c.x, byteN q 5)]
 
 /-- what the state knows after the move: `v, F, f, A` and `x` -/
 def moveOutOf (c : Ctx) (X : AS) : Option Nat :=
@@ -749,10 +759,10 @@ def moveOutOf (c : Ctx) (X : AS) : Option Nat :=
 def moveOut (c : Ctx) (o : Nat) : Bytes :=
   [(c.v, byteN o 0), (c.fF, byteN o 1), (c.ff, byteN o 2), (c.abs, byteN o 3), (c.x, byteN o 4), (c.pg, c.pg0), (c.rs, c.r.ram.get! c.rs), (c.md, c.r.ram.get! c.md)]
 
-/-- the next numbers of Mario: `q` is `v, F, f, A, C` and `t`, `o` is what the move leaves -/
+/-- the next numbers of Mario: `q` is `v, F, f, A, C, x` and `t`, `o` is what the move leaves. After the collision `x` is `x0`: the wall pushes him back from `x0 + 1`. -/
 def nextMario (c : Ctx) (t : UInt8) (o : Nat) : Option (Nat × UInt8) :=
-  if byteN o 4 == c.x0 + 1 then some (q5 0 (byteN o 1) (byteN o 2) (byteN o 3) (c.r.ram.get! c.coll), c.sy.SideTimerBump.toUInt8)
-  else if byteN o 4 == c.x0 then some (q5 (byteN o 0) (byteN o 1) (byteN o 2) (byteN o 3) c.sy.CollisionInit.toUInt8, t - 1)
+  if byteN o 4 == c.x0 + 1 then some (q6 0 (byteN o 1) (byteN o 2) (byteN o 3) (c.r.ram.get! c.coll) c.x0, c.sy.SideTimerBump.toUInt8)
+  else if byteN o 4 == c.x0 then some (q6 (byteN o 0) (byteN o 1) (byteN o 2) (byteN o 3) c.sy.CollisionInit.toUInt8 c.x0, t - 1)
   else none
 
 /-! ## The plan of a frame -/
@@ -852,10 +862,10 @@ def lastFacts (c : Ctx) : List Fact :=
 
 /-! ### Mario's numbers -/
 
-/-- the numbers of Mario at the castle entry -/
+/-- the numbers of Mario at the castle entry: `x` is `x0` or `x0 + 1` -/
 def marioStarts (c : Ctx) : List (Nat × UInt8) :=
-  ((List.range 64).flatMap fun a => (List.range 16).map fun b =>
-    (q5 0 (a * 4).toUInt8 (b * 16).toUInt8 (c.r.ram.get! c.abs) (c.r.ram.get! c.coll), c.sy.SideTimerBump.toUInt8))
+  [c.x0, c.x0 + 1].flatMap fun x => ((List.range 64).flatMap fun a => (List.range 16).map fun b =>
+    (q6 0 (a * 4).toUInt8 (b * 16).toUInt8 (c.r.ram.get! c.abs) (c.r.ram.get! c.coll) x, c.sy.SideTimerBump.toUInt8))
 
 /-- what the move leaves from the numbers `q`: the search, no part of the proof -/
 def moveOutSearch (c : Ctx) (st : Stage) (T : AS) (q : Nat) : Option Nat :=
@@ -867,7 +877,7 @@ partial def marioClosure (c : Ctx) (st : Stage) (T : AS) (todo : List (Nat × UI
   match todo with
   | [] => (seen, tbl)
   | (q, t) :: rest =>
-    let n := q + 2 ^ 40 * t.toNat
+    let n := q + 2 ^ 48 * t.toNat
     if seen.contains n then marioClosure c st T rest seen tbl
     else
       let seen := seen.insert n ()
@@ -899,7 +909,7 @@ def marioTable (c : Ctx) (pl : Plan) : List (Nat × UInt8) × List (Nat × Nat) 
   | none => ([], [])
   | some (st, T) =>
     let r := marioClosure c st T (marioStarts c) {} {}
-    (r.1.toList.map (fun p => (p.1 % 2 ^ 40, (p.1 / 2 ^ 40).toUInt8)), r.2.toList)
+    (r.1.toList.map (fun p => (p.1 % 2 ^ 48, (p.1 / 2 ^ 48).toUInt8)), r.2.toList)
 
 /-- one of Mario's numbers on a frame -/
 def marioOK (c : Ctx) (Q : List (Nat × UInt8)) (tbl : List (Nat × Nat)) (p : Nat × UInt8) : Bool :=
@@ -915,12 +925,12 @@ def marioOK (c : Ctx) (Q : List (Nat × UInt8)) (tbl : List (Nat × Nat)) (p : N
 def marioCheck (c : Ctx) (Q : List (Nat × UInt8)) (tbl : List (Nat × Nat)) : Bool :=
   Q.all (marioOK c Q tbl)
 
-/-- the collision: where he stands, and where he has moved into the wall -/
+/-- the collision: where he stands, and where he has moved into the wall. In both cases `x` is `x0` after it. -/
 def collFacts (c : Ctx) : List Fact :=
   [2, 3, 4].flatMap fun t =>
-    { pre := [(c.task, t), (c.x, c.x0), (c.pg, c.pg0)], alts := [[(c.task, t), (c.coll, c.sy.CollisionInit.toUInt8)]] } ::
+    { pre := [(c.task, t), (c.x, c.x0), (c.pg, c.pg0)], alts := [[(c.task, t), (c.coll, c.sy.CollisionInit.toUInt8), (c.x, c.x0)]] } ::
     (List.range 7).map fun v =>
-      { pre := [(c.task, t), (c.x, c.x0 + 1), (c.pg, c.pg0), (c.v, v.toUInt8)], alts := [[(c.task, t), (c.v, 0), (c.tm, c.sy.SideTimerBump.toUInt8), (c.coll, c.r.ram.get! c.coll)]] }
+      { pre := [(c.task, t), (c.x, c.x0 + 1), (c.pg, c.pg0), (c.v, v.toUInt8)], alts := [[(c.task, t), (c.v, 0), (c.tm, c.sy.SideTimerBump.toUInt8), (c.coll, c.r.ram.get! c.coll), (c.x, c.x0)]] }
 
 /-- the move of each of Mario's numbers -/
 def moveFacts (c : Ctx) (tbl : List (Nat × Nat)) : List Fact :=
@@ -955,18 +965,18 @@ def factSpec (c : Ctx) (d : Data) : Nat → List (List Nat × List Fact)
 
 /-- the bytes that the stages keep: the bytes that their walks need known, what holds at the start, the bytes -/
 def keepSpec (c : Ctx) : Nat → List (List Nat × Bytes × List Nat)
-  | 4 => ([], [], [c.y, c.task] ++ c.digits ++ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md]) ::
+  | 4 => ([], [], [c.y, c.task] ++ c.digits ++ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md, c.x]) ::
       (List.range 20).map fun u => ([], [(c.ph, (u + 1).toUInt8)], [c.w])
   | 6 => [([], [], [c.ph, c.w, c.y, c.task] ++ c.digits ++ [c.coll, c.tm])]
   | 7 => [([], [], c.ruled ++ [c.x, c.pg])]
-  | 8 => [([], [(c.x, c.x0), (c.pg, c.pg0)], c.ruled), ([], [(c.x, c.x0 + 1), (c.pg, c.pg0)], c.ruled)]
+  | 8 => [([], [(c.x, c.x0), (c.pg, c.pg0)], c.ruledNoX), ([], [(c.x, c.x0 + 1), (c.pg, c.pg0)], c.ruledNoX)]
   | 9 => [2, 3, 4].flatMap fun t =>
       [([], [(c.task, t), (c.x, c.x0), (c.pg, c.pg0)], [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.tm, c.rs, c.md] ++ c.digits),
        ([], [(c.task, t), (c.x, c.x0 + 1), (c.pg, c.pg0)], [c.ph, c.w, c.y, c.fF, c.ff, c.abs, c.rs, c.md] ++ c.digits)]
   | 10 =>
-      [([], [(c.task, 2)], [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md]),
-       (coarseKey c 10, [(c.task, 3)], [c.ph, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md] ++ c.digits),
-       (coarseKey c 10, [(c.task, 4)], [c.ph, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md] ++ c.digits)] ++
+      [([], [(c.task, 2)], [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x]),
+       (coarseKey c 10, [(c.task, 3)], [c.ph, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x] ++ c.digits),
+       (coarseKey c 10, [(c.task, 4)], [c.ph, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x] ++ c.digits)] ++
       (((List.range ((c.r.ram.get! c.y).toNat + 1)).filter (c.lim ≤ ·)).map fun v => (coarseKey c 10, [(c.task, 3), (c.y, v.toUInt8)], [c.w])) ++
       ((List.range 127).map fun v => (coarseKey c 10, [(c.task, 3), (c.y, (c.lim - 1).toUInt8), (c.i "FireworksCounter", (v + 1).toUInt8)], [c.w]))
   | j => [(coarseKey c j, [], c.ruled)]
@@ -1025,7 +1035,7 @@ def goodOK (c : Ctx) (d : Data) (m : Machine) : Bool :=
   let v := fun (i : Nat) => m.ram.get! i
   d.B0.any (fun S => covers S m) && decide ((v c.ph).toNat < 21) && (v c.task == 2 || v c.task == 3 || v c.task == 4) &&
     (List.range (c.tmax + 1)).any (fun t => (c.ds t).all fun p => v p.1 == p.2) &&
-    d.Q.any (fun p => p.1 == q5 (v c.v) (v c.fF) (v c.ff) (v c.abs) (v c.coll) && p.2 == v c.tm) &&
+    d.Q.any (fun p => p.1 == q6 (v c.v) (v c.fF) (v c.ff) (v c.abs) (v c.coll) (v c.x) && p.2 == v c.tm) &&
     v c.rs == c.r.ram.get! c.rs && v c.md == c.r.ram.get! c.md &&
     (v c.task == 4 || (decide (c.lim - 1 ≤ (v c.y).toNat) && decide ((v c.y).toNat ≤ (c.r.ram.get! c.y).toNat))) &&
     (v c.task != 4 || decide ((v c.w).toNat ≤ c.w0))
@@ -1386,7 +1396,7 @@ structure Ok (c : Ctx) (d : Data) (m : Machine) : Prop where
   ph : (m.ram.get! c.ph).toNat < 21
   task : m.ram.get! c.task = 2 ∨ m.ram.get! c.task = 3 ∨ m.ram.get! c.task = 4
   digits : ∃ t, t ≤ c.tmax ∧ Quiet (c.ds t) m
-  mario : (q5 (m.ram.get! c.v) (m.ram.get! c.fF) (m.ram.get! c.ff) (m.ram.get! c.abs) (m.ram.get! c.coll), m.ram.get! c.tm) ∈ d.Q
+  mario : (q6 (m.ram.get! c.v) (m.ram.get! c.fF) (m.ram.get! c.ff) (m.ram.get! c.abs) (m.ram.get! c.coll) (m.ram.get! c.x), m.ram.get! c.tm) ∈ d.Q
   rs : m.ram.get! c.rs = c.r.ram.get! c.rs
   md : m.ram.get! c.md = c.r.ram.get! c.md
   y : m.ram.get! c.task ≠ 4 → c.lim - 1 ≤ (m.ram.get! c.y).toNat ∧ (m.ram.get! c.y).toNat ≤ (c.r.ram.get! c.y).toNat
@@ -1432,6 +1442,29 @@ theorem byteN_q5 (a b c d e : UInt8) :
 
 theorem tt (x : UInt8) : x.toNat.toUInt8 = x := by simp
 
+theorem byteN_q6 (a b c d e g : UInt8) :
+    byteN (q6 a b c d e g) 0 = a ∧ byteN (q6 a b c d e g) 1 = b ∧ byteN (q6 a b c d e g) 2 = c ∧ byteN (q6 a b c d e g) 3 = d ∧ byteN (q6 a b c d e g) 4 = e ∧
+      byteN (q6 a b c d e g) 5 = g := by
+  have ha := a.toNat_lt
+  have hb := b.toNat_lt
+  have hc := c.toNat_lt
+  have hd := d.toNat_lt
+  have he := e.toNat_lt
+  have hg := g.toNat_lt
+  have key : ∀ (x : UInt8) (n : Nat), n = x.toNat → n.toUInt8 = x := by
+    intro x n h
+    rw [h]
+    simp
+  simp only [byteN, q6, q5]
+  have p0 : (256 : Nat) ^ 0 = 1 := rfl
+  have p1 : (256 : Nat) ^ 1 = 256 := rfl
+  have p2 : (256 : Nat) ^ 2 = 65536 := rfl
+  have p3 : (256 : Nat) ^ 3 = 16777216 := rfl
+  have p4 : (256 : Nat) ^ 4 = 4294967296 := rfl
+  have p5 : (256 : Nat) ^ 5 = 1099511627776 := rfl
+  rw [p0, p1, p2, p3, p4, p5]
+  refine ⟨key _ _ ?_, key _ _ ?_, key _ _ ?_, key _ _ ?_, key _ _ ?_, key _ _ ?_⟩ <;> omega
+
 theorem Next.frame {cut : List UInt16} {m m' : Machine} (h : Next cut m m') : m'.frame = m.frame := by
   obtain ⟨j, hj, rfl⟩ := h
   exact hj.frame j (Nat.le_refl _)
@@ -1468,8 +1501,13 @@ theorem sim_anyPad {c : Ctx} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : Sim
 
 /-- the bytes of the rule's list -/
 theorem ruled_mem (c : Ctx) : c.ph ∈ c.ruled ∧ c.w ∈ c.ruled ∧ c.y ∈ c.ruled ∧ c.task ∈ c.ruled ∧ c.d 0 ∈ c.ruled ∧ c.d 1 ∈ c.ruled ∧ c.d 2 ∈ c.ruled ∧
-    c.v ∈ c.ruled ∧ c.fF ∈ c.ruled ∧ c.ff ∈ c.ruled ∧ c.abs ∈ c.ruled ∧ c.coll ∈ c.ruled ∧ c.tm ∈ c.ruled ∧ c.rs ∈ c.ruled ∧ c.md ∈ c.ruled := by
+    c.v ∈ c.ruled ∧ c.fF ∈ c.ruled ∧ c.ff ∈ c.ruled ∧ c.abs ∈ c.ruled ∧ c.coll ∈ c.ruled ∧ c.tm ∈ c.ruled ∧ c.rs ∈ c.ruled ∧ c.md ∈ c.ruled ∧ c.x ∈ c.ruled := by
   simp [Ctx.ruled, Ctx.digits, Ctx.mario]
+
+theorem ruledNoX_mem (c : Ctx) : c.ph ∈ c.ruledNoX ∧ c.w ∈ c.ruledNoX ∧ c.y ∈ c.ruledNoX ∧ c.task ∈ c.ruledNoX ∧ c.d 0 ∈ c.ruledNoX ∧ c.d 1 ∈ c.ruledNoX ∧
+    c.d 2 ∈ c.ruledNoX ∧ c.v ∈ c.ruledNoX ∧ c.fF ∈ c.ruledNoX ∧ c.ff ∈ c.ruledNoX ∧ c.abs ∈ c.ruledNoX ∧ c.coll ∈ c.ruledNoX ∧ c.tm ∈ c.ruledNoX ∧
+    c.rs ∈ c.ruledNoX ∧ c.md ∈ c.ruledNoX := by
+  simp [Ctx.ruledNoX, Ctx.digits]
 
 theorem fact1 {E : Env} {cut : List UInt16} {B : List AS} {pre al : Bytes} {pl : Bool} (h : FactP E cut B { pre := pre, alts := [al], plain := pl }) {f : Nat} {m m' : Machine}
     (a : AtL E f B m) (q : Quiet pre m) (n : Next cut m m') : Quiet al m' := by
@@ -1491,8 +1529,8 @@ theorem marioOK_spec {c : Ctx} {Q : List (Nat × UInt8)} {tbl : List (Nat × Nat
       exact ⟨o, x, hl, h1, h2, h3, h4, hx, by simpa using h5⟩
 
 theorem nextMario_spec {c : Ctx} {t : UInt8} {o : Nat} {x : Nat × UInt8} (h : nextMario c t o = some x) :
-    (byteN o 4 = c.x0 + 1 ∧ x = (q5 0 (byteN o 1) (byteN o 2) (byteN o 3) (c.r.ram.get! c.coll), c.sy.SideTimerBump.toUInt8)) ∨
-      (byteN o 4 = c.x0 ∧ x = (q5 (byteN o 0) (byteN o 1) (byteN o 2) (byteN o 3) c.sy.CollisionInit.toUInt8, t - 1)) := by
+    (byteN o 4 = c.x0 + 1 ∧ x = (q6 0 (byteN o 1) (byteN o 2) (byteN o 3) (c.r.ram.get! c.coll) c.x0, c.sy.SideTimerBump.toUInt8)) ∨
+      (byteN o 4 = c.x0 ∧ x = (q6 (byteN o 0) (byteN o 1) (byteN o 2) (byteN o 3) c.sy.CollisionInit.toUInt8 c.x0, t - 1)) := by
   unfold nextMario at h
   split at h
   · rename_i e
@@ -1526,7 +1564,7 @@ structure UpToFlag (c : Ctx) (d : Data) (m m10 : Machine) : Prop where
   d2 : m10.ram.get! (c.d 2) = m.ram.get! (c.d 2)
   rs : m10.ram.get! c.rs = c.r.ram.get! c.rs
   md : m10.ram.get! c.md = c.r.ram.get! c.md
-  mario : (q5 (m10.ram.get! c.v) (m10.ram.get! c.fF) (m10.ram.get! c.ff) (m10.ram.get! c.abs) (m10.ram.get! c.coll), m10.ram.get! c.tm) ∈ d.Q
+  mario : (q6 (m10.ram.get! c.v) (m10.ram.get! c.fF) (m10.ram.get! c.ff) (m10.ram.get! c.abs) (m10.ram.get! c.coll) (m10.ram.get! c.x), m10.ram.get! c.tm) ∈ d.Q
 
 /-- the cover of a stage that has one place to end at: the next stage is the one after it -/
 theorem Checked.covL {c : Ctx} {d : Data} (hC : Checked c d) {j : Nat} (hj : j < 13) (h1 : j ≠ 1) (h3 : j ≠ 3) :
@@ -1547,12 +1585,12 @@ theorem upToFlag (hC : Checked c d) {m m4 e : Machine} (hm : Ok c d m) (a4 : AtL
     (hf : m4.frame = m.frame) (he : EndsAt m4 e) :
     ∃ m10, EndsAt m10 e ∧ m10.frame = m.frame ∧ UpToFlag c d m m10 := by
   have R := ruled_mem c
-  obtain ⟨Rph, Rw, Ry, Rt, Rd0, Rd1, Rd2, Rv, RF, Rf, RA, RC, Rtm, Rrs, Rmd⟩ := R
+  obtain ⟨Rph, Rw, Ry, Rt, Rd0, Rd1, Rd2, Rv, RF, Rf, RA, RC, Rtm, Rrs, Rmd, Rx⟩ := R
   have tk3 : m.ram.get! c.task = 2 ∨ m.ram.get! c.task = 3 ∨ m.ram.get! c.task = 4 := hm.task
   -- the timers
   obtain ⟨m5, n5, a5⟩ := hC.covL (j := 4) (by decide) (by decide) (by decide) _ m4 a4 [] (List.mem_singleton.2 rfl) qn
   have F4 : ∀ f ∈ phFacts c ++ wFacts c ++ tmFacts c, FactP c.E (cutsOf c.sy 4) (d.B 4) f := hC.fact 4 (by decide) _ (List.mem_singleton.2 rfl)
-  have K4 : ∀ b ∈ [c.y, c.task] ++ c.digits ++ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md], m5.ram.get! b = m4.ram.get! b := fun b hb =>
+  have K4 : ∀ b ∈ [c.y, c.task] ++ c.digits ++ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md, c.x], m5.ram.get! b = m4.ram.get! b := fun b hb =>
     hC.keep 4 (by decide) _ List.mem_cons_self b hb _ m4 a4 qn m5 n5
   have ph5 : m5.ram.get! c.ph = (((m.ram.get! c.ph).toNat + 20) % 21).toUInt8 := by
     obtain ⟨al, ha, hq⟩ := F4 { pre := [(c.ph, (m.ram.get! c.ph).toNat.toUInt8)], alts := [[(c.ph, (((m.ram.get! c.ph).toNat + 20) % 21).toUInt8)]] }
@@ -1586,23 +1624,24 @@ theorem upToFlag (hC : Checked c d) {m m4 e : Machine} (hm : Ok c d m) (a4 : AtL
     have := fact1 (pre := [(c.tm, (m.ram.get! c.tm).toNat.toUInt8)]) (al := [(c.tm, ((m.ram.get! c.tm).toNat - 1).toUInt8)]) (pl := false)
       (F4 _ (List.mem_append_right _ (List.mem_map.2 ⟨_, List.mem_range.2 (by omega), rfl⟩))) a4 (qc (by rw [k4 _ Rtm, tt]) qn) n5
     exact qget this (List.mem_singleton.2 rfl)
-  have g6 : ∀ b ∈ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md], b ∈ c.ruled → m6.ram.get! b = m.ram.get! b := by
+  have g6 : ∀ b ∈ [c.v, c.fF, c.ff, c.abs, c.coll, c.rs, c.md, c.x], b ∈ c.ruled → m6.ram.get! b = m.ram.get! b := by
     intro b hb hr
     rw [k6 _ hr, K4 _ (List.mem_append_right _ hb), k4 _ hr]
-  have bq := byteN_q5 (m.ram.get! c.v) (m.ram.get! c.fF) (m.ram.get! c.ff) (m.ram.get! c.abs) (m.ram.get! c.coll)
+  have bq := byteN_q6 (m.ram.get! c.v) (m.ram.get! c.fF) (m.ram.get! c.ff) (m.ram.get! c.abs) (m.ram.get! c.coll) (m.ram.get! c.x)
   -- the move
   obtain ⟨m7, n7, a7⟩ := hC.covL (j := 6) (by decide) (by decide) (by decide) _ m6 a6 [] (List.mem_singleton.2 rfl) qn
   have M7 := fact1 (h := hC.fact 6 (by decide) _ (List.mem_singleton.2 rfl) _ (List.mem_map.2 ⟨_, mem_of_lookup hl, rfl⟩)) a6
     (by
       simp only [moveIn]
-      refine qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ qn))))))
+      refine qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ (qc ?_ qn)))))))
       · rw [g6 _ (by simp) Rv, bq.1]
       · rw [g6 _ (by simp) RF, bq.2.1]
       · rw [g6 _ (by simp) Rf, bq.2.2.1]
       · rw [g6 _ (by simp) RA, bq.2.2.2.1]
-      · rw [g6 _ (by simp) RC, bq.2.2.2.2]
+      · rw [g6 _ (by simp) RC, bq.2.2.2.2.1]
       · rw [g6 _ (by simp) Rrs, hm.rs]
-      · rw [g6 _ (by simp) Rmd, hm.md]) n7
+      · rw [g6 _ (by simp) Rmd, hm.md]
+      · rw [g6 _ (by simp) Rx, bq.2.2.2.2.2]) n7
   have K6 : ∀ b ∈ [c.ph, c.w, c.y, c.task] ++ c.digits ++ [c.coll, c.tm], m7.ram.get! b = m6.ram.get! b := fun b hb =>
     hC.keep 6 (by decide) _ (List.mem_singleton.2 rfl) b hb _ m6 a6 qn m7 n7
   -- the scroll
@@ -1627,28 +1666,30 @@ theorem upToFlag (hC : Checked c d) {m m4 e : Machine} (hm : Ok c d m) (a4 : AtL
   have hxm : byteN o 4 ∈ [c.x0, c.x0 + 1] := by rcases hxa with h | h <;> rw [h] <;> simp
   obtain ⟨m9, n9, a9⟩ := hC.covL (j := 8) (by decide) (by decide) (by decide) _ m8 a8 [(c.x, byteN o 4), (c.pg, c.pg0)] (List.mem_map.2 ⟨_, hxm, rfl⟩) (qc x8 (qc pg8 qn))
   have M9 := fact1 (h := hC.fact 8 (by decide) _ (List.mem_singleton.2 rfl) _ (List.mem_map.2 ⟨_, hxm, rfl⟩)) a8 (qc x8 (qc pg8 qn)) n9
-  have hk8 : (([] : List Nat), [(c.x, byteN o 4), (c.pg, c.pg0)], c.ruled) ∈ keepSpec c 8 := by
+  have hk8 : (([] : List Nat), [(c.x, byteN o 4), (c.pg, c.pg0)], c.ruledNoX) ∈ keepSpec c 8 := by
     rcases hxa with h | h
     · rw [h]; exact List.mem_cons_self
     · rw [h]; exact List.mem_cons_of_mem _ List.mem_cons_self
-  have K8 : ∀ b ∈ c.ruled, m9.ram.get! b = m8.ram.get! b := fun b hb => hC.keep 8 (by decide) _ hk8 b hb _ m8 a8 (qc x8 (qc pg8 qn)) m9 n9
+  have K8 : ∀ b ∈ c.ruledNoX, m9.ram.get! b = m8.ram.get! b := fun b hb => hC.keep 8 (by decide) _ hk8 b hb _ m8 a8 (qc x8 (qc pg8 qn)) m9 n9
+  have N := ruledNoX_mem c
+  obtain ⟨Nph, Nw, Ny, Nt, Nd0, Nd1, Nd2, Nv, NF, Nf, NA, NC, Ntm, Nrs, Nmd⟩ := N
   have x9 : m9.ram.get! c.x = byteN o 4 := qget M9 List.mem_cons_self
   have pg9 : m9.ram.get! c.pg = c.pg0 := qget M9 (List.mem_cons_of_mem _ List.mem_cons_self)
-  have ph9 : m9.ram.get! c.ph = (((m.ram.get! c.ph).toNat + 20) % 21).toUInt8 := by rw [K8 _ Rph, e8 _ (by simp), k6 _ Rph, ph5]
+  have ph9 : m9.ram.get! c.ph = (((m.ram.get! c.ph).toNat + 20) % 21).toUInt8 := by rw [K8 _ Nph, e8 _ (by simp), k6 _ Rph, ph5]
   have w9 : m9.ram.get! c.w = if m.ram.get! c.ph = 0 then ((m.ram.get! c.w).toNat - 1).toUInt8 else m.ram.get! c.w := by
-    rw [K8 _ Rw, e8 _ (by simp), k6 _ Rw, w5]
-  have y9 : m9.ram.get! c.y = m.ram.get! c.y := by rw [K8 _ Ry, e8 _ (by simp), k6 _ Ry, K4 _ (by simp), k4 _ Ry]
-  have task9 : m9.ram.get! c.task = m.ram.get! c.task := by rw [K8 _ Rt, e8 _ (by simp), k6 _ Rt, K4 _ (by simp), k4 _ Rt]
-  have d09 : m9.ram.get! (c.d 0) = m.ram.get! (c.d 0) := by rw [K8 _ Rd0, e8 _ (by simp [Ctx.digits]), k6 _ Rd0, K4 _ (by simp [Ctx.digits]), k4 _ Rd0]
-  have d19 : m9.ram.get! (c.d 1) = m.ram.get! (c.d 1) := by rw [K8 _ Rd1, e8 _ (by simp [Ctx.digits]), k6 _ Rd1, K4 _ (by simp [Ctx.digits]), k4 _ Rd1]
-  have d29 : m9.ram.get! (c.d 2) = m.ram.get! (c.d 2) := by rw [K8 _ Rd2, e8 _ (by simp [Ctx.digits]), k6 _ Rd2, K4 _ (by simp [Ctx.digits]), k4 _ Rd2]
-  have tm9 : m9.ram.get! c.tm = m.ram.get! c.tm - 1 := by rw [K8 _ Rtm, e8 _ (by simp), tm6, pred_byte ht0]
-  have v9 : m9.ram.get! c.v = byteN o 0 := by rw [K8 _ Rv, K7 _ (List.mem_append_left _ Rv)]; exact qget (v := byteN o 0) M7 (by simp [moveOut])
-  have F9 : m9.ram.get! c.fF = byteN o 1 := by rw [K8 _ RF, K7 _ (List.mem_append_left _ RF)]; exact qget (v := byteN o 1) M7 (by simp [moveOut])
-  have f9 : m9.ram.get! c.ff = byteN o 2 := by rw [K8 _ Rf, K7 _ (List.mem_append_left _ Rf)]; exact qget (v := byteN o 2) M7 (by simp [moveOut])
-  have A9 : m9.ram.get! c.abs = byteN o 3 := by rw [K8 _ RA, K7 _ (List.mem_append_left _ RA)]; exact qget (v := byteN o 3) M7 (by simp [moveOut])
-  have rs9 : m9.ram.get! c.rs = c.r.ram.get! c.rs := by rw [K8 _ Rrs, K7 _ (List.mem_append_left _ Rrs)]; exact qget (v := c.r.ram.get! c.rs) M7 (by simp [moveOut])
-  have md9 : m9.ram.get! c.md = c.r.ram.get! c.md := by rw [K8 _ Rmd, K7 _ (List.mem_append_left _ Rmd)]; exact qget (v := c.r.ram.get! c.md) M7 (by simp [moveOut])
+    rw [K8 _ Nw, e8 _ (by simp), k6 _ Rw, w5]
+  have y9 : m9.ram.get! c.y = m.ram.get! c.y := by rw [K8 _ Ny, e8 _ (by simp), k6 _ Ry, K4 _ (by simp), k4 _ Ry]
+  have task9 : m9.ram.get! c.task = m.ram.get! c.task := by rw [K8 _ Nt, e8 _ (by simp), k6 _ Rt, K4 _ (by simp), k4 _ Rt]
+  have d09 : m9.ram.get! (c.d 0) = m.ram.get! (c.d 0) := by rw [K8 _ Nd0, e8 _ (by simp [Ctx.digits]), k6 _ Rd0, K4 _ (by simp [Ctx.digits]), k4 _ Rd0]
+  have d19 : m9.ram.get! (c.d 1) = m.ram.get! (c.d 1) := by rw [K8 _ Nd1, e8 _ (by simp [Ctx.digits]), k6 _ Rd1, K4 _ (by simp [Ctx.digits]), k4 _ Rd1]
+  have d29 : m9.ram.get! (c.d 2) = m.ram.get! (c.d 2) := by rw [K8 _ Nd2, e8 _ (by simp [Ctx.digits]), k6 _ Rd2, K4 _ (by simp [Ctx.digits]), k4 _ Rd2]
+  have tm9 : m9.ram.get! c.tm = m.ram.get! c.tm - 1 := by rw [K8 _ Ntm, e8 _ (by simp), tm6, pred_byte ht0]
+  have v9 : m9.ram.get! c.v = byteN o 0 := by rw [K8 _ Nv, K7 _ (List.mem_append_left _ Rv)]; exact qget (v := byteN o 0) M7 (by simp [moveOut])
+  have F9 : m9.ram.get! c.fF = byteN o 1 := by rw [K8 _ NF, K7 _ (List.mem_append_left _ RF)]; exact qget (v := byteN o 1) M7 (by simp [moveOut])
+  have f9 : m9.ram.get! c.ff = byteN o 2 := by rw [K8 _ Nf, K7 _ (List.mem_append_left _ Rf)]; exact qget (v := byteN o 2) M7 (by simp [moveOut])
+  have A9 : m9.ram.get! c.abs = byteN o 3 := by rw [K8 _ NA, K7 _ (List.mem_append_left _ RA)]; exact qget (v := byteN o 3) M7 (by simp [moveOut])
+  have rs9 : m9.ram.get! c.rs = c.r.ram.get! c.rs := by rw [K8 _ Nrs, K7 _ (List.mem_append_left _ Rrs)]; exact qget (v := c.r.ram.get! c.rs) M7 (by simp [moveOut])
+  have md9 : m9.ram.get! c.md = c.r.ram.get! c.md := by rw [K8 _ Nmd, K7 _ (List.mem_append_left _ Rmd)]; exact qget (v := c.r.ram.get! c.md) M7 (by simp [moveOut])
   have htk : m.ram.get! c.task ∈ ([2, 3, 4] : List UInt8) := by rcases tk3 with h | h | h <;> rw [h] <;> simp
   -- the collision
   have last : ∃ m10, Next (cutsOf c.sy 9) m9 m10 ∧ AtL c.E m.frame (d.B 10) m10 ∧ UpToFlag c d m m10 := by
@@ -1674,7 +1715,7 @@ theorem upToFlag (hC : Checked c d) {m m4 e : Machine} (hm : Ok c d m) (a4 : AtL
       · rw [K9 _ (by simp), md9]
       · rw [hxB] at hxQ
         rw [qget (v := 0) M10 (by simp), K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), qget (v := c.r.ram.get! c.coll) M10 (by simp),
-          qget (v := c.sy.SideTimerBump.toUInt8) M10 (by simp), F9, f9, A9]
+          qget (v := c.x0) M10 (by simp), qget (v := c.sy.SideTimerBump.toUInt8) M10 (by simp), F9, f9, A9]
         exact hxQ
     · have q9 : Quiet [(c.task, m.ram.get! c.task), (c.x, c.x0), (c.pg, c.pg0)] m9 := qc task9 (qc (x9.trans hA) (qc pg9 qn))
       obtain ⟨m10, n10, a10⟩ := hC.covL (j := 9) (by decide) (by decide) (by decide) _ m9 a9 _ (List.mem_flatMap.2 ⟨_, htk, List.mem_cons_self⟩) q9
@@ -1692,7 +1733,8 @@ theorem upToFlag (hC : Checked c d) {m m4 e : Machine} (hm : Ok c d m) (a4 : AtL
       · rw [K9 _ (by simp), rs9]
       · rw [K9 _ (by simp), md9]
       · rw [hxA] at hxQ
-        rw [K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), qget (v := c.sy.CollisionInit.toUInt8) M10 (by simp), K9 _ (by simp), v9, F9, f9, A9, tm9]
+        rw [K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), K9 _ (by simp), qget (v := c.sy.CollisionInit.toUInt8) M10 (by simp), qget (v := c.x0) M10 (by simp),
+          K9 _ (by simp), v9, F9, f9, A9, tm9]
         exact hxQ
   obtain ⟨m10, n10, a10, U⟩ := last
   have hE := ((((((he.next n5 (atL_fdot a5)).next n6 (atL_fdot a6)).next n7
@@ -1764,11 +1806,11 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
   have F10 : ∀ f ∈ digitFacts c, FactP c.E (cutsOf c.sy 10) (d.B 10) f := hC.fact 10 (by decide) _ List.mem_cons_self
   have G10 : ∀ f ∈ yFacts c ++ upFacts c ++ lastFacts c, FactP c.E (cutsOf c.sy 10) (d.B 10) f :=
     hC.fact 10 (by decide) _ (List.mem_cons_of_mem _ List.mem_cons_self)
-  have mario' : ∀ m11 : Machine, (∀ b ∈ [c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md], m11.ram.get! b = m10.ram.get! b) →
-      (q5 (m11.ram.get! c.v) (m11.ram.get! c.fF) (m11.ram.get! c.ff) (m11.ram.get! c.abs) (m11.ram.get! c.coll), m11.ram.get! c.tm) ∈ d.Q ∧
+  have mario' : ∀ m11 : Machine, (∀ b ∈ [c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x], m11.ram.get! b = m10.ram.get! b) →
+      (q6 (m11.ram.get! c.v) (m11.ram.get! c.fF) (m11.ram.get! c.ff) (m11.ram.get! c.abs) (m11.ram.get! c.coll) (m11.ram.get! c.x), m11.ram.get! c.tm) ∈ d.Q ∧
       m11.ram.get! c.rs = c.r.ram.get! c.rs ∧ m11.ram.get! c.md = c.r.ram.get! c.md := by
     intro m11 h
-    rw [h c.v (by simp), h c.fF (by simp), h c.ff (by simp), h c.abs (by simp), h c.coll (by simp), h c.tm (by simp), h c.rs (by simp), h c.md (by simp)]
+    rw [h c.v (by simp), h c.fF (by simp), h c.ff (by simp), h c.abs (by simp), h c.coll (by simp), h c.x (by simp), h c.tm (by simp), h c.rs (by simp), h c.md (by simp)]
     exact ⟨U.mario, U.rs, U.md⟩
   rcases hm.task with h2 | h3 | h4
   · -- the digits count down
@@ -1776,7 +1818,7 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
     obtain ⟨m11, n11, a11⟩ := hC.covL (j := 10) (by decide) (by decide) (by decide) _ m10 U.at10 [(c.task, 2)] List.mem_cons_self r10
     refine ⟨m11, n11, a11, ?_⟩
     have M := fact1 (h := F10 _ (List.mem_map.2 ⟨t, List.mem_range.2 (by omega), rfl⟩)) U.at10 (qc (U.task.trans h2) q10) n11
-    have K : ∀ b ∈ [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md], m11.ram.get! b = m10.ram.get! b := fun b hb =>
+    have K : ∀ b ∈ [c.ph, c.w, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x], m11.ram.get! b = m10.ram.get! b := fun b hb =>
       hC.keep 10 (by decide) _ List.mem_cons_self b hb _ m10 U.at10 r10 m11 n11
     have qd : Quiet (c.ds (t - 1)) m11 := fun p hp => M p (List.mem_cons_of_mem _ hp)
     have tk : m11.ram.get! c.task = if t == 0 then 3 else 2 := qget M List.mem_cons_self
@@ -1806,7 +1848,7 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
     have r10 : Quiet [(c.task, 3)] m10 := qc (U.task.trans h3) qn
     obtain ⟨m11, n11, a11⟩ := hC.covL (j := 10) (by decide) (by decide) (by decide) _ m10 U.at10 [(c.task, 3)] (List.mem_cons_of_mem _ List.mem_cons_self) r10
     refine ⟨m11, n11, a11, ?_⟩
-    have K : ∀ b ∈ [c.ph, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md] ++ c.digits, m11.ram.get! b = m10.ram.get! b := fun b hb =>
+    have K : ∀ b ∈ [c.ph, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x] ++ c.digits, m11.ram.get! b = m10.ram.get! b := fun b hb =>
       hC.keep 10 (by decide) _ (List.mem_cons_of_mem _ List.mem_cons_self) b hb _ m10 U.at10 r10 m11 n11
     have ph11 : (m11.ram.get! c.ph).toNat = ((m.ram.get! c.ph).toNat + 20) % 21 := by rw [K _ (by simp), U.ph]
     have qd : Quiet (c.ds t) m11 := ds_of ((K _ (by simp [Ctx.digits])).trans U.d0) ((K _ (by simp [Ctx.digits])).trans U.d1)
@@ -1880,7 +1922,7 @@ theorem flagStage (hC : Checked c d) {m m10 : Machine} (hm : Ok c d m) (U : UpTo
     have r10 : Quiet [(c.task, 4)] m10 := qc (U.task.trans h4) qn
     obtain ⟨m11, n11, a11⟩ := hC.covL (j := 10) (by decide) (by decide) (by decide) _ m10 U.at10 [(c.task, 4)] (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)) r10
     refine ⟨m11, n11, a11, ?_⟩
-    have K : ∀ b ∈ [c.ph, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md] ++ c.digits, m11.ram.get! b = m10.ram.get! b := fun b hb =>
+    have K : ∀ b ∈ [c.ph, c.y, c.v, c.fF, c.ff, c.abs, c.coll, c.tm, c.rs, c.md, c.x] ++ c.digits, m11.ram.get! b = m10.ram.get! b := fun b hb =>
       hC.keep 10 (by decide) _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)) b hb _ m10 U.at10 r10 m11 n11
     have ph11 : (m11.ram.get! c.ph).toNat = ((m.ram.get! c.ph).toNat + 20) % 21 := by rw [K _ (by simp), U.ph]
     have qd : Quiet (c.ds t) m11 := ds_of ((K _ (by simp [Ctx.digits])).trans U.d0) ((K _ (by simp [Ctx.digits])).trans U.d1)
@@ -1951,10 +1993,10 @@ theorem cnt_same {c : Ctx} {m m' : Machine} (h : ∀ b ∈ c.ruled, m'.ram.get! 
   simp only [cnt, h _ R.1, h _ R.2.1, h _ R.2.2.1, h _ R.2.2.2.1, h _ R.2.2.2.2.1, h _ R.2.2.2.2.2.1, h _ R.2.2.2.2.2.2.1]
 
 theorem ok_same {c : Ctx} {d : Data} {m m' : Machine} (h : ∀ b ∈ c.ruled, m'.ram.get! b = m.ram.get! b) (o : Ok c d m) : Ok c d m' := by
-  obtain ⟨Rph, Rw, Ry, Rt, Rd0, Rd1, Rd2, Rv, RF, Rf, RA, RC, Rtm, Rrs, Rmd⟩ := ruled_mem c
+  obtain ⟨Rph, Rw, Ry, Rt, Rd0, Rd1, Rd2, Rv, RF, Rf, RA, RC, Rtm, Rrs, Rmd, Rx⟩ := ruled_mem c
   obtain ⟨t, ht, hq⟩ := o.digits
   exact ⟨by rw [h _ Rph]; exact o.ph, by rw [h _ Rt]; exact o.task, ⟨t, ht, ds_of (h _ Rd0) (h _ Rd1) (h _ Rd2) hq⟩,
-    by rw [h _ Rv, h _ RF, h _ Rf, h _ RA, h _ RC, h _ Rtm]; exact o.mario, by rw [h _ Rrs]; exact o.rs, by rw [h _ Rmd]; exact o.md,
+    by rw [h _ Rv, h _ RF, h _ Rf, h _ RA, h _ RC, h _ Rx, h _ Rtm]; exact o.mario, by rw [h _ Rrs]; exact o.rs, by rw [h _ Rmd]; exact o.md,
     by rw [h _ Rt, h _ Ry]; exact o.y, by rw [h _ Rt, h _ Rw]; exact o.w⟩
 
 theorem quiet_start {c : Ctx} {d : Data} (hC : Checked c d) {E : Env} {f : Nat} {m : Machine} (h : AtL E f d.B0 m) : Quiet (startFacts c) m := by

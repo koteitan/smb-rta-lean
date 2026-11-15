@@ -155,8 +155,13 @@ def checkT (R : Rd) (C : CfgK) (st : List AS) : Bool :=
 def stI (sy : Syms) : Nat := (sy.Player_State &&& 0x7FF).toNat
 def jI (sy : Syms) : Nat := (sy.JumpspringAnimCtrl &&& 0x7FF).toNat
 
-/-- the bytes that a store through an index or a pointer must not write: the player's state, the jumpspring byte, the block buffers -/
-def keepI (sy : Syms) : List Nat := stI sy :: jI sy :: bufI sy
+/-- the RAM index of the flag that disables the collision routine: the operand of the routine's first instruction, a load of it -/
+def dcdI (sy : Syms) (m0 : Machine) : Nat :=
+  (((romByte m0 (sy.PlayerBGCollision + 1)).toUInt16 ||| ((romByte m0 (sy.PlayerBGCollision + 2)).toUInt16 <<< 8)) &&& 0x7FF).toNat
+
+/-- the bytes that a store through an index or a pointer must not write: the player's state, the jumpspring byte, the block buffers, the flag that disables the
+collision routine -/
+def keepI (sy : Syms) (m0 : Machine) : List Nat := stI sy :: jI sy :: (bufI sy ++ [dcdI sy m0])
 
 /-- the tiles of the buffers of `m0`: each value once -/
 def tilesOf (sy : Syms) (m0 : Machine) : List UInt8 :=
@@ -166,12 +171,12 @@ def tilesOf (sy : Syms) (m0 : Machine) : List UInt8 :=
 def rdOf (sy : Syms) (m0 : Machine) : Rd :=
   { pc := PipeEntryRule.findOp m0 sy.BlockBufferCollision 0xB1 64, tl := tilesOf sy m0, buf := (bufI sy).map fun i => (i, m0.ram.get! i) }
 
-/-- the watched bits: the block buffers with the values of `m0`, and the jumpspring byte 0 -/
-def mapW (sy : Syms) (m0 : Machine) : List Watch := bufW sy m0 ++ [(jI sy, 0xFF, 0)]
+/-- the watched bits: the block buffers with the values of `m0`, the jumpspring byte 0, and the flag that disables the collision routine 0 -/
+def mapW (sy : Syms) (m0 : Machine) : List Watch := bufW sy m0 ++ [(jI sy, 0xFF, 0), (dcdI sy m0, 0xFF, 0)]
 
 /-- the guard: that of a frame in control (`guardOf`), with the player's state, the jumpspring byte and the block buffers among the bytes that a store with a target
 not known does not touch -/
-def guardM (sy : Syms) (m0 : Machine) : Guard := { guardOf sy m0 with prot := keepI sy ++ (guardOf sy m0).prot }
+def guardM (sy : Syms) (m0 : Machine) : Guard := { guardOf sy m0 with prot := keepI sy m0 ++ (guardOf sy m0).prot }
 
 /-- the player's state is known and is 0, 1 or 2 -/
 def stOK (sy : Syms) (B : AS) : Bool := (B.getK (stI sy)).isK && decide ((B.getK (stI sy)).v ≤ 2)
@@ -218,13 +223,13 @@ def mapCheck (sy : Syms) (m0 : Machine) : Bool :=
 /-- **What is asked of one instruction**, besides `Clean` of `guardOf`: a store through an index or a pointer does not write the player's state, the jumpspring byte or the
 block buffers, and the read of the block buffer routine is in the first block buffer (the one of the page he is on) -/
 structure MapOK (sy : Syms) (m0 : Machine) (m : Machine) : Prop where
-  store : ∀ t, PipeWrites.wTarget (PipeWrites.opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ∉ keepI sy
+  store : ∀ t, PipeWrites.wTarget (PipeWrites.opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ∉ keepI sy m0
   read : m.pc = (rdOf sy m0).pc → ScreenPage.readAddr m < 0x2000 ∧ (ScreenPage.readAddr m &&& 0x7FF).toNat ∈ bufI1 sy
 
 /-- `MapOK`, for a program -/
 def mapOKB (sy : Syms) (m0 : Machine) (m : Machine) : Bool :=
   (match PipeWrites.wTarget (PipeWrites.opAt m) m with
-   | some t => !(decide (t < 0x2000) && (keepI sy).contains (t &&& 0x7FF).toNat)
+   | some t => !(decide (t < 0x2000) && (keepI sy m0).contains (t &&& 0x7FF).toNat)
    | none => true) &&
   (m.pc != (rdOf sy m0).pc || (decide (ScreenPage.readAddr m < 0x2000) && (bufI1 sy).contains (ScreenPage.readAddr m &&& 0x7FF).toNat))
 
@@ -584,14 +589,14 @@ open TitleStart
 /-- **The check on the ROM of the state at control**: frame 0 from each near or held state of the set, with any input, ends with control and the speed 0, the player's
 state 0, the jumpspring byte 0 and the two buffers known with the values of `m0`, or without control in a state of the set -/
 def titleMapCheck (sy : Syms) (c : Ctx) (m0 : Machine) : Bool :=
-  frame0Check sy c (fun B => finNear sy B && ((stI sy, 0) :: (jI sy, 0) :: (bufI sy).map fun i => (i, m0.ram.get! i)).all (TaintRun.knownIs B))
+  frame0Check sy c (fun B => finNear sy B && ((stI sy, 0) :: (jI sy, 0) :: (dcdI sy m0, 0) :: (bufI sy).map fun i => (i, m0.ram.get! i)).all (TaintRun.knownIs B))
 
 /-- **At control** (the machine after frame 0, from the press of Start on the title) the buffers are those of `m0`, the jumpspring byte is 0 and the player's state 0 -/
 theorem Begin.map₁ {c : Ctx} {t0 : Nat} {seq : Nat → Machine} {inp : Nat → UInt8} (hB : check sy c t0 = true) (hc : titleMapCheck sy c m0 = true)
     (B : Begin sy c seq inp) (hn : seq 1 = frame (seq 0) (inp 0)) : MapAt sy m0 (seq 1) ∧ (seq 1).ram.get! (stI sy) = 0 := by
   obtain ⟨Bs, hf, hb⟩ := B.frame0 hB hc hn
   simp only [Bool.and_eq_true, List.all_eq_true] at hf
-  have hk : ∀ p ∈ (stI sy, (0 : UInt8)) :: (jI sy, (0 : UInt8)) :: (bufI sy).map (fun i => (i, m0.ram.get! i)), (seq 1).ram.get! p.1 = p.2 :=
+  have hk : ∀ p ∈ (stI sy, (0 : UInt8)) :: (jI sy, (0 : UInt8)) :: (dcdI sy m0, (0 : UInt8)) :: (bufI sy).map (fun i => (i, m0.ram.get! i)), (seq 1).ram.get! p.1 = p.2 :=
     fun p hp => TaintRun.sim_known hb (hf.2 p hp)
   have e0 : (seq 1).ram.get! (stI sy) = 0 := hk _ (List.Mem.head _)
   refine ⟨⟨?_, by rw [e0]; decide⟩, e0⟩
@@ -600,10 +605,13 @@ theorem Begin.map₁ {c : Ctx} {t0 : Nat} {seq : Nat → Machine} {inp : Nat →
   rcases List.mem_append.1 hw with h | h
   · obtain ⟨i, hi, rfl⟩ := List.mem_map.1 h
     show (seq 1).ram.get! i &&& 0xFF = m0.ram.get! i &&& 0xFF
-    rw [hk (i, m0.ram.get! i) (List.Mem.tail _ (List.Mem.tail _ (List.mem_map.2 ⟨i, hi, rfl⟩)))]
-  · rw [List.mem_singleton.1 h]
-    show (seq 1).ram.get! (jI sy) &&& 0xFF = 0 &&& 0xFF
-    rw [hk _ (List.Mem.tail _ (List.Mem.head _))]
+    rw [hk (i, m0.ram.get! i) (List.Mem.tail _ (List.Mem.tail _ (List.Mem.tail _ (List.mem_map.2 ⟨i, hi, rfl⟩))))]
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with h | h <;> subst h
+    · show (seq 1).ram.get! (jI sy) &&& 0xFF = 0 &&& 0xFF
+      rw [hk _ (List.Mem.tail _ (List.Mem.head _))]
+    · show (seq 1).ram.get! (dcdI sy m0) &&& 0xFF = 0 &&& 0xFF
+      rw [hk _ (List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _)))]
 
 end
 
@@ -611,7 +619,7 @@ end
 
 /-- `Clean` of a guard and the stores of `MapOK` give `CleanK` of the guard with the bytes of `keepI` protected too -/
 theorem cleanK_with {sy : Syms} {m0 m : Machine} {G : Guard} (h : Clean G m) (hm : MapOK sy m0 m) :
-    CleanK { G with prot := keepI sy ++ G.prot } StartRun.noSpot.store m := by
+    CleanK { G with prot := keepI sy m0 ++ G.prot } StartRun.noSpot.store m := by
   refine ⟨fun t ht _ => ?_, h.read, h.jump, h.time⟩
   rcases h.store t ht with ⟨h1, h2⟩ | h1
   · refine Or.inl ⟨h1, fun hx => ?_⟩

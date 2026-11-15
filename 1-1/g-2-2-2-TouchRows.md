@@ -52,6 +52,8 @@ The music of the level's end starts on row 66. From then on a pause can delay th
 ∀ n,  touch's end ≤ n ≤ E  →  ¬castle(seq n),        castle(seq(E + 1))
 ```
 
+This condition is now `Run.FirstCastle` (from `b₂` on), with `castle(seq(E + 1))` as `Run.castle_E` ([the castle join](0-5-2-1-CastleJoin.md)). Up to the end of the touch's frame it is proved (`Run.noCastle_up`). With it, `E` is the first frame from `b₂` on that ends with the castle flag (`Run.E_first`), and with `LagUp` `c` is the first counted frame with it (`Run.c_first`). The frames from the touch's end to `E` stay a hypothesis (`hA` of `Run.firstCastle_of`); the rows above would give it.
+
 ## What is not proved
 
 * Nothing on this page is proved. `flag.entry`, `flag.task_E` and `flag.y_E` stay hypotheses (1-1-g-2-2).

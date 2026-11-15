@@ -242,8 +242,8 @@ structure Chg₁ (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChangeEn
   /-- at the exit, the pause sound's queue is the reference's, with the effects and the song's row when silent (`PipeChangeEnd.QuietRest`), and the screen buffer has a form of the table -/
   quiet₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) →
     PipeChangeEnd.QuietRest d₁ (PipeChangeEnd.refX (PipeTransition.entry m0)) (B.seq n) ∧ PipeChangeEnd.SongAt d₁.xshape (B.seq n)
-  /-- at the exit, the game timer is not 000 -/
-  time₁ : ∀ n, B.a₁ sy ≤ n → n ≤ B.b₁ sy → SideChangeBound.ExitAt (PipeChangeEnd.exitQ sy nm₁ (PipeTransition.entry m0)) (B.seq n) → SideChangeEnd.TimerOK d₁.nx (B.seq n)
+  /-- at the entry, the game timer is not 000 -/
+  time₁ : SideChangeEnd.TimerOK d₁.nx (B.seq (B.a₁ sy))
 
 /-- **The conditions of the two changes that `route_1_1` asks give those of the first change here** -/
 theorem chg₁_of_changes {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Route.Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat}

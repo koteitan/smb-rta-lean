@@ -3,6 +3,8 @@ import Theorems.PipeFrames
 import Theorems.OpenMap
 import Theorems.OpenFlat
 import Theorems.OpenJump
+import Theorems.OpenAirFrame
+import Theorems.GuardE
 
 /-!
 # The opening on real frames: each of the first `N` frames is a step of the model
@@ -203,7 +205,8 @@ def OpenRunM.toRun (O : OpenRunM sy m0 lens N E fm) (hs : startHS sy (fm 1) = st
 `FrameModel.move_model` (proved for every value of the bytes, by walks of two machines; the frame does not end during it, by `FrameModel.trace_inFrame` and the time of
 `CleanK`), the state at the player's routine is the walk of `CtrlKeep` from the frame's start
 in control, and the frames not counted keep the bytes of the walk of `LagFrames`. The model's input is the one the player's routine reads (`inOf`). The frames left in the air
-are read from the machines (`airOf`): 0 when the frame begins on the ground, else the counted frames up to the first that begins on the ground. -/
+are read from the machines (`airT`): 0 when the frame begins on the ground, else the counted frames up to the first that begins on the ground, up to the horizon
+`min (N + 1) E`. -/
 
 open PipeTransition (frame)
 open PipeEntryRule (trace)
@@ -221,36 +224,34 @@ def aOf (sy : Syms) (fm : Nat → Machine) (inp : Nat → UInt8) (t : Nat) : Boo
 /-- the counted frame `t` begins on the ground -/
 def groundB (sy : Syms) (fm : Nat → Machine) (t : Nat) : Bool := peek (fm t) sy.Player_State == 0
 
-/-- **The frames left in the air when the counted frame `t` begins**, read from the machines: up to the first counted frame from `t` on that begins on the ground, looking up
-to the counted frame `Z` -/
-def airOf (sy : Syms) (fm : Nat → Machine) (Z t : Nat) : Nat := landFrom (groundB sy fm) t (Z - t) - t
+/-! ### The vertical model on the counted frames -/
 
-theorem airOf_ground {fm : Nat → Machine} {Z t : Nat} (h : peek (fm t) sy.Player_State = 0) : airOf sy fm Z t = 0 := by
-  unfold airOf
-  rw [landFrom_self (by simp [groundB, h])]
-  omega
+/-- **The model's next height before `land` is in the window** at the counted frame `t` in the air: below the ground's height plus `LandDepth`, and the high byte after
+the model's step is 1 -/
+def NextIn (sy : Syms) (m0 : Machine) (fm : Nat → Machine) (inp : Nat → UInt8) (t : Nat) : Prop :=
+  (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy (fm t)) (aOf sy fm inp t) 0).y.toNat <
+    (peek m0 sy.Player_Y_Position).toNat + sy.LandDepth.toUInt8.toNat ∧
+  OpenJump.hiAfter sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy (fm t)) (aOf sy fm inp t) 0 = 1
 
-/-- in the air, one frame less is left at the next counted frame -/
-theorem airOf_air {fm : Nat → Machine} {Z t : Nat} (h : peek (fm t) sy.Player_State ≠ 0) (hZ : t < Z) :
-    airOf sy fm Z t = airOf sy fm Z (t + 1) + 1 := by
-  unfold airOf
-  have hf : groundB sy fm t = false := by simp [groundB, h]
-  rw [show Z - t = (Z - (t + 1)) + 1 by omega, landFrom_succ hf]
-  have := landFrom_ge (groundB sy fm) (t + 1) (Z - (t + 1))
-  omega
+/-- **What the vertical model asks of the counted frame `t`**: at a takeoff (on the ground, a jump read) on the ground at the ground's height with the stored speed at
+most the top speed; in the air the high byte of the height 1, the halt relation (in a jump the jump's halt value is 1) and the model's next height in the window -/
+def VPre (sy : Syms) (m0 : Machine) (fm : Nat → Machine) (inp : Nat → UInt8) (t : Nat) : Prop :=
+  (peek (fm t) sy.Player_State = 0 → (inOf sy fm inp t).jump = true ∧ OpenFlat.GroundAt sy m0 (fm t) ∧
+      (peek (fm t) sy.Player_XSpeedAbsolute).toNat ≤ TopSpeed.top sy) ∧
+  (peek (fm t) sy.Player_State ≠ 0 → peek (fm t) sy.Player_Y_HighPos = 1 ∧ OpenAir.HaltM sy (fm t) ∧ NextIn sy m0 fm inp t)
 
-/-- after a jump that lands `n` counted frames later, `n − 1` frames are left at the next counted frame -/
-theorem airOf_jump {fm : Nat → Machine} {Z t n : Nat} (h1 : 1 ≤ n) (hn : t + n ≤ Z) (hair : ∀ d, 1 ≤ d → d < n → peek (fm (t + d)) sy.Player_State ≠ 0)
-    (hl : peek (fm (t + n)) sy.Player_State = 0) : airOf sy fm Z (t + 1) = n - 1 := by
-  unfold airOf
-  have e := landFrom_at (p := groundB sy fm) (n - 1) (t + 1) (Z - (t + 1))
-    (fun j h2 h3 => by
-      have := hair (j - t) (by omega) (by omega)
-      rw [show t + (j - t) = j by omega] at this
-      simp [groundB, this])
-    (by rw [show t + 1 + (n - 1) = t + n by omega]; simp [groundB, hl]) (by omega)
-  rw [e]
-  omega
+/-- **The model's vertical step at the counted frame `t`** (`OpenJump.vstepO`): the next counted frame has the high byte of the height 1 and the halt relation, and its
+vertical bytes are the model's step: at a takeoff from `ground0` with A and the stored speed, in the air from the frame's own with its A and the stored speed 0 -/
+def VStep (sy : Syms) (m0 : Machine) (fm : Nat → Machine) (inp : Nat → UInt8) (t : Nat) : Prop :=
+  peek (fm (t + 1)) sy.Player_Y_HighPos = 1 ∧ OpenAir.HaltM sy (fm (t + 1)) ∧
+  (peek (fm t) sy.Player_State = 0 → VertModel.vsOf sy (fm (t + 1)) = OpenJump.vstepO sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position)
+      (OpenJump.ground0 (peek m0 sy.Player_Y_Position)) true (peek (fm t) sy.Player_XSpeedAbsolute)) ∧
+  (peek (fm t) sy.Player_State ≠ 0 → VertModel.vsOf sy (fm (t + 1)) =
+      OpenJump.vstepO sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position) (VertModel.vsOf sy (fm t)) (aOf sy fm inp t) 0)
+
+/-- **The counted frames from 1 to `N` before `E` follow the vertical model**, when they meet `VPre` -/
+def VertOK (sy : Syms) (m0 : Machine) (N E : Nat) (fm : Nat → Machine) (inp : Nat → UInt8) : Prop :=
+  ∀ t, 1 ≤ t → t ≤ N → t < E → VPre sy m0 fm inp t → VStep sy m0 fm inp t
 
 /-- **The frame from the scroll handler on**, from the machine `Q` there to the frame's end `b`: it changes no byte of the horizontal state or of the position (no wall, no
 edge of the screen), and it ends with the stored speed `|v|` and the collision bits all 1 (the collision routine found nothing) -/
@@ -260,11 +261,14 @@ def After (sy : Syms) (Q b : Machine) : Prop :=
 /-- **What stays assumed of the first `N` counted frames**, before the entry `E`: conditions on single frames, on their instructions and on their starts. The frames are those of
 `L` (`PipeFrames.Lags`): the counted frame `t` begins at `L.fm t` with the input `L.inp t`. -/
 structure Real (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S : FrameKeep.RealRun} (L : Lags sy m0 g S E) : Prop where
-  /-- each instruction of the frame meets `CleanK` of `FrameKeep.guardF`: `PipeWrites.Clean` with the castle flag, the position's fraction, the pause byte, the area's
-  type, the swimming flag and the change of size protected too, but the move routine's own store (the old fields `cleanK` and `spare`) -/
-  cleanK : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k)
+  /-- each instruction of the frame meets `CleanK` of `FrameKeep.guardE`: `PipeWrites.Clean` with the castle flag, the position's fraction, the pause byte, the area's
+  type, the swimming flag, the change of size, A and B, A and B of the frame before, the moving direction, the running speed and the stored speed protected too, but the
+  move routine's own store (the old fields `cleanK` and `spare`; `guardE` in place of `guardF` for `GuardE.prev_endE`) -/
+  cleanK : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k)
+  /-- **no instruction of a counted frame writes the routine, the mode or the task byte by its address** (as `FrameKeep.Frames.noStore` above ground) -/
+  noStore : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, FrameKeep.CtlStore sy (trace (L.fm t) (L.inp t) k) = false
   /-- each instruction of each frame from frame 1 to the counted frame `N`, counted or not, meets `OpenMap.MapOK`: a store through an index or a pointer does not write the
-  player's state, the jumpspring byte or the block buffers, and the read of the block buffer routine is in the first buffer. With the walk of `OpenMap` this gives the old
+  player's state, the jumpspring byte, the block buffers or the collision flag, and the read of the block buffer routine is in the first buffer. With the walk of `OpenMap` this gives the old
   fields `st` (the player's state is 0, 1 or 2 when the frame begins) and `spring` (no jumpspring when the frame begins): `Real.stSpring` -/
   map : ∀ n, 1 ≤ n → n ≤ L.ix N → n < L.ix E → ∀ k, OpenMap.MapOK sy m0 (trace (S.seq n) (S.inp n) k)
   /-- the page is not 255 when the counted frame `N + 1` begins: at the end of frame `N` he has not gone left of position 0 (at the ends of the frames before it, this is
@@ -273,22 +277,11 @@ structure Real (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {S
   /-- from the scroll handler on: `After` -/
   after : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, CtrlKeep.arrAt sy (L.fm t) (L.inp t) ≤ k → (trace (L.fm t) (L.inp t) k).pc = sy.PlayerSubs →
     After sy (trace (L.fm t) (L.inp t) k) (frame (L.fm t) (L.inp t))
-  /-- **from the return of the collision routine on, the vertical bytes do not change**: at the return after the first arrival at the player's routine, the height, its
-  high byte, the vertical speed and its fraction are those of the frame's end (`OpenFlat.AfterV`). The vertical half of `after`. The walks of `OpenFlat` follow these bytes
-  up to the return; after it the walk does not know the enemies, and their code may write the vertical speed (a stomp) with the state 0 -/
-  afterV : ∀ t, 1 ≤ t → t ≤ N → t < E → OpenFlat.AfterV sy m0 (L.fm t) (L.inp t)
-  /-- **the vertical model** (`OpenJump.vstepO`): a counted frame that begins in the air or reads a jump, up to the landing of the jump that is in the air when the counted
-  frame `N + 1` begins, is followed by a counted frame whose height, vertical speed and fraction, forces, jump's origin, state and A are the model's step: at a takeoff
-  from the ground at the ground's height with the stored speed, in the air from its own with its A and the stored speed 0; and the high byte of the height is 1. With the
-  search of `OpenJump` this gives the old fields `jump` (the length of a jump) and `ground` (the ground's height after a landing): `Real.jumpV`, `Real.ground_all` -/
-  vert : ∀ t, 1 ≤ t → t < N + OpenJump.arcDepth → (∀ s, N < s → s ≤ t → peek (L.fm s) sy.Player_State ≠ 0) →
-    (peek (L.fm t) sy.Player_State = 0 → (inOf sy L.fm L.inp t).jump = true) →
-    peek (L.fm (t + 1)) sy.Player_Y_HighPos = 1 ∧
-    (peek (L.fm t) sy.Player_State = 0 → VertModel.vsOf sy (L.fm (t + 1)) =
-      OpenJump.vstepO sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position) (OpenJump.ground0 (peek m0 sy.Player_Y_Position)) true
-        (peek (L.fm t) sy.Player_XSpeedAbsolute)) ∧
-    (peek (L.fm t) sy.Player_State ≠ 0 → VertModel.vsOf sy (L.fm (t + 1)) =
-      OpenJump.vstepO sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position) (VertModel.vsOf sy (L.fm t)) (aOf sy L.fm L.inp t) 0)
+  /-- **from the return of the collision routine on, the bytes of the vertical model do not change**: at the return after the first arrival at the player's routine, the
+  height, its high byte, the vertical speed and its fraction, the height's fraction, the two forces, the jump's origin, the state, A and B and the jump's halt value are
+  those of the frame's end (`OpenAir.AfterVS`). The walks follow these bytes up to the return; after it the walk does not know the enemies, and their code may write
+  the vertical speed (a stomp) or the state (a platform) -/
+  afterV : ∀ t, 1 ≤ t → t ≤ N → t < E → OpenAir.AfterVS sy m0 (L.fm t) (L.inp t)
 
 /-- **What the frame's start holds, frame after frame**: the stored speed is `|v|`, the collision bits are all 1, and the area's type is `v` with no swimming and no change
 of size -/
@@ -318,6 +311,14 @@ structure Checks (sy : Syms) (m0 : Machine) (lens : Lens) (Zb : Nat) (v : UInt8)
   top16 : 16 ≤ TopSpeed.top sy
   /-- the search of the jumps of the opening's vertical model, with the lengths `lens` (`OpenJump.arcCheck`) -/
   jumps : OpenJump.arcCheck sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position) sy.LandDepth.toUInt8 lens = true
+  /-- the walk of a frame in the air or at a takeoff (`OpenAir.airAll`) -/
+  air : OpenAir.airAll sy m0 v = true
+  /-- the movement routine in the air, with the high byte of the height (`OpenVert.vertAirHOK`) -/
+  vh : OpenVert.vertAirHOK sy m0 (FrameModel.ctrlStack sy m0) = true
+  /-- the walk of a frame for A and B of the frame before (`PrevKeep.prevCheck`, part e's) -/
+  prev : PrevKeep.prevCheck sy m0 v = true
+  /-- bit 7 of A and B of the frame before is that of A and B on `m0` -/
+  prev0 : PrevKeep.PrevOK sy m0
 
 /-- every length of `lens` is below `Zb` -/
 theorem Checks.lens_lt {Zb g : Nat} {v : UInt8} (C : Checks sy m0 lens Zb v g) (k : Nat) : (lens[k]!).2 < Zb := by
@@ -405,7 +406,7 @@ theorem Real.frame_step {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E}
   generalize hM : L.fm t = M at hs hh ⊢
   generalize hi : L.inp t = i
   have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace M i k) := by
-    rw [← hM, ← hi]; exact O.cleanK t h1 h2 h3
+    rw [← hM, ← hi]; exact fun k => FrameKeep.cleanK_of_E (O.cleanK t h1 h2 h3 k)
   have hcl : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace M i k) := fun k => FrameKeep.cleanK_of_F (hclF k)
   have hu : CtrlKeep.Unpaused sy m0 (frame M i) := by
     rw [← hM, ← hi]
@@ -514,7 +515,8 @@ theorem Real.flat {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb :
   have hmA : OpenMap.MapAt sy m0 (L.fm t) :=
     OpenMap.Lags.mapAt hc hp hM L hs₁ hm₁ (b := L.ix t) (Nat.le_of_lt hix)
       (fun n a1 a2 k => O.map n a1 (Nat.le_trans (Nat.le_of_lt a2) hixN) (Nat.lt_of_lt_of_le a2 (Nat.le_of_lt hix)) k) (L.ix t) h1ix (Nat.le_refl _)
-  have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := O.cleanK t h1 h2 h3
+  have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) :=
+    fun k => FrameKeep.cleanK_of_E (O.cleanK t h1 h2 h3 k)
   have hcl : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => FrameKeep.cleanK_of_F (hclF k)
   have hcq : ∀ k, FrameKeep.CleanK (OpenFlat.guardQ sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => OpenFlat.cleanQ_of (hclF k) (hmap k)
   have hcM : ∀ k, FrameKeep.CleanK (OpenMap.guardM sy m0) StartRun.noSpot.store (trace (L.fm t) (L.inp t) k) :=
@@ -527,7 +529,7 @@ theorem Real.flat {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb :
     rw [C.pause, ← S.next]
     exact L.unpaused h1 (by omega)
   have hjump : (FrameModel.readIn sy (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t)))).jump = false := hj
-  obtain ⟨B, hfin, hsB, hgx⟩ := OpenFlat.flat_end C.ctrl C.flat hsK hcl hcq hr hu hh.2.2 hg hG hspr hjump (O.afterV t h1 h2 h3)
+  obtain ⟨B, hfin, hsB, hgx⟩ := OpenFlat.flat_end C.ctrl C.flat hsK hcl hcq hr hu hh.2.2 hg hG hspr hjump (OpenAir.afterV_of (O.afterV t h1 h2 h3))
   have hkn := L.known_end hc hp h1ix hix hsG
   rw [S.next] at hkn
   have k1 := hkn _ (List.Mem.head _)
@@ -580,62 +582,70 @@ theorem last_ground {fm : Nat → Machine} (h1 : peek (fm 1) sy.Player_State = 0
         · exact a4 s h2 hs
         · rw [show s = t + 1 by omega]; exact hg
 
-/-- **The length of a jump** (the old field `jump`), with the ground's height at the landing: a jump started on the counted frame `t ≤ N` lands `n` counted frames later,
-`n` between the lengths `lens` for the speed when the frame begins; the frames between begin in the air, and the counted frame `t + n` begins on the ground at the ground's
-height. The frames follow the vertical model (`vert`), and the search of `OpenJump` covers every jump of the model (`OpenJump.lands`). `hh` gives the stored speed `|v|`,
-`hv` the speed at most the top speed. -/
-theorem Real.jumpV {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (C : Checks sy m0 lens Zb v g) (O : Real sy m0 lens N E L)
-    {t : Nat} (h1 : 1 ≤ t) (h2 : t ≤ N) (hh : Held sy v (L.fm t)) (hv : (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs ≤ TopSpeed.top sy)
-    (hg : peek (L.fm t) sy.Player_State = 0) (hj : (inOf sy L.fm L.inp t).jump = true) :
-    ∃ n, 1 ≤ n ∧ (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 ≤ n ∧ n ≤ (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).2 ∧
-      (∀ d, 1 ≤ d → d < n → peek (L.fm (t + d)) sy.Player_State ≠ 0) ∧ peek (L.fm (t + n)) sy.Player_State = 0 ∧ OpenFlat.GroundAt sy m0 (L.fm (t + n)) := by
-  generalize hV : (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs = V at hv ⊢
+/-- **The length of a jump, up to the horizon** (the old field `jump`), with the ground's height at the landing: a jump started on the counted frame `t ≤ N` (`t < E`)
+lands `n` counted frames later, `n` between the lengths `lens` for the speed when the frame begins, by the counted frame `min (N + 1) E`; the frames between begin in the
+air, and the counted frame `t + n` begins on the ground at the ground's height. Or the counted frames from `t + 1` to `min (N + 1) E` all begin in the air, and their
+number is below the longest length. The frames follow the vertical model (`hV`), and the search of `OpenJump` covers every jump of the model (`OpenJump.lands_by`). `hh`
+gives the stored speed `|v|`, `hv` the speed at most the top speed, `hG` the ground's height at the takeoff. -/
+theorem Real.jumpV {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (C : Checks sy m0 lens Zb v g) (hV : VertOK sy m0 N E L.fm L.inp)
+    {t : Nat} (h1 : 1 ≤ t) (h2 : t ≤ N) (h3 : t < E) (hh : Held sy v (L.fm t)) (hv : (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs ≤ TopSpeed.top sy)
+    (hg : peek (L.fm t) sy.Player_State = 0) (hG : OpenFlat.GroundAt sy m0 (L.fm t)) (hj : (inOf sy L.fm L.inp t).jump = true) :
+    (∃ n, 1 ≤ n ∧ t + n ≤ min (N + 1) E ∧ (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 ≤ n ∧
+      n ≤ (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).2 ∧
+      (∀ d, 1 ≤ d → d < n → peek (L.fm (t + d)) sy.Player_State ≠ 0) ∧ peek (L.fm (t + n)) sy.Player_State = 0 ∧ OpenFlat.GroundAt sy m0 (L.fm (t + n))) ∨
+    ((∀ d, 1 ≤ d → t + d ≤ min (N + 1) E → peek (L.fm (t + d)) sy.Player_State ≠ 0) ∧
+      min (N + 1) E - t < (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).2) := by
+  have hab : (peek (L.fm t) sy.Player_XSpeedAbsolute).toNat ≤ TopSpeed.top sy := by
+    rw [hh.1, SurfaceFrames.absB_natAbs]; exact hv
+  generalize hV' : (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs = V at hv ⊢
   have habs : peek (L.fm t) sy.Player_XSpeedAbsolute = V.toUInt8 := by
-    rw [hh.1, ← hV, ← SurfaceFrames.absB_natAbs]
+    rw [hh.1, ← hV', ← SurfaceFrames.absB_natAbs]
     simp
   let u : Nat → Jump.VS := fun e => VertModel.vsOf sy (L.fm (t + e))
   let a : Nat → Bool := fun e => aOf sy L.fm L.inp (t + e)
   let pre : Nat → UInt8 := fun e => if e = 1 then (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (OpenJump.ground0 (peek m0 sy.Player_Y_Position)) true V.toUInt8).y
     else (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u (e - 1)) (a (e - 1)) 0).y
-  -- the frames of the jump follow the model
-  have hT := (O.vert t h1 (by unfold OpenJump.arcDepth; omega) (fun s a1 a2 => by omega) (fun _ => hj)).2.1 hg
-  have hstep : ∀ e, 1 ≤ e → e < OpenJump.arcDepth → (∀ e', 1 ≤ e' → e' ≤ e → (u e').st ≠ 0) →
-      pre (e + 1) = (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u e) (a e) 0).y ∧
+  let ph : Nat → UInt8 := fun e => if e = 1 then OpenJump.hiAfter sy m0 (FrameModel.ctrlStack sy m0) (OpenJump.ground0 (peek m0 sy.Player_Y_Position)) true V.toUInt8
+    else OpenJump.hiAfter sy m0 (FrameModel.ctrlStack sy m0) (u (e - 1)) (a (e - 1)) 0
+  let P : Nat → Prop := fun e => peek (L.fm (t + e)) sy.Player_Y_HighPos = 1 ∧ OpenAir.HaltM sy (L.fm (t + e))
+  -- the takeoff
+  have hT := hV t h1 h2 h3 ⟨fun _ => ⟨hj, hG, hab⟩, fun h0 => absurd hg h0⟩
+  -- the frames in the air follow the model
+  have hstep : ∀ e, 1 ≤ e → e < min (N + 1) E - t → (∀ e', 1 ≤ e' → e' ≤ e → (u e').st ≠ 0) → P e →
+      (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u e) (a e) 0).y.toNat < (peek m0 sy.Player_Y_Position).toNat + sy.LandDepth.toUInt8.toNat ∧
+        OpenJump.hiAfter sy m0 (FrameModel.ctrlStack sy m0) (u e) (a e) 0 = 1 →
+      P (e + 1) ∧ pre (e + 1) = (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u e) (a e) 0).y ∧
+      ph (e + 1) = OpenJump.hiAfter sy m0 (FrameModel.ctrlStack sy m0) (u e) (a e) 0 ∧
       u (e + 1) = OpenJump.land (peek m0 sy.Player_Y_Position) (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (u e) (a e) 0) := by
-    intro e e1 e2 hair
-    refine ⟨by simp only [pre, show e + 1 ≠ 1 by omega, if_false, show e + 1 - 1 = e by omega], ?_⟩
+    intro e e1 e2 hair hPe hb
     have ha : peek (L.fm (t + e)) sy.Player_State ≠ 0 := hair e e1 (Nat.le_refl _)
-    have hV := (O.vert (t + e) (by omega) (by omega) (fun s a1 a2 => by
-      have : peek (L.fm (t + (s - t))) sy.Player_State ≠ 0 := hair (s - t) (by omega) (by omega)
-      rwa [show t + (s - t) = s by omega] at this) (fun h0 => absurd h0 ha)).2.2 ha
-    show VertModel.vsOf sy (L.fm (t + (e + 1))) = _
-    rw [show t + (e + 1) = t + e + 1 by omega, hV]
-    rfl
-  obtain ⟨n, n1, n2, n3, n4, n5, n6, n7, n8⟩ := OpenJump.lands C.jumps (u := u) (a := a) (pre := pre) (v := V) hv
-    ⟨by simp [pre], by
-      show VertModel.vsOf sy (L.fm (t + 1)) = _
-      rw [hT, habs]
-      rfl⟩ hstep
-  refine ⟨n, n1, n2, n3, fun d d1 d2 => n4 d d1 d2, n5, n6, ?_, n7, n8⟩
-  -- the high byte of the height: from the frame before the landing
-  have hhi := (O.vert (t + (n - 1)) (by omega) (by
-      have := OpenJump.lens_le C.jumps V
-      unfold OpenJump.arcDepth at this ⊢; omega) (fun s a1 a2 => by
-      have : peek (L.fm (t + (s - t))) sy.Player_State ≠ 0 := n4 (s - t) (by omega) (by omega)
-      rwa [show t + (s - t) = s by omega] at this) (fun h0 => by
-      by_cases hn : n = 1
-      · subst hn; rw [show t + (1 - 1) = t by omega]; exact hj
-      · exact absurd h0 (n4 (n - 1) (by omega) (by omega)))).1
-  rwa [show t + (n - 1) + 1 = t + n by omega] at hhi
+    have hS := hV (t + e) (by omega) (by omega) (by omega) ⟨fun h0 => absurd h0 ha, fun _ => ⟨hPe.1, hPe.2, hb⟩⟩
+    refine ⟨?_, by simp only [pre, show e + 1 ≠ 1 by omega, if_false, show e + 1 - 1 = e by omega],
+      by simp only [ph, show e + 1 ≠ 1 by omega, if_false, show e + 1 - 1 = e by omega], ?_⟩
+    · show peek (L.fm (t + (e + 1))) sy.Player_Y_HighPos = 1 ∧ OpenAir.HaltM sy (L.fm (t + (e + 1)))
+      rw [show t + (e + 1) = t + e + 1 by omega]
+      exact ⟨hS.1, hS.2.1⟩
+    · show VertModel.vsOf sy (L.fm (t + (e + 1))) = _
+      rw [show t + (e + 1) = t + e + 1 by omega, hS.2.2.2 ha]
+      rfl
+  rcases OpenJump.lands_by C.jumps (u := u) (a := a) (pre := pre) (ph := ph) (P := P) (v := V) hv (h := min (N + 1) E - t) (by omega)
+      ⟨by simp [pre], by simp [ph], by
+        show VertModel.vsOf sy (L.fm (t + 1)) = _
+        rw [hT.2.2.1 hg, habs]
+        rfl⟩ ⟨hT.1, hT.2.1⟩ hstep with
+    ⟨n, n1, n2, n3, n4, n5, n6, n7, n8, n9, n10⟩ | ⟨hair, hlt⟩
+  · exact Or.inl ⟨n, n1, by omega, n3, n4, fun d d1 d2 => n5 d d1 d2, n6, n7, n10.1, n8, n9⟩
+  · exact Or.inr ⟨fun d d1 d2 => hair d d1 (by omega), hlt⟩
 
 /-- **Every counted frame of the first `N` that begins on the ground begins at the ground's height** (the old field `ground`): by induction on the counted frames. The
 counted frame 1 is at the ground's height (`hG₁`, from the press of Start on the title). After a counted frame that begins on the ground with no jump it is `Real.flat`.
 After a counted frame in the air or with a jump, the last counted frame on the ground before it is a takeoff (a frame on the ground with no jump stays on the ground:
-`Real.flat`), and the jump lands at the ground's height (`Real.jumpV`). `hh`, `hm` and `hv` are what each counted frame holds when it begins (`Held`, the player's state
-0, 1 or 2 and no jumpspring, the speed at most the top speed). -/
+`Real.flat`), and the jump lands at the ground's height (`Real.jumpV`: the frame is before the horizon, so the jump has landed by it). `hh`, `hm` and `hv` are what each
+counted frame holds when it begins (`Held`, the player's state 0, 1 or 2 and no jumpspring, the speed at most the top speed). -/
 theorem Real.ground_all {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
     (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (C : Checks sy m0 lens Zb v g) (hM : OpenMap.mapCheck sy m0 = true)
     (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (hm₁ : OpenMap.MapAt sy m0 (S.seq 1)) (O : Real sy m0 lens N E L)
+    (hV : VertOK sy m0 N E L.fm L.inp)
     (hh : ∀ t, 1 ≤ t → t ≤ N → t < E → Held sy v (L.fm t)) (hm : StSpring sy L N E)
     (hv : ∀ t, 1 ≤ t → t ≤ N → t < E → (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs ≤ TopSpeed.top sy)
     (hg₁ : peek (L.fm 1) sy.Player_State = 0) (hG₁ : OpenFlat.GroundAt sy m0 (L.fm 1)) :
@@ -654,40 +664,292 @@ theorem Real.ground_all {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E}
             (hm (1 + d) (by omega) (by omega) (by omega)).2 hflat.1 (ih d (by omega) (by omega) (by omega) hflat.1) hflat.2).2
         · -- the last counted frame on the ground up to `1 + d` is a takeoff
           obtain ⟨t0, a1, a2, a3, a4⟩ := last_ground hg₁ (1 + d) (by omega)
+          have hG0 : OpenFlat.GroundAt sy m0 (L.fm t0) := by
+            have := ih (t0 - 1) (by omega) (by omega) (by omega) (by rw [show 1 + (t0 - 1) = t0 by omega]; exact a3)
+            rwa [show 1 + (t0 - 1) = t0 by omega] at this
           have hj0 : (inOf sy L.fm L.inp t0).jump = true := by
             cases hj : (inOf sy L.fm L.inp t0).jump
             · exfalso
               by_cases he : t0 = 1 + d
               · subst he; exact hflat ⟨a3, hj⟩
-              · have hG0 : OpenFlat.GroundAt sy m0 (L.fm t0) := by
-                  have := ih (t0 - 1) (by omega) (by omega) (by omega) (by rw [show 1 + (t0 - 1) = t0 by omega]; exact a3)
-                  rwa [show 1 + (t0 - 1) = t0 by omega] at this
-                have := (O.flat hc hk hp C hM hs₁ hm₁ (t := t0) a1 (by omega) (by omega) (hh t0 a1 (by omega) (by omega))
+              · have := (O.flat hc hk hp C hM hs₁ hm₁ (t := t0) a1 (by omega) (by omega) (hh t0 a1 (by omega) (by omega))
                   (hm t0 a1 (by omega) (by omega)).2 a3 hG0 hj).1
                 exact a4 (t0 + 1) (by omega) (by omega) this
             · rfl
-          obtain ⟨n, n1, _, _, n4, n5, n6⟩ := O.jumpV C a1 (by omega) (hh t0 a1 (by omega) (by omega)) (hv t0 a1 (by omega) (by omega)) a3 hj0
-          -- the landing is the counted frame `1 + d + 1`
-          have hn : t0 + n = 1 + d + 1 := by
-            rcases Nat.lt_trichotomy (t0 + n) (1 + d + 1) with h | h | h
-            · exact absurd n5 (a4 (t0 + n) (by omega) (by omega))
-            · exact h
-            · exact absurd hst (by
-                have := n4 (1 + d + 1 - t0) (by omega) (by omega)
-                rwa [show t0 + (1 + d + 1 - t0) = 1 + d + 1 by omega] at this)
-          rw [← hn]; exact n6
+          rcases Real.jumpV C hV a1 (by omega) (by omega) (hh t0 a1 (by omega) (by omega)) (hv t0 a1 (by omega) (by omega)) a3 hG0 hj0 with
+            ⟨n, n1, _, _, _, n4, n5, n6⟩ | ⟨hair, _⟩
+          · -- the landing is the counted frame `1 + d + 1`
+            have hn : t0 + n = 1 + d + 1 := by
+              rcases Nat.lt_trichotomy (t0 + n) (1 + d + 1) with h | h | h
+              · exact absurd n5 (a4 (t0 + n) (by omega) (by omega))
+              · exact h
+              · exact absurd hst (by
+                  have := n4 (1 + d + 1 - t0) (by omega) (by omega)
+                  rwa [show t0 + (1 + d + 1 - t0) = 1 + d + 1 by omega] at this)
+            rw [← hn]; exact n6
+          · exfalso
+            have := hair (1 + d + 1 - t0) (by omega) (by omega)
+            rw [show t0 + (1 + d + 1 - t0) = 1 + d + 1 by omega] at this
+            exact this hst
   intro t h1 h2 h3 hst
   have := key (t - 1) (by omega) (by omega) (by rw [show 1 + (t - 1) = t by omega]; exact hst)
   rwa [show 1 + (t - 1) = t by omega] at this
 
+/-! ### The frames left in the air, for the model
+
+The model needs the frames left in the air only up to the counted frame `N + 1` (and before `E`): the horizon `H = min (N + 1) E`. A jump that has not landed by `H` is
+given as many frames as it has left up to `H`, and at least `L_tap − 1` after the takeoff (`airT`); its length beyond `H` is not needed. -/
+
+theorem landFrom_none {p : Nat → Bool} : ∀ (t d : Nat), (∀ j, t ≤ j → j < t + d → p j = false) → landFrom p t d = t + d
+  | t, 0, _ => rfl
+  | t, d + 1, h => by
+    rw [landFrom_succ (h t (Nat.le_refl _) (by omega)), landFrom_none (t + 1) d (fun j h1 h2 => h j (by omega) (by omega))]
+    omega
+
+/-- the two lengths of a jump for the speed of the counted frame `t` -/
+def lensAt (sy : Syms) (lens : Lens) (fm : Nat → Machine) (t : Nat) : Nat × Nat := lens[(sbyte (peek (fm t) sy.Player_X_Speed)).natAbs]!
+
+/-- **The frames left in the air when the counted frame `t` begins, for the model**, with the horizon `H`: 0 on the ground; after a takeoff at `t − 1`, the frames to the
+first counted frame on the ground if it comes by `H`, else `max (L_tap − 1) (H − t)`; in the air after the air, one less than before -/
+def airT (sy : Syms) (lens : Lens) (fm : Nat → Machine) (H : Nat) : Nat → Nat
+  | 0 => 0
+  | t + 1 =>
+    if groundB sy fm (t + 1) then 0
+    else if groundB sy fm t then
+      (if groundB sy fm (landFrom (groundB sy fm) (t + 1) (H - (t + 1))) then landFrom (groundB sy fm) (t + 1) (H - (t + 1)) - (t + 1)
+       else max ((lensAt sy lens fm t).1 - 1) (H - t - 1))
+    else airT sy lens fm H t - 1
+
+theorem airT_ground {fm : Nat → Machine} {H t : Nat} (h1 : 1 ≤ t) (h : peek (fm t) sy.Player_State = 0) : airT sy lens fm H t = 0 := by
+  obtain ⟨s, rfl⟩ : ∃ s, t = s + 1 := ⟨t - 1, by omega⟩
+  simp [airT, groundB, h]
+
+theorem airT_air {fm : Nat → Machine} {H t : Nat} (h0 : peek (fm t) sy.Player_State ≠ 0) (h1 : peek (fm (t + 1)) sy.Player_State ≠ 0) :
+    airT sy lens fm H (t + 1) = airT sy lens fm H t - 1 := by
+  simp [airT, groundB, h0, h1]
+
+theorem airT_take {fm : Nat → Machine} {H t : Nat} (h0 : peek (fm t) sy.Player_State = 0) (h1 : peek (fm (t + 1)) sy.Player_State ≠ 0) :
+    airT sy lens fm H (t + 1) = if groundB sy fm (landFrom (groundB sy fm) (t + 1) (H - (t + 1))) then landFrom (groundB sy fm) (t + 1) (H - (t + 1)) - (t + 1)
+      else max ((lensAt sy lens fm t).1 - 1) (H - t - 1) := by
+  simp [airT, groundB, h0, h1]
+
+/-- in the air after the takeoff at `t0`, one frame less at each counted frame -/
+theorem airT_run {fm : Nat → Machine} {H t0 : Nat} : ∀ e, 1 ≤ e → (∀ e', 1 ≤ e' → e' ≤ e → peek (fm (t0 + e')) sy.Player_State ≠ 0) →
+    airT sy lens fm H (t0 + e) = airT sy lens fm H (t0 + 1) - (e - 1)
+  | 0, h, _ => absurd h (by omega)
+  | e + 1, _, hair => by
+    by_cases he : e = 0
+    · subst he; rfl
+    · rw [show t0 + (e + 1) = t0 + e + 1 by omega, airT_air (hair e (by omega) (by omega)) (by rw [show t0 + e + 1 = t0 + (e + 1) by omega]; exact hair (e + 1) (by omega) (Nat.le_refl _)),
+        airT_run e (by omega) (fun e' a1 a2 => hair e' a1 (by omega))]
+      omega
+
+/-- **The frames left in the air after a takeoff**: the value at the counted frame after a takeoff at `t`, in the two cases of `Real.jumpV` -/
+theorem airT_after {fm : Nat → Machine} {H t n : Nat} (hg : peek (fm t) sy.Player_State = 0) (h1 : 1 ≤ n) (hn : t + n ≤ H)
+    (hair : ∀ d, 1 ≤ d → d < n → peek (fm (t + d)) sy.Player_State ≠ 0) (hl : peek (fm (t + n)) sy.Player_State = 0) : airT sy lens fm H (t + 1) = n - 1 := by
+  by_cases hn1 : n = 1
+  · subst hn1
+    exact airT_ground (by omega) hl
+  · have ha1 : peek (fm (t + 1)) sy.Player_State ≠ 0 := hair 1 (by omega) (by omega)
+    have e := landFrom_at (p := groundB sy fm) (n - 1) (t + 1) (H - (t + 1))
+      (fun j h2 h3 => by
+        have := hair (j - t) (by omega) (by omega)
+        rw [show t + (j - t) = j by omega] at this
+        simp [groundB, this])
+      (by rw [show t + 1 + (n - 1) = t + n by omega]; simp [groundB, hl]) (by omega)
+    rw [airT_take hg ha1, e, show t + 1 + (n - 1) = t + n by omega]
+    simp [groundB, hl]
+    omega
+
+theorem airT_after_air {fm : Nat → Machine} {H t : Nat} (hg : peek (fm t) sy.Player_State = 0) (htH : t < H)
+    (hair : ∀ d, 1 ≤ d → t + d ≤ H → peek (fm (t + d)) sy.Player_State ≠ 0) : airT sy lens fm H (t + 1) = max ((lensAt sy lens fm t).1 - 1) (H - t - 1) := by
+  have ha1 : peek (fm (t + 1)) sy.Player_State ≠ 0 := hair 1 (by omega) (by omega)
+  have e := landFrom_none (p := groundB sy fm) (t + 1) (H - (t + 1)) (fun j h2 h3 => by
+    have := hair (j - t) (by omega) (by omega)
+    rw [show t + (j - t) = j by omega] at this
+    simp [groundB, this])
+  have hH : groundB sy fm H = false := by
+    have := hair (H - t) (by omega) (by omega)
+    rw [show t + (H - t) = H by omega] at this
+    simp [groundB, this]
+  rw [airT_take hg ha1, e, show t + 1 + (H - (t + 1)) = H by omega, hH]
+  rfl
+
+/-! ### The vertical model on real frames -/
+
+theorem vsA_lagI {x : UInt16} (hx : x ∈ OpenAir.vsA sy) : LagFrames.I x ∈ LagFrames.lagI sy := by
+  simp only [OpenAir.vsA, OpenFlat.vertA, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hx
+  simp only [LagFrames.lagI, LagFrames.vfpI, LagFrames.ctlI, LagFrames.moreI, List.mem_append, List.mem_cons, List.not_mem_nil, or_false]
+  rcases hx with (hx | hx | hx | hx) | hx | hx | hx | hx | hx | hx | hx <;> simp [hx]
+
+theorem ab_lagI : LagFrames.I sy.A_B_Buttons ∈ LagFrames.lagI sy ∧ LagFrames.I sy.PreviousA_B_Buttons ∈ LagFrames.lagI sy := by
+  simp [LagFrames.lagI, LagFrames.vfpI, LagFrames.ctlI, LagFrames.moreI]
+
+theorem vsOf_of_vsA {m m' : Machine} (h : ∀ x ∈ OpenAir.vsA sy, peek m' x = peek m x) : VertModel.vsOf sy m' = VertModel.vsOf sy m := by
+  unfold VertModel.vsOf
+  rw [h _ (by simp [OpenAir.vsA, OpenFlat.vertA]), h _ (by simp [OpenAir.vsA, OpenFlat.vertA]), h _ (by simp [OpenAir.vsA, OpenFlat.vertA]),
+    h _ (by simp [OpenAir.vsA]), h _ (by simp [OpenAir.vsA]), h _ (by simp [OpenAir.vsA]), h _ (by simp [OpenAir.vsA]), h _ (by simp [OpenAir.vsA]),
+    h _ (by simp [OpenAir.vsA])]
+
+theorem haltM_of_vsA {m m' : Machine} (h : ∀ x ∈ OpenAir.vsA sy, peek m' x = peek m x) (hm : OpenAir.HaltM sy m) : OpenAir.HaltM sy m' := by
+  unfold OpenAir.HaltM at hm ⊢
+  rw [h _ (by simp [OpenAir.vsA]), h _ (by simp [OpenAir.vsA])]
+  exact hm
+
+theorem vsOf_keepA {m R : Machine} (h : ∀ x ∈ CtrlKeep.keepA sy, peek R x = peek m x) : VertModel.vsOf sy R = VertModel.vsOf sy m := by
+  unfold VertModel.vsOf
+  rw [h _ (by simp [CtrlKeep.keepA]), h _ (by simp [CtrlKeep.keepA]), h _ (by simp [CtrlKeep.keepA]), h _ (by simp [CtrlKeep.keepA]),
+    h _ (by simp [CtrlKeep.keepA]), h _ (by simp [CtrlKeep.keepA]), h _ (by simp [CtrlKeep.keepA]), h _ (by simp [CtrlKeep.keepA]),
+    h _ (by simp [CtrlKeep.keepA])]
+
+/-- **Bit 7 of A and B of the frame before is that of A and B when each counted frame begins** (`PrevKeep.PrevOK`): at the counted frame 1 (`hpv₁`); each counted frame
+keeps it (`GuardE.prev_endE`, the walk of part e: `CleanK` of `guardE` and no store by address to the routine, the mode or the task, the fields `cleanK` and `noStore`); the
+frames not counted keep both bytes (`PipeFrames.lags_keepI`). -/
+theorem Real.prevAll {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
+    (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (C : Checks sy m0 lens Zb v g)
+    (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (O : Real sy m0 lens N E L)
+    (hh : ∀ t, 1 ≤ t → t ≤ N → t < E → Held sy v (L.fm t)) (hpv₁ : PrevKeep.PrevOK sy (L.fm 1)) :
+    ∀ t, 1 ≤ t → t ≤ N + 1 → t ≤ E → PrevKeep.PrevOK sy (L.fm t) := by
+  intro t
+  induction t with
+  | zero => intro h; omega
+  | succ t ih =>
+    intro h1 h2 h3
+    by_cases ht : t = 0
+    · subst ht; exact hpv₁
+    · have hpv := ih (by omega) (by omega) (by omega)
+      have he := GuardE.prev_endE C.ctrl C.prev (startK_of hc hk hp hs₁ (by omega) (by omega)) (O.cleanK t (by omega) (by omega) (by omega))
+        (O.noStore t (by omega) (by omega) (by omega)) (hh t (by omega) (by omega) (by omega)).2.2 hpv
+      have hl := PipeFrames.lags_keepI hc hk hp L hs₁ t (by omega)
+      unfold PrevKeep.PrevOK at he ⊢
+      rw [show peek (L.fm (t + 1)) sy.PreviousA_B_Buttons = peek (frame (L.fm t) (L.inp t)) sy.PreviousA_B_Buttons from hl _ ab_lagI.2,
+        show peek (L.fm (t + 1)) sy.A_B_Buttons = peek (frame (L.fm t) (L.inp t)) sy.A_B_Buttons from hl _ ab_lagI.1]
+      exact he
+
+/-- **Each counted frame from 1 to `N` that is a takeoff or in the air follows the vertical model** (the old field `vert`). A takeoff: the walk of `OpenAir` from the
+player's routine computes every vertical byte (`OpenAir.take_real`). In the air: the movement routine follows `vstep` up to `Q` (`OpenVert.vert_airH`, with the halt relation
+and A of the frame before, `Real.prevAll`, at the player's routine), and from `Q` the walk of `OpenAir` keeps the vertical bytes up to the return of the collision routine,
+or lands him (`OpenAir.air_real`); the walk comes to `Q` once, so the two arrivals are one. After the return the bytes do not change (`afterV`), and the frames not counted
+keep them (`PipeFrames.lags_keepI`). The flag that disables the collision routine is 0 when each frame begins (`OpenMap`). `hc`, `hk`, `hp`, `C`, `hM` are checks on the
+ROM, `hs₁`, `hm₁` the start of frame 1. -/
+theorem Real.vertOK {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
+    (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (C : Checks sy m0 lens Zb v g) (hM : OpenMap.mapCheck sy m0 = true)
+    (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (hm₁ : OpenMap.MapAt sy m0 (S.seq 1)) (O : Real sy m0 lens N E L)
+    (hh : ∀ t, 1 ≤ t → t ≤ N → t < E → Held sy v (L.fm t)) (hm : StSpring sy L N E) (hpv₁ : PrevKeep.PrevOK sy (L.fm 1)) :
+    VertOK sy m0 N E L.fm L.inp := by
+  intro t h1 h2 h3 hpre
+  have hpvt := O.prevAll hc hk hp C hs₁ hh hpv₁ t h1 (by omega) (by omega)
+  have hA := OpenAir.airFacts_of C.air
+  have hix : L.ix t < L.ix E := Nat.lt_of_lt_of_le (PipeFrames.ixP_lt g S L.dP t) (L.ix_mono h3)
+  have hixN : L.ix t ≤ L.ix N := L.ix_mono h2
+  have h1ix : 1 ≤ L.ix t := L.one_le_ix h1
+  have hmap : ∀ k, OpenMap.MapOK sy m0 (trace (L.fm t) (L.inp t) k) := fun k => O.map (L.ix t) h1ix hixN hix k
+  have hsG : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (L.fm t) := L.startAt hc hk hp hs₁ h1 (Nat.le_of_lt h3)
+  have hsK : FrameKeep.StartK sy m0 (L.fm t) := startK_of hc hk hp hs₁ h1 (Nat.le_of_lt h3)
+  have hmA : OpenMap.MapAt sy m0 (L.fm t) :=
+    OpenMap.Lags.mapAt hc hp hM L hs₁ hm₁ (b := L.ix t) (Nat.le_of_lt hix)
+      (fun n a1 a2 k => O.map n a1 (Nat.le_trans (Nat.le_of_lt a2) hixN) (Nat.lt_of_lt_of_le a2 (Nat.le_of_lt hix)) k) (L.ix t) h1ix (Nat.le_refl _)
+  have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) :=
+    fun k => FrameKeep.cleanK_of_E (O.cleanK t h1 h2 h3 k)
+  have hcl : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => FrameKeep.cleanK_of_F (hclF k)
+  have hcq : ∀ k, FrameKeep.CleanK (OpenFlat.guardQ sy m0) (FrameKeep.spotOf sy m0).store (trace (L.fm t) (L.inp t) k) := fun k => OpenFlat.cleanQ_of (hclF k) (hmap k)
+  have hcM : ∀ k, FrameKeep.CleanK (OpenMap.guardM sy m0) StartRun.noSpot.store (trace (L.fm t) (L.inp t) k) :=
+    fun k => OpenMap.cleanK_of (L.cleanG (L.ix t) h1ix hix k) (hmap k)
+  have hrM : ∀ k, OpenMap.RdOK (OpenMap.rdOf sy m0) (trace (L.fm t) (L.inp t) k) := fun k => OpenMap.rdOK_of (hmap k)
+  have hr : ∀ k, (trace (L.fm t) (L.inp t) k).frame = (L.fm t).frame → OpenFlat.RdOK1 (OpenFlat.rdOf sy m0) (trace (L.fm t) (L.inp t) k) := fun k hf =>
+    OpenFlat.rdOK1_of (hmap k) (fun hpc hn => OpenMap.map_reads hM (OpenMap.start_M hsG) hmA.1 hmA.2 hcM hrM hf hpc hn)
+  have hu : CtrlKeep.Unpaused sy m0 (frame (L.fm t) (L.inp t)) := by
+    show (frame (L.fm t) (L.inp t)).ram.get! (CtrlKeep.pauseI sy m0) &&& 1 = 0
+    rw [C.pause, ← S.next]
+    exact L.unpaused h1 (by omega)
+  have hdc : (L.fm t).ram.get! (OpenMap.dcdI sy m0) = 0 := by
+    have := hmA.1 (OpenMap.dcdI sy m0, 0xFF, 0) (List.mem_append_right _ (List.Mem.tail _ (List.Mem.head _)))
+    rw [FrameKeep.and_ff, FrameKeep.and_ff] at this
+    exact this
+  have hl := PipeFrames.lags_keepI hc hk hp L hs₁ t h3
+  -- the bytes of the next counted frame from those at a return of the collision routine
+  have nxt : ∀ k₂, CtrlKeep.arrAt sy (L.fm t) (L.inp t) ≤ k₂ → (trace (L.fm t) (L.inp t) k₂).pc = OpenFlat.collRet sy m0 →
+      ∀ x ∈ OpenAir.vsA sy, peek (L.fm (t + 1)) x = peek (trace (L.fm t) (L.inp t) k₂) x := fun k₂ e1 e2 x hx =>
+    (hl _ (vsA_lagI hx)).trans (O.afterV t h1 h2 h3 k₂ e1 e2 x hx)
+  obtain ⟨hab, hbits, hv⟩ := hh t h1 h2 h3
+  obtain ⟨hst, hspr⟩ := hm t h1 h2 h3
+  by_cases hg : peek (L.fm t) sy.Player_State = 0
+  · -- a takeoff
+    obtain ⟨hj, hG, habs⟩ := hpre.1 hg
+    have hF : OpenFlat.flatCheckWith sy m0 v (OpenFlat.cfgBOf sy m0 v (OpenFlat.searchB sy m0 v)) (OpenFlat.cfgCOf sy m0 v (OpenFlat.searchB sy m0 v)) = true := C.flat
+    obtain ⟨k₂, J, e1, _, _, _, e3, e4, e5, e6⟩ := OpenAir.take_real C.ctrl hA (OpenFlat.flatCheck_parts hF).2.2.2 hsK hcl hcq hr hu hv hspr hg hG habs hj hdc
+    have hn := nxt k₂ e1 e3
+    refine ⟨by rw [hn _ (by simp [OpenAir.vsA, OpenFlat.vertA])]; exact e5, ?_, fun _ => ?_, fun h0 => absurd hg h0⟩
+    · exact haltM_of_vsA hn (fun _ => e6)
+    · rw [vsOf_of_vsA hn, e4]
+      unfold OpenAir.expT
+      simp
+  · -- in the air
+    obtain ⟨hhi, hhalt, hnext⟩ := hpre.2 hg
+    have hst12 : peek (L.fm t) sy.Player_State = 1 ∨ peek (L.fm t) sy.Player_State = 2 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hst
+      rcases hst with h | h | h
+      · exact absurd h hg
+      · exact Or.inl h
+      · exact Or.inr h
+    obtain ⟨k₁, k₂, J, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10⟩ := OpenAir.air_real C.ctrl hA hsK hcl hcq hr hu hv hspr hst12 hhalt hdc
+    -- the movement routine, from the player's routine to `Q`
+    obtain ⟨c1, c2, c3⟩ := CtrlKeep.arrive_at C.ctrl hsK hcl hu
+    have A := CtrlKeep.ctrl_keep C.ctrl hsK hcl c1 c2 c3
+    have kp : ∀ x ∈ CtrlKeep.keepA sy, peek (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t))) x = peek (L.fm t) x := A.keep
+    have hF : OpenFlat.flatCheckWith sy m0 v (OpenFlat.cfgBOf sy m0 v (OpenFlat.searchB sy m0 v)) (OpenFlat.cfgCOf sy m0 v (OpenFlat.searchB sy m0 v)) = true := C.flat
+    have hhiR := OpenFlat.high_at_cut (OpenFlat.flatCheck_parts hF).2.2.2 hsK hcl c1 c2 c3
+    have hAV : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t))) := by
+      refine ⟨A.good, c1, A.s, A.eng, ?_, ?_, ?_, ?_, ?_⟩
+      · rw [kp _ (by simp [CtrlKeep.keepA]), hv.1]; exact C.v3
+      · rw [kp _ (by simp [CtrlKeep.keepA])]; exact hst
+      · rw [kp _ (by simp [CtrlKeep.keepA])]; exact hspr
+      · rw [kp _ (by simp [CtrlKeep.keepA]), hv.2.1]
+      · rw [kp _ (by simp [CtrlKeep.keepA]), hv.2.2]
+    obtain ⟨k, _, _, hpcQ, _, hvs, hstQ, hIF, hhiQ⟩ := OpenVert.vert_airH C.vh hAV (by rw [hhiR]; exact hhi)
+      (by rw [kp _ (by simp [CtrlKeep.keepA])]; exact hst12)
+      (fun h => by
+        rw [kp sy.DiffToHaltJump (by simp [CtrlKeep.keepA])]
+        exact hhalt (by rw [← kp sy.Player_State (by simp [CtrlKeep.keepA])]; exact h))
+      (by rw [kp _ (by simp [CtrlKeep.keepA]), kp _ (by simp [CtrlKeep.keepA])]; exact hpvt)
+    have hT := FrameModel.trace_inFrame C.idle c2 hIF (fun n hn => (hcl n).time hn) k (Nat.le_refl k)
+    rw [← hT.1] at hpcQ hvs hhiQ
+    -- the arrival at `Q` of the movement routine is the walk's
+    have hkJ : CtrlKeep.arrAt sy (L.fm t) (L.inp t) + k < J := by
+      rcases Nat.lt_or_ge (CtrlKeep.arrAt sy (L.fm t) (L.inp t) + k) J with h | h
+      · exact h
+      · exfalso
+        have hs : ((trace (L.fm t) (L.inp t) J).frame ≥ (L.fm t).frame + 1 || (trace (L.fm t) (L.inp t) J).halted) = true := by simp [a5]
+        have e := PipeEntryRule.trace_stop hs (CtrlKeep.arrAt sy (L.fm t) (L.inp t) + k - J)
+        rw [show J + (CtrlKeep.arrAt sy (L.fm t) (L.inp t) + k - J) = CtrlKeep.arrAt sy (L.fm t) (L.inp t) + k by omega] at e
+        have := hT.2
+        rw [e, a5] at this
+        omega
+    have hk₁ : CtrlKeep.arrAt sy (L.fm t) (L.inp t) + k = k₁ := a8 _ (by omega) hkJ hpcQ
+    rw [hk₁] at hvs hhiQ
+    have hvsR : VertModel.vsOf sy (trace (L.fm t) (L.inp t) (CtrlKeep.arrAt sy (L.fm t) (L.inp t))) = VertModel.vsOf sy (L.fm t) := vsOf_keepA kp
+    rw [hvsR] at hvs hhiQ hstQ
+    have hok : OpenAir.Ok1 sy (OpenAir.ctxOf sy m0 v) (trace (L.fm t) (L.inp t) k₁) := by
+      refine ⟨?_, ?_, ?_⟩
+      · show (VertModel.vsOf sy (trace (L.fm t) (L.inp t) k₁)).y.toNat < _
+        rw [hvs]; exact hnext.1
+      · rw [hhiQ]; exact hnext.2
+      · show (VertModel.vsOf sy (trace (L.fm t) (L.inp t) k₁)).st = 1 ∨ (VertModel.vsOf sy (trace (L.fm t) (L.inp t) k₁)).st = 2
+        rw [hvs]; exact hstQ
+    obtain ⟨b1, b2, b3⟩ := a10 hok
+    have hn := nxt k₂ (by omega) a9
+    refine ⟨by rw [hn _ (by simp [OpenAir.vsA, OpenFlat.vertA])]; exact b2, haltM_of_vsA hn b3, fun h0 => absurd h0 hg, fun _ => ?_⟩
+    rw [vsOf_of_vsA hn, b1, hvs]
+    rfl
+
 /-- **Each of the first `N` counted frames is a step of the opening's model, with the position modulo `2²⁴`**, from the conditions on single frames (`Real`). The frames
-left in the air are read from the machines (`airOf`, looking up to the counted frame `N + Zb`). At control he is on the ground and the frame's start holds `Held` (`h₁`, from
-the press of Start on the title). `hc`, `hk`, `hp`, `C` and `hM` are checks on the ROM, `hs₁` and `hm₁` the start of frame 1. -/
+left in the air are read from the machines up to the horizon `min (N + 1) E` (`airT`). At control he is on the ground and the frame's start holds `Held` (`h₁`, from the
+press of Start on the title). `hc`, `hk`, `hp`, `C` and `hM` are checks on the ROM, `hs₁` and `hm₁` the start of frame 1. -/
 def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Nat} {v : UInt8} (hc : LagFrames.lagCheck sy m0 = true)
     (hk : StartRun.walkCheck sy m0 = true) (hp : LagPause.pauseCheck sy m0 g = true) (C : Checks sy m0 lens Zb v g) (hM : OpenMap.mapCheck sy m0 = true)
     (hs₁ : FrameStart (guardOf sy m0) (PipeEntryRule.envOf m0) (S.seq 1)) (hm₁ : OpenMap.MapAt sy m0 (S.seq 1)) (h₁ : Held sy v (L.fm 1)) (hg₁ : peek (L.fm 1) sy.Player_State = 0)
     (hG₁ : OpenFlat.GroundAt sy m0 (L.fm 1)) (hv : ∀ t, 1 ≤ t → t ≤ E → (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs ≤ TopSpeed.top sy)
-    (O : Real sy m0 lens N E L) (hm : StSpring sy L N E) : OpenRunM sy m0 lens N E L.fm := by
+    (O : Real sy m0 lens N E L) (hm : StSpring sy L N E) (hpv₁ : PrevKeep.PrevOK sy (L.fm 1)) : OpenRunM sy m0 lens N E L.fm := by
   -- the frames not counted after the counted frame `t`
   have lk : ∀ t, 1 ≤ t → t < E → ∀ b ∈ LagFrames.lagI sy, (L.fm (t + 1)).ram.get! b = (frame (L.fm t) (L.inp t)).ram.get! b :=
     fun t _ h2 => PipeFrames.lags_keepI hc hk hp L hs₁ t h2
@@ -702,14 +964,60 @@ def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : N
       have fs := O.frame_step C (t := 1 + d) (by omega) (by omega) (by omega) (startK_of hc hk hp hs₁ (by omega) (by omega)) hh (hm (1 + d) (by omega) (by omega) (by omega))
       rw [show 1 + (d + 1) = 1 + d + 1 by omega]
       exact (keep_parts (lk (1 + d) (by omega) (by omega))).2.2 fs.2.2.1
-  -- on the ground at the ground's height, at each counted frame on the ground
-  have gr := O.ground_all hc hk hp C hM hs₁ hm₁ (fun t h1 h2 h3 => by
+  have heldT : ∀ t, 1 ≤ t → t ≤ N → t < E → Held sy v (L.fm t) := fun t h1 h2 h3 => by
     have := held (t - 1) (by omega) (by omega)
-    rwa [show 1 + (t - 1) = t by omega] at this) hm (fun t h1 _ h3 => hv t h1 (Nat.le_of_lt h3)) hg₁ hG₁
-  refine ⟨airOf sy L.fm (N + Zb), airOf_ground hg₁, ?_⟩
+    rwa [show 1 + (t - 1) = t by omega] at this
+  -- the vertical model on the counted frames
+  have hV : VertOK sy m0 N E L.fm L.inp := O.vertOK hc hk hp C hM hs₁ hm₁ heldT hm hpv₁
+  -- on the ground at the ground's height, at each counted frame on the ground
+  have gr := O.ground_all hc hk hp C hM hs₁ hm₁ hV heldT hm (fun t h1 _ h3 => hv t h1 (Nat.le_of_lt h3)) hg₁ hG₁
+  -- the last counted frame on the ground before a frame in the air is a takeoff, and what `Real.jumpV` says of it
+  have takeoff : ∀ t0, 1 ≤ t0 → t0 ≤ N → t0 < E → peek (L.fm t0) sy.Player_State = 0 → peek (L.fm (t0 + 1)) sy.Player_State ≠ 0 → t0 + 1 ≤ N →
+      (inOf sy L.fm L.inp t0).jump = true := by
+    intro t0 a1 a2 a3 a4 a5 a6
+    cases hj : (inOf sy L.fm L.inp t0).jump
+    · exfalso
+      exact a5 (O.flat hc hk hp C hM hs₁ hm₁ a1 a2 a3 (heldT t0 a1 a2 a3) (hm t0 a1 a2 a3).2 a4 (gr t0 a1 a2 a3 a4) hj).1
+    · rfl
+  -- in the air: at least one frame left, and one less at the next counted frame
+  have air_facts : ∀ t, 1 ≤ t → t ≤ N → t < E → peek (L.fm t) sy.Player_State ≠ 0 →
+      1 ≤ airT sy lens L.fm (min (N + 1) E) t ∧ airT sy lens L.fm (min (N + 1) E) (t + 1) = airT sy lens L.fm (min (N + 1) E) t - 1 := by
+    intro t h1 h2 h3 hst
+    obtain ⟨t0, a1, a2, a3, a4⟩ := last_ground hg₁ t h1
+    have ht0 : t0 < t := by
+      rcases Nat.lt_or_ge t0 t with h | h
+      · exact h
+      · exact absurd (show t0 = t by omega ▸ a3) hst
+    have hn1 : peek (L.fm (t0 + 1)) sy.Player_State ≠ 0 := a4 (t0 + 1) (by omega) (by omega)
+    have hj0 := takeoff t0 a1 (by omega) (by omega) a3 hn1 (by omega)
+    have hrun := airT_run (lens := lens) (H := min (N + 1) E) (fm := L.fm) (t0 := t0) (t - t0) (by omega) (fun e' b1 b2 => a4 (t0 + e') (by omega) (by omega))
+    rw [show t0 + (t - t0) = t by omega] at hrun
+    rcases Real.jumpV C hV a1 (by omega) (by omega) (heldT t0 a1 (by omega) (by omega)) (hv t0 a1 (by omega)) a3 (gr t0 a1 (by omega) (by omega) a3) hj0 with
+      ⟨n, n1, nH, _, _, n4, n5, _⟩ | ⟨hair, _⟩
+    · have hlt : t < t0 + n := by
+        rcases Nat.lt_or_ge t (t0 + n) with h | h
+        · exact h
+        · exact absurd n5 (a4 (t0 + n) (by omega) h)
+      have hA := airT_after (lens := lens) a3 n1 nH n4 n5
+      rw [hA] at hrun
+      refine ⟨by omega, ?_⟩
+      by_cases he : t + 1 = t0 + n
+      · rw [he, airT_ground (by omega) n5, hrun]
+        omega
+      · have ha' : peek (L.fm (t + 1)) sy.Player_State ≠ 0 := by
+          have := n4 (t + 1 - t0) (by omega) (by omega)
+          rwa [show t0 + (t + 1 - t0) = t + 1 by omega] at this
+        exact airT_air hst ha'
+    · have hA := airT_after_air (lens := lens) a3 (by omega) hair
+      rw [hA] at hrun
+      refine ⟨by omega, ?_⟩
+      have ha' : peek (L.fm (t + 1)) sy.Player_State ≠ 0 := by
+        have := hair (t + 1 - t0) (by omega) (by omega)
+        rwa [show t0 + (t + 1 - t0) = t + 1 by omega] at this
+      exact airT_air hst ha'
+  refine ⟨airT sy lens L.fm (min (N + 1) E), airT_ground (Nat.le_refl 1) hg₁, ?_⟩
   intro t h1 h2 h3
-  have hh := held (t - 1) (by omega) (by omega)
-  rw [show 1 + (t - 1) = t by omega] at hh
+  have hh := heldT t h1 h2 h3
   obtain ⟨s1, s2, _, s4⟩ := O.frame_step C h1 h2 h3 (startK_of hc hk hp hs₁ h1 (by omega)) hh (hm t h1 h2 h3)
   obtain ⟨k1, k2, _⟩ := keep_parts (v := v) (lk t h1 h3)
   have hmem : inOf sy L.fm L.inp t ∈ Potential.inputs := FrameModel.readIn_mem (FrameModel.joy_of_model C.model) _
@@ -727,27 +1035,42 @@ def Real.toRunM {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : N
   · rw [k1, s1, FastTakeoff.hstep_norm C.norm hmem]
   · rw [k2, k1]; exact s2
   · by_cases hg : peek (L.fm t) sy.Player_State = 0
-    · rw [airOf_ground hg]
+    · rw [airT_ground h1 hg]
       simp [Opening.valid, FastTakeoff.norm_st, est, hg]
-    · rw [airOf_air hg (by have := C.Zb0; omega)]
+    · obtain ⟨p1, _⟩ := air_facts t h1 h2 h3 hg
+      obtain ⟨r, hr⟩ : ∃ r, airT sy lens L.fm (min (N + 1) E) t = r + 1 := ⟨airT sy lens L.fm (min (N + 1) E) t - 1, by omega⟩
+      rw [hr]
       simp [Opening.valid, FastTakeoff.norm_st, FastTakeoff.norm_jump, est, hg, ejp hg]
   · by_cases hg : peek (L.fm t) sy.Player_State = 0
-    · rw [airOf_ground hg]
+    · rw [airT_ground h1 hg]
       cases hj : (inOf sy L.fm L.inp t).jump
       · have hf := (O.flat hc hk hp C hM hs₁ hm₁ h1 h2 h3 hh (hm t h1 h2 h3).2 hg (gr t h1 h2 h3 hg) hj).1
-        rw [airOf_ground hf]
+        rw [airT_ground (by omega) hf]
         simp [Opening.modes, FastTakeoff.norm_jump, hj]
-      · obtain ⟨n, n1, n2, n3, n4, n5, _⟩ := O.jumpV C h1 h2 hh (hv t h1 (Nat.le_of_lt h3)) hg hj
-        have hZ := C.lens_lt (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs
-        rw [airOf_jump n1 (by omega) n4 n5]
+      · have hord := OpenJump.lens_ord C.jumps (sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs
         simp only [Opening.modes, FastTakeoff.norm_jump, hj, if_true, beq_self_eq_true]
-        refine List.mem_map.2 ⟨n - 1 - ((lens[(sbyte (startHS sy (L.fm t)).v).natAbs]!).1 - 1), List.mem_range.2 ?_, ?_⟩
-        · show n - 1 - ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1) <
-            (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).2 + 1 - (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1
-          omega
-        · show (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1 + (n - 1 - ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1)) = n - 1
-          omega
-    · rw [airOf_air hg (by have := C.Zb0; omega)]
+        rcases Real.jumpV C hV h1 h2 h3 hh (hv t h1 (Nat.le_of_lt h3)) hg (gr t h1 h2 h3 hg) hj with ⟨n, n1, nH, n2, n3, n4, n5, _⟩ | ⟨hair, hlt⟩
+        · rw [airT_after (lens := lens) hg n1 nH n4 n5]
+          refine List.mem_map.2 ⟨n - 1 - ((lens[(sbyte (startHS sy (L.fm t)).v).natAbs]!).1 - 1), List.mem_range.2 ?_, ?_⟩
+          · show n - 1 - ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1) <
+              (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).2 + 1 - (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1
+            omega
+          · show (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1 + (n - 1 - ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1)) = n - 1
+            omega
+        · rw [airT_after_air (lens := lens) hg (by omega) hair]
+          refine List.mem_map.2 ⟨max ((lensAt sy lens L.fm t).1 - 1) (min (N + 1) E - t - 1) - ((lens[(sbyte (startHS sy (L.fm t)).v).natAbs]!).1 - 1),
+            List.mem_range.2 ?_, ?_⟩
+          · show max ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1) (min (N + 1) E - t - 1) -
+                ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1) <
+              (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).2 + 1 - (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1
+            omega
+          · show (lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1 + (max ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1)
+                (min (N + 1) E - t - 1) - ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1)) =
+              max ((lens[(sbyte (peek (L.fm t) sy.Player_X_Speed)).natAbs]!).1 - 1) (min (N + 1) E - t - 1)
+            omega
+    · obtain ⟨_, p2⟩ := air_facts t h1 h2 h3 hg
+      obtain ⟨r, hr⟩ : ∃ r, airT sy lens L.fm (min (N + 1) E) t = r + 1 := ⟨airT sy lens L.fm (min (N + 1) E) t - 1, by have := (air_facts t h1 h2 h3 hg).1; omega⟩
+      rw [p2, hr]
       simp [Opening.modes]
 
 /-- **Each of the first `N` counted frames is a step of the opening's model**: `Real.toRunM`, with the positions exact (`OpenRunM.toRun`). The horizontal state and the
@@ -760,8 +1083,8 @@ def Real.toRun {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Zb : Na
     (hs : startHS sy (L.fm 1) = startHS sy m0) (hP : posP sy (L.fm 1) = posP sy m0) {D : Int}
     (hopt : ∀ k u, k ≤ N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → u.2 ≤ D)
     (hlow : ∀ k u, k < N → Cert.Reach (succ sy m0 lens) (start sy m0) k u → -posP sy m0 ≤ u.2) (htop : posP sy m0 + D < 0x1000000)
-    (O : Real sy m0 lens N E L) (hm : StSpring sy L N E) : OpenRun sy m0 lens N E L.fm :=
-  (O.toRunM hc hk hp C hM hs₁ hm₁ h₁ hg₁ hG₁ hv hm).toRun hs hP hopt hlow htop O.page
+    (O : Real sy m0 lens N E L) (hm : StSpring sy L N E) (hpv₁ : PrevKeep.PrevOK sy (L.fm 1)) : OpenRun sy m0 lens N E L.fm :=
+  (O.toRunM hc hk hp C hM hs₁ hm₁ h₁ hg₁ hG₁ hv hm hpv₁).toRun hs hP hopt hlow htop O.page
 
 instance (sy : Syms) (v : UInt8) (m : Machine) : Decidable (Held sy v m) := by unfold Held CtrlKeep.AreaOK; infer_instance
 
@@ -799,12 +1122,15 @@ theorem checks_of {B : PoleJoin.Box} {J Zb g : Nat} {lens : Lens} (hn : SurfaceF
     (hnorm : Potential.normIdem = true) (hl : ((lens.toList.all fun p => decide (p.2 < Zb)) && decide (0 < Zb) && decide (16 ≤ TopSpeed.top sy)) = true)
     (hs : decide (Held sy (peek m0 sy.AreaType) m0 ∧ peek m0 sy.Player_State = 0 ∧ OpenFlat.GroundAt sy m0 m0) = true) (hg : (CtrlKeep.pauseI sy m0 == g) = true)
     (hf : OpenFlat.flatCheck sy m0 (peek m0 sy.AreaType) = true)
-    (hj : OpenJump.arcCheck sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position) sy.LandDepth.toUInt8 lens = true) :
+    (hj : OpenJump.arcCheck sy m0 (FrameModel.ctrlStack sy m0) (peek m0 sy.Player_Y_Position) sy.LandDepth.toUInt8 lens = true)
+    (ha : OpenAir.airAll sy m0 (peek m0 sy.AreaType) = true) (hvh : OpenVert.vertAirHOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hp0 : PrevKeep.prevOKB sy m0 = true) :
     Checks sy m0 lens Zb (peek m0 sy.AreaType) g := by
   have e : peek B.m sy.AreaType = peek m0 sy.AreaType := by simpa using he
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hl hs
-  refine ⟨hn.model, hn.ctrl, ?_, ?_, hnorm, hl.1.1, hl.1.2, hs, by simpa using hg, hn.idle, hf, hl.2, hj⟩
+  refine ⟨hn.model, hn.ctrl, ?_, ?_, hnorm, hl.1.1, hl.1.2, hs, by simpa using hg, hn.idle, hf, hl.2, hj, ha, hvh, ?_, by simpa [PrevKeep.prevOKB] using hp0⟩
   · rw [← e]; exact hn.after
   · rw [← e]; exact hn.area3
+  · rw [← e]; exact hn.prev
 
 end Smbrta.OpenFrames

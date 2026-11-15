@@ -416,9 +416,20 @@ def rowQ (sy : Syms) (S : AS) : Bool :=
   (SurfaceFrames.ctlBytes sy).all (knowsAd S) &&
     (!controllable sy (mOf S) || (knSt (S.getK (I sy.Player_State)) AB.top && knZero (S.getK (I sy.PlayerChangeSizeFlag)) AB.top))
 
-/-- **The check on the ROM**: in the rows of the time of the change into the room, a machine with control has both relations, and the two facts of `Quad` -/
-def rowsCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) : Bool :=
-  (timeRows (timeCtx sy nm d e) d e).all fun w => w.R.all fun S => rowP sy S && rowQ sy S
+/-- the bytes that `VertModel.vsOf` reads -/
+def vsBytes (sy : Syms) : List UInt16 :=
+  [sy.Player_Y_Position, sy.Player_Y_MoveForce, sy.Player_Y_Speed, sy.Player_YMF_Dummy, sy.VerticalForce, sy.VerticalForceDown, sy.JumpOrigin_Y_Position,
+    sy.Player_State, sy.A_B_Buttons]
+
+/-- a state of a row: it says whether it has control, and if it has, it knows the vertical bytes, and they are a state of `v0` -/
+def rowV (sy : Syms) (v0 : List Jump.VS) (S : AS) : Bool :=
+  (SurfaceFrames.ctlBytes sy).all (knowsAd S) &&
+    (!controllable sy (mOf S) || ((vsBytes sy).all (knowsAd S) && v0.contains (VertModel.vsOf sy (mOf S))))
+
+/-- **The check on the ROM**: in the rows of the time of the change into the room, a machine with control has both relations, the two facts of `Quad`, and a vertical
+state of `v0` -/
+def rowsCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (v0 : List Jump.VS) : Bool :=
+  (timeRows (timeCtx sy nm d e) d e).all fun w => w.R.all fun S => rowP sy S && rowQ sy S && rowV sy v0 S
 
 variable {sy : Syms}
 
@@ -432,18 +443,23 @@ theorem pair_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : 
   · exact ⟨knHalt_spec h1 (hs.ram _ (PipeTransitionAll.mask_lt _)) (hs.ram _ (PipeTransitionAll.mask_lt _)),
       knPrev_spec h2 (hs.ram _ (PipeTransitionAll.mask_lt _)) (hs.ram _ (PipeTransitionAll.mask_lt _))⟩
 
-theorem pair_of_invL {C : Ctx} : ∀ {l : List Row}, (l.all fun w => w.R.all fun S => rowP sy S && rowQ sy S) = true → ∀ {m : Machine}, InvL C l m →
-    controllable sy m = true → Pair sy m
+/-- what a row's check gives on a machine of the rows -/
+theorem of_invL {C : Ctx} {Q : AS → Bool} {R : Machine → Prop} (hq : ∀ {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine}, Sim E F S m → Q S = true → controllable sy m = true → R m) :
+    ∀ {l : List Row}, (l.all fun w => w.R.all Q) = true → ∀ {m : Machine}, InvL C l m → controllable sy m = true → R m
   | [], _, _, h, _ => by cases h
   | w :: t, hl, _, h, hc => by
     simp only [List.all_cons, Bool.and_eq_true] at hl
     rcases h with ⟨S, hS, hs⟩ | h
-    · exact pair_of_state hs (Bool.and_eq_true _ _ ▸ List.all_eq_true.1 hl.1 S hS).1 hc
-    · exact pair_of_invL hl.2 h hc
+    · exact hq hs (List.all_eq_true.1 hl.1 S hS) hc
+    · exact of_invL hq hl.2 h hc
+
+theorem pair_of_invL {C : Ctx} {v0 : List Jump.VS} {l : List Row} (hl : (l.all fun w => w.R.all fun S => rowP sy S && rowQ sy S && rowV sy v0 S) = true) {m : Machine}
+    (h : InvL C l m) (hc : controllable sy m = true) : Pair sy m :=
+  of_invL (fun hs hq hc => pair_of_state hs (by simp only [Bool.and_eq_true] at hq; exact hq.1.1) hc) hl h hc
 
 /-- **Both relations at the first control in the room**, for a machine with control in the rows of the time -/
-theorem pair_of_rows {nm : Names} {d : Data} {e : Machine} (hc : rowsCheck sy nm d e = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) :
-    Pair sy m :=
+theorem pair_of_rows {nm : Names} {d : Data} {e : Machine} {v0 : List Jump.VS} (hc : rowsCheck sy nm d e v0 = true) {m : Machine} (h : InRowsT sy nm d e m)
+    (hm : controllable sy m = true) : Pair sy m :=
   pair_of_invL hc h hm
 
 theorem quad_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : Sim E F S m) (hr : rowQ sy S = true) (h : controllable sy m = true) : Quad sy m := by
@@ -455,19 +471,37 @@ theorem quad_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : 
     cases h1
   · exact ⟨knSt_spec h1 (hs.ram _ (PipeTransitionAll.mask_lt _)), knZero_spec h2 (hs.ram _ (PipeTransitionAll.mask_lt _))⟩
 
-theorem quad_of_invL {C : Ctx} : ∀ {l : List Row}, (l.all fun w => w.R.all fun S => rowP sy S && rowQ sy S) = true → ∀ {m : Machine}, InvL C l m →
-    controllable sy m = true → Quad sy m
-  | [], _, _, h, _ => by cases h
-  | w :: t, hl, _, h, hc => by
-    simp only [List.all_cons, Bool.and_eq_true] at hl
-    rcases h with ⟨S, hS, hs⟩ | h
-    · exact quad_of_state hs (Bool.and_eq_true _ _ ▸ List.all_eq_true.1 hl.1 S hS).2 hc
-    · exact quad_of_invL hl.2 h hc
+theorem quad_of_invL {C : Ctx} {v0 : List Jump.VS} {l : List Row} (hl : (l.all fun w => w.R.all fun S => rowP sy S && rowQ sy S && rowV sy v0 S) = true) {m : Machine}
+    (h : InvL C l m) (hc : controllable sy m = true) : Quad sy m :=
+  of_invL (fun hs hq hc => quad_of_state hs (by simp only [Bool.and_eq_true] at hq; exact hq.1.2) hc) hl h hc
 
 /-- **Both facts at the first control in the room**, for a machine with control in the rows of the time -/
-theorem quad_of_rows {nm : Names} {d : Data} {e : Machine} (hc : rowsCheck sy nm d e = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) :
-    Quad sy m :=
+theorem quad_of_rows {nm : Names} {d : Data} {e : Machine} {v0 : List Jump.VS} (hc : rowsCheck sy nm d e v0 = true) {m : Machine} (h : InRowsT sy nm d e m)
+    (hm : controllable sy m = true) : Quad sy m :=
   quad_of_invL hc h hm
+
+/-- a covered machine with control that knows the vertical bytes has the vertical state of the state -/
+theorem v_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} {v0 : List Jump.VS} (hs : Sim E F S m) (hr : rowV sy v0 S = true)
+    (h : controllable sy m = true) : VertModel.vsOf sy m ∈ v0 := by
+  simp only [rowV, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true] at hr
+  obtain ⟨hk, hr⟩ := hr
+  rcases hr with h1 | ⟨h1, h2⟩
+  · have := SurfaceFrames.controllable_of_known hs hk h
+    rw [this] at h1
+    cases h1
+  · simp only [vsBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at h1
+    obtain ⟨k1, k2, k3, k4, k5, k6, k7, k8, k9⟩ := h1
+    have e : VertModel.vsOf sy m = VertModel.vsOf sy (mOf S) := by
+      simp only [VertModel.vsOf, SideChangeEnd.peek_of_known hs k1, SideChangeEnd.peek_of_known hs k2, SideChangeEnd.peek_of_known hs k3,
+        SideChangeEnd.peek_of_known hs k4, SideChangeEnd.peek_of_known hs k5, SideChangeEnd.peek_of_known hs k6, SideChangeEnd.peek_of_known hs k7,
+        SideChangeEnd.peek_of_known hs k8, SideChangeEnd.peek_of_known hs k9]
+    rw [e]
+    exact List.contains_iff_mem.1 h2
+
+/-- **The vertical state at the first control in the room is a state of `v0`**, for a machine with control in the rows of the time -/
+theorem v_of_rows {nm : Names} {d : Data} {e : Machine} {v0 : List Jump.VS} (hc : rowsCheck sy nm d e v0 = true) {m : Machine} (h : InRowsT sy nm d e m)
+    (hm : controllable sy m = true) : VertModel.vsOf sy m ∈ v0 :=
+  of_invL (fun hs hq hc => v_of_state hs (by simp only [Bool.and_eq_true] at hq; exact hq.2) hc) hc h hm
 
 end
 
@@ -478,16 +512,16 @@ open ScreenPage (placesR envR refR)
 open PipeChangeEnd (Data InRowsT)
 
 /-- what the room needs: the two walks and the rows -/
-structure Checks (sy : Syms) (nmS : Names) (m0 : Machine) (nm : Names) (d : Data) : Prop where
+structure Checks (sy : Syms) (nmS : Names) (m0 : Machine) (nm : Names) (d : Data) (v0 : List Jump.VS) : Prop where
   walks : WalkChecks sy nmS m0
-  rows : rowsCheck sy nm d (PipeTransition.entry m0) = true
+  rows : rowsCheck sy nm d (PipeTransition.entry m0) v0 = true
 
-variable {sy : Syms} {nm nmS : Names} {d : Data} {m0 : Machine}
+variable {sy : Syms} {nm nmS : Names} {d : Data} {m0 : Machine} {v0 : List Jump.VS}
 
 /-- **Both relations at the start of every frame of the room before the entry.** `seq` lists the frames of a run; frame `b` is the first control in the room, a machine
 with control in the rows of the change; each frame before `a` meets `SiteOK` on each instruction and starts in the player's routine. The machine at the end of each frame
 from `b` to `a` has both relations: in a jump the jump's halt value is 1, and bit 7 of A of the frame before is bit 7 of A. -/
-theorem pair_run (hP : Checks sy nmS m0 nm d) (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true)
+theorem pair_run (hP : Checks sy nmS m0 nm d v0) (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true)
     {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat}
     (hin : InRowsT sy nm d (PipeTransition.entry m0) (seq b)) (hctl : controllable sy (seq b) = true)
     (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
@@ -511,7 +545,7 @@ theorem pair_run (hP : Checks sy nmS m0 nm d) (hF : RoomMap.MapFacts sy nmS m0) 
 
 /-- **The player's state is 0, 1 or 2 and the change of size is 0 at the start of every frame of the room before the entry**, under the conditions of `pair_run`.
 `hQ` are the two walks, `hP` gives the rows -/
-theorem quad_run (hQ : QuadWalks sy nmS m0) (hP : Checks sy nmS m0 nm d) (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true)
+theorem quad_run (hQ : QuadWalks sy nmS m0) (hP : Checks sy nmS m0 nm d v0) (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true)
     {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat}
     (hin : InRowsT sy nm d (PipeTransition.entry m0) (seq b)) (hctl : controllable sy (seq b) = true)
     (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
@@ -534,11 +568,11 @@ theorem quad_run (hQ : QuadWalks sy nmS m0) (hP : Checks sy nmS m0 nm d) (hF : R
   exact key k h2
 
 /-- the checks of the room's walks: those of `RoomVert` and those of this file, and that the room's idle loop is a `JMP` to itself -/
-structure RoomWalks (sy : Syms) (nmS : Names) (m0 : Machine) (h k : Nat) (nm : Names) (d : Data) : Prop where
+structure RoomWalks (sy : Syms) (nmS : Names) (m0 : Machine) (h k : Nat) (nm : Names) (d : Data) (v0 : List Jump.VS) : Prop where
   vert : RoomVert.VChecks sy nmS m0 h k
   /-- the walk from the scroll handler falling, and every state of the jumps from the floor (`RoomFall`) -/
   fall : RoomFall.FChecks sy nmS m0 h
-  pair : Checks sy nmS m0 nm d
+  pair : Checks sy nmS m0 nm d v0
   quad : QuadWalks sy nmS m0
   idle : FrameModel.idleAt (FrameModel.Rom.of m0) (placesR sy nmS m0).idle = true
 

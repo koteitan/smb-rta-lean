@@ -9,9 +9,9 @@ counter of `TaintRun` (`Env.rkI`): a walk that does not fail shows that no instr
 the instruction before `SkipMainOper`: a paused frame skips that call. So, under `Clean` on each instruction before the call:
 
 * `keeps_frame`: a frame from the idle loop in control either calls the routine of the mode, or it ends with the five bytes of the speed, the subspeed and the
-  position (`vfpI`), the three bytes of control (`ctlI`: the routine, the mode, the task) and thirteen more bytes (`moreI`: the rest of the horizontal state, the stored
-  speed, the collision bits, the area's type, the swimming flag, the change of size, the player's state, the height, its high byte, the vertical speed and its fraction)
-  as it began. One walk for each byte.
+  position (`vfpI`), the three bytes of control (`ctlI`: the routine, the mode, the task) and twenty more bytes (`moreI`: the rest of the horizontal state, the stored
+  speed, the collision bits, the area's type, the swimming flag, the change of size, the player's state, the height, its high byte, the vertical speed and its fraction,
+  the other vertical bytes of `vstep`, A and B, A and B of the frame before, the jump's halt value) as it began. One walk for each byte.
 * `known_of_keep`: so such a frame ends in control (`known_ctl` of `StartRun` the other way: the known bytes of `guardOf`).
 
 The five bytes of `V` are not in `prot` of `guardOf`: a store with a target not known makes the walk forget the followed byte, and then the walk fails at the frame's end.
@@ -40,10 +40,13 @@ def vfpI (sy : Syms) : List Nat :=
 def ctlI (sy : Syms) : List Nat := [I sy.GameEngineSubroutine, I sy.OperMode, I sy.OperMode_Task]
 
 /-- the other bytes of the horizontal state (the facing and moving directions, the running speed), the stored speed, the collision bits, the area's type, the swimming flag,
-the change of size, the player's state, and the height, its high byte, the vertical speed and its fraction: what the next counted frame needs at its start (`OpenFrames`) -/
+the change of size, the player's state, and the height, its high byte, the vertical speed and its fraction; and the other vertical bytes of `vstep` (the height's
+fraction, the two forces, the jump's origin), A and B, A and B of the frame before, and the jump's halt value: what the next counted frame needs at its start
+(`OpenFrames`) -/
 def moreI (sy : Syms) : List Nat :=
   [I sy.PlayerFacingDir, I sy.Player_MovingDir, I sy.RunningSpeed, I sy.Player_XSpeedAbsolute, I sy.Player_CollisionBits, I sy.AreaType, I sy.SwimmingFlag,
-   I sy.PlayerChangeSizeFlag, I sy.Player_State, I sy.Player_Y_Position, I sy.Player_Y_HighPos, I sy.Player_Y_Speed, I sy.Player_Y_MoveForce]
+   I sy.PlayerChangeSizeFlag, I sy.Player_State, I sy.Player_Y_Position, I sy.Player_Y_HighPos, I sy.Player_Y_Speed, I sy.Player_Y_MoveForce,
+   I sy.Player_YMF_Dummy, I sy.VerticalForce, I sy.VerticalForceDown, I sy.JumpOrigin_Y_Position, I sy.A_B_Buttons, I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump]
 
 /-- the bytes that the walk follows, one walk each -/
 def lagI (sy : Syms) : List Nat := vfpI sy ++ ctlI sy ++ moreI sy

@@ -94,7 +94,7 @@ Lean: `Theorems/OpenFlat.lean`（`AfterV`、`vertA`、`groundOK`、`finX`、`fla
 
 * **`afterV`**（新しい）: 当たり判定のルーチンから戻るところからフレームの終わりまで、`V` の 4 バイトは変わらない。1 フレームごとの条件で、`after` の縦の半分です。
 * **`map`**: ブロックバッファのルーチンの読み出しは最初のバッファの中にある（ページ 0 にいる）。`map` は数えるフレーム `N` のフレームも含む。
-* **もう仮定でないもの**: `flat`、`ground`（着地のあとは [出だしのジャンプ](a-5-7-OpenJump-ja.md) のフィールド `vert` から出ます）。
+* **もう仮定でないもの**: `flat`、`ground`（着地のあとは `Real.vertOK` と [出だしのジャンプ](a-5-7-OpenJump-ja.md) から出ます）。
 
 **ファイル.** `Theorems/OpenFlat.lean`、`Theorems/OpenFrames.lean`、`Theorems/OpenMap.lean`、`Theorems/LagFrames.lean`、`Theorems/StartRun.lean`、
 `Theorems/Route.lean`、非公開の `Proof/OpenFlat.lean`。

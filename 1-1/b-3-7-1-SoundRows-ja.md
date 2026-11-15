@@ -41,7 +41,7 @@ goK   :  ∀ m, InRowsK(m) → ¬Paused(m)
 ctlK  :  ∀ m, InRowsK(m) ∧ left(m) = 0 → InRowsT(m)
 ```
 
-**走り.** `PipeRunK` は `PipeRun` のフィールドに、出口での `QuietP ∧ SongAt(shape)`（`quiet`）と出口での `TimerOK`（`time`）を持ちます。`b` が入ったあと最初の操作なら（`hc`）:
+**走り.** `PipeRunK` は `PipeRun` のフィールドに、出口での `QuietP ∧ SongAt(shape)`（`quiet`）と出口での `TimerOK`（`time`。第 13 回からは入口での `TimerOK`: [縦の土管でのゲームタイマー](b-3-9-1-PipeTime-ja.md)）を持ちます。`b` が入ったあと最初の操作なら（`hc`）:
 
 ```
 PipeRunK.bound   :  cnt(a) + 91 ≤ cnt(b)
@@ -86,7 +86,7 @@ Lean: `Theorems/SoundRows.lean`（`SRow`、`scan`、`rowsFromS`、`incl`、`finS
 ## 仮定（Lean では証明していない）
 
 * 出口でルートはいま `QuietRest ∧ SongAt(shape)` だけを求めます（`chg.quiet₁`）。`QuietP` のポーズの部分は、入るときの条件 `PauseV`（`chg.pause₁`）から、ポーズをクラスに入れた土管のフレームで出ます。[縦の土管のフレームを通るポーズ](b-3-7-2-PipePause-ja.md)を見てください。ポーズの音のキュー、鳴っていない場合の曲の行と 2 つの効果音、画面のバッファの形はまだ求めます。
-* 出口での `TimerOK`（`chg.time₁`）。
+* 出口での `TimerOK`（`chg.time₁`）。第 13 回からは入口で求めます: [縦の土管でのゲームタイマー](b-3-9-1-PipeTime-ja.md)。
 * 土管のあとのゲームコアのフレームで Start を押さないこと（`chg.noStart₁`、1-1-b-3-6）。操作の前の最後の 18 フレームです。ポーズしたフレームは `left` を減らさず、段は `left` の値ごとに 1 つです。していません。
 
 **ファイル.** `Theorems/SoundRows.lean`、`Theorems/PipeChangeEnd.lean`。非公開の確認は `Proof/PipeChangeEnd.lean` の `pipe_end_checks` です。

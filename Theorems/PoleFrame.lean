@@ -1,5 +1,6 @@
 import Theorems.SideFrame
 import Theorems.FrameKeep
+import Theorems.SubsOnce
 
 /-!
 # The touch of the pole: one whole frame
@@ -637,8 +638,13 @@ theorem start_T {sy : Syms} {m0 : Machine} {E : Env} {m : Machine} (h : FrameSta
 /-- the pointer's two bytes are in the RAM -/
 def ptrOK (sy : Syms) (m0 : Machine) : Bool := decide ((spotsF sy m0).ptrI + 1 < 2048)
 
-/-- **The check on the ROM.** -/
-def poleFrameCheck (sy : Syms) (m0 : Machine) : Bool := ptrOK sy m0 && frameCheck (poleOf sy m0) (envOf m0)
+/-- **The check on the ROM**: the walk of the touch's frame, and the two walks of `SubsOnce` (a frame in control comes to the end of the move at most once) -/
+def poleFrameCheck (sy : Syms) (m0 : Machine) : Bool := ptrOK sy m0 && frameCheck (poleOf sy m0) (envOf m0) && SubsOnce.subsCheck sy m0
+
+/-- the check of `SubsOnce` is part of the check -/
+theorem subs_of_check {sy : Syms} {m0 : Machine} (hc : poleFrameCheck sy m0 = true) : SubsOnce.subsCheck sy m0 = true := by
+  simp only [poleFrameCheck, Bool.and_eq_true] at hc
+  exact hc.2
 
 /-- **The touch on a real frame, at the end of the move.** If the frame touches, it starts in control (`StartK`), each of its instructions is `CleanK`, up to the write each
 state meets `PosKeep` and `TileRead`, and right after the scroll handler's store at the screen's edges (`again`) he is in the pole's range only if he was in it at the end of
@@ -651,7 +657,7 @@ theorem touch_right_of_left {sy : Syms} {m0 m : Machine} {i : UInt8} (hc : poleF
         ∃ k, k ≤ n ∧ (trace m i k).pc = sy.PlayerSubs ∧ (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i k))) :
     ∃ n j, WriteStep sy m i n ∧ j ≤ n ∧ (trace m i j).pc = sy.PlayerSubs ∧ (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j) := by
   simp only [poleFrameCheck, Bool.and_eq_true] at hc
-  obtain ⟨hp, hc⟩ := hc
+  obtain ⟨⟨hp, hc⟩, _⟩ := hc
   have hp' : (spotsF sy m0).ptrI + 1 < 2048 := by simpa [ptrOK] using hp
   obtain ⟨n, hw⟩ := he
   by_cases hx : ∃ j, j ≤ n ∧ (trace m i j).pc = sy.PlayerSubs ∧ (spotsF sy m0).left ≤ px (spotsF sy m0) (trace m i j)

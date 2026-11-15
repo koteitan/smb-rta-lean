@@ -52,10 +52,10 @@ frames_phase :  keepCheckOf, phaseCheck, tcCheck,  K はフレーム a からの
 |---|---|---|
 | 歩き `A`、`DecTimers` まで | 4（下のビット 0 か 1、フレームの早いか遅いか） | 15,554。切れ目の状態は 12 |
 | タイマーのコード | 12 × 21 | なし |
-| 歩き `B`、タイマーのループから | 252 | 38,386 |
+| 歩き `B`、タイマーのループから | 252 | 45,392（`guardE` が当たり判定のビットを守る前は 38,386） |
 | `tcCheck` の歩き | 2 | `FrameKeep` の探索 |
 
-ネイティブで、`phaseCheck` は探索も入れて 3.0 秒、`tcCheck` は 0.3 秒です。`Proof.PhaseFrame` のビルドは約 4 秒です。
+ネイティブで、`phaseCheck` は探索も入れて 3.1 秒、`tcCheck` は 0.3 秒です。`Proof.PhaseFrame` のビルドは約 4 秒です。
 
 ## 本物の走りで
 

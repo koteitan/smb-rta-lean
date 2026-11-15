@@ -10,7 +10,7 @@
 
 ```
 spareE           :=  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}
-Prot_E           :=  spareE  ∪  Prot_F                                                   （guardE）
+Prot_E           :=  spareE  ∪  collE  ∪  Prot_F                                          （guardE。13 回目に collE = {Player_CollisionBits} も加えた。パート e の `spareC` は `keep.cleanE` の一部）
 CleanK_E(m)      :=  Prot_K の代わりに Prot_E の CleanK(m)
 keep.cleanE      :  n < ix g  →  ∀ k,  CleanK_E(tr_n(k))                               （フィールド。前は cleanF で Prot_F）
 

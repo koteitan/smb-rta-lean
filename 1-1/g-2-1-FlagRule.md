@@ -53,7 +53,7 @@ The frames from the first frame of task 5 on keep the held counters. A frame tha
 * `m` is in one of 240 abstract states `B₀`. The pad is not known.
 * `ph < 21` and `task ∈ {2, 3, 4}`.
 * The timer's three digits are those of some `t ≤ tmax`. `tmax` is the timer's value at the start of 1-1, plus 1.
-* Mario's numbers `(v, F, f, A, C, s)` are in the set `Q`: `v` is the speed, `F` and `f` the fractions of two forces, `A` the absolute speed, `C` the collision bits, `s` the timer of the side collision. `Q` has the 6714 tuples reached frame by frame from the numbers at a bump into the wall. At a bump `v = 0`, `s` has its value at a bump, `F` is a multiple of 4 and `f` a multiple of 16.
+* Mario's numbers `(v, F, f, A, C, x, s)` are in the set `Q`: `v` is the speed, `F` and `f` the fractions of two forces, `A` the absolute speed, `C` the collision bits, `x` his position, `s` the timer of the side collision. `Q` has the 8762 tuples reached frame by frame from the numbers at a bump into the wall. At a bump `v = 0`, `s` has its value at a bump, `F` is a multiple of 4, `f` a multiple of 16, and `x` is `x0` or `x0 + 1` (`x0` that of `r`). After the first frame `x` is `x0` ([A wider condition at the castle entry](g-2-2-1-FlagWide.md)).
 * `RunningSpeed` and `Player_MovingDir` are those of `r`.
 * `task ≠ 4  →  lim − 1 ≤ y ≤ y(r)` and `task = 4  →  w ≤ w₀`.
 
@@ -64,7 +64,7 @@ The frames from the first frame of task 5 on keep the held counters. A frame tha
 * The bytes of the pause are known only in part. `GamePauseStatus` is 0, 1, 0x80 or 0x81. `PauseModeFlag` and `PauseSoundQueue` are at most 3. `GamePauseTimer` may have any value.
 * The height of the flagpole's floating number `FlagpoleFNum_Y_Pos` may have any value. The number of the flagpole's score `FlagpoleScore` is below 8. Both are set by the height of the touch. Up to the round before they had to be those of `r` ([A wider condition at the castle entry](g-2-2-1-FlagWide.md)).
 * The star flag is in the first enemy slot. The other four slots are empty, or all hold fireworks.
-* `EventMusicBuffer` is that of `r` or 0. Of the left and right x of the screen and of `ScrollThirtyTwo` only the high bits are known.
+* `EventMusicBuffer` is that of `r` or 0. Of the left and right x of the screen only bit 7 is known (0 to 127), of `ScrollThirtyTwo` only the high 3 bits. Mario's `x` is `x0` or `x0 + 1`.
 
 Any other byte may have any value: the score, the coins, the random bytes, the frame counter, `HorizontalScroll`, the places in the music (Square 1 is split by its value), the fireworks' states, the counters, the sound of the pause.
 
@@ -75,7 +75,7 @@ A frame is cut at 13 named places: `SoundEngine`, `MusicHandler`, `ReadJoypads`,
 On each stage three kinds of walks of the [abstract machine](b-2-3-TaintRun.md) are checked (`Checked`):
 
 * cover: from the states of the stage the machine comes to the next place in a state of the stage that begins there (`CoverP`, `nextIdx`);
-* facts: from one value, one of some values at the next place (`FactP`). These are the phase, the interval timer, the side timer, Mario's move (4844 moves), the wall, the timer's digits, the flag's height, the fireworks counter and the last wait;
+* facts: from one value, one of some values at the next place (`FactP`). These are the phase, the interval timer, the side timer, Mario's move (6892 moves), the wall, the timer's digits, the flag's height, the fireworks counter and the last wait;
 * keeps: under a condition the byte `b` does not change (`KeepP`). For values of at least 2 this is a walk with `b` as the counter (`Env.rkI`). For 0 and 1 it is a walk with the value known.
 
 `frame_step` joins them in order: the counters change by the rule, Mario's numbers come back into `Q`, and the frame ends in `B₀`.
@@ -131,7 +131,7 @@ In the three runs with idle frames real fireworks go up. The timer was set at th
 ## What is not proved
 
 * `Good(seq(E + 1))`, task 2 and the flag's height are hypotheses. They are not proved from the frames before the castle entry. They were checked on the runs above and on runs that touch the pole at other heights ([A wider condition at the castle entry](g-2-2-1-FlagWide.md)). The rows from the touch's end were only measured ([Rows from the touch's end to the castle](g-2-2-2-TouchRows.md)).
-* Nothing outside `Good` is covered: big Mario, the flag in another slot, slots with other objects, Mario's numbers outside `Q`, a timer above `tmax`, bytes that differ from `B₀`. A run where Mario's `x` after the castle entry is 1 more than in `r` is outside too.
+* Nothing outside `Good` is covered: big Mario, the flag in another slot, slots with other objects, Mario's numbers outside `Q`, a timer above `tmax`, bytes that differ from `B₀`. A run with the area parser at work at the castle entry is outside too.
 * `t(seq(E + 1)) = T` and `ph(seq(E + 1)) = c` stay fields that join `Frames`.
 * `GMerge` (1-1-g-2-3) is not treated here.
 

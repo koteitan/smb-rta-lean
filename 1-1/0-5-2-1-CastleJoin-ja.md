@@ -83,6 +83,31 @@ atCastle_of_phase :  lagUp_of の仮定,  g < c,  fc.sy = sy   ⟹   castle(pole
 
 なので `phase_succ_iff` は、時計の規則が位相をどこまで運ぶかを言います。フレーム `n` が始まるときに時計の位相が機械の位相なら、フレームが終わるときもそうであるのは、ちょうどフレーム `n` が `LagUp` を満たすときです。フレーム 0 の `read₀` から、時計の種類を機械につなぐものがなければ、規則はそれより後のどのフレームも与えません。
 
+## どのフレームで城に入るか
+
+`flag` はフレーム `E` のあとの機械を読みます。`flag.task_E` は、そこで城の旗が上がっていると言います（`castle_E`）。これまで、その前に旗が下りていることは何も言っていませんでした。なので `E` は、処理 2 の最初のフレームより後のフレームでもかまいませんでした。`FirstCastle` は、1 つずつの状態でこれを言います。
+
+```
+FirstCastle  :=  ∀ n,  b₂ ≤ n ≤ E   ⟹   ¬castle(seq n)
+
+castle_E        :  fc.sy = sy   ⟹   castle(seq(E + 1))
+noCastle_up     :  keepCheckOf,  StartK(pole.seq 0),  Watched(pole.seq 0)   ⟹   ∀ n ≤ ix(g),  ¬castle(seq(b₂ + n))
+firstCastle_of  :  同じもの,  hA : ∀ n,  b₂ + ix(g) < n ≤ E  ⟹  ¬castle(seq n)   ⟹   FirstCastle
+E_first         :  FirstCastle   ⟹   ∀ n ≥ b₂,  castle(seq(n + 1))  ⟹  E ≤ n
+c_first         :  LagUp,  g < c,  FirstCastle   ⟹   ∀ j < c,  ¬castle(pole.seq j)
+```
+
+なので `FirstCastle` があれば、`E` は `b₂` から城の旗で終わる最初のフレームです。さらに `LagUp` があれば、`c` は `pole` の数えるフレームで城の旗のある最初のものです（`pole.atCastle` は `c` で旗が上がっていると言います）。
+
+証明:
+
+* `noCastle_up`: `FrameKeep` の歩きは、触るフレームの終わりまでの各フレームで、数えても数えなくても、見張るビットを保ちます（`FrameKeep.Frames.all_watched`）。城の旗が下りていることはその 1 つです（`FrameKeep.castle_of_watched`）。
+* `firstCastle_of`: `b₂ + ix(g)` までは `noCastle_up`、そのあとは `hA` です。
+* `E_first`: `n < E` なら `n + 1 ≤ E` で、`FirstCastle` はフレーム `n + 1` の始めに旗が下りていると言います。
+* `c_first`: `pole.seq 0 = seq(b₂)` です（`Run.atCtl`）。`1 ≤ j < c` なら、`count_up` が `seq(n + 1) = pole.seq(j)`、`r(n) = Cs + j` のフレーム `n ∈ [b₂, E]` を与えます。`r(E) = Cs + c`（`clock.seen_E`）なので `n ≠ E`、なので `n + 1 ≤ E` です。
+
+`FirstCastle` はフィールドではありません。`LagUp` と同じく、定理がそれを受け取ります。`route_1_1` は変わりません。本物の走りでは、プログラムは `E` を城の旗で終わる最初のフレームにとります（`touchRunOf`）。なのでそこではこの選び方で `FirstCastle` が成り立ちます。[城に入ったときの条件を広げる](g-2-2-1-FlagWide-ja.md)の、`E + 1` で `Good` に入る 183 の走りでは、この `E` が `flag`（処理 2、旗の高さ、`Good`）を満たします。[触った終わりから城までの行](g-2-2-2-TouchRows-ja.md)は、触った終わりのあと城の旗のある最初のフレームが処理 2 で終わることを示します。`FirstCastle` があれば、そのフレームが `E` です。
+
 ## 本物の走りで
 
 `castle-join-check FM2` は、[タイマーと格子](g-1-CastleToLevel-ja.md) のチェックと同じく、`clock` の種類を機械から読みます（`CastleToLevel.kindOf`: 位相が動かないフレームが `lag` フレーム）。フレーム `b₂` が始まるときの機械から走らせ、城に入るときで止めます。
@@ -104,9 +129,10 @@ atCastle_of_phase :  lagUp_of の仮定,  g < c,  fc.sy = sy   ⟹   castle(pole
 * `PhaseUp`: 地上の各フレームで `clock` の位相が機械の位相であること。フレーム 0 では `read₀`、`E` のあとでは `flag` がこれを言います。フィールドからは出ません。地上の `clock` の種類は走りとともに選ぶもので、`lag_of_phase` と `phase_succ_iff` は、フレームごとに `PhaseUp` と `LagUp` が同じことを言うと示します。動画で種類を機械から読むと、1,219 フレームすべてで `PhaseUp` が成り立ちます。
 * `hA`: 触るフレームのあと `E` までのフレームが `PhaseRule` に従うこと。それらのフレームを追う歩きはありません。城までの 388 の走り（70,995 フレーム）で測りました。
 * `pole.atCastle` はフィールドのままです。`PhaseUp` と `hA` をフィールドにすれば定理になります（`atCastle_of_phase`）が、それらは 1 つの機械の条件のかわりに地上の全フレームの条件です。
+* `firstCastle_of` の `hA`: 触るフレームのあと `E` までの各フレームの始めに城の旗が下りていること。それらのフレームを追う歩きはありません。
 * 地下と最初の土管の前では、種類は前と同じつながりだけです。`paused₁`、`paused₂`（切り替えの `lag` フレームはポーズで終わる）、数 `ha₁`、`hb₁`、`ha₂`、`hb₂`、フレーム 0 での `read₀` です。
 
-**ファイル.** `Theorems/Route.lean`（`Run.LagUp`、`Run.seen_up`、`Run.up_E`、`Run.castle_join`、`Run.count_up`、`Run.kind_up`、`Run.j_up`、`Run.atCastle_of_flag`。`Run.PhaseAt`、`Run.PhaseUp`、`PhaseName`、`Run.not_setup`、`Run.lag_of_phase`、`Run.phase_succ_iff`、`Run.lagUp_of_phase`、`Run.rule_up`、`Run.lagUp_of`、`Run.atCastle_of_phase`）、`Theorems/CastleToLevel.lean`（`Frames.ph_lt`）。
+**ファイル.** `Theorems/Route.lean`（`Run.LagUp`、`Run.seen_up`、`Run.up_E`、`Run.castle_join`、`Run.count_up`、`Run.kind_up`、`Run.j_up`、`Run.atCastle_of_flag`。`Run.PhaseAt`、`Run.PhaseUp`、`PhaseName`、`Run.not_setup`、`Run.lag_of_phase`、`Run.phase_succ_iff`、`Run.lagUp_of_phase`、`Run.rule_up`、`Run.lagUp_of`、`Run.atCastle_of_phase`。`Run.FirstCastle`、`Run.castle_E`、`Run.noCastle_up`、`Run.firstCastle_of`、`Run.E_first`、`Run.c_first`）、`Theorems/CastleToLevel.lean`（`Frames.ph_lt`）。
 
 **再現.**
 ```

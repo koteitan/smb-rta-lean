@@ -95,7 +95,7 @@ flower, enemies), forgot the height, and grew to 731,297 states with failures.
 * **`afterV`** (new): from the return of the collision routine to the frame's end, the four bytes of `V` do not change. A condition on single frames, the vertical half
   of `after`.
 * **`map`**: the read of the block buffer routine in the first buffer (he is on page 0), and `map` on the frame of the counted frame `N` too.
-* **No longer assumed**: `flat`; `ground` (after a landing it comes from the field `vert` of [The jumps of the opening](a-5-7-OpenJump.md)).
+* **No longer assumed**: `flat`; `ground` (after a landing it comes from `Real.vertOK` and [The jumps of the opening](a-5-7-OpenJump.md)).
 
 **Files.** `Theorems/OpenFlat.lean`, `Theorems/OpenFrames.lean`, `Theorems/OpenMap.lean`, `Theorems/LagFrames.lean`, `Theorems/StartRun.lean`, `Theorems/Route.lean`,
 private `Proof/OpenFlat.lean`.

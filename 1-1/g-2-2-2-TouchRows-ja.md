@@ -51,6 +51,8 @@ S ∈ row(j)、どの入力 i:    frame(S, i) がポーズで終わる      → 
 ∀ n,  触った終わり ≤ n ≤ E  →  ¬castle(seq n)、        castle(seq(E + 1))
 ```
 
+この条件はいま `Run.FirstCastle`（`b₂` から）で、`castle(seq(E + 1))` は `Run.castle_E` です（[城をつなぐ](0-5-2-1-CastleJoin-ja.md)）。触るフレームの終わりまでは証明しました（`Run.noCastle_up`）。これがあれば、`E` は `b₂` から城の旗で終わる最初のフレームで（`Run.E_first`）、`LagUp` もあれば `c` は城の旗のある最初の数えるフレームです（`Run.c_first`）。触った終わりから `E` までのフレームは仮定のままです（`Run.firstCastle_of` の `hA`）。上の行がそれを与えるはずです。
+
 ## 証明していないこと
 
 * このページのことは何も証明していません。`flag.entry`、`flag.task_E`、`flag.y_E` は仮定のままです（1-1-g-2-2）。

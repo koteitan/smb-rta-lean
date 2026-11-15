@@ -53,8 +53,9 @@ Run.pipeHS     :  確認,  title_pos_check,  1 ≤ E   →   startHS(pipe.fm 1) 
 ```
 
 `walkCheck` と `titleCheck` は ROM での確認で、非公開の `walk_check` と `title_ctl_check` が `native_decide` で示します（証明のビルドで 2 つ合わせて約 4 秒）。
-`titlePosCheck` は `titleCheck` と同じようにフレーム 0 を追い、操作できる終わりのそれぞれで、位置、横の状態のバイト、`stI` の 10 バイトが `m₀` の値で
-わかっていることを確かめます（非公開の `title_pos_check`、ネイティブで約 2.2 秒）。
+`titlePosCheck` は `titleCheck` と同じようにフレーム 0 を追い、操作できる終わりのそれぞれで、位置、横の状態のバイト、`stI` の 12 バイトが `m₀` の値で
+わかっていることを確かめます（非公開の `title_pos_check`、ネイティブで約 2.2 秒）。13 回目に `stI` に A と B、前のフレームの A と B を足しました:
+数えるフレーム 1 での `PrevOK` の証明がこれを使います（[本物のフレームの上の縦のモデル](a-5-7-2-OpenAir-ja.md)）。
 `lagCheck` は [土管までの数えないフレーム](a-5-5-3-LagFrames-ja.md) の確認で、非公開の `lag_check` が示します。
 ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。`#print axioms route_1_1` に `sorryAx` はありません。
 

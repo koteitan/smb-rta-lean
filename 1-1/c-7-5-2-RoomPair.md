@@ -37,7 +37,7 @@ A frame that ends paused does not run the game engine. It writes neither byte, s
 
 **At the first control.** The rows of the time of the change into the room know `st = 2` and bit 7 of `p` and of `a` at the machine with control (`rowsCheck`, `pair_of_rows`).
 
-**Two more bytes.** Item 1-1-c-7-1-2 uses two more walks of this kind, each with one byte (`x = y`): the player's state is 0, 1 or 2 (`checkSt`), and the change of size is 0 (`checkSz`), about 3.5 s each. The same pass over the rows checks them at the first control (`rowQ` in `rowsCheck`), so the rows are walked once (25 s in a program, as before) ([The room's frames at the player's routine](c-7-1-2-RoomCut.md)).
+**Two more bytes.** Item 1-1-c-7-1-2 uses two more walks of this kind, each with one byte (`x = y`): the player's state is 0, 1 or 2 (`checkSt`), and the change of size is 0 (`checkSz`), about 3.5 s each. The same pass over the rows checks them at the first control (`rowQ` in `rowsCheck`), so the rows are walked once (25 s in a program, as before) ([The room's frames at the player's routine](c-7-1-2-RoomCut.md)). Item 1-1-c-7-5-4 adds a third part to the same pass: a state with control knows the 9 bytes of the vertical state, and it is a state of the room's list `vStart` (`rowV`, `v_of_rows`; [The first fall in the room](c-7-5-4-FirstFall.md)).
 
 **Every frame.** `RoomMap.cond_of_rows` gives the room's condition at the start of each frame from `b₁` to `a₂`. With `SiteOK` (`roomSites`) and the routine byte at each frame's end (`roomStay`), induction on the frames gives `pair_run`. `Run.roomPair` puts the start of the room's frame `n + 1` at frame `b₁ + ix(n + 1 − C) − 1` of `base`, before `a₂` (`Run.roomIdx`).
 

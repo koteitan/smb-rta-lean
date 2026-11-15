@@ -11,12 +11,13 @@ The block buffers are the two tables of 13 rows of 16 tiles that the collision c
 empty, ground, a brick and two kinds of block with an item. None of them is a jumpspring or a climbing tile.
 
 `seq(n)` is the machine when frame `n` begins, `ix(t)` the frame where the counted frame `t` begins, `fm(t) = seq(ix t)`. `tr_n(k)` is the machine `k` instructions into
-frame `n`. `st(m)` is the player's state, `js(m)` the jumpspring byte. `R` is the place of the `LDA (zp),Y` of the block buffer routine, `addr(m)` the address it reads,
+frame `n`. `st(m)` is the player's state, `js(m)` the jumpspring byte, `dcd(m)` the flag that turns the collision routine off (`DisableCollisionDet`; its RAM index is read from
+the ROM, the operand of the routine's first load: `OpenMap.dcdI`). `R` is the place of the `LDA (zp),Y` of the block buffer routine, `addr(m)` the address it reads,
 `val(m)` the byte it reads.
 
 ```
-MapAt(m)    :=  ∀ d ∈ B,  m(d) = m₀(d)   ∧   js(m) = 0   ∧   st(m) ≤ 2
-MapOK(m)    :=  store:  a store through an index or a pointer of m does not write st, js or a byte of B
+MapAt(m)    :=  ∀ d ∈ B,  m(d) = m₀(d)   ∧   js(m) = 0   ∧   dcd(m) = 0   ∧   st(m) ≤ 2
+MapOK(m)    :=  store:  a store through an index or a pointer of m does not write st, js, dcd or a byte of B
                 read:   pc(m) = R  →  addr(m) is in the RAM and its byte is in the first block buffer (B₁ ⊂ B)
 ```
 
@@ -82,6 +83,8 @@ Program `open-map-check FM2 300`. From the machine at control it runs each frame
 * On the ground, every frame starts with the same height, and with the vertical speed and its fraction 0.
 * No store through an index or a pointer writes the pause byte or the bytes of `CtrlKeep.spareI`.
 * At the TAS's control the block buffers are those of `m₀`.
+* Round 13 adds `dcd` to `MapAt` and to the store part of `MapOK`. `open-map-check FM2 30` on that: 91 runs, 9,997 frames, 24,433,366 instructions, not `MapOK` 0.
+  [The vertical model on real frames](a-5-7-2-OpenAir.md) needs `dcd = 0` at the collision routine.
 
 ## Assumed (not proved in Lean)
 
@@ -92,8 +95,9 @@ Program `open-map-check FM2 300`. From the machine at control it runs each frame
 * **No longer assumed**: `st` and `spring` (item 1-1-a-5-4-3-3-3).
 * **No longer assumed**: `flat` (item 1-1-a-5-4-3-4-1): a walk that reads the tiles by the known bits of the address sees the ground under the feet
   ([The flat ground of the opening](a-5-4-3-4-1-OpenFlat.md)).
-* **No longer assumed**: `jump` and `ground` (item 1-1-a-5-7): from the field `vert` on single frames and the search of every jump of the opening's vertical model
-  ([The jumps of the opening](a-5-7-OpenJump.md)). That the real frames follow the model (`vert`) is not proved.
+* **No longer assumed**: `jump` and `ground` (item 1-1-a-5-7): from `Real.vertOK` and the search of every jump of the opening's vertical model
+  ([The jumps of the opening](a-5-7-OpenJump.md)). That the real frames follow the model is now proved too (`Real.vertOK`, item 1-1-a-5-7-2,
+  [The vertical model on real frames](a-5-7-2-OpenAir.md)).
 
 **Files.** `Theorems/OpenMap.lean`, `Theorems/OpenFrames.lean`, `Theorems/Route.lean`, private `Proof/OpenMap.lean`.
 

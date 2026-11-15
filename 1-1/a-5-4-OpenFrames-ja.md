@@ -34,28 +34,33 @@ OpenRun(air)  :  air(1) = 0,  そして t ∈ [1, N],  t < E  の各 t で  ∃ 
 OpenRunM(air) :  OpenRun(air) の移動を  (P(fm(t + 1)) − P(fm t) − 16·v(hs(fm(t + 1)))) mod 2²⁴ = 0  にしたもの
 
 Real  （t ∈ [1, N],  t < E  の各 t で）:
-  cleanK    :  ∀ k,  CleanK_F(tr(t, k))                   （PipeWrites.Clean に城の旗、位置の端数、ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化の保護を
-                                                          足したもの。ただし移動のルーチン自身の書き込みは除く。前の cleanK と spare）
+  cleanK    :  ∀ k,  CleanK_E(tr(t, k))                   （PipeWrites.Clean に城の旗、位置の端数、ポーズのバイト、エリアの種類、泳ぎのフラグ、大きさの変化、
+                                                          A と B、前のフレームの A と B、動く向き、走る速さ、覚えている速さの保護を足したもの。ただし移動の
+                                                          ルーチン自身の書き込みは除く: FrameKeep.guardE）
+  noStore   :  ∀ k,  tr(t, k) でルーチン、モード、タスクに番地で書かない
   after     :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = PlayerSubs  →  b(t) の hs と P の 8 バイトは tr(t, k) のもの,  ab(b t) = |v(b t)|,  bits(b t) = FF
-  afterV    :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = Q  →  V(b t) = V(tr(t, k))       （当たり判定から戻る Q からあと、高さ、その上位バイト、縦の速さ、その端数は変わらない）
-そして、空中かジャンプを読む t ∈ [1, N + 80) で、N + 1 から t のフレームが空中のときに（OpenJump）:
-  vert      :  hi(fm(t + 1)) = 1,  跳ぶときは  VS(fm(t + 1)) = vstepO(ground0, A, abs(fm t)),  空中では  VS(fm(t + 1)) = vstepO(VS(fm t), a(t), 0)
-                                                          （出だしの縦のモデルの 1 歩。前のフィールド ground と jump の代わり）
+  afterV    :  ∀ k ≥ n₀(t),  pc(tr(t, k)) = Q  →  b(t) の vsA の 11 バイトは tr(t, k) のもの
+                                                          （当たり判定から戻る Q からあと、高さ、その上位バイト、縦の速さ、その端数、高さの端数、2 つの力、
+                                                          ジャンプの始まりの高さ、状態、A と B、止める値は変わらない）
 そして 1 回だけ:
   page      :  N < E  →  page(fm(N + 1)) ≠ 255
 1 ≤ n ≤ ix(N)、n < ix(E) の各フレーム n（数えるものも数えないものも）の各命令で（OpenMap）:
-  map       :  MapOK(tr_n(k))                             （添字やポインタでの書き込みが、プレイヤーの状態、ジャンプ台のバイト、ブロックバッファを書かない。
-                                                          ブロックバッファのルーチンの読み出しは最初のバッファの中）
+  map       :  MapOK(tr_n(k))                             （添字やポインタでの書き込みが、プレイヤーの状態、ジャンプ台のバイト、ブロックバッファ、当たりの
+                                                          ルーチンを止める旗を書かない。ブロックバッファのルーチンの読み出しは最初のバッファの中）
 
 Real.stSpring :  確認,  Real,  FrameStart(seq 1),  MapAt(seq 1)   →   st(fm t) ∈ {0, 1, 2}  ∧  JumpspringAnimCtrl(fm t) = 0     （前のフィールド st、spring）
 Real.flat     :  確認,  Real,  FrameStart(seq 1),  MapAt(seq 1),  Held(fm t),  ground(t),  GroundAt(fm t),  ¬jump(in t)
                  →   ground(t + 1)  ∧  GroundAt(fm(t + 1))                                                （前のフィールド flat。OpenFlat）
-Real.jumpV    :  確認,  Real,  t ∈ [1, N],  Held(fm t),  |v(fm t)| ≤ top,  ground(t),  jump(in t)
-                 →   ∃ n ≥ 1,  L_tap(|v(fm t)|) ≤ n ≤ L_hold(|v(fm t)|),  1 ≤ d < n で ¬ground(t + d),  ground(t + n),  GroundAt(fm(t + n))   （前のフィールド jump。OpenJump）
+Real.vertOK   :  確認,  Real,  Held,  StSpring,  PrevOK(fm 1)   →   VertOK: N までの跳ぶフレームと空中のフレームは vstepO の 1 歩     （前のフィールド vert。
+                                                                                                          OpenAir、a-5-7-2）
+Real.jumpV    :  確認,  VertOK,  t ∈ [1, N],  t < E,  Held(fm t),  |v(fm t)| ≤ top,  ground(t),  GroundAt(fm t),  jump(in t)
+                 →   (∃ n ≥ 1,  t + n ≤ H,  L_tap ≤ n ≤ L_hold,  1 ≤ d < n で ¬ground(t + d),  ground(t + n),  GroundAt(fm(t + n)))
+                     ∨  (t + d ≤ H で ¬ground(t + d)  ∧  H − t < L_hold)                        （前のフィールド jump。OpenJump）
 Real.ground_all: 確認,  Real,  各 t の Held(fm t)、StSpring、|v(fm t)| ≤ top,  ground(1),  GroundAt(fm 1)   →   ground(t)  →  GroundAt(fm t)
                                                                                                           （前のフィールド ground。OpenFlat、OpenJump）
 
-air(t)        :=  j − t   （j は [t, N + Zb) で ground(j) となる最初の数えるフレーム。なければ N + Zb）
+air(t)        :=  airT(t):  地面では 0;  t − 1 で跳んだあと:  地面の上の最初の数えるフレーム j が H = min(N + 1, E) までに来れば  j − t、
+                  来なければ  max(L_tap − 1, H − t);  空中のあとの空中では  air(t − 1) − 1
 Held(m)       :=  ab(m) = |v(m)|  ∧  bits(m) = FF  ∧  AreaType(m) = v₀  ∧  SwimmingFlag(m) = 0  ∧  PlayerChangeSizeFlag(m) = 0
 
 hopt           :  ∀ k ≤ N,  Reach(start, k, u)  →  dist(u) ≤ D                   （Opening、非公開の opening）
@@ -66,8 +71,10 @@ move_mod       :  modelOK,  AtCtrl(tr n₀),  n₀ まで 8 バイトは変わ�
                   →   hs(frame m i) = hstep(hs m, readIn(tr n₀))  ∧  (P(frame m i) − P(m) − 16·v(frame m i)) mod 2²⁴ = 0
 Real.frame_step:  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm t)
                   →   hs(b t) = hstep(hs(fm t), in t)  ∧  (P(b t) − P(fm t) − 16·v(b t)) mod 2²⁴ = 0  ∧  Held(b t)  ∧  st(tr(t, n₀)) = st(fm t)
-lags_keepI     :  数えないフレームは 21 バイトを変えない。その中に hs、P、ab、bits、st、エリアの 3 バイト、V がある      （LagFrames）
-Real.toRunM    :  lagCheck, walkCheck, pauseCheck,  Checks,  FrameStart(seq 1),  Held(fm 1),  ground(1),  GroundAt(fm 1),  t ≤ E で |v(fm t)| ≤ top,  Real
+lags_keepI     :  数えないフレームは 28 バイトを変えない。その中に hs、P、ab、bits、st、エリアの 3 バイト、VS、上位バイト、両方のフレームの A と B、
+                  止める値がある      （LagFrames）
+Real.toRunM    :  lagCheck, walkCheck, pauseCheck,  Checks,  FrameStart(seq 1),  Held(fm 1),  ground(1),  GroundAt(fm 1),  t ≤ E で |v(fm t)| ≤ top,  Real,
+                  PrevOK(fm 1)
                   →   OpenRunM(air)
 OpenRunM.next  :  OpenRunM(air),  P(fm 1) = P(m₀),  hopt,  hlow,  htop,  page,  k < N,  1 + k < E,  Reach(start, k, st(1 + k))
                   →   P(fm(k + 2)) = P(fm(k + 1)) + 16·v(fm(k + 2))  ∧  Reach(start, k + 1, st(k + 2))
@@ -86,7 +93,7 @@ Run.pipeOpenB  :  N < E  →  fr(N).P' ≤ P(m₀) + D              （Run.pipeO
 地面の上のフレームの歩き（`OpenFlat.flatCheck`、非公開の `open_flat_check`、ネイティブで約 3 秒）、`16 ≤ top`、出だしの縦のモデルのジャンプの探索
 （`OpenJump.arcCheck`、非公開の `open_jump_check`、ネイティブで約 2.4 秒）です。
 非公開の `open_checks` がこれを出します。はじめの 3 つとアイドルループはパート e の確認（`pole_numbers`）で、地上のエリアの種類は `m₀` のものと同じです。`m₀` は地面の高さにいます（`GroundAt(m₀)`、`start` の中）。`title_pos_check` は、操作のときの `ab`、`bits`、`st`、
-エリアの 3 バイト、`V` の 4 バイトの 10 バイトも `m₀` の値かを確かめます（ネイティブで約 2.2 秒）。`lag_check` は 21 バイトを追うようになりました（ネイティブで約 7 秒）。ROM のない定理が使う公理は `propext`、
+エリアの 3 バイト、`V` の 4 バイト、A と B、前のフレームの A と B の 12 バイトも `m₀` の値かを確かめます（ネイティブで約 2.2 秒）。`lag_check` は 28 バイトを追うようになりました（ネイティブで約 7 秒）。ROM のない定理が使う公理は `propext`、
 `Classical.choice`、`Quot.sound` だけです。
 
 Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.lean`（`Real.stSpring` が使う）、`Theorems/OpenFlat.lean`（`Real.flat` が使う）、`Theorems/OpenJump.lean`（`Real.jumpV` が使う）、`Theorems/PipeFrames.lean` の `lags_keepI`、`Theorems/LagFrames.lean` の `moreI`、`lagI`、`Theorems/StartRun.lean` の `stI`、
@@ -113,17 +120,17 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
 * **空中.** `air(t) = 0` は `ground(t)` のときだけです。空中では定義から `air(t + 1) = air(t) − 1` です。地面で跳び始めなければ、`Real.flat`（[出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md)）から `air(t + 1) = 0` です。
   これには `GroundAt(fm t)` が要ります。これは地面の上のどの数えるフレームでも成り立ちます（`Real.ground_all`）: `GroundAt(fm 1)`、`Real.flat` そのもの、着地のあとの
   `Real.jumpV` からの帰納法です。
-  跳び始めでは、`Real.jumpV` が着地 `t + n` を出すので `air(t + 1) = n − 1 ∈ [L_tap − 1, L_hold − 1]` です。これはフィールド `vert` とモデルのジャンプの探索から
-  出ます（[出だしのジャンプ](a-5-7-OpenJump-ja.md)）。跳ぶときの速さは最高速以下です（`Run.pipeSpeed`）。モデルの入力は `norm(in t)` です。状態とジャンプのビットは同じで、
+  跳び始めでは、`Real.jumpV` が `H` までの着地 `t + n` を出すので `air(t + 1) = n − 1 ∈ [L_tap − 1, L_hold − 1]` です。`H` までに着地しなければ `H − t < L_hold`
+  なので `air(t + 1) = max(L_tap − 1, H − t − 1)` もそのあいだです。これは `Real.vertOK` とモデルのジャンプの探索から出ます（[出だしのジャンプ](a-5-7-OpenJump-ja.md)）。跳ぶときの速さは最高速以下です（`Run.pipeSpeed`）。モデルの入力は `norm(in t)` です。状態とジャンプのビットは同じで、
   それでの `hstep` も同じです（`normIdem`）。
 * **操作のとき.** `title_pos_check` は、タイトルの集合の近い状態のどれからもどの入力でもフレーム 0 を追います。操作できる終わりのそれぞれで、位置、横の状態、`stI` の
-  10 バイトが `m₀` の値でわかっていることを確かめます。
+  12 バイトが `m₀` の値でわかっていることを確かめます。
 
 ## 本物のフレームで確かめたこと
 
 プログラムです（`open-real-check`）。操作のときの機械から最初の 32 の数えるフレームを動かします（インターバルタイマーの段が動かないフレームは数えません）。各フレームを
 1 命令ずつ動かし、`Real` の各フィールド、証明が出すこと（フレームの始まりの `Held`、プレイヤーのルーチンでの `keepA`、フレームの終わりと次の数えるフレームでの `hstep` と
-`16·v`）、数えないフレームが 21 バイトを変えないことを確かめます。
+`16·v`）、数えないフレームが 28 バイトを変えないことを確かめます。
 
 | 走り | 数えるフレーム | そのあいだの数えないフレーム | 跳び始め | `Real` のフィールドが成り立たない | モデルの 1 歩でない |
 |---|---|---|---|---|---|
@@ -131,15 +138,16 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
 | 操作のときからの自分の入力、Start あり（300 回） | 9,600 | 9,600 | 528 | 0 | 0 |
 | 操作できる最初の 4 フレームのどれかで 43〜82 フレームのポーズ、そのあと TAS の入力（60 回、ポーズが終わるのは 58 回） | 1,856 | 5,814 | 116 | 0 | 0 |
 
-* TAS では、操作のときの `stI` の 10 バイト、位置、横の状態は `m₀` のものです。
-* `vert` は、空中かジャンプを読むどの数えるフレームでも確かめます。`N` まで、そのあとは数えるフレーム `N + 1` で空中にあるジャンプの着地までです: 3 つの行で
-  42、11,839、2,571 フレーム、失敗 0 です。`afterV` はどの数えるフレームでも成り立ちます（失敗 0）。
+* TAS では、操作のときの `stI` の 12 バイト、位置、横の状態は `m₀` のものです。
+* 縦のモデルの 1 歩（`VStep`）は、`N` までの空中かジャンプを読むどの数えるフレームでも確かめます。11 バイトの `afterV`、`noStore`、`guardE` の `CleanK` も
+  どの数えるフレームでも確かめ、証明が各数えるフレームの始まりで出す関係（前のフレームの A と B、止める値の関係、当たりの旗 0）も確かめます。数は
+  [本物のフレームの上の縦のモデル](a-5-7-2-OpenAir-ja.md) にあります。
 * **パート e の `far` はここでは成り立ちません**: 最初のフレームで A と B と左を押し、そのあと B と左を押し続ける自分の走りは、数えるフレーム 33 を `P = 320`（1.25 px）で
   始めます。画面の端には触りません。`page` はどれでも成り立ちます。
-* **操作できる最初のフレームで Start**: そのフレームはポーズで終わり、タイマーの段は動かないので、時計はそれを数えません。この回の前は `PipeFrames.Lags` が走りの
+* **操作できる最初のフレームで Start**: そのフレームはポーズで終わり、タイマーの段は動かないので、時計はそれを数えません。12 回目の前は `PipeFrames.Lags` が走りの
   フレーム 1 を数えるフレーム 1 にしていたので、そういう走りでは `t = 1` で `unpaused` が成り立たず、扱えていませんでした。いまは数えるフレームをポーズのバイトから読みます
   （`PipeFrames.ixP`、[LagPause](a-5-5-3-3-LagPause-ja.md)）。数えるフレーム 1 はフレーム 1 から先でポーズでなく終わる最初のフレームで、操作のときの状態はそこまで運ばれます
-  （`Run.pipeKeep₁`）。3 行目の走りは最初のフレームでポーズします。その数えるフレーム 1 より前のフレームは 21 バイトを変えません。これらの走りでは、数えるフレーム 32 までの
+  （`Run.pipeKeep₁`）。3 行目の走りは最初のフレームでポーズします。その数えるフレーム 1 より前のフレームは 28 バイトを変えません。これらの走りでは、数えるフレーム 32 までの
   全部のフレームを 1 命令ずつも動かします（7,728 フレーム）。どの命令も `Clean`（`lags.clean`）で、数えないフレームが添字やポインタでポーズのバイトを書くことはありません
   （`lags.keeps`。いまは数えるフレーム 1 より前のフレームも含みます）。
 * これらの走りの、操作できない状態で終わる最初のフレームまでの全部のフレームで、タイマーの段が動くのはポーズでなく終わるときだけです（81,931 フレームで例外なし）。
@@ -148,15 +156,16 @@ Lean: `Theorems/OpenFrames.lean`、`Theorems/OpenLeft.lean`、`Theorems/OpenMap.
 
 ## 前提（Lean では証明していない）
 
-* `Real` のフィールド: `cleanK`、`map`、`after`、`afterV`、`vert`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
+* `Real` のフィールド: `cleanK`、`noStore`、`map`、`after`、`afterV`、それに数えるフレーム `N + 1` の始まりだけの `page`。1 フレームごと、その命令ごと、
   その始まりの状態ごとの条件です。`after` は、スクロールの処理からあと何も彼を動かさず、当たりのルーチンが何も見つけないこと（壁も画面の端もない）です。項目 1-1-a-5-6 の横の半分です。
-  `afterV`（新しい）は、当たり判定から戻るところからあと `V` が変わらないことです。地面の上でのその縦の半分です。`vert`（新しい）は、空中かジャンプを読む数える
-  フレームが出だしの縦のモデルの 1 歩であることです（[出だしのジャンプ](a-5-7-OpenJump-ja.md)）。
-* もう仮定でないもの（この回）: `ground`（`Real.ground_all`: 数えるフレーム 1 ではタイトルから、ジャンプのない地面の上の数えるフレームのあとでは
+  `afterV` は、当たり判定から戻るところからあと縦のモデルの 11 バイトが変わらないことです。
+* 13 回目: `vert` はもう仮定しません（[本物のフレームの上の縦のモデル](a-5-7-2-OpenAir-ja.md)、`Real.vertOK`）。数えるフレーム `N` のあとでも求めません。新しい:
+  `noStore`。広げた: `cleanK`（`guardE`: 守るバイトが 5 つ増える）、`afterV`（11 バイト、前は 4）、`map`（当たりの旗も守る）。
+* もう仮定でないもの（12 回目）: `ground`（`Real.ground_all`: 数えるフレーム 1 ではタイトルから、ジャンプのない地面の上の数えるフレームのあとでは
   [出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md) の歩きから、着地のあとでは `Real.jumpV` から）。当たり判定から戻るところまでの歩きはそこで `V` を確かめます。
   そのあとの歩きは `V` を追えないので、新しいフィールド `afterV` を求めます。
-* もう仮定でないもの（この回）: `jump`（項目 1-1-a-5-7、多くのフレームについての条件）。フィールド `vert`（1 フレームごと）と、モデルのどのジャンプも調べる
-  探索（`OpenJump.lands`）から定理になりました（`Real.jumpV`）。
+* もう仮定でないもの（12 回目）: `jump`（項目 1-1-a-5-7、多くのフレームについての条件）。`Real.vertOK` と、モデルのどのジャンプも調べる探索から定理に
+  なりました（`Real.jumpV`）。
 * もう仮定でないもの（11 回目）: `flat`（地面から落ちない）。[出だしの平らな地面](a-5-4-3-4-1-OpenFlat-ja.md) の歩きと、新しいフィールド `ground` から定理になりました
   （`Real.flat`）。`map` の読み出しは最初のブロックバッファの中にあると求め、`map` は数えるフレーム `N` のフレームも含みます。
 * 前の回から仮定しないこと: `longer`、数えるフレーム 1 から `N` の始まりでの `page`。

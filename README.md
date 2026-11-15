@@ -52,6 +52,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-0-5-2 The kinds of frame come in the order of the parts (`plan`)
       - ✅ 1-1-0-5-2-1 Above ground, `lag` = ends paused gives `E` = `pole`'s `c` (`LagUp`, not a field; follows from `PhaseUp` and the phase's rule)
         - ✅ 1-1-0-5-2-1-1 A frame in control keeps the phase exactly when it ends paused (`PhaseFrame`, three walks)
+        - ✅ 1-1-0-5-2-1-2 With `FirstCastle`, `E` is the first frame with the castle flag (not a field; proved up to the touch's end)
     - ✅ 1-1-0-5-3 The timer and the phase at frame 0 (`zero` removed; from one state after the press on the title)
     - 🚨 1-1-0-5-4 The machine after Start on the title meets the condition (`title.press`; with the pause sound's buffer)
     - ✅ 1-1-0-5-5 Start before control (`title.noPause` removed; a search closed under any input, and `frame0Check`)
@@ -88,11 +89,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - 🚨 1-1-a-5-4-3 The first 32 frames are steps of the model
         - ✅ 1-1-a-5-4-3-1 `hstep` and the 16·v move (`move_model`, walk of `CtrlKeep`; `opening` gone)
         - ✅ 1-1-a-5-4-3-2 Air frames read from the player's state (`air` gone)
-        - 🚨 1-1-a-5-4-3-3 Conditions on single frames (`cleanK`, `map`, `after`, `afterV`; `longer`, `spare`, `st`, `spring` gone; `page` only at counted frame 33)
+        - 🚨 1-1-a-5-4-3-3 Conditions on single frames (`cleanK`, `noStore`, `map`, `after`, `afterV`; `longer`, `spare`, `st`, `spring` gone; `page` only at counted frame 33)
           - ✅ 1-1-a-5-4-3-3-1 No frame ends during the movement (`longer` gone; walk and `CleanK` time)
           - ✅ 1-1-a-5-4-3-3-2 The opening to the left (not left of position 0 in 31 frames)
           - ✅ 1-1-a-5-4-3-3-3 The jumpspring and the player's state (`spring`, `st` gone; a walk that knows the buffers, and `map` on each instruction)
-        - ✅ 1-1-a-5-4-3-4 The ground's height and the jump lengths (`ground`, `jump` gone; new fields `afterV`, `vert`)
+        - ✅ 1-1-a-5-4-3-4 The ground's height and the jump lengths (`ground`, `jump` gone; new field `afterV`)
           - ✅ 1-1-a-5-4-3-4-1 Flat ground (`flat`, `ground` gone; new field `afterV`; the read in the first buffer)
     - 🚨 1-1-a-5-5 The frames after: read from the machines (`own`, `lags`)
       - ✅ 1-1-a-5-5-1 The frames follow each other, with the top speed (`next`, `speed` are theorems)
@@ -109,7 +110,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-a-5-6 Open flat ground, in the air only during a jump
     - 🚨 1-1-a-5-7 A jump's length depends only on the takeoff speed
       - ✅ 1-1-a-5-7-1 Every jump of the model lands on the ground between the two lengths (`open_jump_check`)
-      - 🚨 1-1-a-5-7-2 A frame in the air is a step of the model (`vert`)
+      - ✅ 1-1-a-5-7-2 The vertical model on real frames (`vert` gone; new field `noStore`)
     - 🚨 1-1-a-5-8 The gain bound of the relaxed model (`GainBound`)
     - 🚨 1-1-a-5-9 The position at the foot check is the position at the end of the move (`edge`, `moved`)
       - ✅ 1-1-a-5-9-1 From the end of the move to the foot check the position does not change (`rule_on_framesS`)
@@ -129,7 +130,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - 🚨 1-1-b-3-4-2 The other 36 bytes (`chg.entryRest₁`; the pause's bits and 19 bytes the pipe's frames do not use gone)
         - ✅ 1-1-b-3-4-2-1 19 bytes the pipe's frames do not use (out of `Entry`, `entryDropped`)
       - ✅ 1-1-b-3-4-3 Each frame from control to the entry starts in control (`chg.upStart₁` is gone: by induction; `a₁` is the first frame without control)
-      - 🚨 1-1-b-3-4-4 Each of its instructions is `Clean` (`chg.upClean₁`; also guards the six bytes of the pause)
+      - 🚨 1-1-b-3-4-4 Each of its instructions is `Clean` (`chg.upClean₁`; also guards the six bytes of the pause; one `CleanK` with part a's guards measured)
     - 🚨 1-1-b-3-5 The conditions at places of the pipe's frames (`chg.places₁`)
     - 🚨 1-1-b-3-6 No pause after the pipe (`chg.noStart₁`)
     - 🚨 1-1-b-3-7 At the exit the pause queue is as the reference's, with the song and effects when silent, and the screen buffer is in the table (`chg.quiet₁`, `QuietRest`)
@@ -137,7 +138,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-b-3-7-2 The pause through the pipe's frames in 88 classes (`QuietP`'s pause part from `chg.pause₁`)
       - ✅ 1-1-b-3-7-3 At the entry the pause is not paused (`chg.pause₁` gone; the class is carried beside the frames from the title)
     - 🚨 1-1-b-3-8 A `lag` frame ends paused (`chg.paused₁`)
-    - 🚨 1-1-b-3-9 At the exit the game timer is not 000 (`chg.time₁`, `TimerOK`); `b₁` is defined as the first control (`chg.ctlFirst₁` is gone); `left₁` not 0 before control is proved
+    - 🚨 1-1-b-3-9 At the entry the game timer is not 000 (`chg.time₁`, `TimerOK`; at the exit it is proved); `b₁` is defined as the first control (`chg.ctlFirst₁` is gone); `left₁` not 0 before control is proved
+      - ✅ 1-1-b-3-9-1 The pipe's frames do not change the game timer (`PipePause`'s walk with the digits)
     - ✅ 1-1-b-3-10 Bits 0–6 of the pause byte at the room's first control (`chg.pauseBits₂` gone; from the first change's rows)
   - 🚨 1-1-b-4 Assumptions of the exact lengths (the route does not need them)
     - 🚨 1-1-b-4-1 The same for every input (`Merge`)
@@ -159,10 +161,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`): from the change's rows
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
-    - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_long`, `vfall`, `floor_at`, `vfloor`, `low_at`)
+    - 🚨 1-1-c-7-5 The fall and the height of the feet (`air_in`, `stand_wall`, `fall_stand`, `vfall_stand`, `land_at`, `vfloor`, `low_at`)
       - ✅ 1-1-c-7-5-1 A jump's first 8 frames follow `vstep` (the air part of `vframes`: two walks of the room's frames)
       - ✅ 1-1-c-7-5-2 The halt value and A of the frame before (`halt`, `prevA` gone: two walks of the room and the rows of the change)
       - ✅ 1-1-c-7-5-3 A landing is on a whole row with no speed (`stand_row` gone; the falling walk)
+      - ✅ 1-1-c-7-5-4 The first fall (`fall_long`, `vfall`, `floor_at` gone)
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
     - 🚨 1-1-c-7-7 Takeoff and landing (`Approach`)
     - 🚨 1-1-c-7-8 The ways off the block (`Off`)
@@ -188,8 +191,9 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-d-2-4-1 `Room` at the first control in the room: from the change's rows of the time (`chg.roomRest` removed)
     - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (`chg.roomSites`)
     - ✅ 1-1-d-2-4-3 Each frame up to the entry starts in the player's routine (from the definition of `a₂`)
-  - 🚨 1-1-d-2-5 11 bytes at the entry (`chg.entry₂`; was 16); the rest from the room's walk and the change's rows; all 11 measured: they need the timer, the height or part b's rows
+  - 🚨 1-1-d-2-5 10 bytes at the entry (`chg.entry₂`; was 16); the rest from the room's walk, the change's rows and the entering frame; all 10 measured: they need the timer, the height, the machines from `t0` to the entry or part b's rows
     - ✅ 1-1-d-2-5-1 Five music bytes from the room's walk (the music bytes in a table)
+    - ✅ 1-1-d-2-5-2 The routine at the entry, from the room's entering frame (out of `entry₂`; new field `dR_pos`)
   - 🚨 1-1-d-3 Assumptions of part d
     - ✅ 1-1-d-3-1 `change₂` proved from `chg`
     - 🚨 1-1-d-3-2 A `lag` frame ends paused (`chg.paused₂`); that it keeps `left` is proved
@@ -246,9 +250,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `fr` gone; `fr` is the definition `frOf`)
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
-      - 🚨 1-1-e-2-10-3 Speed and position after the scroll handler (`collide`)
+      - 🚨 1-1-e-2-10-3 Subspeed and position after the scroll handler (`collide`, `CollideR`)
+        - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; new `spareV`)
       - ✅ 1-1-e-2-10-4 A touch after frame 745 (`farLate` gone: the bound from the count of frames, `SurfaceLate`)
-      - 🚨 1-1-e-2-10-5 No instruction writes the collision bits through an index (`spareC`)
+      - ✅ 1-1-e-2-10-5 No instruction writes the collision bits through an index (`spareC` gone: a part of `keep.cleanE`, 1-1-f-6-21)
+      - 🚨 1-1-e-2-10-6 No instruction writes the speed through an index (`spareV`)
 - 🚨 1-1-f The flag (1085 → 1218)
   - ✅ 1-1-f-1 The bound on the push back
   - ✅ 1-1-f-2 The height of a jump
@@ -273,21 +279,22 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
     - 🚨 1-1-f-6-17 The pole's tiles are read only in its column (`tiles`, `TileRead`; about the byte read, not its address)
-    - 🚨 1-1-f-6-18 `P₂(g)` is the position at the end of the move (`moved`; the touch writes the position, so it cannot be read at the end); the edge store does not bring him into the range (`edge`)
+    - 🚨 1-1-f-6-18 The edge store does not bring him into the range (`edge`); `P₂(g)` is the position at the end of the move (`moved` removed: 1-1-f-6-18-2)
       - ✅ 1-1-f-6-18-1 The walk follows the head bump with the position kept (the head is gone from `edge`; new field `posKeep`: only the player's move writes the position through an index)
+      - ✅ 1-1-f-6-18-2 A frame in control comes to the end of the move at most once (`moved` removed; two walks that do not cut the write)
     - ✅ 1-1-f-6-19 Each frame moves the position by a multiple of 1/16 px (one whole frame by the walk, from `keep`)
     - 🚨 1-1-f-6-20 The frames up to the touch are real frames in control
       - ✅ 1-1-f-6-20-1 Each frame starts in control (`start` removed; from the walk and `ctl`)
       - 🚨 1-1-f-6-20-2 The frames before the touch write no routine, mode or task byte by its address (`noStore`, the `lag` frames too; ending in control is the theorem `Frames.ctlAll`)
       - ✅ 1-1-f-6-20-3 The link of the frames, and the `lag` frames (`ends`, `lag`, `lagStart` removed; from the list of all frames and the walk)
-    - 🚨 1-1-f-6-21 Each instruction of those frames (`keep.cleanE`, `CleanK` with 9 more bytes, the `lag` frames too)
+    - 🚨 1-1-f-6-21 Each instruction of those frames (`keep.cleanE`, `CleanK` with 10 more bytes, the `lag` frames too)
     - ✅ 1-1-f-6-22 The frames from the touch to the castle are real frames too (`seq`, `seqAt` removed; `c` is a counted frame: `toCastle`)
 - 🚨 1-1-g From the castle to 1-2 (1218 → 1748)
   - ✅ 1-1-g-1 The timer and the grid
   - 🚨 1-1-g-2 Assumptions of part g
     - ✅ 1-1-g-2-1 Each frame follows the star flag's rule (`step`)
-    - 🚨 1-1-g-2-2 The condition at the entry (`Good`, task 2, flag height); false on some runs that touch at other heights (6 of 19 measured)
-      - ✅ 1-1-g-2-2-1 Runs touching at other heights are in `Good` too (the floating number's height and the score's number widened)
+    - 🚨 1-1-g-2-2 The condition at the entry (`Good`, task 2, flag height); false when the area parser is at work (17 of 193 measured)
+      - ✅ 1-1-g-2-2-1 Runs touching at other heights are in `Good` too (the floating number, the score, Mario's x and the screen's x widened)
       - 🚨 1-1-g-2-2-2 Rows from the touch's end to the castle (measured only; 295 s with Start)
     - 🚨 1-1-g-2-3 The same for every input (`GMerge`)
     - ✅ 1-1-g-2-4 The level changes on a frame with task 5 (`task_L`)

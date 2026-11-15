@@ -83,6 +83,31 @@ The proof:
 
 So `phase_succ_iff` says how far the clock's rule carries the phase. If the phase of the clock is the machine's when frame `n` begins, it is the machine's when the frame ends exactly when frame `n` meets `LagUp`. From `read₀` at frame 0 the rule gives no later frame without a tie of the kinds of the clock to the machine.
 
+## Which frame is the castle entry
+
+`flag` reads the machine after frame `E`. `flag.task_E` says that the castle flag is up there (`castle_E`). Up to now nothing said that it is down before, so `E` could be a later frame of task 2 than the first one. `FirstCastle` says so, one state at a time:
+
+```
+FirstCastle  :=  ∀ n,  b₂ ≤ n ≤ E   ⟹   ¬castle(seq n)
+
+castle_E        :  fc.sy = sy   ⟹   castle(seq(E + 1))
+noCastle_up     :  keepCheckOf,  StartK(pole.seq 0),  Watched(pole.seq 0)   ⟹   ∀ n ≤ ix(g),  ¬castle(seq(b₂ + n))
+firstCastle_of  :  the same,  hA : ∀ n,  b₂ + ix(g) < n ≤ E  ⟹  ¬castle(seq n)   ⟹   FirstCastle
+E_first         :  FirstCastle   ⟹   ∀ n ≥ b₂,  castle(seq(n + 1))  ⟹  E ≤ n
+c_first         :  LagUp,  g < c,  FirstCastle   ⟹   ∀ j < c,  ¬castle(pole.seq j)
+```
+
+So with `FirstCastle`, `E` is the first frame from `b₂` on that ends with the castle flag, and with `LagUp` as well, `c` is the first counted frame of `pole` with it (`pole.atCastle` says it is up at `c`).
+
+The proof:
+
+* `noCastle_up`: the walk of `FrameKeep` keeps the watched bits on every frame up to the end of the touch's frame, counted or not (`FrameKeep.Frames.all_watched`). The castle flag down is one of them (`FrameKeep.castle_of_watched`).
+* `firstCastle_of`: `noCastle_up` up to `b₂ + ix(g)`, `hA` after it.
+* `E_first`: if `n < E`, then `n + 1 ≤ E`, and `FirstCastle` says the flag is down when frame `n + 1` begins.
+* `c_first`: `pole.seq 0 = seq(b₂)` (`Run.atCtl`). For `1 ≤ j < c`, `count_up` gives a frame `n ∈ [b₂, E]` with `seq(n + 1) = pole.seq(j)` and `r(n) = Cs + j`. Since `r(E) = Cs + c` (`clock.seen_E`), `n ≠ E`, so `n + 1 ≤ E`.
+
+`FirstCastle` is not a field: the theorems take it, as they take `LagUp`. `route_1_1` does not change. On real runs the programs take `E` as the first frame that ends with the castle flag (`touchRunOf`), so `FirstCastle` holds there by this choice. On the 183 runs of [A wider condition at the castle entry](g-2-2-1-FlagWide.md) that are in `Good` at `E + 1`, this `E` meets `flag` (task 2, the flag's height, `Good`). [The rows from the touch's end to the castle](g-2-2-2-TouchRows.md) show that the first frame after the touch's end with the castle flag ends with task 2; with `FirstCastle` that frame is `E`.
+
 ## On real runs
 
 `castle-join-check FM2` reads the kinds of `clock` from the machine as the checks of [the timer and the grid](g-1-CastleToLevel.md) do (`CastleToLevel.kindOf`: a frame whose phase stays is a `lag` frame). It runs from the machine when frame `b₂` begins and stops at the castle entry.
@@ -104,9 +129,10 @@ On the 81 random runs without a castle entry, the phase and the pause agree on e
 * `PhaseUp`: the phase of `clock` is the machine's on each frame above ground, as `read₀` says at frame 0 and `flag` after `E`. It does not follow from the fields: above ground the kinds of `clock` are chosen with the run, and `lag_of_phase` and `phase_succ_iff` show that, frame by frame, `PhaseUp` and `LagUp` say the same thing. On the movie, with the kinds read from the machine, `PhaseUp` holds on all 1,219 frames.
 * `hA`: the frames after the touch's frame up to `E` follow `PhaseRule`. No walk follows those frames. Measured on 388 runs to the castle (70,995 frames).
 * `pole.atCastle` stays a field. It would be a theorem (`atCastle_of_phase`) if `PhaseUp` and `hA` were fields, but they are conditions on every frame above ground in place of one on one machine.
+* `hA` of `firstCastle_of`: the castle flag is down when each frame after the touch's frame, up to `E`, begins. No walk follows those frames.
 * Below ground and before the first pipe the kinds are tied only as before: `paused₁`, `paused₂` (a `lag` frame of a change ends paused), the counts `ha₁`, `hb₁`, `ha₂`, `hb₂`, and `read₀` at frame 0.
 
-**Files.** `Theorems/Route.lean` (`Run.LagUp`, `Run.seen_up`, `Run.up_E`, `Run.castle_join`, `Run.count_up`, `Run.kind_up`, `Run.j_up`, `Run.atCastle_of_flag`; `Run.PhaseAt`, `Run.PhaseUp`, `PhaseName`, `Run.not_setup`, `Run.lag_of_phase`, `Run.phase_succ_iff`, `Run.lagUp_of_phase`, `Run.rule_up`, `Run.lagUp_of`, `Run.atCastle_of_phase`), `Theorems/CastleToLevel.lean` (`Frames.ph_lt`).
+**Files.** `Theorems/Route.lean` (`Run.LagUp`, `Run.seen_up`, `Run.up_E`, `Run.castle_join`, `Run.count_up`, `Run.kind_up`, `Run.j_up`, `Run.atCastle_of_flag`; `Run.PhaseAt`, `Run.PhaseUp`, `PhaseName`, `Run.not_setup`, `Run.lag_of_phase`, `Run.phase_succ_iff`, `Run.lagUp_of_phase`, `Run.rule_up`, `Run.lagUp_of`, `Run.atCastle_of_phase`; `Run.FirstCastle`, `Run.castle_E`, `Run.noCastle_up`, `Run.firstCastle_of`, `Run.E_first`, `Run.c_first`), `Theorems/CastleToLevel.lean` (`Frames.ph_lt`).
 
 **To reproduce.**
 ```

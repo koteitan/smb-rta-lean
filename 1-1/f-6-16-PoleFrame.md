@@ -4,7 +4,7 @@
 
 **Claim.** On a real frame that touches the pole, the position at the end of the move, before the write of the pole's routine, is at or right of the left end of the pole's range. The proof follows the whole frame of the touch with an abstract machine, from the idle loop before the NMI to the frame's end, as [The side pipe's entry: one whole frame](c-7-16-SideFrame.md) does for the side pipe. The frame is frame `g` of the frames of the run (`PoleJoin.Run.keep`), so its start (`StartK`) and the condition on each instruction (`CleanK`) are what [One whole frame in control](f-6-19-FrameKeep.md) gives.
 
-So the hypotheses `pass` and `pos` of `PoleJoin.Run` are gone, and so are `fm` and `inp`: the touch is now on frame `g` of `keep`. The hypotheses are `moved` and `edge`, as for the two pipes, `tiles`, a condition on the byte that a side check reads, and `posKeep`, a condition on each instruction up to the write.
+So the hypotheses `pass` and `pos` of `PoleJoin.Run` are gone, and so are `fm` and `inp`: the touch is now on frame `g` of `keep`. The hypotheses are `edge`, as for the two pipes, `tiles`, a condition on the byte that a side check reads, and `posKeep`, a condition on each instruction up to the write (`moved` is a theorem now: item 1-1-f-6-18-2 below).
 
 The walk cuts no place. It follows the scroll handler's store of the position at the screen's edges and the routine of the head's collision with a block. The edge store makes the walk forget the position, so right after it the walk splits the position again, as at the end of the move. `edge` says: if he is in the pole's range right after the edge store, he was in it at the end of the move.
 
@@ -81,22 +81,11 @@ A program (`pole-frame-check FM2 1200`, exit 0, bad 0). The runs of [Touching th
 * The 1,095 edge stores are all at the screen's left edge (the index 0): the largest position after them is 3050. None is at the right edge.
 * No frame in control begins with a pole tile in the block buffers outside the pole's column, or in the column with the page two or more before the pole's. But 90 side reads (all in the runs with the position overwritten near the column) read a byte that is not the byte that was at that place when the frame began: the block buffers can change inside a frame before a side read.
 
-## Why `moved` stays (item 1-1-f-6-18)
+## `moved` is a theorem now (item 1-1-f-6-18-2)
 
-Part c removed its `movedE`: it reads `P(E)` at the end of the entering frame, and two walks show that this position is in the mouth ([the side pipe's entering frame](c-7-18-2-SideEntryEnd.md)). The same does not work for the touch. The touch writes the position: `FlagpoleCollision` goes on to `PutPlayerOnVine`, which stores the pole's column plus a step in the pixel (and, on one column of the block buffer, the page), and sets the speed to 0. On the movie's touch (frame 1092) the move ends at px 3158 = 12·256 + 86 with the fraction 80, that is 80/256 px right of the left end `L` of the range. The frame ends at px 12·256 + 89 with the same fraction. So the position at the frame's end does not give `P₂(g)`, and the bound has much less margin than the 3 px of the change.
+The field `moved` said: at each instruction of the touch's frame at the end of the move (`PlayerSubs`) before the write, the position is `P₂(g)`. Part e's frames are now a definition on `keep`'s machines, and `OnFrames.touchMove` shows that `P₂(g)` is the position at one arrival at the end of the move. A frame in control comes there at one instruction at most ([A frame in control comes to the end of the move at most once](f-6-18-2-SubsOnce.md), two walks of the whole frame that do not cut the write of the pole's routine). So `moved` is the theorem `Run.moved`. Its check is now part of `poleFrameCheck`.
 
-`moved` is the only link of the model's `P₂(g)` and `v₂(g)` on frame `g` to the machine: the frames read `P`, `v`, `f` at the start of frame `g` (`frames.reads`), and nothing at its end. The movement walk (`FrameModel.move_model`, as `SurfaceFrames.at_subs` uses it) gives the position at the end of the move as the start's position plus `16·v` of the speed there. But `v₂(g)` is a value of the field `fr`, so a reading of it would still be needed: replacing `moved` by a reading of `v₂(g)` gains nothing. Building frame `g` of the model from the machine would need the frame's start in the walk's domain. On real touches (`touch-move-check`, 677 touches: the movie's, 1 from random inputs from control, 675 from random inputs from the movie's frames 1002 to 1091):
-
-| on the touch's frame | touches |
-|---|---|
-| the position at the end of the move is the start's plus `16·v` of the speed there | 677 of 677 |
-| the horizontal state there is `hstep`'s, from the start's state and the input read at the player's routine | 675 of 677 |
-| at the player's routine the stored speed is `|v|` | 677 of 677 |
-| the side he presses is masked | 6 |
-| the frame starts from a state that is not `Clean` (the movie's touch among them) | 18 |
-| the end of the move is passed more than once | 0 |
-
-`OnFrames.moves` (part e) gives the conditions of a frame only for `j < g`, and `Clean` fails before 18 touches. So `moved` stays a hypothesis: a reading of the model at the end of the move.
+Why this was not done before: the touch writes the position (`FlagpoleCollision` goes on to `PutPlayerOnVine`, which stores the pole's column plus a step in the pixel and sets the speed to 0), so the frame's end does not give `P₂(g)`. On the movie's touch (frame 1092) the move ends at px 3158 = 12·256 + 86 with the fraction 80, and the frame ends at px 12·256 + 89. And part e's `AfterKeep.subs_once` asks that no instruction of the frame writes the routine, the mode or the task by its address; the touch's frame writes the routine. On real touches (`touch-move-check`, 677 touches) the end of the move is passed more than once 0 times.
 
 ## Why `tiles`, `edge` and `posKeep` stay (items 1-1-f-6-17, 1-1-f-6-18)
 
@@ -121,7 +110,6 @@ So it would replace one condition by three. `tiles` stays.
 * **`tiles`**: `TileRead` up to the write. The code that draws the pole's column into the block buffers is not followed.
 * **`posKeep`** (new): `PosAt` on each instruction up to the write. It is what lets the walk keep the position through the head's routine. It is not proved: the walk does not follow where the stores through an index point.
 * **`edge`**: up to the write, if he is in the pole's range right after the edge store, he was in it at the end of the move. That is, the edge store does not bring him into the range. Last round it spoke of the edge store and of the head's routine; two rounds ago it was: no `w_edge` and no `h` up to the write (as for the two pipes). Each older form implies the newer `edge`; `posKeep` is new. By the code, the edge store at the right edge moves him left; at the left edge it puts him at the screen's left edge, so there `edge` says that the screen's left edge is not in the pole's range. None of this is proved: the walk does not know the screen's edges.
-* **`moved`**: `P₂(g)` is `posP` at `PlayerSubs` before the write: part of making the frame model from the real frame, as for the two pipes.
 * `touches`, and the frames of `keep` (their own hypotheses).
 
 Only the left end of the range is used. The height decides the row, but no bound on the height comes out.

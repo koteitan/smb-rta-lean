@@ -41,7 +41,7 @@ goK   :  ∀ m, InRowsK(m) → ¬Paused(m)
 ctlK  :  ∀ m, InRowsK(m) ∧ left(m) = 0 → InRowsT(m)
 ```
 
-**A run.** `PipeRunK` has the fields of `PipeRun` with `QuietP ∧ SongAt(shape)` at the exit (`quiet`) and `TimerOK` at the exit (`time`). With `b` the first control after the entry (`hc`):
+**A run.** `PipeRunK` has the fields of `PipeRun` with `QuietP ∧ SongAt(shape)` at the exit (`quiet`) and `TimerOK` at the exit (`time`; since round 13 `TimerOK` at the entry: [the game timer at the vertical pipe](b-3-9-1-PipeTime.md)). With `b` the first control after the entry (`hc`):
 
 ```
 PipeRunK.bound   :  cnt(a) + 91 ≤ cnt(b)
@@ -86,7 +86,7 @@ From the exit to control there were always 44 frames, and `left` fell by exactly
 ## Assumptions (not proved in Lean)
 
 * At the exit the route now asks only `QuietRest ∧ SongAt(shape)` (`chg.quiet₁`): the pause part of `QuietP` comes from the condition `PauseV` at the entry (`chg.pause₁`), carried by the pipe's frames with the pause in a class: see [the pause through the vertical pipe's frames](b-3-7-2-PipePause.md). The queue of the pause sound, the song's row and the two effects in the silent case, and the screen buffer's form are still asked.
-* `TimerOK` at the exit (`chg.time₁`).
+* `TimerOK` at the exit (`chg.time₁`). Since round 13 it is asked at the entry: [the game timer at the vertical pipe](b-3-9-1-PipeTime.md).
 * `NoStart` on the frames of the game core after the pipe (`chg.noStart₁`, 1-1-b-3-6). These are the last 18 frames before control. A paused frame does not take one off `left`, and the rows have one row for each value of `left`. Not done.
 
 **Files.** `Theorems/SoundRows.lean`, `Theorems/PipeChangeEnd.lean`; the private check is `pipe_end_checks` in `Proof/PipeChangeEnd.lean`.

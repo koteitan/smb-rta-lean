@@ -52,10 +52,10 @@ All are in `Theorems/PhaseFrame.lean`. The private proof (`Proof/PhaseFrame.lean
 |---|---|---|
 | walk `A`, to `DecTimers` | 4 (the low bit 0 or 1, early or late in the frame) | 15,554; 12 states at the cut |
 | the timer's code | 12 × 21 | none |
-| walk `B`, from the timers' loop | 252 | 38,386 |
+| walk `B`, from the timers' loop | 252 | 45,392 (38,386 before `guardE` protected the collision bits) |
 | the walk of `tcCheck` | 2 | a search of `FrameKeep` |
 
-Natively `phaseCheck` takes 3.0 s with its searches, and `tcCheck` 0.3 s. `Proof.PhaseFrame` builds in about 4 s.
+Natively `phaseCheck` takes 3.1 s with its searches, and `tcCheck` 0.3 s. `Proof.PhaseFrame` builds in about 4 s.
 
 ## On real runs
 

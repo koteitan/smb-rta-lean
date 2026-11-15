@@ -46,15 +46,17 @@ QuietV(m)  ∧  QuietRest(m)   →   QuietP(m)                     (quietP_of_V)
 
 ## 命題
 
-`DuringV(m) := During(m) ∧ ∃ t ∈ classesV, SIn(t, m)` です。`EndStatement` に新しいフィールドが 2 つあります。確認 `endCheck` はいま `pipeCheckV` と `exitVOK` も走らせます（`endStatement_of_check`）。下の 1 行目は ROM を使いません。
+`DuringV(m) := During(m) ∧ (∃ t ∈ classesV, SIn(t, m)) ∧ TimerOK(m)` です（`TimerOK` は第 13 回から）。`EndStatement` に新しいフィールドが 2 つあります。確認 `endCheck` はいま `pipeCheckV` と `exitVOK` も走らせます（`endStatement_of_check`）。下の 1 行目は ROM を使いません。
 
 ```
 class_of_pauseV :  PauseV(M)  →  ∃ t ∈ classesV, SIn(t, M)
 pauseStep       :  ∀ m, DuringV(m) → ∀ i, (∀ j, Places(trace(m, i, j))) →
                      DuringV(frame(m, i))
-                   ∨ ( ExitAt(frame(m, i))  ∧  QuietV(frame(m, i))  ∧  ( QuietP ∧ SongAt(shape) ∧ TimerOK at frame(m, i)  →  InRowsK(frame(m, i)) ) )
+                   ∨ ( ExitAt(frame(m, i))  ∧  QuietV(frame(m, i))  ∧  TimerOK(frame(m, i))  ∧  ( frame(m, i) で QuietP ∧ SongAt(shape)  →  InRowsK(frame(m, i)) ) )
 pauseExit       :  ∀ m,  QuietV(m) ∧ QuietRest(m)  →  QuietP(m)
 ```
+
+第 13 回から `DuringV` は `TimerOK` も持ちます。歩きはゲームタイマーの桁をバイト `D` として持ち、`pauseStep` は出口での `TimerOK` を前提なしに出します。[縦の土管でのゲームタイマー](b-3-9-1-PipeTime-ja.md) を見てください。前は最後の行が、出口での `TimerOK` を `InRowsK` の前提として求めていました。
 
 **走り.** `PipeRunK` に新しいフィールド `pause : PauseV(seq a)` があり、フィールド `quiet` は出口で `QuietP ∧ SongAt(shape)` の代わりに `QuietRest ∧ SongAt(shape)` を求めます。定理は前と同じで、引数も同じです。帰納法では、入ってからの各機械は `DuringV` か、表を持つ段にあります（`PipeRunK.stepD`、`PipeRunK.atEntry`）。
 

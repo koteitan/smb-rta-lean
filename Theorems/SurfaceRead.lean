@@ -38,6 +38,17 @@ structure CollideE (sy : Syms) (M Q b : Machine) : Prop where
   P : posP sy b = posP sy Q ∨ posP sy b = posP sy Q - 256 ∨
     (posP sy Q ≤ posP sy b ∧ posP sy b ≤ posP sy M + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
 
+/-- **`CollideE` but the speed**: the subspeed stays, and the position as in `CollideE`. The speed's part `CollideE.v` is a theorem on the frames above ground
+(`CollideKeep.speed_end`: a walk from the scroll handler to the frame's end). -/
+structure CollideR (sy : Syms) (M Q b : Machine) : Prop where
+  f : peek b sy.Player_X_MoveForce = peek Q sy.Player_X_MoveForce
+  P : posP sy b = posP sy Q ∨ posP sy b = posP sy Q - 256 ∨
+    (posP sy Q ≤ posP sy b ∧ posP sy b ≤ posP sy M + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
+
+/-- `CollideR` and the speed's part give `CollideE` -/
+theorem CollideR.toE {M Q b : Machine} (h : CollideR sy M Q b)
+    (v : peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∨ peek b sy.Player_X_Speed = 0) : CollideE sy M Q b := ⟨v, h.f, h.P⟩
+
 /-- `CollideE` reads only the position of the frame's start -/
 theorem CollideE.ofP {M M' Q b : Machine} (h : CollideE sy M Q b) (e : posP sy M = posP sy M') : CollideE sy M' Q b :=
   ⟨h.v, h.f, by rw [← e]; exact h.P⟩

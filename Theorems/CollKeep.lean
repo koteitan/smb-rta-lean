@@ -13,9 +13,10 @@ Here the walk splits `X` into its 256 values at the `dex` of `ImpedePlayerMove` 
 On each piece `X` is known, so the bit to clear is known. The rest is the walk of `PrevKeep` with one more split before each step (`walkKX`), and with the collision bits
 watched under the mask `FC` (so one of the four values of `TopSpeed.collBits`) and protected (`collCheck`).
 
-So (`coll_end`): a frame in control whose instructions meet `CleanK` of `FrameKeep.guardE` and `SpareC` (no store through an index or a pointer writes the collision bits),
-and none of which writes the routine, the mode or the task by its address, keeps the collision bits under `FC`. A frame that does not come to the player's routine keeps
-them (`CtrlKeep.keep_of_noCut`).
+So (`coll_end`): a frame in control whose instructions meet `CleanK` of `FrameKeep.guardE`, and none of which writes the routine, the mode or the task by its address,
+keeps the collision bits under `FC`. `guardE` protects the collision bits (`FrameKeep.collE`): no store through an index or a pointer writes them, so `CleanK` of
+`guardE` gives `CleanK` of the walk's guard (`cleanC_of`; the old one-instruction condition `SpareC` is a part of it, `spareC_of`). A frame that does not come to the
+player's routine keeps them (`CtrlKeep.keep_of_noCut`).
 
 The searches are no part of the proof. No game data. Page: `1-1/e-2-SurfaceFrames.md`.
 -/
@@ -159,7 +160,7 @@ def collCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
   let C := collCfg sy m0 v cuts
   CtrlKeep.ctrlCheck1 (cfgPC sy m0 v q C) && C.t.all (walkKX C (spOf sy m0) (FrameKeep.ctlI sy) FrameKeep.fuelK)
 
-/-- **A store through an index or a pointer does not write the collision bits** (one instruction) -/
+/-- **A store through an index or a pointer does not write the collision bits** (one instruction): a part of `CleanK` of `FrameKeep.guardE` (`spareC_of`) -/
 def SpareC (sy : Syms) (m : Machine) : Prop := ∀ t, PipeWrites.wTarget (PipeWrites.opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ≠ bitsI sy
 
 /-- `SpareC`, for a program -/
@@ -335,9 +336,29 @@ theorem mem_of_collOK (hb : collBitsOK sy = true) {m : Machine} (h : CollOK sy m
   · exact absurd h e
   · exact List.contains_iff_mem.1 e
 
-/-- `CleanK` of the walk's guard: `CleanK` of `FrameKeep.guardE` and `SpareC` -/
-theorem cleanC_of {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) (hs : SpareC sy m) : FrameKeep.CleanK (guardC sy m0) q m :=
-  CtrlKeep.cleanK_prot (G := FrameKeep.guardF sy m0) (l := [bitsI sy]) (FrameKeep.cleanK_of_E hc) (fun t ht hlt hm => hs t ht hlt (List.mem_singleton.1 hm))
+/-- the collision bits are protected by `FrameKeep.guardE` -/
+theorem bitsI_mem : bitsI sy ∈ (FrameKeep.guardE sy m0).prot :=
+  List.mem_append_left _ (List.mem_append_right _ (List.mem_singleton.2 rfl))
+
+/-- **`CleanK` of the walk's guard from `CleanK` of `FrameKeep.guardE`**: each byte that the walk's guard protects, `guardE` protects (the collision bits are in
+`FrameKeep.collE`) -/
+theorem cleanC_of {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) : FrameKeep.CleanK (guardC sy m0) q m := by
+  refine FrameKeep.cleanK_sub hc (fun x hx => ?_) rfl rfl rfl rfl
+  simp only [guardC, List.mem_append, List.mem_singleton] at hx
+  rcases hx with rfl | hx
+  · exact bitsI_mem
+  · exact List.mem_append_right _ hx
+
+/-- **`SpareC` is a part of `CleanK` of `FrameKeep.guardE`**, on every instruction but the player's own store of the fraction (the instruction at the store of the move
+routine with the index 0), where `CleanK` asks nothing -/
+theorem spareC_of {q : UInt16} {m : Machine} (h : FrameKeep.CleanK (FrameKeep.guardE sy m0) q m) (hq : ¬ (m.pc = q ∧ m.x = 0)) : SpareC sy m := by
+  intro t ht hlt hm
+  rcases h.store t ht hq with ⟨_, h2⟩ | ⟨h1, _⟩
+  · exact h2 (hm ▸ bitsI_mem)
+  · have a1 := UInt16.lt_iff_toNat_lt.1 hlt
+    have a2 := UInt16.le_iff_toNat_le.1 h1
+    simp at a1 a2
+    omega
 
 theorem valC_lt (v : UInt8) : ∀ w ∈ watchC sy m0 v, w.1 < 2048 := by
   intro w hw
@@ -350,18 +371,18 @@ theorem valC_lt (v : UInt8) : ∀ w ∈ watchC sy m0 v, w.1 < 2048 := by
       exact PipeTransitionAll.mask_lt _
 
 /-- **A frame in control keeps the collision bits under `FC`.** The frame starts in the idle loop in control (`FrameKeep.StartK`), each instruction meets `CleanK` of
-`FrameKeep.guardE` and `SpareC`, and writes neither the routine, nor the mode, nor the task by its address; the area's type is `v`, the swimming flag 0, the change of
+`FrameKeep.guardE`, and writes neither the routine, nor the mode, nor the task by its address; the area's type is `v`, the swimming flag 0, the change of
 size 0. If the frame comes to the player's routine, the walk after the cut with `X` split at `ImpedePlayerMove` keeps the bits under `FC`; if it does not, it keeps the
 bits (`CtrlKeep.keep_of_noCut`). `hc`, `hp` are the checks on the ROM. -/
 theorem coll_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hp : collCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
-    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n)) (hsc : ∀ n, SpareC sy (trace m i n))
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) (h : CollOK sy m) : CollOK sy (frame m i) := by
   obtain ⟨hp1, hp2⟩ := collCheck_parts hp
   generalize CtrlKeep.cutTable sy m0 true = q at hp1 hp2
   generalize CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q) = cuts at hp1 hp2
   have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) :=
     fun n => FrameKeep.cleanK_of_F (FrameKeep.cleanK_of_E (hcl n))
-  have hclC : ∀ n, FrameKeep.CleanK (guardC sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => cleanC_of (hcl n) (hsc n)
+  have hclC : ∀ n, FrameKeep.CleanK (guardC sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => cleanC_of (hcl n)
   rcases CtrlKeep.cut_or_end2 (C := cfgPC sy m0 v q (collCfg sy m0 v cuts)) hp1 rfl rfl rfl (CtrlKeep.cfg_start q _ true h0) hclK with
     ⟨k, h1, h2, _, h4, h5, B, _, hB2, hs⟩ | ⟨hno, _⟩
   · have A := CtrlKeep.ctrl_keep hc h0 hclK h1 h2 h4

@@ -54,8 +54,9 @@ Run.pipeHS     :  the checks,  title_pos_check,  1 ≤ E   →   startHS(pipe.fm
 ```
 
 `walkCheck` and `titleCheck` are checks on the ROM, by `native_decide` in the private `walk_check` and `title_ctl_check` (about 4 s together in the proof build).
-`titlePosCheck` walks frame 0 as `titleCheck` does, and asks at each end with control that the bytes of the position, of the horizontal state and the ten bytes of `stI` are
-known, with the values of `m₀` (the private `title_pos_check`, about 2.2 s natively).
+`titlePosCheck` walks frame 0 as `titleCheck` does, and asks at each end with control that the bytes of the position, of the horizontal state and the twelve bytes of `stI` are
+known, with the values of `m₀` (the private `title_pos_check`, about 2.2 s natively). Round 13 added A and B and A and B of the frame before to `stI`:
+the proof of `PrevOK` at the counted frame 1 needs them ([The vertical model on real frames](a-5-7-2-OpenAir.md)).
 `lagCheck` is the check of [Frames not counted, up to the pipe](a-5-5-3-LagFrames.md), in the private `lag_check`.
 The theorems without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`. `#print axioms route_1_1` shows no `sorryAx`.
 
