@@ -4,7 +4,7 @@
 
 **Claim.** Take a run from the press of Start on the title screen, with any buttons on every frame, Start included. Assume one condition on the machine after the frame of the press. Then the frame before the first control (frame 0 of the route) begins with the timer at 401, the interval timers' phase at 2 and no hurry-up music, and at control the speed is 0.
 
-**This is a theorem with hypotheses.** They are the fields of `TitleStart.Begin`, all listed below. The condition at the press is one state. It is now a theorem (`Begin.press`) for the runs from power-on of [From power-on to the press of Start](0-5-4-TitleBoot.md): a RAM without the mark of a warm boot or with two bytes 0, no Start and no Select before the press, Start on a frame from 32 to 508. For another run it is still assumed (the second case of `boot`). It was checked on 339 real runs. No field asks for no Start: Start is allowed on every frame, frame 0 included. The checks of other files that walk frame 0 to control (`StartRun`, `EntryKeep`, `HurryMusic`) walk it from the near and held states with any input (`frame0Check`, `Begin.frame0`).
+**This is a theorem with hypotheses.** They are the fields of `TitleStart.Begin`, all listed below. The condition at the press is one state. It is now a theorem (`Begin.press`) for the runs from power-on of [From power-on to the press of Start](0-5-4-TitleBoot.md): a RAM without the mark of a warm boot or with two bytes 0, no Start and no Select before the press, Start on a frame from 31 to 508. For another run it is still assumed (the second case of `boot`). It was checked on 339 real runs. No field asks for no Start: Start is allowed on every frame, frame 0 included. The checks of other files that walk frame 0 to control (`StartRun`, `EntryKeep`, `HurryMusic`) walk it from the near and held states with any input (`frame0Check`, `Begin.frame0`).
 
 Before this, `Route.Run` had the field `zero` (timer and phase when frame 0 begins), `Route.Pipe` had `still` (the speed at control), and `HurryMusic.Run` had `zero` and `quiet₀`. They are now theorems: `Route.Run.zero`, `Route.Run.still`, `HurryMusic.Run.zero`, `HurryMusic.Run.quiet₀`.
 
@@ -20,14 +20,14 @@ Start on a frame of the game core pauses the game (`PauseRoutine`, before the co
 
 ```
 Press(m)  :  m is in the idle loop at the start of a frame (the program counter and the stack pointer of x, dot < 10, the NMI as at a frame's start),
-             not paused,  and  ∀ i ∈ K,  m[i] = x[i]
-K         =  the bytes that the run from x with no input reads before it writes them, up to control,  minus the free bytes,
+             not paused,  ∀ i ∈ K, m[i] = x[i], and the timer-load flag is nonzero
+K         =  the bytes that the run from x with no input reads before it writes them, up to control,  minus the free bytes and the timer-load flag,
              and PauseSoundBuffer
 free      =  FrameCounter, IntervalTimerControl, PseudoRandomBitReg (7), NumberOfPlayers, TopScoreDisplay (6), the 3 bytes after the scores,
              Timers (36), JoypadBitMask (2), HorizontalScroll, VerticalScroll, SprShuffleAmtOffset, SprDataOffset (15), Mirror_PPU_CTRL_REG1
 ```
 
-`K` has 54 bytes: the sound's queues and buffers, the head of the screen buffer, the world, level and area, the player's size and status, the timer's flag, the modes and tasks, the pause bytes, the scores, and the level's number (`AreaNumber`, new in round 15: the run does not read it before control, but the vertical pipe's entry needs its value, 1-1-b-3-4-5). All other bytes are free.
+`K` has 53 bytes: the sound's queues and buffers, the head of the screen buffer, the world, level and area, the player's size and status, the modes and tasks, the pause bytes, the scores, and the level's number (`AreaNumber`, new in round 15: the run does not read it before control, but the vertical pipe's entry needs its value, 1-1-b-3-4-5). Apart from the nonzero timer-load flag, all other bytes are free.
 
 `PauseSoundBuffer` (the pause sound that plays) is new in `K`. The run with no input never reads it, but a run with a pause reads it on the frame after the pause starts. If it were not known, the abstract machine could take a path on which the pause sound never sets `PauseModeFlag`, and then the music would play through a pause of any length: the search would not end. It is 0 on the title screen on every real run: the sound engine clears it at the end of each pause sound, and the power-on and a reset clear it. `GamePauseStatus` was in `K` already; the start states now keep all its bits (before, they kept only bit 0).
 
@@ -35,7 +35,7 @@ The fields of `TitleStart.Begin`:
 
 ```
 next      tm(n + 1) = frame(tm n, ti n)
-boot      TitleBoot.Start(tm 0)  =  power(TitleBoot.Run(tm 0))  |  press(Press(tm 0))
+boot      TitleBoot.Start(tm 0)  =  power(TitleBoot.Run(tm 0)) | menu(TitleBoot.Menu.Run(tm 0)) | later(TitleBoot.Run(later context, tm 0)) | press(Press(tm 0))
               power: one state (the machine at power-on) and single inputs up to the press;  press: one state, as before
 atZero    tm(pre) = seq 0,  ti(pre) = inp 0
 first     n ≤ pre  ⟹  ¬ctl(tm n)
@@ -86,7 +86,7 @@ the movie's own press                  meets Press; frame 0 has timer 401, phase
 
 ## What is not proved
 
-* `press` is proved for the runs from power-on of [From power-on to the press of Start](0-5-4-TitleBoot.md); `PauseSoundBuffer` = 0 at the press is part of it. For the other runs (Select or Start before the press, the press after the first demo, the title after a game over or a reset) it is still a hypothesis on one state, the case `press` of `boot`. It holds on all 339 runs above. A run in which the title shows another world (A with Start after a game over), or a byte of `K` with another value, is outside. So is the press on frame 31 from power-on: the game starts with `FetchNewGameTimerFlag` = 2, and `Press` asks 1; frame 0 and control are still as the theorems say on that run.
+* `press` is proved for the runs from power-on of [From power-on to the press of Start](0-5-4-TitleBoot.md); `PauseSoundBuffer` = 0 at the press is part of it. For the other runs (Select or Start before the press, the press after the first demo, the title after a game over or a reset) it is still a hypothesis on one state, the case `press` of `boot`. It holds on all 339 runs above. A run in which the title shows another world (A with Start after a game over), or a byte of `K` with another value, is outside. The press on frame 31 is now included. `FetchNewGameTimerFlag` is outside `K`; `Press` asks only that it is nonzero. The start states know this by `dg`.
 * There was a field `noPause` (no Start on frame 0). It is gone: `StartRun.titleCheck` and `EntryKeep.nearCheck` are now `frame0Check` (every end of frame 0 from the near and held states, with any input, meets their condition or is far), as `HurryMusic.nearCheck` is, and `Begin.frame0` replaces `Begin.near`. Both checks pass in the proof build.
 * `atZero`, `first`, `ctl` say which machine is frame 0. They hold by how the sequence is made. `pipeAt` is no longer a field: `pipe` takes its machines from `base`, and its counted frame 1 is frame 1 (`Run.pipeAt`, a theorem).
 
@@ -96,3 +96,7 @@ the movie's own press                  meets Press; frame 0 has timer 401, phase
 ```
 .lake/build/bin/smbrta title-check FM2
 ```
+
+The new `boot.menu` case uses the first frame that leaves the title. It permits earlier Start and held Start. Select is absent through the exit, the first input has no Start, and the exit is on frames 31 to 508. The ROM check `TitleBoot.Menu.check` proves the alternative for every row. No route field is added.
+
+`boot.later` covers presses on frames 1657 to 2123 after the first demo, with no Start or Select before the press. The same `Press` and conclusions hold. Other later frames remain assumptions.

@@ -58,8 +58,15 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
 
       </details>
     - ✅ 1-1-0-5-3 The timer and the phase at frame 0 (`zero` removed; from one state after the press on the title)
-    - 🚨 1-1-0-5-4 The machine after Start on the title meets the condition (`title.press` gone: proved from the machine at power-on and the inputs up to the press, for a press on frames 32 to 508 with no Start and no Select before it; new `title.boot`)
-      - 🚨 1-1-0-5-4-1 Runs outside the class (Select or Start before the press, after the demo, a reset) keep the condition (`press` of `title.boot`)
+    - 🚨 1-1-0-5-4 The machine after Start on the title meets the condition (`title.press` gone: proved from the machine at power-on and the inputs up to the press, for a press on frames 31 to 508 with no Start and no Select before it, for the first exit with earlier Start, and for the window after the first demo; new `title.boot`)
+      - 🚨 1-1-0-5-4-1 Runs outside the class (Select before the press, a press after frame 2123, a reset) keep the condition (`press` of `title.boot`)
+        <details><summary>3 lines of proved parts (the parent's own assumptions remain)</summary>
+
+        - ✅ 1-1-0-5-4-1-1 A press on the menu's first frame (frame 31)
+        - ✅ 1-1-0-5-4-1-2 The first exit from the title, with earlier Start (`menu`)
+        - ✅ 1-1-0-5-4-1-3 The window after the first demo (frames 1657 to 2123, `later`)
+
+        </details>
     - ✅ 1-1-0-5-5 Start before control (`title.noPause` removed; a search closed under any input, and `frame0Check`)
   - 🚨 1-1-0-6 Runs not in the theorem
     - 🚨 1-1-0-6-1 Runs that do not go through the two pipes

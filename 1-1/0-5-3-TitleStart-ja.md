@@ -4,7 +4,7 @@
 
 **命題.** タイトル画面で Start を押したところからの走りを考えます。各フレームの入力は何でもよく、Start も押してよいです。押したフレームのあとの機械が 1 つの条件を満たすとします。すると、最初に操作できるフレームの前のフレーム（道筋のフレーム 0）は、タイマー 401、インターバルタイマーの位相 2、急ぎの音楽なしで始まります。操作できるときの速さは 0 です。
 
-**これは仮定つきの定理です.** 仮定は `TitleStart.Begin` のフィールドで、下に全部挙げます。押したときの条件は 1 つの状態の条件です。これは [電源から Start を押すまで](0-5-4-TitleBoot-ja.md) の電源からの走りについては定理になりました（`Begin.press`）。ウォームブートの印がないか 2 バイトが 0 の RAM、押す前に Start も Select もない、フレーム 32 から 508 で Start、という走りです。ほかの走りでは、まだ仮定です（`boot` の 2 つ目の場合）。本物の 339 通りで確かめました。Start がないことを求めるフィールドはありません。フレーム 0 も含めて、どのフレームでも Start を押してよいです。フレーム 0 を操作まで歩くほかのファイルの確かめ（`StartRun`、`EntryKeep`、`HurryMusic`）は、近い状態と止まった状態からどの入力でも歩きます（`frame0Check`、`Begin.frame0`）。
+**これは仮定つきの定理です.** 仮定は `TitleStart.Begin` のフィールドで、下に全部挙げます。押したときの条件は 1 つの状態の条件です。これは [電源から Start を押すまで](0-5-4-TitleBoot-ja.md) の電源からの走りについては定理になりました（`Begin.press`）。ウォームブートの印がないか 2 バイトが 0 の RAM、押す前に Start も Select もない、フレーム 31 から 508 で Start、という走りです。ほかの走りでは、まだ仮定です（`boot` の 2 つ目の場合）。本物の 339 通りで確かめました。Start がないことを求めるフィールドはありません。フレーム 0 も含めて、どのフレームでも Start を押してよいです。フレーム 0 を操作まで歩くほかのファイルの確かめ（`StartRun`、`EntryKeep`、`HurryMusic`）は、近い状態と止まった状態からどの入力でも歩きます（`frame0Check`、`Begin.frame0`）。
 
 これまで `Route.Run` にはフィールド `zero`（フレーム 0 が始まるときのタイマーと位相）、`Route.Pipe` には `still`（操作できるときの速さ）、`HurryMusic.Run` には `zero` と `quiet₀` がありました。これらは定理になりました: `Route.Run.zero`、`Route.Run.still`、`HurryMusic.Run.zero`、`HurryMusic.Run.quiet₀`。
 
@@ -20,14 +20,14 @@
 
 ```
 Press(m)  :  m はフレームの始まりで何もしないループにいる（x のプログラムカウンタとスタックポインタ、ドット < 10、NMI はフレームの始まりのとおり）、
-             ポーズしていない、そして  ∀ i ∈ K,  m[i] = x[i]
-K         =  x から何も押さずに走るとき、操作できるまでに書く前に読むバイト  から  自由なバイトを除いたもの、
+             ポーズしていない、タイマーを読み込ませるフラグがゼロでない、そして ∀ i ∈ K, m[i] = x[i]
+K         =  x から何も押さずに走るとき、操作できるまでに書く前に読むバイト  から  自由なバイトとタイマーを読み込ませるフラグを除いたもの、
              と PauseSoundBuffer
 自由      =  FrameCounter、IntervalTimerControl、PseudoRandomBitReg（7）、NumberOfPlayers、TopScoreDisplay（6）、点数のあとの 3 バイト、
              Timers（36）、JoypadBitMask（2）、HorizontalScroll、VerticalScroll、SprShuffleAmtOffset、SprDataOffset（15）、Mirror_PPU_CTRL_REG1
 ```
 
-`K` は 54 バイトです。音のキューとバッファ、画面のバッファの頭、ワールドとレベルとエリア、プレイヤーの大きさと状態、タイマーのフラグ、モードとタスク、ポーズのバイト、点数、レベルの番号です（`AreaNumber`。15 回目に加えた。走りは操作までにこれを読みませんが、縦の土管の入口がその値を使います。1-1-b-3-4-5）。ほかのバイトは全部自由です。
+`K` は 53 バイトです。音のキューとバッファ、画面のバッファの頭、ワールドとレベルとエリア、プレイヤーの大きさと状態、モードとタスク、ポーズのバイト、点数、レベルの番号です（`AreaNumber`。15 回目に加えた。走りは操作までにこれを読みませんが、縦の土管の入口がその値を使います。1-1-b-3-4-5）。タイマーを読み込ませるフラグがゼロでないという条件を除いて、ほかのバイトは自由です。
 
 `PauseSoundBuffer`（鳴っているポーズの音）は `K` に新しく入れました。何も押さない走りはこれを読みませんが、ポーズする走りはポーズの次のフレームで読みます。分からないままだと、抽象機械はポーズの音が `PauseModeFlag` を立てない道を通れます。すると音楽がどんなに長いポーズのあいだも鳴り、探索が終わりません。本物の走りではタイトル画面でいつも 0 です。音のエンジンが各ポーズの音の終わりに消し、電源とリセットも消します。`GamePauseStatus` はもとから `K` にあります。始まりの状態は、いまはそのビットを全部知っています（前はビット 0 だけでした）。
 
@@ -35,7 +35,7 @@ K         =  x から何も押さずに走るとき、操作できるまでに�
 
 ```
 next      tm(n + 1) = frame(tm n, ti n)
-boot      TitleBoot.Start(tm 0)  =  power(TitleBoot.Run(tm 0))  |  press(Press(tm 0))
+boot      TitleBoot.Start(tm 0)  =  power(TitleBoot.Run(tm 0)) | menu(TitleBoot.Menu.Run(tm 0)) | later(TitleBoot.Run(later context, tm 0)) | press(Press(tm 0))
               power: 1 つの状態（電源を入れたときの機械）と、押すまでの 1 つずつの入力。 press: 前と同じ 1 つの状態
 atZero    tm(pre) = seq 0,  ti(pre) = inp 0
 first     n ≤ pre  ⟹  ¬ctl(tm n)
@@ -86,7 +86,7 @@ HurryMusic.Run.zero, HurryMusic.Run.quiet₀   Run.title から
 
 ## 証明していないこと
 
-* `press` は、[電源から Start を押すまで](0-5-4-TitleBoot-ja.md) の電源からの走りについては証明しました。押したときの `PauseSoundBuffer` = 0 もその一部です。ほかの走り（押す前の Select や Start、最初のデモのあとに押す、ゲームオーバーやリセットのあとのタイトル）では、まだ 1 つの状態の仮定です（`boot` の場合 `press`）。上の 339 通りでは全部成り立ちます。タイトルが別のワールドを示す走り（ゲームオーバーのあとの A と Start）や、`K` のバイトが別の値の走りは外です。電源からフレーム 31 で押す走りも外です。ゲームは `FetchNewGameTimerFlag` = 2 で始まり、`Press` は 1 を求めます。その走りでもフレーム 0 と操作は定理のとおりです。
+* `press` は、[電源から Start を押すまで](0-5-4-TitleBoot-ja.md) の電源からの走りについては証明しました。押したときの `PauseSoundBuffer` = 0 もその一部です。ほかの走り（押す前の Select や Start、最初のデモのあとに押す、ゲームオーバーやリセットのあとのタイトル）では、まだ 1 つの状態の仮定です（`boot` の場合 `press`）。上の 339 通りでは全部成り立ちます。タイトルが別のワールドを示す走り（ゲームオーバーのあとの A と Start）や、`K` のバイトが別の値の走りは外です。フレーム 31 で押す走りも含められるようになりました。`FetchNewGameTimerFlag` を `K` の外にし、`Press` はゼロでないことだけを求めます。始まりの状態は `dg` でこれを知ります。
 * フィールド `noPause`（フレーム 0 で Start を押さない）がありましたが、なくしました。`StartRun.titleCheck` と `EntryKeep.nearCheck` を、`HurryMusic.nearCheck` と同じく `frame0Check`（近い状態と止まった状態からどの入力でも、フレーム 0 の終わりは全部、その条件を満たすか遠い状態）にし、`Begin.near` の代わりに `Begin.frame0` を使います。どちらの確かめも証明のビルドで通ります。
 * `atZero`、`first`、`ctl` はどの機械がフレーム 0 かです。列の作り方から成り立ちます。`pipeAt` はもう欄ではありません。`pipe` は機械を `base` からとり、数えるフレーム 1 はフレーム 1 です（定理 `Run.pipeAt`）。
 
@@ -96,3 +96,7 @@ HurryMusic.Run.zero, HurryMusic.Run.quiet₀   Run.title から
 ```
 .lake/build/bin/smbrta title-check FM2
 ```
+
+新しい `boot.menu` の場合は、最初にタイトルを出るフレームを使います。前の Start と押しっぱなしの Start を許します。出るまで Select はなく、最初の入力に Start はなく、出るのはフレーム 31 から 508 です。ROM の確かめ `TitleBoot.Menu.check` が各段での場合分けを証明します。道筋のフィールドは増えません。
+
+`boot.later` は最初のデモのあとのフレーム 1657 から 2123 で押す走りを含みます。押す前に Start も Select もありません。同じ `Press` と結論が成り立ちます。ほかの遅いフレームは仮定のままです。

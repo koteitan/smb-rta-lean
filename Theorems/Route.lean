@@ -693,7 +693,7 @@ structure Run (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) (rN : RoomJoin.Nums
   roomLag : ∀ n, base.b₁ sy ≤ n → n < base.a₂ sy nmS m0 → ¬ FrameKeep.Unpaused sy m0 (base.seq (n + 1)) → clock.kind n = .lag
   /-- from the press of Start on the title to frame 0. The press (`title.boot`): the run comes from power-on, with one state, the machine at power-on (its RAM not
   known: without the mark of a warm boot, or 0 in two bytes), no Start and no Select before the press, and the press in the window of frames `tc.first` to `tc.last`
-  (`TitleBoot.Start.power`); or the machine after the press meets the condition itself (`TitleBoot.Start.press`). The condition is the theorem
+  (`TitleBoot.Start.power`), or the first-exit class with earlier Start (`TitleBoot.Start.menu`), or the same press in the window after the first demo (`TitleBoot.Start.later`); or the machine after the press meets the condition itself (`TitleBoot.Start.press`). The condition is the theorem
   `TitleStart.Begin.press`. From the press any input (Start before frame 0 may pause the game); and frame 0 is the frame before the first control. -/
   title : TitleStart.Begin sy tc base.seq base.inp
   /-- the counters of `clock` before frame 0 are those of the machine when frame 0 begins, as `flag` says of the machine after the castle entry (`t_E`, `ph_E`) -/

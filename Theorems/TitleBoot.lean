@@ -3,9 +3,9 @@ import Theorems.StepWrites
 /-!
 # From power-on to the press of Start on the title screen
 
-`TitleStart` proves the run from the press of Start on the title to frame 0 of the route, from one condition on the machine after the frame of the press (`ExitCond`: the idle
-loop, and the bytes `K` of a reference machine). Here that condition is proved for a class of runs from power-on: no Start and no Select on the frames before the press, the press
-is Start with A or without it and no other button, and the press comes in a window of frames (`Ctx.first`, `Ctx.last`: after the menu has run for one frame, before the demo
+`TitleStart` proves the run from the press of Start on the title to frame 0 of the route, from one condition on the machine after the frame of the press (`Press`: the idle
+loop, the bytes `K` of a reference machine, and a nonzero timer-load flag). Here that condition is proved for a class of runs from power-on: no Start and no Select on the frames before the press, the press
+is Start with A or without it and no other button, and the press comes in a window of frames (`Ctx.first`, `Ctx.last`: from the first menu frame, before the demo
 starts).
 
 The machine at power-on is one state (`PowerOn`): the registers and the place in the frame of the reference power-on, and a RAM that is not known. Either its byte `W`
@@ -16,8 +16,9 @@ the frame's end of `SideChangeEnd`) follows every machine, one row of states for
 know all bytes but the stack's old bytes and the bytes that a warm boot keeps. A row's frame with no Start and no Select ends in the next row (`linkOK`); a row's frame
 with the press ends in the condition (`pressOK`, `finPress`).
 
-`TitleStart.Begin` takes a `Start`: the run from power-on (`Run`), or the condition itself, as before, for a run outside the class. Both give the condition
-(`Start.cond`).
+`Menu.Run` permits Start before the first frame that leaves the title. Each row either stays on the title or leaves it with `Press`. Select is absent; the first input has no Start.
+
+`TitleStart.Begin` takes a `Start`: the original run from power-on (`Run`), the first-exit run (`Menu.Run`), or the condition itself for a run outside these classes. All give `Press` (`Start.cond`).
 
 The search for the rows is no part of the proof (`rowsOf`): `check` walks every state of every row and of its tables. There is no game data in this file.
 Page: `1-1/0-5-4-TitleBoot.md`.
@@ -52,15 +53,23 @@ structure Ctx where
   Z : List Nat
   /-- the byte of the mark of a warm boot: the mark is its value in `x` -/
   W : Nat
+  /-- the byte of the flag that makes the game load the timer when the player enters: it is not 0 after the press, and `K` does not hold it -/
+  T : Nat
   /-- the frames of the press that the check covers: `first ≤ kp ≤ last` -/
   first : Nat
   last : Nat
+  laterFirst : Nat := 1
+  laterLast : Nat := 0
 
 /-- the names of the bytes `Z`: the two bytes that a warm boot keeps and that change the game started from the title (the world selection, the world of a continue) -/
 def zeroNames : List String := ["WorldSelectEnableFlag", "ContinueWorld"]
 
 /-- the name of the byte `W` -/
 def markName : String := "WarmBootValidation"
+
+/-- the name of the byte `T`. The menu changes it on the frame of the press. Its first frame can leave a different nonzero value, before the game core has cleared it.
+The game only tests whether it is zero. -/
+def flagName : String := "FetchNewGameTimerFlag"
 
 /-- the pad of a frame before the press: no Start and no Select -/
 def quietPad : AB := ⟨0, 0x0C⟩
@@ -107,11 +116,21 @@ def startOK (C : Cfg) (fin : AS → Bool) (S : AS) : Bool := S.k == 0 && !S.rk &
 def linkOK (b : Ctx) (r r' : Row) : Bool :=
   r.t.all (xwalk (cfgQ b r) (finOf r'.R) walkFuel) && r.R.all (startOK (cfgQ b r) (finOf r'.R))
 
-/-- the end of the frame of the press: the idle loop of the reference, the next NMI to come or pending, and the bytes `K` of the reference -/
+/-- the end of the frame of the press: the idle loop of the reference, the next NMI to come or pending, the bytes `K` of the reference, and the byte `T` is not 0 -/
 def finPress (b : Ctx) (B : AS) : Bool :=
   B.pc == b.x.pc && B.s == b.x.s && decide (B.hi < 10) &&
   ((B.hi == 0 && !B.vb && !B.nmi) || (decide (1 ≤ B.lo) && B.vb && B.nmi)) &&
-  B.ppuCtrl.k &&& 0x80 == 0x80 && B.ppuCtrl.v &&& 0x80 == 0x80 && !B.strobe && b.K.all (fun i => knownIs B (i, b.x.ram.get! i))
+  B.ppuCtrl.k &&& 0x80 == 0x80 && B.ppuCtrl.v &&& 0x80 == 0x80 && !B.strobe && b.K.all (fun i => knownIs B (i, b.x.ram.get! i)) &&
+  (B.getK b.T).isZero == some false
+
+/-- **The condition after the frame of the press** (`Press` in the pages): the condition of `SideChangeEnd` on the idle loop and the bytes `K` of the reference, and the
+byte `T` is not 0. All other bytes are free. -/
+structure Press (b : Ctx) (m : Machine) : Prop where
+  exit : ExitCond b.E b.x b.K b.gps m
+  timer : m.ram.get! b.T ≠ 0
+
+/-- `Press` as a check, for a program -/
+def meets (b : Ctx) (m : Machine) : Bool := SideChangeEnd.exitOK b.E b.x b.K b.gps m && m.ram.get! b.T != 0
 
 /-- a frame with the press from a state of `r` ends in the condition -/
 def pressOK (b : Ctx) (r : Row) : Bool :=
@@ -490,11 +509,37 @@ def windowOf (b : Ctx) (cap : Nat) : Nat × Nat := Id.run do
 
 /-! ## The check -/
 
+/-- A later continuous window after `skip`. The search crosses failed press frames, but every preceding link must close. -/
+def windowAfter (b : Ctx) (skip cap : Nat) : Nat × Nat := Id.run do
+  let b1 : Ctx := { b with first := 1, last := cap }
+  let mut R := firstStates b
+  let mut prev : Option Row := none
+  let mut first := 0
+  let mut last := 0
+  for j in [0:cap] do
+    let (r, R') := rowOf b1 R (decide (skip ≤ j + 1))
+    let linked := match prev with
+      | none => bootOK b1 r
+      | some q => linkOK b1 q r
+    if !linked then break
+    if skip ≤ j + 1 then
+      let ok := pressOK b1 r
+      if ok then
+        if first == 0 then first := j + 1
+        last := j + 1
+      else if first != 0 then break
+    prev := some r
+    R := R'
+  return (first, last)
+
+/-- The optional later window uses the same condition on the machine after the exit. -/
+def later (b : Ctx) : Ctx := { b with first := b.laterFirst, last := b.laterLast }
+
 /-- **The check**, for given rows: the first frame ends in the first row; each row's frame with no Start and no Select ends in the next row; from `first` on, each row's
 frame with the press ends in the condition. -/
 def checkOf (b : Ctx) (rows : Array Row) : Bool :=
   decide (b.last < b.first) ||
-  (decide (1 ≤ b.first) && b.K.contains b.gps && b.x.ram.get! b.gps &&& 1 == 0 && bootOK b rows[0]! &&
+  (decide (1 ≤ b.first) && b.K.contains b.gps && b.x.ram.get! b.gps &&& 1 == 0 && decide (b.T < 2048) && bootOK b rows[0]! &&
     (List.range (b.last - 1)).all (fun j => linkOK b rows[j]! rows[j + 1]!) &&
     (List.range b.last).all (fun j => decide (j + 1 < b.first) || pressOK b rows[j]!))
 
@@ -566,22 +611,26 @@ theorem link_frame (hE : b.E.pad = AB.top) {r r' : Row} (h : linkOK b r r' = tru
   obtain ⟨hr, D, hD, hle⟩ := hf
   exact ⟨D, hD, next_start hb' hr hle⟩
 
-/-- **The frame of the press** from a row ends in the condition of `TitleStart` -/
-theorem press_frame (hE : b.E.pad = AB.top) (hg : b.K.contains b.gps = true) (hp : b.x.ram.get! b.gps &&& 1 = 0) {r : Row} (h : pressOK b r = true)
-    {m : Machine} (hc : Covered b r m) {i : UInt8} (hq : onlyStart i = true) : ExitCond b.E b.x b.K b.gps (frame m i) := by
-  obtain ⟨S, hS, hs⟩ := hc
-  simp only [pressOK, Bool.and_eq_true] at h
-  obtain ⟨h1, h2⟩ := h
-  have hs1 : Sim (cfgS b r).E (m.frame, 2) S { m with pad := smbToPad i } := sim_pad (sim_splits' hs) (onlyStart_mem hq)
-  obtain ⟨B, hf, hb⟩ := frame_of_start (C := cfgS b r) h1 rfl (List.all_eq_true.1 h2 S hS) hs1
-  have hE' : ({ b.E with splits := padSplits b } : Env).pad = AB.top := hE
-  have hb' : Sim b.E (m.frame, 2) B (frame m i) := sim_splits (sim_unpad hE' hb)
+/-- a byte that the state knows not to be 0 -/
+theorem ne_zero_of_sim {E : Env} {F : Nat × UInt8} {B : AS} {m : Machine} (hs : Sim E F B m) {i : Nat} (hi : i < 2048) (h : (B.getK i).isZero = some false) :
+    m.ram.get! i ≠ 0 := by
+  rcases TR_isZero (hs.ram i hi) with h0 | h0
+  · rw [h] at h0
+    cases h0
+  · rw [h] at h0
+    intro he
+    rw [he] at h0
+    cases h0
+
+/-- an end of a frame that `finPress` accepts meets the condition -/
+theorem press_of_fin (hg : b.K.contains b.gps = true) (hp : b.x.ram.get! b.gps &&& 1 = 0) (hT : b.T < 2048) {B : AS} (hf : finPress b B = true) {F : Nat × UInt8}
+    {m' : Machine} (hb' : Sim b.E F B m') : Press b m' := by
   simp only [finPress, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Bool.or_eq_true, Bool.not_eq_true', List.all_eq_true] at hf
-  obtain ⟨⟨⟨⟨⟨⟨⟨f1, f2⟩, f3⟩, f4⟩, f5⟩, f6⟩, f7⟩, f8⟩ := hf
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨f1, f2⟩, f3⟩, f4⟩, f5⟩, f6⟩, f7⟩, f8⟩, f9⟩ := hf
   have hhi := hb'.hi
   have hlo := hb'.lo
-  have hbytes : ∀ j ∈ b.K, (frame m i).ram.get! j = b.x.ram.get! j := fun j hj => sim_known hb' (f8 j hj)
-  refine ⟨by omega, ?_, ?_, ?_, hb'.strobe.trans f7, hb'.halted, hb'.trk, hb'.prg, hb'.mask, hb'.size, hb'.pc.trans f1, hb'.s.trans f2, hbytes, ?_⟩
+  have hbytes : ∀ j ∈ b.K, m'.ram.get! j = b.x.ram.get! j := fun j hj => sim_known hb' (f8 j hj)
+  refine ⟨⟨by omega, ?_, ?_, ?_, hb'.strobe.trans f7, hb'.halted, hb'.trk, hb'.prg, hb'.mask, hb'.size, hb'.pc.trans f1, hb'.s.trans f2, hbytes, ?_⟩, ne_zero_of_sim hb' hT f9⟩
   · rcases f4 with ⟨⟨a1, a2⟩, a3⟩ | ⟨⟨a1, a2⟩, a3⟩
     · exact Or.inl ⟨by omega, hb'.vb.trans a2, hb'.nmi.trans a3⟩
     · exact Or.inr ⟨by omega, hb'.vb.trans a2, hb'.nmi.trans a3⟩
@@ -590,6 +639,18 @@ theorem press_frame (hE : b.E.pad = AB.top) (hg : b.K.contains b.gps = true) (hp
   · rw [bit_eq hb'.ppuCtrl f5, f6]
   · rw [hbytes b.gps (List.contains_iff_mem.1 hg)]
     exact hp
+
+/-- **The frame of the press** from a row ends in the condition of `TitleStart` -/
+theorem press_frame (hE : b.E.pad = AB.top) (hg : b.K.contains b.gps = true) (hp : b.x.ram.get! b.gps &&& 1 = 0) (hT : b.T < 2048) {r : Row} (h : pressOK b r = true)
+    {m : Machine} (hc : Covered b r m) {i : UInt8} (hq : onlyStart i = true) : Press b (frame m i) := by
+  obtain ⟨S, hS, hs⟩ := hc
+  simp only [pressOK, Bool.and_eq_true] at h
+  obtain ⟨h1, h2⟩ := h
+  have hs1 : Sim (cfgS b r).E (m.frame, 2) S { m with pad := smbToPad i } := sim_pad (sim_splits' hs) (onlyStart_mem hq)
+  obtain ⟨B, hf, hb⟩ := frame_of_start (C := cfgS b r) h1 rfl (List.all_eq_true.1 h2 S hS) hs1
+  have hE' : ({ b.E with splits := padSplits b } : Env).pad = AB.top := hE
+  have hb' : Sim b.E (m.frame, 2) B (frame m i) := sim_splits (sim_unpad hE' hb)
+  exact press_of_fin hg hp hT hf hb'
 
 theorem memB_ok {v : AB} {x : UInt8} (h : memB v x = true) : v.mem x := by
   simpa [memB, AB.mem] using h
@@ -752,11 +813,11 @@ theorem Run.covered (hE : b.E.pad = AB.top) {rows : Array Row} (hb : bootOK b ro
     exact link_frame hE (hl n (by have := R.hi; omega)) (Run.covered hE hb hl R n (by omega)) (R.quiet (n + 1) h)
 
 /-- **The condition of `TitleStart` at the press**, from the machine at power-on and the inputs -/
-theorem Run.press_of (hE : b.E.pad = AB.top) {rows : Array Row} (h : checkOf b rows = true) (R : Run b m) : ExitCond b.E b.x b.K b.gps m := by
+theorem Run.press_of (hE : b.E.pad = AB.top) {rows : Array Row} (h : checkOf b rows = true) (R : Run b m) : Press b m := by
   have hlo := R.lo
   have hhi := R.hi
   simp only [checkOf, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true, List.all_eq_true, List.mem_range, beq_iff_eq] at h
-  rcases h with h | ⟨⟨⟨⟨⟨h1, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩
+  rcases h with h | ⟨⟨⟨⟨⟨⟨h1, h3⟩, h4⟩, hT⟩, h5⟩, h6⟩, h7⟩
   · omega
   · obtain ⟨k, hk⟩ : ∃ k, R.kp = k + 1 := ⟨R.kp - 1, by omega⟩
     have hc := R.covered hE h5 h6 k (by omega)
@@ -767,20 +828,161 @@ theorem Run.press_of (hE : b.E.pad = AB.top) {rows : Array Row} (h : checkOf b r
     rw [e]
     rcases h7 k (by omega) with hp | hp
     · omega
-    · exact press_frame hE h3 h4 hp hc (by rw [← hk]; exact R.start)
+    · exact press_frame hE h3 h4 hT hp hc (by rw [← hk]; exact R.start)
 
 /-- **The condition at the press**, from the check -/
-theorem Run.press (hE : b.E.pad = AB.top) (h : check b = true) (R : Run b m) : ExitCond b.E b.x b.K b.gps m := R.press_of hE h
+theorem Run.press (hE : b.E.pad = AB.top) (h : check b = true) (R : Run b m) : Press b m := R.press_of hE h
+
+/-! ## The first frame that leaves the title, with Start allowed before it -/
+
+namespace Menu
+open TaintRun
+open SideChangeEnd (xwalk finOf xframe_of_walk sim_pad sim_unpad sim_splits sim_splits')
+
+/-- Start may be held before the frame that leaves the title. Select is absent. -/
+def pad : AB := ⟨0, 0x04⟩
+def noSelect (i : UInt8) : Bool := smbToPad i &&& 0x04 == 0
+def mode (b : Ctx) : Nat := (b.sy.OperMode &&& 0x7FF).toNat
+def env (b : Ctx) : Env := { ({ b.E with splits := b.E.splits ++ [((b.sy.SavedJoypadBits &&& 0x7FF).toNat, 0x90)] } : Env) with pad := pad }
+def cfg (b : Ctx) (r : Row) : Cfg :=
+  { E := env b, ops := (aRows (env b)).toArray, sy := b.sy, K := 1, keep := keepS b, t := r.t, idx := r.idx, cut := r.cut }
+/-- Every end either stays on the title, or meets the condition after leaving it. -/
+def fin (b : Ctx) (R : List AS) (B : AS) : Bool :=
+  (knownIs B (mode b, 0) && finOf R B) || (finPress b B && (B.getK (mode b)).isZero == some false)
+def link (b : Ctx) (r r' : Row) : Bool :=
+  r.t.all (xwalk (cfg b r) (fin b r'.R) walkFuel) && r.R.all (startOK (cfg b r) (fin b r'.R))
+
+def row (b : Ctx) (R : List AS) : Row × List AS :=
+  let E := env b
+  let idle := R.all fun S => isIdle b.E S.pc (b.E.prg.get! (S.pc &&& b.E.mask).toNat)
+  let late := if idle then R.filter (·.lo != 0) else []
+  let starts := if idle then late else R
+  let X := searchOf E (keepS b) idle starts
+  let t := X.1 ++ late.toArray
+  let T := tableOf E (keepS b) t
+  let ends := X.2.toList.filter (fun S => knownIs S (mode b, 0))
+  ({ R, t, idx := T.1, cut := T.2, tp := #[], idxp := {}, cutp := ByteArray.empty }, prune (SideChangeEnd.nextStates b.E false ends))
+
+def rows (b : Ctx) : Array Row := Id.run do
+  let mut rs := #[]
+  let mut R := firstStates b
+  for _ in [0:b.last + 1] do
+    let (r, R') := row b R
+    rs := rs.push r
+    R := R'
+  return rs
+
+def checkOf (b : Ctx) (rs : Array Row) : Bool :=
+  decide (b.last < b.first) || (decide (1 ≤ b.first) && decide (b.T < 2048) && decide (mode b < 2048) &&
+  b.K.contains b.gps && b.x.ram.get! b.gps &&& 1 == 0 && bootOK b rs[0]! &&
+  (List.range b.last).all (fun j => link b rs[j]! rs[j + 1]!))
+def check (b : Ctx) : Bool := checkOf b (rows b)
+theorem pad_mem {i : UInt8} (h : noSelect i = true) : pad.mem (smbToPad i) := by
+  simpa [noSelect, pad, AB.mem] using h
+
+/-- A frame either stays on the title or leaves it with Press. -/
+theorem link_frame (hE : b.E.pad = AB.top) (hg : b.K.contains b.gps = true)
+    (hp : b.x.ram.get! b.gps &&& 1 = 0) (hT : b.T < 2048) (hM : mode b < 2048)
+    {r r' : Row} (h : link b r r' = true) {m : Machine} (hc : Covered b r m)
+    {i : UInt8} (hi : noSelect i = true) :
+    (Covered b r' (PipeTransition.frame m i) ∧ (PipeTransition.frame m i).ram.get! (mode b) = 0) ∨
+    (Press b (PipeTransition.frame m i) ∧ (PipeTransition.frame m i).ram.get! (mode b) ≠ 0) := by
+  obtain ⟨S, hS, hs⟩ := hc
+  simp only [link, Bool.and_eq_true] at h
+  have hs1 : Sim (cfg b r).E (m.frame, 2) S { m with pad := smbToPad i } :=
+    sim_pad (sim_splits' hs) (pad_mem hi)
+  obtain ⟨B, hf, hb⟩ := frame_of_start (C := cfg b r) h.1 rfl (List.all_eq_true.1 h.2 S hS) hs1
+  have hE' : ({ b.E with splits := b.E.splits ++ [((b.sy.SavedJoypadBits &&& 0x7FF).toNat, 0x90)] } : Env).pad = AB.top := hE
+  have hb' : Sim b.E (m.frame, 2) B (PipeTransition.frame m i) := sim_splits (sim_unpad hE' hb)
+  simp only [fin, Bool.or_eq_true, Bool.and_eq_true, beq_iff_eq] at hf
+  rcases hf with ⟨h0, hf⟩ | ⟨hf, hn⟩
+  · have hm := sim_known hb' h0
+    simp only [finOf, Bool.and_eq_true, Bool.not_eq_true', List.any_eq_true] at hf
+    obtain ⟨hr, D, hD, hle⟩ := hf
+    exact Or.inl ⟨⟨D, hD, next_start hb' hr hle⟩, hm⟩
+  · exact Or.inr ⟨press_of_fin hg hp hT hf hb', ne_zero_of_sim hb' hM hn⟩
+
+/-- A run is indexed by its first exit from the title, rather than by the first input with Start. -/
+structure Run (b : Ctx) (m : Machine) where
+  kp : Nat
+  pm : Nat → Machine
+  pi : Nat → UInt8
+  next : ∀ n, pm (n + 1) = PipeTransition.frame (pm n) (pi n)
+  power : PowerOn b (pm 0)
+  bootInput : noSS (pi 0) = true
+  quiet : ∀ n, n ≤ kp → noSelect (pi n) = true
+  stays : ∀ n, 2 ≤ n → n ≤ kp → (pm n).ram.get! (mode b) = 0
+  left : m.ram.get! (mode b) ≠ 0
+  lo : b.first ≤ kp
+  hi : kp ≤ b.last
+  after : m = pm (kp + 1)
+
+variable {m : Machine}
+
+theorem Run.press_of {rs : Array Row} (hE : b.E.pad = AB.top) (h : checkOf b rs = true) (R : Run b m) : Press b m := by
+  simp only [checkOf, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, List.all_eq_true, List.mem_range] at h
+  rcases h with hempty | h
+  · have := R.lo; have := R.hi; omega
+  obtain ⟨⟨⟨⟨⟨⟨hfirst, hT⟩, hM⟩, hg⟩, hp⟩, hboot⟩, hlinks⟩ := h
+  have hc : ∀ n, n < R.kp → Covered b rs[n]! (R.pm (n + 1)) := by
+    intro n
+    induction n with
+    | zero =>
+      intro hn
+      rw [R.next]
+      exact boot_frame hE hboot R.power R.bootInput
+    | succ n ih =>
+      intro hn
+      rw [R.next]
+      rcases link_frame hE hg hp hT hM (hlinks n (by have := R.hi; omega)) (ih (by omega)) (R.quiet (n + 1) (by omega)) with hstay | hleft
+      · exact hstay.1
+      · have he := R.stays (n + 2) (by omega) (by omega)
+        rw [R.next] at he
+        exact False.elim (hleft.2 he)
+  have hk : 1 ≤ R.kp := by have := R.lo; omega
+  have hcov := hc (R.kp - 1) (by omega)
+  have he : R.kp - 1 + 1 = R.kp := by omega
+  rw [he] at hcov
+  rcases link_frame hE hg hp hT hM (hlinks (R.kp - 1) (by have := R.hi; omega)) hcov (R.quiet R.kp (Nat.le_refl _)) with hstay | hleft
+  · have hz := hstay.2
+    rw [← R.next, ← R.after] at hz
+    exact False.elim (R.left hz)
+  · rw [← R.next, ← R.after] at hleft
+    exact hleft.1
+
+theorem Run.press (hE : b.E.pad = AB.top) (h : check b = true) (R : Run b m) : Press b m :=
+  R.press_of hE h
+
+/-- A small native probe before committing to a larger ROM check. -/
+def probe (b : Ctx) : IO Unit := do
+  let mut R := firstStates b
+  let mut prev : Option Row := none
+  for j in [0:b.last + 1] do
+    let (r, R') := row b R
+    let ok := match prev with
+      | none => bootOK b r
+      | some q => link b q r
+    if j % 20 == 0 || !ok then
+      IO.println s!"menu row {j + 1}: states {R.length}, table {r.t.size}, next {R'.length}, link {ok}"
+      (← IO.getStdout).flush
+    if !ok then return
+    prev := some r
+    R := R'
+end Menu
 
 /-- **How the machine after the press is known**: by the run from power-on (`power`: one state and conditions on single inputs), or by the condition itself (`press`:
 one state, as before, for a run that is not in the class of `Run`) -/
 inductive Start (b : Ctx) (m : Machine) where
   | power (R : Run b m)
-  | press (h : ExitCond b.E b.x b.K b.gps m)
+  | menu (R : Menu.Run b m)
+  | later (R : Run (later b) m)
+  | press (h : Press b m)
 
-/-- **The condition at the press**, in both cases -/
-theorem Start.cond (hE : b.E.pad = AB.top) (h : check b = true) : Start b m → ExitCond b.E b.x b.K b.gps m
+/-- **The condition at the press**, in all cases -/
+theorem Start.cond (hE : b.E.pad = AB.top) (h : check b = true) (hm : Menu.check b = true) (hl : check (TitleBoot.later b) = true) : Start b m → Press b m
   | .power R => R.press hE h
+  | .menu R => R.press hE hm
+  | .later R => let h := Run.press (b := TitleBoot.later b) hE hl R; ⟨h.exit, h.timer⟩
   | .press h' => h'
 
 end

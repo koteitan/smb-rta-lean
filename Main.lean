@@ -513,8 +513,10 @@ theorem room_vert : RoomPair.RoomWalks sy screenNames ctx roomNums.h roomNums.ri
 rows of `TitleBoot` close. A search finds the window (at most 2000 frames). `m0` gives the cartridge. -/
 def titleCtxText (sy : Syms) (tnm : PipeTransitionAll.Names) (m0 : Machine) : String :=
   let cart : Machine := { prg := m0.prg, prgMask := m0.prgMask }
-  let w := TitleBoot.windowOf (TitleStart.bootOf sy (TitleStart.ctxOf sy tnm cart 39)) 2000
-  s!"\{ TitleStart.ctxOf sy titleNames cart 39 with first := {w.1}, last := {w.2} }"
+  let b := TitleStart.bootOf sy (TitleStart.ctxOf sy tnm cart 39)
+  let w := TitleBoot.windowOf b 2000
+  let later := TitleBoot.windowAfter b (w.2 + 1) 4000
+  s!"\{ TitleStart.ctxOf sy titleNames cart 39 with first := {w.1}, last := {w.2}, laterFirst := {later.1}, laterLast := {later.2} }"
 
 set_option maxRecDepth 2048 in
 /-- the theorem files that only apply `native_decide` to the public statements -/
@@ -14284,7 +14286,7 @@ def titleRun (sy : Syms) (c : TitleStart.Ctx) (t0 : Nat) (m : Machine) (kk : Nat
   let mut x := m
   for k in [0:kk] do x := runFrame x (ti k &&& 0xF7)
   x := runFrame x pi
-  let press := SideChangeEnd.exitOK c.E c.x c.K c.gps x
+  let press := TitleBoot.meets (TitleStart.bootOf sy c) x
   let mut b := x
   let mut paused := 0
   for n in [0:3000] do
@@ -14415,7 +14417,7 @@ def titleCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
   for h : k in [0:inputs.size] do
     let y := runFrame x inputs[k]
     if peek x sy.OperMode == 0 && peek y sy.OperMode != 0 then
-      moviePress := SideChangeEnd.exitOK c.E c.x c.K c.gps y
+      moviePress := TitleBoot.meets (TitleStart.bootOf sy c) y
       let mut b := y
       for j in [k + 1:inputs.size] do
         let z := runFrame b inputs[j]!
@@ -14449,7 +14451,8 @@ def titleBootCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
   let cart ← loadCart romPath
   let c0 := TitleStart.ctxOf sy tnm cart 39
   let w := TitleBoot.windowOf (TitleStart.bootOf sy c0) 2000
-  let c : TitleStart.Ctx := { c0 with first := w.1, last := w.2 }
+  let wl := TitleBoot.windowAfter (TitleStart.bootOf sy c0) (w.2 + 1) 4000
+  let c : TitleStart.Ctx := { c0 with first := w.1, last := w.2, laterFirst := wl.1, laterLast := wl.2 }
   let b := TitleStart.bootOf sy c
   IO.println s!"the window of the press: frames {w.1} to {w.2} from power-on; bytes of the RAM at power-on that are 0: {b.Z.length}; known at the press: {c.K.length}"
   let t1 ← IO.monoMsNow
@@ -14457,6 +14460,10 @@ def titleBootCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
   let okText := toString ok
   let t2 ← IO.monoMsNow
   IO.println s!"the check: {okText} ({t2 - t1} ms)"
+  let tl1 ← IO.monoMsNow
+  let okLater ← IO.lazyPure fun _ => TitleBoot.check (TitleBoot.later b)
+  let tl2 ← IO.monoMsNow
+  IO.println s!"later window {wl.1} to {wl.2}: check {okLater} ({tl2 - tl1} ms)"
   flush
   let pon := powerOn cart 0
   let zeros := pon.ram
@@ -14469,7 +14476,7 @@ def titleBootCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
     let mut x : Machine := { pon with ram }
     for k in [0:kp] do x := runFrame x (ti k)
     let y := runFrame x pi
-    return (peek y sy.OperMode != 0, SideChangeEnd.exitOK c.E c.x c.K c.gps y)
+    return (peek y sy.OperMode != 0, TitleBoot.meets (TitleStart.bootOf sy c) y)
   let span := w.2 + 1 - w.1
   let kpOf := fun (i : Nat) => w.1 + ((titleRand (i.toUInt64 + 31) 1).toNat * 256 + (titleRand (i.toUInt64 + 31) 2).toNat) % span
   let mut groups : Array (String × Bool × Array (ByteArray × (Nat → UInt8) × Nat × UInt8)) := #[]
@@ -14491,8 +14498,14 @@ def titleBootCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
   cls := cls.push (ByteArray.mk (Array.replicate 2048 255), fun k => titleRand 9 k &&& 0xF3, w.2, 0x09)
   groups := groups.push ("the class", true, cls)
   groups := groups.push (s!"the press on frame {w.1 - 1}", false, #[(zeros, fun _ => 0, w.1 - 1, 0x08), (zeros, fun _ => 0, w.1 - 1, 0x09)])
+  groups := groups.push ("the press on frame 31", true, #[(zeros, fun _ => 0, 31, 0x08), (zeros, fun _ => 0, 31, 0x09)])
+  groups := groups.push ("the press on frame 1657 after the first demo", false, #[(zeros, fun _ => 0, 1657, 0x08), (zeros, fun _ => 0, 1657, 0x09)])
   groups := groups.push (s!"the press on frames {w.2 + 1} to {w.2 + 40}", false, (Array.range 40).map fun j => (zeros, fun _ => 0, w.2 + 1 + j, 0x08))
   groups := groups.push ("the press after the first demo (frames 1600 to 2200, each 7th)", false, (Array.range 86).map fun j => (zeros, fun _ => 0, 1600 + 7 * j, 0x08))
+  groups := groups.push ("later-window class with seeded RAM and random inputs without Start or Select", true,
+    (Array.range 100).map fun i =>
+      (bootRam (i.toUInt64 + 14000) b.Z, fun k => titleRand (i.toUInt64 + 15000) k &&& 0xF3,
+        wl.1 + (i * 97) % (wl.2 + 1 - wl.1), if i % 2 == 0 then 0x08 else 0x09))
   groups := groups.push ("Select on frames before the press", false, (Array.range 200).map fun i => (zeros, fun k => titleRand (i.toUInt64 + 3000) k &&& 0xF7, kpOf (i + 2000), 0x08))
   groups := groups.push ("Start with another button on frames before the press", false,
     (Array.range 200).map fun i => (zeros, fun k => let v := titleRand (i.toUInt64 + 4000) k &&& 0xFB; if v &&& 0xFE == 0x08 then v ||| 0x80 else v, kpOf (i + 3000), 0x08))
@@ -14524,7 +14537,87 @@ def titleBootCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
         (run zeros (fun k => inputs[k]!) kp inputs[kp]!).2
     | none => false
   IO.println s!"the movie: its first Start is on frame {kpM}; it is a run of the class and meets the condition {movieOK}"
-  return (if ok && bad == 0 && movieOK then 0 else 1)
+  return (if ok && okLater && bad == 0 && movieOK then 0 else 1)
+
+/-- Test the first-exit class on real frames, including held Start. -/
+def titleMenuCheck (sy : Syms) (romPath fm2Path : String) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let c := TitleStart.ctxOf sy (TitleStart.namesFrom text) cart 39
+  let b := TitleStart.bootOf sy { c with first := 31, last := 508 }
+  let t1 ← IO.monoMsNow
+  let ok ← IO.lazyPure fun _ => TitleBoot.Menu.check b
+  let t2 ← IO.monoMsNow
+  IO.println s!"first-exit menu check: {ok}, {t2 - t1} ms"
+  flush
+  let pon := powerOn cart 0
+  let mut bad := 0
+  for group in [0:3] do
+    let mut left := 0
+    let mut held := 0
+    for i in [0:200] do
+      let ram := if group == 2 then bootRam (i.toUInt64 + 11000) b.Z else pon.ram
+      let mut x := { pon with ram }
+      let target := 39 + i % 250
+      let mut prev : UInt8 := 0
+      for n in [0:509] do
+        let v := titleRand (i.toUInt64 + 12000) n &&& 0xFB
+        let v := if group == 1 && v &&& 0xFE == 0x08 then v ||| 0x80 else v
+        let inp := if n == 0 then 0 else if n < target then v else if (n - target) % 2 == 0 then 0x08 else 0
+        if inp &&& prev &&& 0x08 != 0 then held := held + 1
+        let y := runFrame x inp
+        if n ≥ 1 && peek y sy.OperMode != 0 then
+          left := left + 1
+          if n < 31 || !TitleBoot.meets b y then
+            bad := bad + 1
+            IO.println s!"AGAINST first-exit class: group {group}, run {i}, first exit {n}, Press {TitleBoot.meets b y}"
+          break
+        prev := inp
+        x := y
+    IO.println s!"first-exit group {group}: 200 runs, exits {left}, adjacent frames with Start {held}"
+    flush
+  let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2Path)) fceuxSkip
+  let mut x := pon
+  let mut movie := false
+  for n in [0:509] do
+    let y := runFrame x inputs[n]!
+    if n ≥ 1 && peek y sy.OperMode != 0 then
+      movie := 31 ≤ n && TitleBoot.meets b y
+      break
+    x := y
+  IO.println s!"movie first exit meets Press: {movie}; counterexamples {bad}"
+  return if ok && movie && bad == 0 then 0 else 1
+
+/-- Probe the title rows with Start permitted before the first exit. -/
+def titleMenuProbe (sy : Syms) (romPath : String) (cap : Nat) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let c := TitleStart.ctxOf sy (TitleStart.namesFrom text) cart 39
+  let b := TitleStart.bootOf sy { c with first := 31, last := cap }
+  TitleBoot.Menu.probe b
+  return 0
+
+/-- Probe the rows through the first demo, before adding any later-window hypothesis. -/
+def titleDemoProbe (sy : Syms) (romPath : String) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let c := TitleStart.ctxOf sy (TitleStart.namesFrom text) cart 39
+  let b := TitleStart.bootOf sy { c with first := 1657, last := 2123 }
+  let mut R := TitleBoot.firstStates b
+  let mut prev : Option TitleBoot.Row := none
+  for j in [0:b.last] do
+    let (r, R') := TitleBoot.rowOf b R (decide (b.first ≤ j + 1))
+    let ok := match prev with
+      | none => TitleBoot.bootOK b r
+      | some q => TitleBoot.linkOK b q r
+    let press := if b.first ≤ j + 1 then TitleBoot.pressOK b r else true
+    if j % 100 == 0 || !ok || !press then
+      IO.println s!"demo row {j + 1}: states {R.length}, table {r.t.size}, next {R'.length}, link {ok}, press {press}"
+      flush
+    if !ok || !press then return 1
+    prev := some r
+    R := R'
+  return 0
 
 /-! ## The condition at the vertical pipe's entry, from the title (`EntryKeep`) -/
 
@@ -17057,6 +17150,9 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   change-scenes FM2                  the number of frames left in both changes, with random inputs, pauses and frames that run over, as a program
   frames-check FM2 [A HEX | pause F D | insert A K]  the frame rule on a movie's frames up to the level change, as a program
   title-check FM2                    from Start on the title to control: the condition at the press and frame 0 on real runs, as a program
+  title-menu-check FM2               first exit from the title, with earlier Start and held Start
+  title-demo-probe                  rows through the first demo
+  title-menu-probe [CAP]            first-exit row diagnostic
   title-boot-check FM2               from power-on to the press of Start: the rows of TitleBoot, and the condition at the press on real runs from power-on
   entry-keep-check FM2               the vertical pipe's entry from the title: the kept bytes at control, FrameStart and Clean on each frame, Rest and Entry at the entry
   entry-walk-check                   the walks of EntryKeep as a program: one frame from control (each end with the player's routine starts a frame), frame 0
@@ -17709,6 +17805,10 @@ def main (args : List String) : IO UInt32 := do
   | ["hurry-ctl-check"] => hurryCtlCheckProg sy rom
   | ["title-check", fm2] => titleCheck sy rom fm2
   | ["title-boot-check", fm2] => titleBootCheck sy rom fm2
+  | ["title-menu-check", fm2] => titleMenuCheck sy rom fm2
+  | ["title-demo-probe"] => titleDemoProbe sy rom
+  | ["title-menu-probe"] => titleMenuProbe sy rom 508
+  | ["title-menu-probe", cap] => titleMenuProbe sy rom (cap.toNat?.getD 508)
   | ["entry-keep-check", fm2] => entryKeepCheck sy rom fm2
   | ["entry-walk-check"] => entryWalkCheck sy rom
   | ["entry-clean-use"] => entryCleanUse sy rom
