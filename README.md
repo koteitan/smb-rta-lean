@@ -162,10 +162,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-b-3-3 `chg.keep₁` removed: a frame that ends paused keeps the frames left
     - 🚨 1-1-b-3-4 The condition at the entry (`chg.entry₁` is gone)
       - ✅ 1-1-b-3-4-1 The idle loop, the pipe's timer and 74 bytes from the title and the frames from control
-      - 🚨 1-1-b-3-4-2 The other 36 bytes (`chg.entryRest₁`; the pause's bits and 19 bytes the pipe's frames do not use gone)
-        <details><summary>1 lines of proved parts (the parent's own assumptions remain)</summary>
+      - 🚨 1-1-b-3-4-2 The other 35 bytes (`chg.entryRest₁`; the pause's bits, 19 bytes the pipe's frames do not use and the first square channel's effect queue gone)
+        <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-b-3-4-2-1 19 bytes the pipe's frames do not use (out of `Entry`, `entryDropped`)
+        - ✅ 1-1-b-3-4-2-2 The first square channel's effect queue (out of `Entry`, `entryDropped`)
 
         </details>
       - ✅ 1-1-b-3-4-3 Each frame from control to the entry starts in control (`chg.upStart₁` is gone: by induction; `a₁` is the first frame without control)

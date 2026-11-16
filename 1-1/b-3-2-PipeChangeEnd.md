@@ -184,3 +184,5 @@ Entries: `E`, the TAS entry, the 13 real entries, and 422 entries of runs of my 
 .lake/build/bin/smbrta pipe-end-check FM2    # the check, the conditions on E, the TAS entry and 13 real entries with three kinds of inputs, the time at the exits, about 2 min
 .lake/build/bin/smbrta changes-check FM2     # the fields of Changes on the TAS run
 ```
+
+The first square channel's effect queue is removed from the entry condition. `Entry` has 98 full bytes and 11 masked bytes. The exit condition is unchanged. The pipe walk is checked without knowing this queue at entry, with larger tables. See [the remaining entry bytes](b-3-4-2-EntryRest.md).

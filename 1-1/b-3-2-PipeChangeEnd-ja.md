@@ -184,3 +184,5 @@ Lean: `Theorems/PipeChangeEnd.lean`（`cov_place`、`cov_zsplit`、`s_zsuccs`、
 .lake/build/bin/smbrta pipe-end-check FM2    # 確認と、E、TAS の入る状態、本物の 13 個での 3 種類の入力による条件と出口の時間の確認。約 2 分
 .lake/build/bin/smbrta changes-check FM2     # TAS の走りでの Changes のフィールド
 ```
+
+第 1 矩形波の効果音キューは、入口の条件から外しました。`Entry` は 98 バイトとマスクつきの 11 バイトです。出口の条件は同じです。入口でこのキューを知らない土管の歩きを確かめます。表は大きくなります。[残る入口のバイト](b-3-4-2-EntryRest-ja.md) を参照してください。

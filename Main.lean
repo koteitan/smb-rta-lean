@@ -15290,6 +15290,148 @@ def entryNeed (sy : Syms) (romPath : String) (only : List Nat) (group : Bool) : 
       if only.isEmpty || only.contains k then run s!"[{k}] {lbl} i={i}" [i]
   return 0
 
+/-- round 16 (part b), for measuring `chg.entryRest₁`: `EntryKeep.runE` that also records, for each byte of a group, the places where a step changes what the
+state knows of it, and the ends of the frame that fail: the routine at the end (256 if not known) and the bytes of the group that the end does not know -/
+partial def runEG (S : FrameKeep.Spot) (G : PipeWrites.Guard) (E : TaintRun.Env) (tI : Nat) (fin : TaintRun.AS → Bool) (ops : Array (TaintRun.AM Unit))
+    (grp : List FrameKeep.Watch) (X0 : PipeWrites.SG) (wr0 : Std.HashMap (Nat × Nat) Nat) (ends0 : Std.HashMap (Nat × List Nat) Nat) (A0 : TaintRun.AS) :
+    PipeWrites.SG × Std.HashMap (Nat × Nat) Nat × Std.HashMap (Nat × List Nat) Nat := Id.run do
+  let mut X := X0
+  let mut wr := wr0
+  let mut ends := ends0
+  let mut cur := A0
+  let mut run := 0
+  while true do
+    let rs := (FrameKeep.preK S G cur).flatMap (FrameKeep.kstep S G E ops)
+    X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
+    let bad := rs.any fun r => match r with
+      | none => true
+      | some B => B.k != cur.k && !fin B
+    if bad then
+      X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur, failPcs := X.failPcs.insert cur.pc.toNat (X.failPcs.getD cur.pc.toNat 0 + 1) }
+    for r in rs do
+      match r with
+      | some B =>
+        for w in grp do
+          let c0 := cur.getK w.1
+          let b0 := B.getK w.1
+          if b0.k != c0.k || (b0.v &&& b0.k) != (c0.v &&& c0.k) then wr := wr.insert (w.1, cur.pc.toNat) (wr.getD (w.1, cur.pc.toNat) 0 + 1)
+        if B.k != cur.k && !fin B then
+          let r := B.getK G.rtI
+          let key := ((if r.isK then r.v.toNat else 256), (grp.filter fun w => !FrameKeep.watchOK [w] B).map (·.1))
+          ends := ends.insert key (ends.getD key 0 + 1)
+      | none => ends := ends.insert (999, [cur.pc.toNat]) (ends.getD (999, [cur.pc.toNat]) 0 + 1)
+    let good := (rs.filterMap id).filter fun b => b.k == cur.k
+    match good with
+    | [b] =>
+      if (X.leaders[b.pc.toNat]?).isNone && run < 64 && b.pc != G.je && b.pc != S.entry &&
+          (b.pc.toNat == cur.pc.toNat + 1 || b.pc.toNat == cur.pc.toNat + 2 || b.pc.toNat == cur.pc.toNat + 3) then
+        cur := b
+        run := run + 1
+        continue
+      else pure ()
+    | _ => pure ()
+    for b in good do
+      X := { X with leaders := X.leaders.insert b.pc.toNat () }
+      X := EntryKeep.routeE E S G tI X b
+    break
+  return (X, wr, ends)
+
+/-- Audit each remaining Rest byte without changing the title condition or the guard. -/
+def entryRestAudit (sy : Syms) (romPath : String) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let e := PipeTransition.entry m0
+  let nx := PipeChangeEnd.namesOf text
+  let T ← IO.lazyPure fun _ => PipeChangeEnd.tablesOf sy nx m0
+  let d := PipeChangeEnd.assemble sy nx m0 (PipeChangeEnd.songTable nx m0 5327) T.2.1 T.1 T.2.2.1 T.2.2.2 0 0
+  let c := TitleStart.ctxOf sy (TitleStart.namesFrom text) cart 39
+  let near := (TitleStart.setsOf sy c).near.R
+  let GE := EntryKeep.guardOf sy m0 d e
+  let GU := UpClean.guardU sy m0 d e
+  let ws := EntryKeep.entryW d e
+  IO.println s!"Rest audit: {((ws.filter fun w => (EntryKeep.restIdx nx).contains w.1)).length} bytes, kept {(EntryKeep.kept sy d e).length}, guard {GE.prot.eraseDups.length}, union {GU.prot.eraseDups.length}"
+  for p in EntryKeep.restNames do
+    for (i, j) in (SideChangeBound.bytesOf nx [p]).zipIdx do
+      for w in ws.filter (fun w => w.1 == i) do
+        let control := m0.ram.get! i &&& w.2.1 == w.2.2 &&& w.2.1
+        let knows := (near.filter fun A => (A.getK i).k &&& w.2.1 == w.2.1).length
+        let nearMatches := (near.filter fun A => FrameKeep.watchOK [w] A).length
+        IO.println s!"{p.1}+{p.2.1 + j}: press {c.K.contains i}, near known {knows}/{near.length}, near reference {nearMatches}/{near.length}, control reference {control}, extra guard byte {if GE.prot.contains i then 0 else 1}, extra union byte {if GU.prot.contains i then 0 else 1}"
+  return 0
+
+/-- round 16 (part b), a program for measuring `chg.entryRest₁`: the walk of one frame from control with a group of the bytes of `Rest` kept too and protected by
+the guard (the bytes are given by their place in the list of `Rest`, as `entry-need` counts them; none given: every byte that has the reference's value on the
+movie's frames). It prints the places of the frame that change what the state knows of each byte, and the ends that fail: the routine at the end and the bytes of
+the group that the end does not know. -/
+def entryRestCheck (sy : Syms) (romPath fm2Path : String) (only : List Nat) : IO UInt32 := do
+  let text ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let e := PipeTransition.entry m0
+  let nx := PipeChangeEnd.namesOf text
+  let T ← IO.lazyPure fun _ => PipeChangeEnd.tablesOf sy nx m0
+  let d := PipeChangeEnd.assemble sy nx m0 (PipeChangeEnd.songTable nx m0 5327) T.2.1 T.1 T.2.2.1 T.2.2.2 0 0
+  let W := EntryKeep.kept sy d e
+  let G := EntryKeep.guardOf sy m0 d e
+  let E := PipeEntryRule.envOf m0
+  let ops := (TaintRun.aRows E).toArray
+  let S := EntryKeep.spot
+  -- the bytes of `Rest`, with a label, in the order of `entry-need`
+  let mut rest : Array (String × FrameKeep.Watch) := #[]
+  for p in EntryKeep.restNames do
+    for (i, j) in (SideChangeBound.bytesOf nx [p]).zipIdx do
+      for w in (EntryKeep.entryW d e).filter fun w => w.1 == i do
+        rest := rest.push (s!"{p.1}+{p.2.1 + j}", w)
+  -- the movie's frames from control to the entry
+  let pon := powerOn cart 0
+  let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2Path)) fceuxSkip
+  let mut x := pon
+  let mut k0 := 0
+  for h : k in [0:inputs.size] do
+    x := runFrame x inputs[k]
+    if controllable sy x then
+      k0 := k
+      break
+  let mut tas : Array Machine := #[x]
+  let mut a := x
+  for j in [1:400] do
+    a := runFrame a inputs[k0 + j]!
+    if (peek a sy.GameEngineSubroutine).toUInt16 == sy.EngVerticalPipe then break
+    tas := tas.push a
+  let same := fun (w : FrameKeep.Watch) => tas.all fun m => (m.ram.get! w.1 &&& w.2.1) == (w.2.2 &&& w.2.1)
+  let sel := (rest.toList.zipIdx.filter fun p => if only.isEmpty then same p.1.2 else only.contains p.2)
+  let grp := sel.map (·.1.2)
+  let lbl := fun (i : Nat) => match rest.toList.find? (fun p => p.2.1 == i) with
+    | some p => p.1
+    | none => s!"{i}"
+  IO.println s!"Rest: {rest.size} bytes; the group: {sel.map fun p => (p.2, p.1.1)}"
+  flush
+  let W' := W ++ grp
+  let W3 := EntryKeep.atEntry d e ++ grp
+  let G' := { G with prot := grp.map (·.1) ++ G.prot }
+  let fin := EntryKeep.finE G'.rtI sy.Eng_PlayerCtrl.toUInt8 (PipeEntryRule.vp sy) W' W3 (FrameKeep.endOK G') (fun B => EntryKeep.idleOK e B && EntryKeep.timerOK (EntryKeep.timerI d e) B)
+  let t0 ← IO.monoMsNow
+  let mut X : PipeWrites.SG := [FrameKeep.startK G' W' false, FrameKeep.startK G' W' true].foldl (EntryKeep.routeE E S G' (EntryKeep.timerI d e)) {}
+  let mut wr : Std.HashMap (Nat × Nat) Nat := {}
+  let mut ends : Std.HashMap (Nat × List Nat) Nat := {}
+  while true do
+    match X.pending.minEntry? with
+    | none => break
+    | some (key, A) =>
+      X := { X with pending := X.pending.erase key }
+      let r := runEG S G' E (EntryKeep.timerI d e) fin ops grp X wr ends A
+      X := r.1
+      wr := r.2.1
+      ends := r.2.2
+  IO.println s!"search {X.steps} steps, {X.fails} failures, table {X.multi.size} ({(← IO.monoMsNow) - t0} ms); the player's routine {sy.Eng_PlayerCtrl}, the pipe's {PipeEntryRule.vp sy}"
+  for p in sel do
+    let l := ((wr.toList.filter fun q => q.1.1 == p.1.2.1).map fun q => (q.1.2, q.2)).mergeSort fun a b => a.1 ≤ b.1
+    IO.println s!"[{p.2}] {p.1.1}: changed at {l}"
+  for q in (ends.toList.mergeSort fun a b => a.1.1 ≤ b.1.1) do
+    IO.println s!"a failing end: routine {q.1.1}, not known {q.1.2.map lbl} ({q.2} times)"
+  return 0
+
 /-- round 15 (part b), a program for measuring: the level's number (`AreaNumber`) in the condition at the vertical pipe's entry. Where the lists have it (the press on
 the title, `Entry`, the kept bytes, the guards); the walks of the pipe's frames (`leftCheck`, `zcheck`, `pcheck`) with it known at the entry and without it, with their
 tables and times (what the byte costs in `Entry`); and the same walks asked to end at the exit in a state that knows it (whether the exit and so the rows of part b could
@@ -17157,6 +17299,8 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   entry-keep-check FM2               the vertical pipe's entry from the title: the kept bytes at control, FrameStart and Clean on each frame, Rest and Entry at the entry
   entry-walk-check                   the walks of EntryKeep as a program: one frame from control (each end with the player's routine starts a frame), frame 0
   entry-clean-use                    the places where the walk of EntryKeep leaves an instruction to Clean, by the part of Clean
+  entry-rest-audit                   frame-0 knowledge and guard cost of each Rest byte
+  entry-rest-check FM2 [K...]        track the Rest bytes together and record failing ends
   entry-widen FM2 [real | end | K]   EntryKeep, each byte of restNames alone: its values on real frames, the search with it kept too and frame 0 (end: asked only at the pipe's end)
   entry-writers [NAME ...]           EntryKeep: with one byte of restNames kept too, the places where the walk of a frame changes it
   entry-stores FM2                   EntryKeep: the stores through an index or a pointer to each byte of restNames on real frames from control
@@ -17819,6 +17963,8 @@ def main (args : List String) : IO UInt32 := do
   | "entry-need" :: "group" :: ks => entryNeed sy rom (ks.map String.toNat!) true
   | "entry-need" :: ks => entryNeed sy rom (ks.map String.toNat!) false
   | ["entry-area-check"] => entryAreaCheck sy rom
+  | ["entry-rest-audit"] => entryRestAudit sy rom
+  | "entry-rest-check" :: fm2 :: ks => entryRestCheck sy rom fm2 (ks.map String.toNat!)
   | ["pipe-rows-fx", mode] => pipeRowsFx sy rom mode
   | ["entry-widen", fm2, "real"] => entryWiden sy rom fm2 [] false
   | ["entry-widen", fm2, k] => entryWiden sy rom fm2 [k.toNat!] true

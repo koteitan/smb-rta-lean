@@ -42,9 +42,9 @@ open FrameKeep (Watch watchOK Watched Spot CleanK kstep preK normK keyK startK)
 
 /-- **The bytes of the condition at the entry that are not proved here**: a name, an offset, a number of bytes. Each byte was measured alone. The walks of the pipe's frames
 need each of them (with the byte not known at the entry, `PipeChangeEnd.zcheck` and `pcheck` fail, or for the two music queues the search does not end in 10 minutes:
-`entry-need`), but the first square's effect queue: without it the tables of `pcheck` grow from about 100,000 states to 300,000, so it stays. Each fails one of these:
+`entry-need`), except the first square's effect queue, which is now removed from Entry: the larger pipe-frame tables are accepted. Each fails one of these:
 * another value on some real frame from control to the entry: the routine, the enemies' page select, the states and flags of blocks 0 and 1, misc object 8's state, scores 0 to 2,
-  the states of enemy slots 0 to 2, the flag and the kind of enemy slot 5 (the power-up's), the first square's effect queue;
+  the states of enemy slots 0 to 2, the flag and the kind of enemy slot 5 (the power-up's);
 * not known at frame 0 (no near state of `TitleStart` knows them): the saved song;
 * written by the walk of a frame that ends with the player's routine, since it knows nothing of the objects, the area's data or the sound: the flag of enemy slot 4, the music
   and the noise, the vine's flag offset, the frenzy, the warp zone, the next area (2), the star, the world;
@@ -54,7 +54,7 @@ The pause byte's bits 1 to 6 left in round 11: the near states of `TitleStart` k
 def restNames : List (String × Nat × Nat) :=
   [("GameEngineSubroutine", 0, 1), ("EnemyObjectPageSel", 0, 1), ("AreaMusicBuffer_Alt", 0, 1),
    ("Block_State", 0, 2), ("Block_RepFlag", 0, 2), ("Misc_State", 8, 1), ("FloateyNum_Control", 0, 3), ("FloateyNum_Control", 5, 1),
-   ("Enemy_State", 0, 3), ("Square1SoundQueue", 0, 1),
+   ("Enemy_State", 0, 3),
    ("Enemy_Flag", 4, 2), ("Enemy_ID", 0, 3), ("Enemy_ID", 5, 1), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1),
    ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1), ("VineFlagOffset", 0, 1),
    ("EnemyFrenzyBuffer", 0, 1), ("EnemyFrenzyQueue", 0, 1), ("WarpZoneControl", 0, 1), ("AreaPointer", 0, 1), ("EntrancePage", 0, 1),

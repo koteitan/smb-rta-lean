@@ -1366,16 +1366,16 @@ def entryNames : List (String × Nat × Nat) :=
 /-- the bytes that the state at the entry knows by a mask of bits: the objects' kinds and states as on a real entry, Mario's status below the fire flower, the pause bits other than the low bit and the top bit -/
 def entryMasks : List (String × Nat × UInt8) :=
   [("Enemy_ID", 0, 249), ("Enemy_ID", 1, 249), ("Enemy_ID", 2, 249), ("Enemy_State", 0, 254), ("Enemy_State", 1, 254), ("Enemy_State", 2, 254), ("Enemy_State", 3, 254),
-   ("Square1SoundQueue", 0, 239), ("SprDataOffset_Ctrl", 0, 254), ("PlayerStatus", 0, 254), ("GamePauseStatus", 0, 126), ("AreaMusicBuffer_Alt", 0, 251)]
+   ("SprDataOffset_Ctrl", 0, 254), ("PlayerStatus", 0, 254), ("GamePauseStatus", 0, 126), ("AreaMusicBuffer_Alt", 0, 251)]
 
 /-- **The bytes that the entry no longer asks** (round 12): with each alone not known at the entry, and with all of them together, both walks of the pipe's frames
 (`zcheck`, `pcheck`) and `leftCheck` still pass (`entry-need`). The buttons up and down, the enemies' page, the screen's timer, the demo's timer, three bytes after the world's
 number in the menu, the byte after the mode, the height of misc object 8, Mario's state, the state of enemy slot 5, the second square's effect queue (the sound routine clears it
-on every frame, so the exit still knows it), the flagpole's number, the vine's height, the first cannon's offset, the duplicate, the colours, the loop, the flag of a new game timer. -/
+on every frame, so the exit still knows it), the flagpole's number, the vine's height, the first cannon's offset, the duplicate, the colours, the loop, the flag of a new game timer. The first square's effect queue is now also free: the checks of the pipe's frames accept every value, with larger tables. -/
 def entryDropped : List (String × Nat × Nat) :=
   [("Up_Down_Buttons", 0, 1), ("EnemyObjectPageLoc", 0, 1), ("ScreenTimer", 0, 1), ("DemoTimer", 0, 1), ("WorldSelectNumber", 2, 3), ("OperMode", 1, 1),
    ("Misc_Y_Position", 8, 1), ("Player_State", 0, 1), ("Enemy_State", 5, 1), ("Square2SoundQueue", 0, 1), ("FlagpoleFNum_Y_Pos", 0, 1), ("VineHeight", 0, 1),
-   ("Cannon_Offset", 0, 1), ("DuplicateObj_Offset", 0, 1), ("BackgroundColorCtrl", 0, 1), ("LoopCommand", 0, 1), ("FetchNewGameTimerFlag", 0, 1)]
+   ("Cannon_Offset", 0, 1), ("DuplicateObj_Offset", 0, 1), ("BackgroundColorCtrl", 0, 1), ("LoopCommand", 0, 1), ("FetchNewGameTimerFlag", 0, 1), ("Square1SoundQueue", 0, 1)]
 
 /-- the known bytes of the entry as RAM indices: the list, and the bytes of the exit, but those of `entryDropped` -/
 def entryKnown (nx : Names) : List Nat :=
