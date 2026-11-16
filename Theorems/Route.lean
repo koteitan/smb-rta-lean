@@ -503,9 +503,9 @@ structure RoomChecks (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChan
   mapStartF : RoomMap.startCheckF sy nmS m0 = true
   sideEnd : SideEntryEnd.sideEntryEndCheck sy m0 = true
   sideRest : SideEntryRest.restCheck sy nmS m0 = true
-  /-- the walks of the vertical pipe's frames, of the last frames of the change and of the room's frames with the level's number known, and their small checks: with
-  them the level's number at the side pipe's entry is that of the vertical pipe's entry (`AreaKeep`, `Run.area₂`) -/
-  area : AreaKeep.Facts sy m0 nm₁ d₁ (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) nmS
+  /-- the walk of the room's frames with the level's number known, and its small checks: with them and the rows of the first change (`start`) the level's number
+  at the side pipe's entry is that of the vertical pipe's entry (`AreaKeep`, `Run.area₂`) -/
+  area : AreaKeep.Facts sy m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) nmS
   /-- the walk of the room's frame that follows the height, with the player's size of the reference known, and the references' height: with them a frame of the
   room that starts with that size and ends with the side pipe's routine ends with the height of the reference entry (`EntryHeight`, `Run.y₂`) -/
   height : EntryHeight.Facts sy nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0))
@@ -1122,15 +1122,22 @@ theorem Run.area₁ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : Tit
     (R.base.seq (R.base.a₁ sy)).ram.get! (AreaKeep.areaI nmS) = (PipeTransition.entry m0).ram.get! (AreaKeep.areaI nmS) :=
   ScreenStart.area_of_entry hR.start (R.entry₁ hB hK).entry
 
-/-- **The level's number at the side pipe's entry is the vertical pipe's entry's** (it was a byte of `entry₂`, now the theorem): at the vertical pipe's entry it has the
-reference's value (`Run.area₁`); the walks of the pipe's frames and of the rows with the byte known go beside the walks of part b up to the room's first control
-(`AreaKeep.PipeRunK.areaB`), and the room's walk with the byte in a table carries it to the side pipe's entry (`AreaKeep.area_run`). `hR`, `hB`, `hK` are checks on the ROM. -/
+/-- **The level's number at the room's first control is the vertical pipe's entry's**: the entry's condition lists the byte (`Run.entry₁`), the exit's list has it
+(`PipeChangeEnd.exitNames`), so the walk of the pipe's frames ends with it known and every state of the rows after the exit knows it; the machine at the room's first
+control is in these rows (`PipeChangeEnd.PipeRunK.inRowsT`, `ScreenStart.area_of_rows`). `hR`, `hB`, `hK` are checks on the ROM. -/
+theorem Run.areaB₁ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    (R.base.seq (R.base.b₁ sy)).ram.get! (AreaKeep.areaI nmS) = (PipeTransition.entry m0).ram.get! (AreaKeep.areaI nmS) :=
+  ScreenStart.area_of_rows hR.start ((R.chg.run₁ (R.entry₁ hB hK)).inRowsT hR.pipe R.chg.ctlFirst₁)
+
+/-- **The level's number at the side pipe's entry is the vertical pipe's entry's** (it was a byte of `entry₂`, now the theorem): at the room's first control it has
+the reference entry's value, from the rows of the first change (`Run.areaB₁`; round 14 had two copied walks with the byte known for this, they are gone), and the
+room's walk with the byte in a table carries it to the side pipe's entry (`AreaKeep.area_run`). `hR`, `hB`, `hK` are checks on the ROM. -/
 theorem Run.area₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     (R.base.seq (R.base.a₂ sy nmS m0)).ram.get! (AreaKeep.areaI nmS) = (PipeTransition.entry m0).ram.get! (AreaKeep.areaI nmS) := by
   have he := R.entry₁ hB hK
-  have hX := (AreaKeep.small_parts hR.area.small).2.2.2.1
-  have hb := AreaKeep.PipeRunK.areaB hR.pipe (R.chg.run₁ he) R.chg.ctlFirst₁ hR.area.pipe hR.area.rows hX (R.area₁ hR hB hK)
+  have hb := R.areaB₁ hR hB hK
   exact AreaKeep.area_run hR.area.room hR.facts.rt R.base.next R.chg.roomOrder (R.chg.roomAt hR he) hb R.chg.roomSites R.chg.roomStay
     (fun h => hR.facts.ne (by rw [← h]; exact R.rt₂ hR hB hK))
 
@@ -1140,7 +1147,7 @@ theorem entryAt_of_area (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) {m : 
     (ha : m.ram.get! (AreaKeep.areaI nmS) = (PipeTransition.entry m0).ram.get! (AreaKeep.areaI nmS))
     (h : EntryAt (restIdxA sy nmS m0) (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) m) :
     EntryAt (restIdxR sy nmS m0) (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) m := by
-  have hV := (AreaKeep.small_parts hR.area.small).2.2.2.2
+  have hV := (AreaKeep.small_parts hR.area.small).2.2.2
   obtain ⟨v, hv, hb⟩ := h
   refine ⟨v, hv, fun i hi hiL => ?_⟩
   by_cases e : i = AreaKeep.areaI nmS

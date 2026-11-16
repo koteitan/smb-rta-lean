@@ -2,7 +2,7 @@
 
 # 縦の土管から横の土管までのレベルの番号
 
-**主張.** 縦の土管の入口でレベルの番号（`AreaNumber`）が基準の入口の値なら、横の土管の入口でもその値です。ROM の 3 つの歩きで証明しました。そこで `Route.Run` は横の土管の入口で 10 バイトでなく 9 バイトを求め（`chg.entry₂`、1-1-d-2-5）、縦の土管の入口で新しく 1 バイトを求めます（`area₁`）。仮定は横の土管の入口から縦の土管の入口へ移りました。なくなってはいません。
+**主張.** 縦の土管の入口でレベルの番号（`AreaNumber`）が基準の入口の値なら、横の土管の入口でもその値です。証明しました。16 回目から、縦の土管の入口から部屋の最初の操作まではパート b の歩きがこのバイトを運びます（出口の一覧にこのバイトがある）。部屋のフレームの 1 つの歩きが横の土管の入口まで運びます。そこで `Route.Run` は横の土管の入口で 10 バイトでなく 9 バイトを求めます（`chg.entry₂`、1-1-d-2-5）。14 回目にこのバイトは縦の土管の入口へ移り（`area₁`）、15 回目からそれも定理です（1-1-b-3-4-5）。
 
 このページは、この回のほかの 2 つの候補について測ったことも書きます。足す音の長さ（`NoteLengthTblAdder`）と、横の土管の入口でのゲームタイマー（`chg.time₂`）です。どちらも部屋のフレームを通りません。
 
@@ -10,50 +10,47 @@
 
 ## 定理
 
-`startsP` と `baseK` は縦の土管のフレームの歩きの始まりの状態と出口の状態です（[部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)）。`rowsKc` は出口から部屋の最初の操作までの表を持つ段です（[音のバイトを表で運ぶ](b-3-7-1-SoundRows-ja.md)）。`DuringV`、`InRowsK`、`QuietP`、`SongAt`、`TimerOK` はパート b のものです。
+`baseK` は縦の土管のフレームの歩きの出口の状態です（[部屋への切り替え](b-3-2-PipeChangeEnd-ja.md)）。`timeRows` は出口からのパート b の段のうち `left` が 0 のものです（[音のバイトを表で運ぶ](b-3-7-1-SoundRows-ja.md)）。`InRowsT(m)` は `m` がそこに入ることです。
 
 ```
-startsA  :=  { S[i ↦ v] : S ∈ startsP }           baseA  :=  { S[i ↦ v] : S ∈ baseK }
-DuringA(m)  :=  m は startsA からの土管のフレームの歩きに入る
-InRowsA(m)  :=  m は baseA からの表を持つ段に入る
+i ∈ exitNames                                     （16 回目。入口の一覧には 15 回目から i がある）
+roomCheck :  …  ∧  ∀ row ∈ timeRows, ∀ S ∈ row:  S は i を値 v で知る
 
-PipeRunK.areaB :  a から b までのパート b の切り替えの走り,  b は a のあとの最初の操作,  seq(a)[i] = v   →   seq(b)[i] = v
-area_run       :  Room(seq c),  seq(c)[i] = v,
-                  ∀ n ∈ [c, e):  (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r),     rt(seq e) ≠ rt(r)
-                  →  seq(e)[i] = v
+area_of_rows :  InRowsT(m)  →  m[i] = v
+Run.areaB₁   :  seq(b₁)[i] = v                                           （定理）
+area_run     :  Room(seq c),  seq(c)[i] = v,
+                ∀ n ∈ [c, e):  (∀ j, SiteOK(trₙ(j))) ∧ rt(seq n) = rt(r),     rt(seq e) ≠ rt(r)
+                →  seq(e)[i] = v
 
-Run.area₁       :  seq(a₁)[i] = v                                         （15 回目から定理、1-1-b-3-4-5。14 回目はフィールド）
-Run.area₂       :  seq(a₂)[i] = v                                         （定理）
+Run.area₁       :  seq(a₁)[i] = v                                        （15 回目から定理、1-1-b-3-4-5。14 回目はフィールド）
+Run.area₂       :  seq(a₂)[i] = v                                        （定理）
 entryAt_of_area :  m[i] = v  ∧  EntryAt(R₉, m)  →  EntryAt(R₁₀, m)
-chg.entry₂      :  EntryAt(R₉, seq a₂)                                    （9 バイト。前は R₁₀）
+chg.entry₂      :  EntryAt(R₉, seq a₂)                                   （9 バイト。前は R₁₀）
 ```
 
 `R₁₀` は `restIdxR` の 10 バイト、`R₉ := R₁₀ \ {i}` です（`restIdxA`）。`EntryAt` は [横の土管の入口のルーチン](d-2-5-2-EntryRoutine-ja.md) のものです。
 
-**`PipeRunK.areaB`** は切り替えのフレームについての帰納法です。`n = a + k ≤ b` で次を保ちます。
+**出口の一覧.** 縦の土管のどのフレームもこのバイトを書きません。入口の条件はこのバイトを知ります（15 回目）。だからパート b の土管のフレームの歩きは、このバイトを知る状態で終わり、出口の一覧にこのバイトを入れられます（`PipeChangeEnd.exitNames`、16 回目）。出口のあとの段は出口の状態（`baseK`）から始まるので、段もこのバイトを知ります。`ScreenStart.roomCheck` はもう 1 つ求めます。`timeRows` の各状態がこのバイトを値 `v` で知ることです（`rowsArea`）。
 
-```
-( DuringV(seq n) ∧ DuringA(seq n) )  ∨  ( InRowsK(seq n) ∧ InRowsA(seq n) )
-```
+**`Run.areaB₁`.** 最初の切り替えのパート b の走り（`ChangesK.run₁`）は、部屋の最初の操作 `b₁` の機械を `timeRows` に入れます（`PipeRunK.inRowsT`）。`area_of_rows` がそこでのバイトを出します。
 
-各側の左半分はパート b の歩きから出ます（`EndStatement.pauseStep`、`rowsK`、`zeroK`）。右半分はバイトを持つ歩きから出ます。土管の中では、2 つの歩きはフレームが土管を出るかどうかで一致しなければなりません。`DuringA` の状態は土管のルーチンにあります（始まりの状態の確認 `pipeOK`）。出口の機械は土管のルーチンにありません（出口のタスクはゲームコアでない）。出口では `QuietP`、`SongAt`、`TimerOK` がパート b の走りから出て、機械を `baseA` からの最初の段に入れます（`rowsA_of_exit`、`PipeChangeEnd.inRowsK_of_exit` と同じ）。段の中では `b` より前に `left` は 0 になりません。パート b の段は `left` が 0 のところで操作でき、`b` は最初の操作だからです。`b` で機械は `baseA` からの段にあり、各段の各状態はバイトを値 `v` で知ります（`knowsRows`）。
+14 回目と 15 回目には、ここにバイトを知るパート b の歩きの写しが 2 つありました（入口から出口までの `pipeCheckA`、ネイティブで 15〜18 秒。段の `rowsCheckA`、116〜136 秒）。なくなりました。
 
 **`area_run`** は 1 つの状態の表 `[(i, v)]` での `RoomPause.pause_run` です。音のルーチンの区間では、歩きは表からバイトを知ります。区間の外では、バイトを書くかもしれないステップで歩きは失敗します。
 
-**`Run.area₂`.** `area₁`、最初の切り替えのパート b の走り（`ChangesK.run₁`）、`PipeRunK.areaB` が `b₁` でのバイトを出します。`b₁` から `a₂` までの `area_run`（`b₁` での部屋の条件、`roomSites`、`roomStay`、`a₂` でほかのルーチンになることに `Run.rt₂`）が `a₂` でのバイトを出します。
+**`Run.area₂`.** `Run.areaB₁` が `b₁` でのバイトを出します。`b₁` から `a₂` までの `area_run`（`b₁` での部屋の条件、`roomSites`、`roomStay`、`a₂` でほかのルーチンになることに `Run.rt₂`）が `a₂` でのバイトを出します。
 
-Lean: `Theorems/AreaKeep.lean`（`areaI`、`setA`、`startsA`、`baseA`、`cfgRa`、`cfgOa`、`pipeCheckA`、`startsKA`、`rowsA`、`InRowsA`、`knowsRows`、`rowsCheckA`、`regA`、`cfgA`、`roomCheckA`、`smallCheck`、`zok_of_check`、`sim_setA`、`duringA_of_entry`、`inPipe_of_A`、`not_inPipe_of_exit`、`rowsA_of_exit`、`rowsA_step`、`area_of_rowsA`、`PipeRunK.areaB`、`roomOK_of_check`、`area_run`、`Facts`、`factsOf`、`small_parts`）、`Theorems/Route.lean`（`restIdxA`、`RoomChecks.area`、`Run.area₁`、`Run.area₂`、`entryAt_of_area`、`Run.chgK`）、非公開の `Proof/AreaKeep.lean`（`area_pipe`、`area_rows`、`area_room`、`area_small`、`area_factsA`）と `Proof/AreaJoin.lean`（`area_facts`）。公開のファイルにゲームのデータはありません。
+Lean: `Theorems/AreaKeep.lean`（`areaI`、`regA`、`cfgA`、`roomCheckA`、`smallCheck`、`roomOK_of_check`、`area_run`、`Facts`、`factsOf`、`small_parts`）、`Theorems/ScreenStart.lean`（`rowsArea`、`roomCheck`、`area_of_invL`、`area_of_rows`）、`Theorems/PipeChangeEnd.lean`（`exitNames`）、`Theorems/Route.lean`（`restIdxA`、`RoomChecks.area`、`Run.area₁`、`Run.areaB₁`、`Run.area₂`、`entryAt_of_area`、`Run.chgK`）、非公開の `Proof/AreaKeep.lean`（`area_room`、`area_small`、`area_factsA`）と `Proof/AreaJoin.lean`（`area_facts`）。公開のファイルにゲームのデータはありません。
 
 ## 確認
 
 | 確認 | 歩くもの | 時間（ネイティブ） |
 |---|---|---|
-| `pipeCheckA` | `startsA` からの縦の土管のフレーム（パート b の歩き `zcheck`）。`baseA` で終わる | 15〜18 秒 |
-| `rowsCheckA` | `baseA` からの表を持つ段: 44 段、1,906 状態。`chainS` と、各状態がバイトを知ること | 120〜136 秒 |
-| `roomCheckA` | 1 つの状態の表でバイトを持つ部屋のフレーム | 2.3〜2.5 秒 |
-| `smallCheck` | バイトは 11 バイトの 1 つでルーチンのバイトでない、出口のタスクはゲームコアでない、横の土管の入口の各基準は `v` を持つ | — |
+| `roomCheckA` | 1 つの状態の表でバイトを持つ部屋のフレーム | 2〜3 秒 |
+| `smallCheck` | バイトは 11 バイトの 1 つでルーチンのバイトでない、横の土管の入口の各基準は `v` を持つ | — |
+| `ScreenStart.roomCheck` の最後の部分（パート b の確認） | `timeRows`（1 段、14,224 状態）の各状態がバイトを知る | 新しい歩きはない。段は確認がどのみち作るもの（プログラムとしての `ScreenStart.roomCheck`: 34 秒） |
 
-段の確認は約 2 分かかります。パート b の段のフレームごとの確認（`soundCheck`、同じ 44 段と 1,906 状態で約 200 秒）を、バイトを持つ段でするからです。パート b の長い確認を待たないように、`Proof/AreaKeep.lean` は `gen-proofs` が書いたファイルから名前と切り替えのデータを写し、`Proof.Rom` だけを読み込みます。`Proof/AreaJoin.lean` が道筋の名前とデータで事実を述べます。写しは同じ項です（`rfl`、0.2 秒）。
+出口の一覧にこのバイトがあっても、パート b の確認は同じ段で通ります。表を持つ段 44、状態 1,906、`soundCheck` 205 秒（前は 209 秒）。`Proof/AreaKeep.lean` は `gen-proofs` が書いたファイルから部屋と横の土管の名前を写し、`Proof.Rom` だけを読み込みます。`Proof/AreaJoin.lean` が道筋の名前で事実を述べます。写しは同じ項です（`rfl`）。
 
 ## 測ったこと: 2 つのバイトをどこで知るか
 
@@ -68,7 +65,9 @@ Lean: `Theorems/AreaKeep.lean`（`areaI`、`setA`、`startsA`、`baseA`、`cfgRa
 | 出口からの時間の段（始まりにバイトを加えた写し） | 操作で知る | 操作で知る |
 | 部屋のフレーム | 保つ（`roomCheckA`） | 保たない: 急ぎの音楽が 8 にする（回 12: エリア音楽のバッファが基準の値の表の 6 状態のうち 2 つが 8） |
 
-レベルの番号が失敗するのはフレーム 0 だけです。縦の土管の入口より前のフレームには、`upClean₁` のガードがこのバイトを守ることが要ります（パート b）。足す音の長さは 2 か所で失敗し、どちらもタイマーが原因です。イベントの音楽のコード（`LoadEventMusic`）は急ぎの音楽のときこのバイトを 8 にします。歩きはゲームタイマーを知らないので、急ぎの音楽が待ちにあるかどうかを知りません。
+この表は 15 回目より前のものです。15 回目から縦の土管の入口がレベルの番号を載せ（`Entry`）、16 回目からその出口も載せます（`exitNames`）。
+
+レベルの番号が失敗したのはフレーム 0 だけでした。縦の土管の入口より前のフレームには、`upClean₁` のガードがこのバイトを守ることが要ります（パート b）。足す音の長さは 2 か所で失敗し、どちらもタイマーが原因です。イベントの音楽のコード（`LoadEventMusic`）は急ぎの音楽のときこのバイトを 8 にします。歩きはゲームタイマーを知らないので、急ぎの音楽が待ちにあるかどうかを知りません。
 
 ## 測ったこと: 横の土管の入口のゲームタイマー（`time₂`）
 
@@ -95,7 +94,7 @@ Lean: `Theorems/AreaKeep.lean`（`areaI`、`setA`、`startsA`、`baseA`、`cfgRa
 
 * `Run.chg : ChangesK … (restIdxA sy nmS m0)`: 横の土管の入口で 9 バイト（前は `restIdxR`、10 バイト）。`Run.chgK` は `Run.area₂` と `Run.rt₂` から 11 バイトの切り替えを出します。`Run.change₂`、`Run.start`、`Run.atCtl₀` は前と同じです。
 * 14 回目には `Run` に新しいフィールド `area₁` がありました。15 回目からは定理 `Run.area₁` です。縦の土管の入口の条件がこのバイトを載せています（1-1-b-3-4-5）。
-* `RoomChecks` に新しいフィールド `area : AreaKeep.Facts …` があります。道筋の非公開のファイル（5 回）と急ぎの音楽の非公開のファイル（1 回）で `area_facts` から作ります。
+* `RoomChecks` に新しいフィールド `area : AreaKeep.Facts …` があります。道筋の非公開のファイル（5 回）と急ぎの音楽の非公開のファイル（1 回）で `area_facts` から作ります。16 回目からは部屋の歩きと小さい確認だけです（`room`、`small`）。土管のフレームと段はパート b のものです（`RoomChecks.pipe`、`RoomChecks.start`）。
 
 仮定からなくなったもの: `entry₂` のレベルの番号。14 回目に加わったもの: `area₁`、縦の土管の入口でのレベルの番号。15 回目になくなりました。
 
@@ -105,11 +104,11 @@ Lean: `Theorems/AreaKeep.lean`（`areaI`、`setA`、`startsA`、`baseA`、`cfgRa
 * `chg.entry₂`: 横の土管の入口で 9 バイト: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ。 回 15 から、高さと画面のバッファの 5 バイトは入るフレームから出ます。入るフレームが小さいプレイヤーで、画面のバッファの制御が 0 で始まるときです（[1-1-d-2-5-4](d-2-5-4-EntryHeight-ja.md)、[1-1-d-2-5-5](d-2-5-5-EntryBuffer-ja.md)）。`chg.entry₂` は 3 バイトを求め、ほかの走りのために `Run` に 2 つのフィールド `height₂`、`buffer₂` があります。
 * `chg.time₂`: 横の土管の入口でゲームタイマーは 000 でない。
 
-**ファイル.** `Theorems/AreaKeep.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/AreaKeep.lean` と `Proof/AreaJoin.lean`（`Main.lean` の `genAreaKeep`）。
+**ファイル.** `Theorems/AreaKeep.lean`、`Theorems/ScreenStart.lean`、`Theorems/PipeChangeEnd.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/AreaKeep.lean` と `Proof/AreaJoin.lean`（`Main.lean` の `genAreaKeep`）。
 
 **再現.**
 ```
-.lake/build/bin/smbrta area-keep-check                 # 4 つの確認、約 3 分 30 秒
+.lake/build/bin/smbrta area-keep-check                 # 部屋の歩き、小さい確認、パート b の段のバイト、約 2 分
 .lake/build/bin/smbrta area-links-check all            # 上の表（両方のバイト）、約 4 分
 .lake/build/bin/smbrta side-time-low FM2               # 部屋の最初の操作でタイマーを下げる、約 5 秒
 .lake/build/bin/smbrta area-real FM2 10 7              # 本物の走りでのバイト、約 20 秒

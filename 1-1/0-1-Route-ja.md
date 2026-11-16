@@ -128,7 +128,7 @@ room.fe C_r = seq b₁                                         Run.roomCtl     �
 b₁ < a₂                                                      Run.b₁_lt_a₂（Room(seq b₁)、dR_pos）
 1 ≤ n < a₁ → ∀ j, Clean(trₙ(j))                             Run.upClean₁（upCleanU から）
 area(seq a₁) = area(e₁)                                      Run.area₁（Run.entry₁ から。e₁ = 縦の土管の入口の参照の機械）
-area(seq a₂) = area(e₁)                                      Run.area₂（Run.area₁ と AreaKeep の歩き）
+area(seq a₂) = area(e₁)                                      Run.area₂（パート b の段からの Run.areaB₁ と、AreaKeep の部屋の歩き）
 y(seq a₂) = y(e₂),  Buffer(seq a₂)                            Run.y₂、Run.buf₂（height₂、buffer₂ と、入るフレームの歩き）
 rt(seq a₂) = e_s                                             Run.rt₂（room.enters、Run.roomEnter、EntryRoutine.rt_of_rows）
 k = b₁ + ix(E_b − C_r) − 1,  b₁ ≤ k < a₂,  room.fm(E_b − 1) = seq k     Run.roomEnter   （E_b − C_r ≤ ups: Run.roomMany、roomLag から）

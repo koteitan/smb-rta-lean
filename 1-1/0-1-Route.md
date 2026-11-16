@@ -128,7 +128,7 @@ room.fe C_r = seq b₁                                         Run.roomCtl     (
 b₁ < a₂                                                      Run.b₁_lt_a₂ (Room(seq b₁), dR_pos)
 1 ≤ n < a₁ → ∀ j, Clean(trₙ(j))                             Run.upClean₁ (from upCleanU)
 area(seq a₁) = area(e₁)                                      Run.area₁ (from Run.entry₁; e₁ = the reference machine at the vertical pipe's entry)
-area(seq a₂) = area(e₁)                                      Run.area₂ (Run.area₁ and the walks of AreaKeep)
+area(seq a₂) = area(e₁)                                      Run.area₂ (Run.areaB₁ from part b's rows, and the room's walk of AreaKeep)
 y(seq a₂) = y(e₂),  Buffer(seq a₂)                            Run.y₂, Run.buf₂ (height₂, buffer₂ and the walks of the entering frame)
 rt(seq a₂) = e_s                                             Run.rt₂ (room.enters, Run.roomEnter, EntryRoutine.rt_of_rows)
 k = b₁ + ix(E_b − C_r) − 1,  b₁ ≤ k < a₂,  room.fm(E_b − 1) = seq k     Run.roomEnter   (E_b − C_r ≤ ups: Run.roomMany, from roomLag)

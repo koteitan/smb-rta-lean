@@ -1332,13 +1332,15 @@ end
 
 /-! ## The statement -/
 
-/-- the bytes that the state at the exit knows. The values come from the reference machine when the timer has run out. -/
+/-- the bytes that the state at the exit knows. The values come from the reference machine when the timer has run out. Round 16 added the level's number
+(`AreaNumber`, last): the entry knows it (`entryNames`), no frame of the pipe stores to it, so the walk of the pipe's frames ends with it known, and the rows after the
+exit carry it to the room's first control (`ScreenStart.area_of_rows`). -/
 def exitNames : List (String × Nat × Nat) :=
   [("OperMode", 0, 1), ("OperMode_Task", 0, 1), ("GameEngineSubroutine", 0, 1), ("ScreenRoutineTask", 0, 1), ("DisableScreenFlag", 0, 1),
    ("AreaPointer", 0, 1), ("EntrancePage", 0, 1), ("AltEntranceControl", 0, 1), ("HalfwayPage", 0, 1), ("CurrentPlayer", 0, 1), ("JoypadOverride", 0, 1), ("GameTimerExpiredFlag", 0, 1),
    ("AreaMusicBuffer", 0, 1), ("EventMusicBuffer", 0, 1),
    ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("Square1SoundQueue", 0, 1), ("Square2SoundQueue", 0, 1), ("NoiseSoundQueue", 0, 1),
-   ("WorldNumber", 0, 1), ("PrimaryHardMode", 0, 1)]
+   ("WorldNumber", 0, 1), ("PrimaryHardMode", 0, 1), ("AreaNumber", 0, 1)]
 
 /-- the bytes that the state at the exit knows by a mask of bits: Mario's status below the fire flower, the saved song but for the bit of the underground song. The room's condition asks these bits. -/
 def exitMasks : List (String × Nat × UInt8) := [("PlayerStatus", 0, 254), ("AreaMusicBuffer_Alt", 0, 251)]

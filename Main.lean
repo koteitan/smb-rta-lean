@@ -5037,7 +5037,8 @@ def areaReal (sy : Syms) (romPath fm2 : String) (runs rate : Nat) : IO UInt32 :=
   IO.println s!"real vertical entries {nV} ({runs} runs each): room's first controls {nB}, side entries {nS} (the movie's inputs from its first control in the room); other values of the byte {bad}"
   return (if bad == 0 then 0 else 1)
 
-/-- the checks of `AreaKeep` as a program, with their times -/
+/-- the checks for the level's number as a program, with their times: the small checks and the room's walk of `AreaKeep`, and the rows of the first change
+(`ScreenStart.roomCheck`, whose last part asks that every state of the rows where `left` is 0 knows the byte). The two copied walks of round 14 are gone. -/
 def areaKeepCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   let m0 := smb11Start sy (← loadCart romPath)
   let txt ← IO.FS.readFile (← (← Config.load none).path "disasm")
@@ -5055,29 +5056,32 @@ def areaKeepCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   let i := AreaKeep.areaI nmS
   let V := SideChangeEnd.refs2 nm2 nx2 (SideTransition.entry m0)
   IO.println s!"AreaNumber {i}: entry {hex2 (e.ram.get! i)}; the references of the side pipe's entry: {V.map fun v => (v.2.contains i, hex2 (v.1.ram.get! i))}"
+  IO.println s!"the entry's list has it {d.known.contains i}, the exit's list has it {(PipeChangeEnd.exitKnownK nx).contains i}, the states at the exit know it {(PipeChangeEnd.baseK d e).all fun S => TaintRun.knownIs S (i, e.ram.get! i)}"
   let ok4 := AreaKeep.smallCheck sy e V nmS m0
   IO.println s!"smallCheck {ok4}"
-  flush
-  let tm1 ← IO.monoMsNow
-  let ok1 ← IO.lazyPure fun _ => AreaKeep.pipeCheckA sy nm d e i
-  IO.println s!"pipeCheckA {ok1} ({(← IO.monoMsNow) - tm1} ms)"
-  flush
-  let tm2 ← IO.monoMsNow
-  let ok2 ← IO.lazyPure fun _ => AreaKeep.rowsCheckA sy nm d e i
-  let l := AreaKeep.rowsA (PipeChangeEnd.timeCtx sy nm d e) d e i
-  IO.println s!"rowsCheckA {ok2} ({(← IO.monoMsNow) - tm2} ms): {l.length} rows, {(l.map (·.row.R.length)).foldl (· + ·) 0} states, knowsRows {AreaKeep.knowsRows i (e.ram.get! i) l}"
   flush
   let tm3 ← IO.monoMsNow
   let ok3 ← IO.lazyPure fun _ => AreaKeep.roomCheckA sy nmS m0 i (e.ram.get! i)
   IO.println s!"roomCheckA {ok3} ({(← IO.monoMsNow) - tm3} ms)"
+  flush
+  let tm4 ← IO.monoMsNow
+  let lb ← IO.lazyPure fun _ => PipeChangeEnd.rowsKc (PipeChangeEnd.timeCtx sy nm d e) d e
+  let kb := lb.all fun r => r.row.R.all fun S => TaintRun.knownIs S (i, e.ram.get! i)
+  IO.println s!"part b's rows with tables: {lb.length} rows, {(lb.map (·.row.R.length)).foldl (· + ·) 0} states, every state knows the byte {kb} ({(← IO.monoMsNow) - tm4} ms)"
+  flush
+  let tm5 ← IO.monoMsNow
+  let lt ← IO.lazyPure fun _ => PipeChangeEnd.timeRows (PipeChangeEnd.timeCtx sy nm d e) d e
+  let ok5 := ScreenStart.rowsArea (ScreenStart.areaI nmS) (e.ram.get! (ScreenStart.areaI nmS)) lt
+  IO.println s!"the rows where left is 0: {lt.length} rows, {(lt.map (·.R.length)).foldl (· + ·) 0} states, rowsArea {ok5} ({(← IO.monoMsNow) - tm5} ms)"
+  flush
+  let tm6 ← IO.monoMsNow
+  let ok6 ← IO.lazyPure fun _ => ScreenStart.roomCheck sy nm d e nmS m0
+  IO.println s!"ScreenStart.roomCheck {ok6} ({(← IO.monoMsNow) - tm6} ms)"
   if (← IO.getEnv "AREA_COMPARE").isSome then
-    let tm4 ← IO.monoMsNow
-    let lb ← IO.lazyPure fun _ => PipeChangeEnd.rowsKc (PipeChangeEnd.timeCtx sy nm d e) d e
-    IO.println s!"part b's rows with tables: {lb.length} rows, {(lb.map (·.row.R.length)).foldl (· + ·) 0} states ({(← IO.monoMsNow) - tm4} ms)"
-    let tm5 ← IO.monoMsNow
-    let ok5 ← IO.lazyPure fun _ => PipeChangeEnd.soundCheck sy nm d e
-    IO.println s!"part b's soundCheck {ok5} ({(← IO.monoMsNow) - tm5} ms)"
-  return (if ok1 && ok2 && ok3 && ok4 then 0 else 1)
+    let tm7 ← IO.monoMsNow
+    let ok7 ← IO.lazyPure fun _ => PipeChangeEnd.soundCheck sy nm d e
+    IO.println s!"part b's soundCheck {ok7} ({(← IO.monoMsNow) - tm7} ms)"
+  return (if ok3 && ok4 && kb && ok5 && ok6 then 0 else 1)
 
 /-- the movie to the room's first control; there the game timer's digits are set to `0 0 v` and its control timer to `c`, for each `v` and `c`; then the movie's inputs to
 the frame that leaves the player's routine: the routine there, and the digits (a program, for measuring `chg.time₂`: the timer not 000 at the room's first control does
@@ -5286,34 +5290,26 @@ theorem room_music : ∃ T, RoomMusic.Facts sy ctx pipeBoundNames pipeEndData (S
   ⟨musicTab, RoomMusic.factsOf room_music_walk (RoomMusic.startBoth_parts room_starts).2 room_music_derive room_music_refs room_music_rt room_music_bit⟩
 ")
 
-/-- the private files of `AreaKeep`. `AreaKeep.lean` has the walks of the vertical pipe's frames, of the last frames of the change and of the room's frames with the level's
-number known, and the small checks. It takes copies of the names and of the data of the change into the room from the files that `genProofs` wrote, so that it imports
-only `Proof.Rom` and is not built after the long check of `PipeChangeEnd`. `AreaJoin.lean` gives the same facts for the route's names and data: the copies are the
-same terms (`rfl`). -/
+/-- the private files of `AreaKeep`. `AreaKeep.lean` has the walk of the room's frames with the level's number known, and the small checks (round 16: the walks of
+the vertical pipe's frames and of the last frames of the change with the byte known are gone; part b's rows carry the byte, `screen_start`). It takes copies of the
+names of the room and of the side pipe from the files that `genProofs` wrote, so that it imports only `Proof.Rom`. `AreaJoin.lean` gives the same facts for the
+route's names: the copies are the same terms (`rfl`). -/
 def genAreaKeep (dir : String) : IO Unit := do
   let grab := fun (file name : String) => do
     let ls := (← IO.FS.readFile s!"{dir}/{file}.lean").splitOn "\n"
     let body := (ls.dropWhile fun l => !l.startsWith s!"def {name} :").takeWhile fun l => l != ""
     if body.isEmpty then throw (IO.userError s!"genAreaKeep: no def {name} in {file}.lean")
     return "\n".intercalate body
-  let ren := fun (t : String) => ((((((t.replace "pipeBoundNames" "areaBoundNames").replace "pipeEndNames" "areaEndNames").replace "pipeEndData" "areaEndData").replace
-    "screenNames" "areaScreenNames").replace "sideBoundNames" "areaSideBoundNames").replace "sideEndNames" "areaSideEndNames")
-  let defs := [← grab "PipeChangeBound" "pipeBoundNames", ← grab "PipeChangeEnd" "pipeEndNames", ← grab "PipeChangeEnd" "pipeEndData",
-    ← grab "ScreenPage" "screenNames", ← grab "SideChangeBound" "sideBoundNames", ← grab "SideChangeEnd" "sideEndNames"].map ren
+  let ren := fun (t : String) => (((t.replace "screenNames" "areaScreenNames").replace "sideBoundNames" "areaSideBoundNames").replace "sideEndNames" "areaSideEndNames")
+  let defs := [← grab "ScreenPage" "screenNames", ← grab "SideChangeBound" "sideBoundNames", ← grab "SideChangeEnd" "sideEndNames"].map ren
   IO.FS.writeFile s!"{dir}/AreaKeep.lean" ("import Proof.Rom\nimport Theorems.AreaKeep\n" ++ s!"/-! {privateNote} -/
-open Smbrta Smbrta.Rom Smbrta.PipeTransitionAll Smbrta.PipeChangeEnd
+open Smbrta Smbrta.Rom Smbrta.PipeTransitionAll
 
 set_option maxHeartbeats 0
 
-/-! The names and the data of `PipeChangeBound`, `PipeChangeEnd`, `ScreenPage`, `SideChangeBound`, `SideChangeEnd`, copied from those files -/
+/-! The names of `ScreenPage`, `SideChangeBound`, `SideChangeEnd`, copied from those files -/
 
 " ++ "\n\n".intercalate defs ++ "
-
-/-- the vertical pipe's frames with the level's number known at the entry end with it known at the exit -/
-theorem area_pipe : AreaKeep.pipeCheckA sy areaBoundNames areaEndData (PipeTransition.entry ctx) (AreaKeep.areaI areaScreenNames) = true := by native_decide
-
-/-- the rows with tables from the exit with the level's number known: every state knows it -/
-theorem area_rows : AreaKeep.rowsCheckA sy areaBoundNames areaEndData (PipeTransition.entry ctx) (AreaKeep.areaI areaScreenNames) = true := by native_decide
 
 /-- the room's frames with the level's number in a table of one state -/
 theorem area_room : AreaKeep.roomCheckA sy areaScreenNames ctx (AreaKeep.areaI areaScreenNames) ((PipeTransition.entry ctx).ram.get! (AreaKeep.areaI areaScreenNames)) = true := by
@@ -5324,14 +5320,14 @@ theorem area_small : AreaKeep.smallCheck sy (PipeTransition.entry ctx) (SideChan
   native_decide
 
 /-- what the checks give for the level's number, with the copies -/
-theorem area_factsA : AreaKeep.Facts sy ctx areaBoundNames areaEndData (SideChangeEnd.refs2 areaSideBoundNames areaSideEndNames (SideTransition.entry ctx)) areaScreenNames :=
-  AreaKeep.factsOf area_pipe area_rows area_room area_small
+theorem area_factsA : AreaKeep.Facts sy ctx (SideChangeEnd.refs2 areaSideBoundNames areaSideEndNames (SideTransition.entry ctx)) areaScreenNames :=
+  AreaKeep.factsOf area_room area_small
 ")
-  IO.FS.writeFile s!"{dir}/AreaJoin.lean" ("import Proof.AreaKeep\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.ScreenPage\nimport Proof.SideChangeBound\nimport Proof.SideChangeEnd\n" ++ s!"/-! {privateNote} -/
+  IO.FS.writeFile s!"{dir}/AreaJoin.lean" ("import Proof.AreaKeep\nimport Proof.ScreenPage\nimport Proof.SideChangeBound\nimport Proof.SideChangeEnd\n" ++ s!"/-! {privateNote} -/
 open Smbrta Smbrta.Rom
 
-/-- what the checks give for the level's number, with the route's names and data: the copies of `Proof.AreaKeep` are these terms -/
-theorem area_facts : AreaKeep.Facts sy ctx pipeBoundNames pipeEndData (SideChangeEnd.refs2 sideBoundNames sideEndNames (SideTransition.entry ctx)) screenNames :=
+/-- what the checks give for the level's number, with the route's names: the copies of `Proof.AreaKeep` are these terms -/
+theorem area_facts : AreaKeep.Facts sy ctx (SideChangeEnd.refs2 sideBoundNames sideEndNames (SideTransition.entry ctx)) screenNames :=
   area_factsA
 ")
 
@@ -15249,9 +15245,11 @@ def entryAreaCheck (sy : Syms) (romPath : String) : IO UInt32 := do
     flush
     return lk && okO && okN
   let a ← run "the byte known at the entry (Entry of round 15)" d false
-  let b ← run "the byte not known at the entry (Entry before round 15)" { d with known := d.known.filter (· != aI) } false
+  let b ← run "the byte not known at the entry (Entry before round 15; since round 16 the exit's list has the byte, so this walk fails)" { d with known := d.known.filter (· != aI) } false
   let c ← run "the byte known at the entry, and the exit asked to know it" d true
-  return if a && b && c && d.known.contains aI && has (EntryKeep.kept sy d e) && GU.prot.contains aI && tc.K.contains aI then 0 else 1
+  -- `b` is only printed: since round 16 the exit's list has the byte, and the walk from an entry that does not know it is expected to fail
+  let _ := b
+  return if a && c && d.known.contains aI && has (EntryKeep.kept sy d e) && GU.prot.contains aI && tc.K.contains aI then 0 else 1
 
 /-- experiment for round 12 (part b): the rows with tables of the first change (`PipeChangeEnd.rowsKc`) from a first table whose silent kind knows the effects' buffers
 given by `mode` (`none`, `s1`, `s2`, `both`), frame by frame as `pipeSoundRows` makes them; on a frame whose search fails, the first failing state -/
@@ -17156,7 +17154,7 @@ def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMM
   entry-bytes-check nlta              the music table built with NoteLengthTblAdder known 0 at the room's first control
   area-links-check rows|room|pipe|keep|all  whether AreaNumber and NoteLengthTblAdder go through the walks from control to the side pipe
   side-time-low FM2                   the timer set to 00v at the room's first control of the movie: the routine and the timer at the side pipe's entry
-  area-keep-check                     the checks of AreaKeep (the level's number through the vertical pipe, the rows, the room), with their times
+  area-keep-check                     the checks for the level's number (the room's walk of AreaKeep, part b's rows that carry the byte), with their times
   area-real FM2 N R                   the level's number on the movie and from real vertical entries (N runs each, Start once in R frames): at the two entries and the room's first control
   side-time-check                     the side pipe's walk with the game timer's digits as the walk's bytes D (dg at the start and at the exit), as a program
   room-pause-real FM2 [N R]           the pause in the room on real runs: the first control, each frame (Start once in R frames), PauseE at the side pipe's entry

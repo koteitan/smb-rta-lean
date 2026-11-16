@@ -28,11 +28,16 @@ def rowsR (sy : Syms) (r : Machine) (K : List (Nat × UInt8)) (l : List Row) : B
 /-- the level's number in the room's names, as a RAM index (`AreaKeep.areaI` is this number) -/
 def areaI (nmS : Names) : Nat := (nmS.ad "AreaNumber").toNat &&& 0x7FF
 
+/-- every state of the rows knows the byte `i` with the value `v` -/
+def rowsArea (i : Nat) (v : UInt8) (l : List Row) : Bool := l.all fun w => w.R.all fun S => TaintRun.knownIs S (i, v)
+
 /-- **The check on the ROM**: the mask of the bits, the same ROM in both environments, and the states of the rows of the time; and the two lists of names agree on the
-level's number: its index in the room's names is a byte that the vertical pipe's entry knows (round 15, for `Route.Run.area₁`) -/
+level's number: its index in the room's names is a byte that the vertical pipe's entry knows (round 15, for `Route.Run.area₁`); and every state of the rows of the
+time knows the level's number with the entry's value (round 16, for `Route.Run.area₂`: the exit's list has the byte, so the rows carry it) -/
 def roomCheck (sy : Syms) (nm : Names) (d : Data) (e : Machine) (nmS : Names) (m0 : Machine) : Bool :=
   maskOK (refR m0) (knownOf nmS) && decide ((timeEnv d e).prg.data = (envR sy nmS m0).prg.data) && (timeEnv d e).mask == (envR sy nmS m0).mask &&
-    rowsR sy (refR m0) (knownOf nmS) (timeRows (timeCtx sy nm d e) d e) && d.known.contains (areaI nmS)
+    rowsR sy (refR m0) (knownOf nmS) (timeRows (timeCtx sy nm d e) d e) && d.known.contains (areaI nmS) &&
+    rowsArea (areaI nmS) (e.ram.get! (areaI nmS)) (timeRows (timeCtx sy nm d e) d e)
 
 variable {sy : Syms} {nm nmS : Names} {d : Data} {e m0 : Machine}
 
@@ -70,7 +75,7 @@ theorem ba_eq {a b : ByteArray} (h : a.data = b.data) : a = b := by
 /-- **The condition at the first control in the room**, for a machine with control in the rows of the time. -/
 theorem room_of_rows (hc : roomCheck sy nm d e nmS m0 = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) : Room sy nmS m0 m := by
   simp only [roomCheck, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
-  obtain ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, _⟩ := hc
+  obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, _⟩, _⟩ := hc
   have hM := maskOK_spec h1
   have hp := ba_eq h2
   have hc0 : RoomCond (timeEnv d e) (refR m0) (knownOf nmS) m := room_of_invL hM h4 h hm
@@ -82,6 +87,21 @@ theorem area_of_entry (hc : roomCheck sy nm d e nmS m0 = true) {m : Machine} (h 
   simp only [roomCheck, Bool.and_eq_true] at hc
   obtain ⟨v, hv, _, _, hb⟩ := h.1.ref
   cases List.mem_singleton.1 hv
-  exact hb _ (List.contains_iff_mem.1 hc.2)
+  exact hb _ (List.contains_iff_mem.1 hc.1.2)
+
+/-- a machine in rows whose states know the byte `i` with the value `v` has it -/
+theorem area_of_invL {C : Ctx} {i : Nat} {v : UInt8} : ∀ {l : List Row}, rowsArea i v l = true → ∀ {m : Machine}, InvL C l m → m.ram.get! i = v
+  | [], _, _, h => by cases h
+  | w :: t, hl, _, h => by
+    simp only [rowsArea, List.all_cons, Bool.and_eq_true] at hl
+    rcases h with ⟨S, hS, hs⟩ | h
+    · exact TaintRun.sim_known hs (List.all_eq_true.1 hl.1 S hS)
+    · exact area_of_invL hl.2 h
+
+/-- **The level's number at the room's first control is the vertical pipe's entry's**: a machine in the rows of the time has it with the reference entry's value.
+The exit's list has the byte (`PipeChangeEnd.exitNames`), so the walk of the pipe's frames ends with it known and every state of the rows after the exit knows it. -/
+theorem area_of_rows (hc : roomCheck sy nm d e nmS m0 = true) {m : Machine} (h : InRowsT sy nm d e m) : m.ram.get! (areaI nmS) = e.ram.get! (areaI nmS) := by
+  simp only [roomCheck, Bool.and_eq_true] at hc
+  exact area_of_invL hc.2 h
 
 end Smbrta.ScreenStart
