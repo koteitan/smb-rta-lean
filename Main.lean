@@ -23,6 +23,7 @@ import Theorems.CastleToLevel
 import Theorems.HurryMusic
 import Theorems.RoomJoin
 import Theorems.PoleJoin
+import Theorems.PoleJump
 import Theorems.Route
 import Theorems.OpenAfter
 import Theorems.OpenStore
@@ -505,6 +506,16 @@ theorem room_vert_jump : VertJump.jumpOK sy ctx (FrameModel.ctrlStack sy ctx) = 
 theorem room_vert : RoomPair.RoomWalks sy screenNames ctx roomNums.h roomNums.rise pipeBoundNames pipeEndData roomNums.vStart :=
   ⟨room_vert_v, room_fall, room_stand, ⟨⟨room_pair_h, room_pair_a, room_pair_apart⟩, room_pair_rows⟩, ⟨room_quad_st, room_quad_size, room_quad_apart⟩, room_vert_idle,
     room_vert_jump⟩
+")
+
+/-- The machine-based pole arc uses the movement routine's fixed stack and halt value. -/
+def genPoleJump (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/PoleJump.lean" ("import Proof.RoomVert\nimport Theorems.PoleJump\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+/-- The grab-height check also holds for the machine used by the vertical-frame lemmas. -/
+theorem pole_machine_arc_check : Jump.arcCheck sy (VertModel.vmach sy ctx (FrameModel.ctrlStack sy ctx))
+    (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true := by native_decide
 ")
 
 /-! ## The frames of the press on the title (`TitleBoot`) -/
@@ -13568,11 +13579,17 @@ structure StopCount where
   fastNone : Nat := 0
   /-- frames that come to the scroll handler other than once after the player's routine -/
   subsOff : Nat := 0
+  takeRead : Nat := 0
+  takeEnd : Nat := 0
+  airRead : Nat := 0
+  airEnd : Nat := 0
+  hardChanged : Nat := 0
+  takeRangeOff : Nat := 0
   bad : Nat := 0
   ex : List String := []
 
 def StopCount.str (c : StopCount) : String :=
-  s!"runs {c.runs}, frames {c.frames}; stored speed |v₂| at the end {c.wrote}, else kept {c.keptAbs}; from speed 0 {c.stopped} (stored speed and direction kept {c.kept}); on the ground with no jump {c.ground}; takeoffs after a landing with the stored speed at the air threshold or more {c.fastT}: a frame after the landing wrote it {c.fastWrote}, none did {c.fastNone}; not once at the scroll handler {c.subsOff}; bad {c.bad} {c.ex.reverse}"
+  s!"runs {c.runs}, frames {c.frames}; stored speed |v₂| at the end {c.wrote}, else kept {c.keptAbs}; from speed 0 {c.stopped} (stored speed and direction kept {c.kept}); on the ground with no jump {c.ground}; takeoffs after a landing with the stored speed at the air threshold or more {c.fastT}: a frame after the landing wrote it {c.fastWrote}, none did {c.fastNone}; not once at the scroll handler {c.subsOff}; takeoff read {c.takeRead}, end with VEnd {c.takeEnd}; air read {c.airRead}, end with VEnd {c.airEnd}; hard bytes changed {c.hardChanged}; takeoff stored speed above top {c.takeRangeOff}; bad {c.bad} {c.ex.reverse}"
 
 /-- one frame for `stopReadCheck`: the machine at the player's routine, the machines at the scroll handler after it, and the frame's end -/
 def stopScan (sy : Syms) (M : Machine) (i : UInt8) : Option Machine × List Machine × Machine := Id.run do
@@ -13617,6 +13634,36 @@ def stopRun (sy : Syms) (m0 start : Machine) (w : Array UInt8) (name : String) (
       let v2 := sbyte (peek Q sy.Player_X_Speed)
       let abs := (peek b sy.Player_XSpeedAbsolute).toNat
       let jump := (FrameModel.readIn sy R).jump
+      -- Actual vertical steps and the explicitly exposed five-byte end condition.
+      let hard := (SurfaceFrames.vHard sy).all fun x => peek b x == peek Q x
+      if !hard then c := { c with hardChanged := c.hardChanged + 1 }
+      let atV := (peek R sy.AreaType == 1 || peek R sy.AreaType == 2 || peek R sy.AreaType == 3) &&
+        peek R sy.JumpspringAnimCtrl == 0 && peek R sy.SwimmingFlag == 0 && peek R sy.PlayerChangeSizeFlag == 0
+      if atV && peek R sy.Player_State == 0 && peek R sy.SavedJoypadBits &&& 0x80 == 0x80 &&
+          peek R sy.PreviousA_B_Buttons &&& 0x80 == 0 then
+        c := { c with takeRead := c.takeRead + 1 }
+        let target := VertJump.jumpOff sy m0 (FrameModel.ctrlStack sy m0) (peek a sy.Player_Y_Position) (peek a sy.Player_XSpeedAbsolute)
+        if !(VertModel.vsOf sy Q == target && peek Q sy.Player_State == 1 &&
+            peek Q sy.Player_Y_Speed &&& 0x80 == 0x80 && peek Q sy.DiffToHaltJump == 1) then
+          c := { c with bad := c.bad + 1, ex := if c.ex.length < 6 then s!"{name} frame {j}: take_subs" :: c.ex else c.ex }
+        if (peek a sy.Player_XSpeedAbsolute).toNat > TopSpeed.top sy then
+          c := { c with takeRangeOff := c.takeRangeOff + 1 }
+        if hard then
+          c := { c with takeEnd := c.takeEnd + 1 }
+          if !(VertModel.vsOf sy b == target && peek b sy.DiffToHaltJump == 1) then
+            c := { c with bad := c.bad + 1, ex := if c.ex.length < 6 then s!"{name} frame {j}: take_end" :: c.ex else c.ex }
+      if atV && (peek a sy.Player_State == 1 || peek a sy.Player_State == 2) &&
+          (peek a sy.Player_State != 1 || peek a sy.DiffToHaltJump == 1) &&
+          peek a sy.PreviousA_B_Buttons &&& 0x80 == peek a sy.A_B_Buttons &&& 0x80 then
+        c := { c with airRead := c.airRead + 1 }
+        let target := VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy a) (peek R sy.SavedJoypadBits &&& 0x80 != 0) 0
+        if !(VertModel.vsOf sy Q == target && (peek Q sy.Player_State == 1 || peek Q sy.Player_State == 2) &&
+            (peek Q sy.Player_State != 1 || peek Q sy.DiffToHaltJump == 1)) then
+          c := { c with bad := c.bad + 1, ex := if c.ex.length < 6 then s!"{name} frame {j}: air_subs" :: c.ex else c.ex }
+        if hard then
+          c := { c with airEnd := c.airEnd + 1 }
+          if !(VertModel.vsOf sy b == target && (peek b sy.Player_State != 1 || peek b sy.DiffToHaltJump == 1)) then
+            c := { c with bad := c.bad + 1, ex := if c.ex.length < 6 then s!"{name} frame {j}: air_end" :: c.ex else c.ex }
       stB := stB.push (peek a sy.Player_State)
       stA := stA.push (peek b sy.Player_State)
       jmp := jmp.push jump
@@ -17893,8 +17940,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!

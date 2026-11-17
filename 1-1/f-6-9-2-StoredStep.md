@@ -70,3 +70,7 @@ No new check on the ROM. The private proofs are unchanged.
 ```
 .lake/build/bin/smbrta stop-read-check FM2 100     # the table above (about 30 s)
 ```
+
+## Machine takeoff: checked partial result
+
+[Read the pole jump from the machines](f-6-3-PoleJump.md) proves the counted takeoff and air steps and defines an arc whose fast class reads the actual stored speed. The end-of-frame step explicitly needs preservation of five vertical bytes. `reads` for the arbitrary arc of `Run.direct` remains; no new Run field replaces it.

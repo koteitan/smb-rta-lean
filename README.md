@@ -365,7 +365,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - 🚨 1-1-f-6 Assumptions of part f
     - ✅ 1-1-f-6-1 The touch on real frames: one pass of the side check
     - ✅ 1-1-f-6-2 No castle flag up to the touch (`noCastle` removed; from the change's rows and the walk)
-    - 🚨 1-1-f-6-3 The path of the jump (`path`, `atY`, `atRising`)
+    - 🚨 1-1-f-6-3 The path of the jump (`path`, `atY`, `atRising`; the machine's takeoff and air steps proved under `VEnd`, `PoleJump`)
     - 🚨 1-1-f-6-4 He comes from the left and falls below the base's top (`order`, `left`, `air`)
     - 🚨 1-1-f-6-5 One frame of the fall (`fall`)
     - 🚨 1-1-f-6-6 The map near the flag (the premise of `fall`)
