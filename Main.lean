@@ -77,6 +77,7 @@ import Theorems.PhaseFrame
 import Theorems.RoomMusic
 import Theorems.AreaKeep
 import Theorems.EntryHeight
+import Theorems.RoomAddress
 import Theorems.EntryBuffer
 import Theorems.CollideKeep
 import Theorems.UpClean
@@ -5342,6 +5343,15 @@ open Smbrta Smbrta.Rom
 /-- what the checks give for the level's number, with the route's names: the copies of `Proof.AreaKeep` are these terms -/
 theorem area_facts : AreaKeep.Facts sy ctx (SideChangeEnd.refs2 sideBoundNames sideEndNames (SideTransition.entry ctx)) screenNames :=
   area_factsA
+")
+
+/-- The small block-buffer column routine, separate from the whole landing frame. -/
+def genRoomAddress (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/RoomAddress.lean" ("import Proof.ScreenPage\nimport Theorems.RoomAddress\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+/-- All selectors and stack bytes give the map buffer's column pointer. -/
+theorem room_address_check : RoomAddress.check sy screenNames ctx = true := by native_decide
 ")
 
 /-- The map reference and the coin gap used by the partial entry results. -/
@@ -10847,6 +10857,8 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
   let cr ← IO.lazyPure fun _ => RoomBlocks.rowsCheckR sy nm d nmS m0 [roomV0Of sy m0]
   IO.println s!"rowsCheckR (the rows of the time at the first control: `RoomPair.rowsCheck`, and the blocks) {cr} ({(← IO.monoMsNow) - t2} ms)"
   (← IO.getStdout).flush
+  let H := EntryHeight.hpOf sy nmS m0
+  let xTable := (romByte m0 (sy.BlockBufferCollision + 4)).toUInt16 ||| ((romByte m0 (sy.BlockBufferCollision + 5)).toUInt16 <<< 8)
   -- real frames
   let gy := Jump.groundY sy
   let inRoom := fun (c : Machine) => c.ram.get! P.rtI == r.ram.get! P.rtI
@@ -10854,7 +10866,8 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
     "of them Y is not the offset's byte", "of them in a row with no empty byte and no coin", "frames where a byte of the block buffers changes that no erase of the frame wrote",
     "frames that start with a byte not of the map among the bytes that are not coins in the map", "runs with no stand before 34",
     "of them not standing at 34", "of them every read of frame 34 that is not for the head gives an empty byte or a coin", "(not used)",
-    "erases with the last read at another address", "erases with the last read not a coin"]
+    "erases with the last read at another address", "erases with the last read not a coin", "column selectors", "of them not the coordinate formula",
+    "block reads", "of them pointer not the selected column", "of them address not selected column plus Y"]
   -- one frame: the counts, and the machine at its end; `feet` asks for the reads of the frame at the feet
   let scan := fun (m : Machine) (pad : UInt8) (x : Array Nat) (feet : Bool) => Id.run do
     let mut acc := x.set! 0 (x[0]! + 1)
@@ -10866,9 +10879,21 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
     let mut targets : List Nat := []
     let mut lastRead : UInt16 := 0
     let mut lastVal : UInt8 := 0
+    let mut selector : Option UInt8 := none
+    let mut selected : Option UInt16 := none
     let mut fr : List (Nat × UInt8) := []
     while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) do
+      if c.pc == sy.BlockBufferCollision && !c.nmiPending then
+        selector := some (RoomAddress.encoded (peek c (sy.Player_PageLoc + c.x.toUInt16))
+          (peek c (sy.Player_X_Position + c.x.toUInt16)) (romByte m0 (xTable + c.y.toUInt16)))
+      if c.pc == H.colAt && !c.nmiPending then
+        acc := acc.set! 15 (acc[15]! + 1)
+        if selector != some c.a || c.a.toNat ≥ 32 then acc := acc.set! 16 (acc[16]! + 1)
+        selected := some (RoomAddress.target P c.a)
       if c.pc == P.read && !c.nmiPending then
+        acc := acc.set! 17 (acc[17]! + 1)
+        if selected != some (RoomBlocks.ptrZ c (romByte m0 (P.read + 1))) then acc := acc.set! 18 (acc[18]! + 1)
+        if selected.map (· + c.y.toUInt16) != some (ScreenPage.readAddr c) then acc := acc.set! 19 (acc[19]! + 1)
         lastRead := ScreenPage.readAddr c
         lastVal := ScreenPage.readVal c
         if feet && !P.heads.contains (c.ram.get! P.saveI) then fr := fr ++ [((lastRead &&& 0x7FF).toNat, lastVal)]
@@ -17940,8 +17965,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!
