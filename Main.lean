@@ -260,7 +260,7 @@ set_option maxHeartbeats 0
 theorem up_q_check : EntryKeep.qCheck sy ctx pipeEndData (PipeTransition.entry ctx) = true := by native_decide
 ")
 
-/-- the private file of `OpenAfter`: the walks of four vertical bytes from the return of the collision routine to the frame's end, for the frames of the opening
+/-- the private file of `OpenAfter`: the walks of five vertical bytes from the return of the collision routine to the frame's end, for the frames of the opening
 (about 2 s natively, with their searches) -/
 def genOpenAfter (dir : String) : IO Unit :=
   IO.FS.writeFile s!"{dir}/OpenAfter.lean" ("import Proof.Rom\nimport Theorems.OpenAfter\n" ++ s!"/-! {privateNote} -/
@@ -269,7 +269,7 @@ open Smbrta Smbrta.Rom
 set_option maxHeartbeats 0
 " ++ "
 /-- from the return of the collision routine to the frame's end, no step of a frame in control writes the vertical force down, the jump's origin, the jump's halt
-value or A and B -/
+value, A and B or the vertical force -/
 theorem open_after_check : OpenAfter.retCheck sy ctx (peek ctx sy.AreaType) = true := by native_decide
 ")
 
@@ -8019,7 +8019,7 @@ def openRealFrame (sy : Syms) (m0 : Machine) (M : Machine) (i : UInt8) (last : B
     if qs.isEmpty then f := "no return of the collision routine" :: f
     for Q in qs do
       if !(OpenAir.vsR sy).all (fun x => peek b x == peek Q x) then f := "afterV: vertical bytes" :: f
-      if !(VertKeep.kI sy).all (fun x => b.ram.get! x == Q.ram.get! x) then f := "walk: keep_ret" :: f
+      if !(OpenAfter.retI sy).all (fun x => b.ram.get! x == Q.ram.get! x) then f := "walk: keep_ret (including vertical force)" :: f
     -- what the walk of `CtrlKeep` proves
     if !(CtrlKeep.keepA sy).all (fun x => peek R x == peek M x) then f := "walk: keepA at the routine" :: f
     let u := FrameModel.readIn sy R
@@ -8346,7 +8346,7 @@ def openAfterSearch (sy : Syms) (romPath : String) (which : String) : IO UInt32 
         let inE := prot.contains b
         IO.println s!"  {name} (protected by guardE: {inE}): {P.X.steps} steps, table {P.X.multi.size}, {P.X.fails} failures at {P.X.failPcs.toList}; again at the place {P.stops.size}; dropped at {P.drops.toList}; {(← IO.monoMsNow) - t2} ms"
         (← IO.getStdout).flush
-        if Q != sy.PlayerSubs && (VertKeep.kI sy).contains b then ok := ok && P.X.fails == 0 && P.drops.isEmpty && P.stops.isEmpty
+        if Q != sy.PlayerSubs && (OpenAfter.retI sy).contains b then ok := ok && P.X.fails == 0 && P.drops.isEmpty && P.stops.isEmpty
   return if ok then 0 else 1
 
 /-! ## The opening: the two walks of a whole frame around the stores to the routine, the mode and the task (a program, no part of the proof) -/

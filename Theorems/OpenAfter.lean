@@ -2,7 +2,7 @@ import Theorems.VertKeep
 import Theorems.OpenFlat
 
 /-!
-# The opening: four vertical bytes after the return of the collision routine
+# The opening: five vertical bytes after the return of the collision routine
 
 `VertKeep.keep_end` (part e) shows that a frame in control keeps four vertical bytes (`VertKeep.kI`: the vertical force down, the jump's origin, the jump's halt value,
 A and B) from the scroll handler to its end. The frames of the opening ask these bytes at a later place: the return of the collision routine in the player's routine
@@ -13,8 +13,9 @@ walks of `AfterKeep` with the return in place of the scroll handler:
 * the second from there to the frame's end (`AfterKeep.walkKR`), with one byte followed as the counter of `TaintRun` (`Env.rkI`): it fails on any write to the byte, and
   if the frame comes to `Q` again.
 
-`keep_at` is the theorem for any place `Q`; `keep_ret` is `keep_at` at the return of the collision routine. The condition on each instruction is `CleanK` of
-`FrameKeep.guardE`, which protects the four bytes (`VertKeep.cleanK_of_kI`), and no store to the routine, the mode or the task by its address.
+`keep_at` is the theorem for any place `Q`; `keep_ret_all` specializes it at the collision return
+for the original four bytes and the vertical force. `keep_ret` retains its four-byte statement.
+The existing guard protects all five (the force via `stateE`); there is no new per-instruction condition.
 
 The searches are no part of the proof. No game data. Page: `1-1/a-5-4-3-3-4-OpenAfter.md`.
 -/
@@ -71,8 +72,10 @@ def checkAt (sy : Syms) (m0 : Machine) (v : UInt8) (Q : UInt16) (bs : List Nat) 
     CtrlKeep.ctrlCheck1 (cfgP sy m0 v Q q C1 C2) && C1.t.all (walkQ1 C1 (FrameKeep.ctlI sy) Q (atQ sy Q C2) FrameKeep.fuelK) &&
     C2.all fun C => C.t.all (walkKR C (FrameKeep.ctlI sy) Q FrameKeep.fuelK)
 
-/-- **The check on the ROM**: `checkAt` at the return of the collision routine, with the four bytes of `VertKeep.kI` -/
-def retCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool := checkAt sy m0 v (OpenFlat.collRet sy m0) (VertKeep.kI sy)
+/-- **The check on the ROM**: `checkAt` at the return of the collision routine, with the four bytes of `VertKeep.kI` and the vertical force -/
+def retI (sy : Syms) : List Nat := VertKeep.kI sy ++ [(sy.VerticalForce &&& 0x7FF).toNat]
+
+def retCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool := checkAt sy m0 v (OpenFlat.collRet sy m0) (retI sy)
 
 section
 variable {sy : Syms} {m0 : Machine}
@@ -151,12 +154,29 @@ theorem keep_at (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} {Q : UInt16} 
 
 /-- **A frame in control keeps four vertical bytes from the return of the collision routine to its end**: the vertical force down, the jump's origin, the jump's
 halt value, A and B (`VertKeep.kI`). `keep_at` at `OpenFlat.collRet`, with the one condition `CleanK` of `FrameKeep.guardE` on each instruction. -/
+theorem keep_ret_all (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hk : retCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
+    (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
+    (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
+    ∀ k, n₀ ≤ k → (trace m i k).pc = OpenFlat.collRet sy m0 → ∀ x ∈ retI sy, (frame m i).ram.get! x = (trace m i k).ram.get! x := by
+  apply keep_at hc hk h0 (fun n => FrameKeep.cleanK_of_E (hcl n)) ?_ hx hv harr hf0 hfirst
+  intro x hx j
+  refine FrameKeep.cleanK_sub (hcl j) (fun y hy => ?_) rfl rfl rfl rfl
+  simp only [guardH, List.mem_append, List.mem_singleton] at hy
+  rcases hy with rfl | hy
+  · simp only [retI, List.mem_append, List.mem_singleton] at hx
+    rcases hx with hx | rfl
+    · exact VertKeep.kI_mem hx
+    · simp [FrameKeep.guardE, FrameKeep.stateE]
+  · exact List.mem_append_right _ hy
+
 theorem keep_ret (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hk : retCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
     (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
-    ∀ k, n₀ ≤ k → (trace m i k).pc = OpenFlat.collRet sy m0 → ∀ x ∈ VertKeep.kI sy, (frame m i).ram.get! x = (trace m i k).ram.get! x :=
-  keep_at hc hk h0 (fun n => FrameKeep.cleanK_of_E (hcl n)) (fun _ hx' j => VertKeep.cleanK_of_kI hx' (hcl j)) hx hv harr hf0 hfirst
+    ∀ k, n₀ ≤ k → (trace m i k).pc = OpenFlat.collRet sy m0 → ∀ x ∈ VertKeep.kI sy, (frame m i).ram.get! x = (trace m i k).ram.get! x := by
+  intro k hk' hpc x hx'
+  exact keep_ret_all hc hk h0 hcl hx hv harr hf0 hfirst k hk' hpc x (List.mem_append_left _ hx')
 
 end
 

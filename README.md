@@ -113,7 +113,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
           - ✅ 1-1-a-5-4-3-3-1 No frame ends during the movement (`longer` gone; walk and `CleanK` time)
           - ✅ 1-1-a-5-4-3-3-2 The opening to the left (not left of position 0 in 31 frames)
           - ✅ 1-1-a-5-4-3-3-3 The jumpspring and the player's state (`spring`, `st` gone; a walk that knows the buffers, and `map` on each instruction)
-          - 🚨 1-1-a-5-4-3-3-4 After the scroll handler and after the collision routine (`after`: 5 bytes, the speed, the collision bits; `afterV`: 7 bytes; frame 32 may end at the left end)
+          - 🚨 1-1-a-5-4-3-3-4 After the scroll handler and after the collision routine (`after`: 3 bytes, 2 more when the frame ends with the speed and the subspeed 0, the speed, the collision bits; `afterV`: 6 bytes; frame 32 may end at the left end)
           - ✅ 1-1-a-5-4-3-3-5 A frame that ends in control does not store the routine, the mode or the task (`noStore` gone; from `lags.ctl`)
         - ✅ 1-1-a-5-4-3-4 The ground's height and the jump lengths (`ground`, `jump` gone; new field `afterV`)
           <details><summary>1 lines of children, all ✅</summary>

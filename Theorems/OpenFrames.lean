@@ -8,6 +8,7 @@ import Theorems.GuardE
 import Theorems.CollideKeep
 import Theorems.OpenAfter
 import Theorems.OpenStore
+import Theorems.FaceKeep
 
 /-!
 # The opening on real frames: each of the first `N` frames is a step of the model
@@ -234,14 +235,18 @@ def VStep (sy : Syms) (m0 : Machine) (fm : Nat → Machine) (inp : Nat → UInt8
 def VertOK (sy : Syms) (m0 : Machine) (N E : Nat) (fm : Nat → Machine) (inp : Nat → UInt8) : Prop :=
   ∀ t, 1 ≤ t → t ≤ N → t < E → VPre sy m0 fm inp t → VStep sy m0 fm inp t
 
-/-- **The horizontal bytes that stay asked from the scroll handler on**: the subspeed, the facing direction, the position and its fraction. The other three bytes of
-`FrameModel.hBytes` are theorems: the moving direction and the running speed (`GuardE.keepHE`), and the speed but its fall to 0 (`CollideKeep.speed_end`). -/
-def hRest (sy : Syms) : List UInt16 := [sy.Player_X_MoveForce, sy.PlayerFacingDir, sy.Player_X_Position, sy.Player_PageLoc, sy.SprObject_X_MoveForce]
+/-- The three position bytes still asked unconditionally after the scroll handler.
+Facing and subspeed remain only in `zeroRest`'s zero case; `FaceKeep.keepZ_end` gives the other cases. -/
+def hRest (sy : Syms) : List UInt16 := [sy.Player_X_Position, sy.Player_PageLoc, sy.SprObject_X_MoveForce]
+
+/-- The two bytes still asked only in the zero-speed/zero-sub-speed exception. -/
+def zeroRest (sy : Syms) : List UInt16 := [sy.Player_X_MoveForce, sy.PlayerFacingDir]
 
 /-- **The frame from the scroll handler on, what stays assumed**, from the machine `Q` there to the frame's end `b`: it changes no byte of `hRest` (no wall, no edge
-of the screen, no platform), it does not set a speed that is not 0 to 0, and it ends with the collision bits all 1 (the collision routine found nothing) -/
+of the screen, no platform), it does not set a speed that is not 0 to 0, and its collision bits end all set. Facing and subspeed equality are asked only in the zero-speed/zero-sub-speed case -/
 def AfterR (sy : Syms) (Q b : Machine) : Prop :=
-  (∀ x ∈ hRest sy, peek b x = peek Q x) ∧ (peek b sy.Player_X_Speed = 0 → peek Q sy.Player_X_Speed = 0) ∧ peek b sy.Player_CollisionBits = 0xFF
+  (∀ x ∈ hRest sy, peek b x = peek Q x) ∧ (peek b sy.Player_X_Speed = 0 → peek Q sy.Player_X_Speed = 0) ∧ peek b sy.Player_CollisionBits = 0xFF ∧
+    (peek b sy.Player_X_Speed = 0 ∧ peek b sy.Player_X_MoveForce = 0 → ∀ x ∈ zeroRest sy, peek b x = peek Q x)
 
 /-- **At the left end of the level**: the page 0 and the pixel 0. The screen's left edge puts him there when the movement of the frame takes him left of it. -/
 def AtEdge (sy : Syms) (b : Machine) : Prop := peek b sy.Player_PageLoc = 0 ∧ peek b sy.Player_X_Position = 0
@@ -270,13 +275,13 @@ structure RealB (sy : Syms) (m0 : Machine) (lens : Lens) (N E : Nat) {g : Nat} {
   /-- the page is not 255 when the counted frame `N + 1` begins: at the end of frame `N` he has not gone left of position 0 (at the ends of the frames before it, this is
   the search of `OpenLeft`) -/
   page : N < E → peek (L.fm (N + 1)) sy.Player_PageLoc ≠ 0xFF
-  /-- from the scroll handler on: `AfterR` (five horizontal bytes do not change, a speed that is not 0 is not set to 0, the collision bits end all 1). On frame `N`
+  /-- from the scroll handler on: `AfterR` (three position bytes stay, facing/subspeed stay only in the zero case, a speed that is not 0 is not set to 0, the collision bits end all 1). On frame `N`
   the frame may also end at the left end of the level (`AtEdge`): in `N` frames an input of the model gets a little left of position 0, and there the screen's left
   edge stops him. The moving direction, the running speed, the stored speed and the speed are theorems (`Real.frame_step`, the walks of part e). -/
   after : ∀ t, 1 ≤ t → t ≤ N → t < E → ∀ k, CtrlKeep.arrAt sy (L.fm t) (L.inp t) ≤ k → (trace (L.fm t) (L.inp t) k).pc = sy.PlayerSubs →
     AfterR sy (trace (L.fm t) (L.inp t) k) (frame (L.fm t) (L.inp t)) ∨ (t = N ∧ AtEdge sy (frame (L.fm t) (L.inp t)))
-  /-- **from the return of the collision routine on, seven bytes of the vertical model do not change**: at the return after the first arrival at the player's
-  routine, the height, its high byte, the vertical speed and its fraction, the height's fraction, the vertical force and the state are those of the frame's end
+  /-- **from the return of the collision routine on, six bytes of the vertical model do not change**: at the return after the first arrival at the player's
+  routine, the height, its high byte, the vertical speed and its fraction, the height's fraction and the state are those of the frame's end
   (`OpenAir.AfterVR`). The walks follow these bytes up to the return; after it the walk does not know the enemies, and their code may write the vertical speed (a
   stomp) or the state (a platform). The other four bytes of the vertical model (the vertical force down, the jump's origin, A and B, the jump's halt value) are a
   theorem (`Real.afterVS`, the walk of `OpenAfter`). -/
@@ -341,6 +346,8 @@ structure Checks (sy : Syms) (m0 : Machine) (lens : Lens) (Zb : Nat) (v : UInt8)
   left : 256 ≤ posP sy m0
   /-- the two walks of a whole frame around the stores to the routine, the mode and the task by address (`OpenStore.storeCheck`) -/
   store : OpenStore.storeCheck sy m0 = true
+  /-- the existing facing/subspeed walk, from part e's Numbers -/
+  zk : FaceKeep.zCheck sy m0 v = true
 
 /-- every length of `lens` is below `Zb` -/
 theorem Checks.lens_lt {Zb g : Nat} {v : UInt8} (C : Checks sy m0 lens Zb v g) (k : Nat) : (lens[k]!).2 < Zb := by
@@ -410,7 +417,7 @@ the level.
 
 The movement up to the scroll handler is `FrameModel.move_model`; the frame does not end during it (`FrameModel.trace_inFrame`: the player's routine comes in the
 frame, each instruction but the idle loop runs at least 64 dots before the frame's end, the condition `time` of `FrameKeep.CleanK`, and the idle loop is a `JMP` to
-itself). From the scroll handler to the frame's end: the field `after` gives five horizontal bytes (`AfterR`); the moving direction, the running speed and the stored
+itself). From the scroll handler to the frame's end: the field `after` gives three position bytes and the two zero-case equalities (`AfterR`); the moving direction, the running speed and the stored
 speed are those of the scroll handler (`GuardE.keepHE`); the speed is that of the scroll handler or 0 (`CollideKeep.speed_end`), and it is not set to 0 (`AfterR`); at
 the scroll handler the stored speed is `|v|` (`FrameModel.stored_path`; the frame comes to the scroll handler once, `GuardE.subs_onceE`). So the stored speed at the
 frame's end is `|v|`: this was a part of the field `after`. -/
@@ -456,20 +463,29 @@ theorem Real.frame_step {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E}
   obtain ⟨k, _, _, hpc, m1, m2, hC⟩ := FrameModel.move_model C.model hat
   have e0 := (FrameModel.trace_inFrame C.idle harr.2.1 hC (fun n hn => (hcl n).time hn) k (Nat.le_refl k)).1
   rw [← e0] at hpc m1 m2
-  rcases haf (n₀ + k) (by omega) hpc with ⟨hr, hv0, hbits'⟩ | ⟨hN, hedge⟩
+  rcases haf (n₀ + k) (by omega) hpc with ⟨hr, hv0, hbits', hz0⟩ | ⟨hN, hedge⟩
   · -- the rest of the frame keeps the horizontal bytes
     have kH := GuardE.keepHE C.ctrl C.keepH hs hclE hx ⟨harea, hswim, hsize⟩ harr.1 harr.2.1 harr.2.2 (n₀ + k) (by omega) hpc
     have eV : peek (frame M i) sy.Player_X_Speed = peek (trace M i (n₀ + k)) sy.Player_X_Speed := by
       rcases CollideKeep.speed_end C.ctrl C.vkeep hs hclE hx ⟨harea, hswim, hsize⟩ harr.1 harr.2.1 harr.2.2 (n₀ + k) (by omega) hpc with h | h
       · exact h
       · rw [h, hv0 h]
+    have kZ := FaceKeep.keepZ_end C.ctrl C.zk hs hclE hx ⟨harea, hswim, hsize⟩ harr.1 harr.2.1 harr.2.2 (n₀ + k) (by omega) hpc
+    have zkeep : ∀ x ∈ zeroRest sy, peek (frame M i) x = peek (trace M i (n₀ + k)) x := by
+      intro x hz
+      have hzI : (x &&& 0x7FF).toNat ∈ FaceKeep.zI sy := by
+        simp only [zeroRest, List.mem_cons, List.not_mem_nil, or_false] at hz
+        rcases hz with rfl | rfl <;> simp [FaceKeep.zI, FaceKeep.fdI, CollideKeep.sfI]
+      rcases kZ _ hzI with he | he
+      · exact he
+      · exact hz0 he x hz
     have hall : ∀ a ∈ FrameModel.hBytes sy, peek (frame M i) a = peek (trace M i (n₀ + k)) a := by
       intro a ha
       simp only [FrameModel.hBytes, List.mem_cons, List.not_mem_nil, or_false] at ha
       rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
       · exact eV
-      · exact hr _ (by simp [hRest])
-      · exact hr _ (by simp [hRest])
+      · exact zkeep _ (by simp [zeroRest])
+      · exact zkeep _ (by simp [zeroRest])
       · exact kH _ (by simp [AfterKeep.hI])
       · exact kH _ (by simp [AfterKeep.hI])
       · exact hr _ (by simp [hRest])
@@ -886,7 +902,7 @@ theorem Real.prevAll {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Z
       exact he
 
 /-- **From the return of the collision routine to the frame's end the bytes of the vertical model do not change** (`OpenAir.AfterVS`, the old field `afterV`), on
-each counted frame from 1 to `N`: seven bytes are the field `afterV` (`OpenAir.AfterVR`); the vertical force down, the jump's origin, A and B and the jump's halt
+each counted frame from 1 to `N`: six bytes are the field `afterV` (`OpenAir.AfterVR`); the vertical force, the vertical force down, the jump's origin, A and B and the jump's halt
 value are kept by the walk of `OpenAfter` (`OpenAfter.keep_ret`: from the frame's start in control, `CleanK` of `guardE` and no store by address to the routine,
 the mode or the task, `cleanK` and `Real.noStore`). `hc`, `hk`, `hp`, `C` are checks on the ROM, `hs₁` the start of frame 1, `hh` what the frame's start
 holds. -/
@@ -903,7 +919,7 @@ theorem Real.afterVS {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Z
     rw [C.pause, ← S.next]
     exact L.unpaused h1 (by omega)
   obtain ⟨c1, c2, c3⟩ := CtrlKeep.arrive_at C.ctrl hsK hcl hu
-  have kr := OpenAfter.keep_ret C.ctrl C.ret hsK hclE (O.noStore C h1 h2 h3 hsK) hh.2.2 c1 c2 c3
+  have kr := OpenAfter.keep_ret_all C.ctrl C.ret hsK hclE (O.noStore C h1 h2 h3 hsK) hh.2.2 c1 c2 c3
   have kv := O.afterV t h1 h2 h3
   intro k hk' hpc x hx
   simp only [OpenAir.vsA, OpenFlat.vertA, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hx
@@ -913,12 +929,12 @@ theorem Real.afterVS {g : Nat} {S : FrameKeep.RealRun} {L : Lags sy m0 g S E} {Z
   · exact kv k hk' hpc _ (by simp [OpenAir.vsR, OpenFlat.vertA])
   · exact kv k hk' hpc _ (by simp [OpenAir.vsR, OpenFlat.vertA])
   · exact kv k hk' hpc _ (by simp [OpenAir.vsR])
+  · exact kr k hk' hpc _ (by simp [OpenAfter.retI])
+  · exact kr k hk' hpc _ (by simp [OpenAfter.retI, VertKeep.kI])
+  · exact kr k hk' hpc _ (by simp [OpenAfter.retI, VertKeep.kI])
   · exact kv k hk' hpc _ (by simp [OpenAir.vsR])
-  · exact kr k hk' hpc _ (by simp [VertKeep.kI])
-  · exact kr k hk' hpc _ (by simp [VertKeep.kI])
-  · exact kv k hk' hpc _ (by simp [OpenAir.vsR])
-  · exact kr k hk' hpc _ (by simp [VertKeep.kI])
-  · exact kr k hk' hpc _ (by simp [VertKeep.kI])
+  · exact kr k hk' hpc _ (by simp [OpenAfter.retI, VertKeep.kI])
+  · exact kr k hk' hpc _ (by simp [OpenAfter.retI, VertKeep.kI])
 
 /-- **Each counted frame from 1 to `N` that is a takeoff or in the air follows the vertical model** (the old field `vert`). A takeoff: the walk of `OpenAir` from the
 player's routine computes every vertical byte (`OpenAir.take_real`). In the air: the movement routine follows `vstep` up to `Q` (`OpenVert.vert_airH`, with the halt relation
@@ -1222,11 +1238,12 @@ theorem checks_of {B : PoleJoin.Box} {J Zb g : Nat} {lens : Lens} (hn : SurfaceF
   have e : peek B.m sy.AreaType = peek m0 sy.AreaType := by simpa using he
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hl hs
   refine ⟨hn.model, hn.ctrl, ?_, ?_, hnorm, hl.1.1, hl.1.2, ⟨hs.1, hs.2.1, hs.2.2.1⟩, by simpa using hg, hn.idle, hf, hl.2, hj, ha, hvh, ?_,
-    by simpa [PrevKeep.prevOKB] using hp0, ?_, ?_, hn.storedW, hfr, hret, hs.2.2.2, hst⟩
+    by simpa [PrevKeep.prevOKB] using hp0, ?_, ?_, hn.storedW, hfr, hret, hs.2.2.2, hst, ?_⟩
   · rw [← e]; exact hn.after
   · rw [← e]; exact hn.area3
   · rw [← e]; exact hn.prev
   · rw [← e]; exact hn.keepH
   · rw [← e]; exact hn.vkeep
+  · rw [← e]; exact hn.zk
 
 end Smbrta.OpenFrames

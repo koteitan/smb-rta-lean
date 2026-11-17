@@ -4,24 +4,27 @@
 
 **主張.** 最初の 32 の数えるフレームの 2 つのフィールドが、前より少ないことを求めます。
 
-* `after`（スクロールの処理からフレームの終わりまで）は、横の 8 つのバイト、覚えている速さ、当たりのビットを求めていました。いまは 5 つのバイト、
-  0 でない速さを 0 にしないこと、当たりのビットを求めます。動く向き、走りの速さ、速さ、覚えている速さは定理です。
-* `afterV`（当たり判定のルーチンから戻ったあと、フレームの終わりまで）は縦の 11 のバイトを求めていました。いまは 7 つです。下向きの縦の力、ジャンプの始まりの高さ、
-  ジャンプを止める値、A と B は定理です。
+* `after`（スクロールの処理からフレームの終わりまで）は、横の 8 つのバイト、覚えている速さ、当たりのビットを求めていました。いまは位置の 3 つのバイト、
+  0 でない速さを 0 にしないこと、当たりのビットを求めます。向きとサブ速さは、フレームが速さ 0 とサブ速さ 0 で終わるときだけ求めます（17 回目。前は 5 つのバイト）。動く向き、走りの速さ、速さ、覚えている速さは定理です。
+* `afterV`（当たり判定のルーチンから戻ったあと、フレームの終わりまで）は縦の 11 のバイトを求めていました。いまは 6 つです（17 回目。前は 7 つ）。下向きの縦の力、ジャンプの始まりの高さ、
+  ジャンプを止める値、A と B、縦の力は定理です。
 * 前の `after` は、数えるフレーム 32 で**本物の実行で偽**でした。新しい `after` は、フレーム 32 がレベルの左端で終わることを許します。
 
 `fm(t)` は数えるフレーム `t` が始まるときの機械、`b(t)` はその終わりの機械、`tr(t, k)` はその `k` 命令あとの機械、`n₀(t)` はプレイヤーのルーチンに初めて来る命令です。
-`Q` はスクロールの処理（`PlayerSubs`）、`cR` はプレイヤーのルーチンの中で当たり判定のルーチンから戻るところです。`v` は速さ、`ab` は覚えている速さ、`bits` は当たりのビット、
+`Q` はスクロールの処理（`PlayerSubs`）、`cR` はプレイヤーのルーチンの中で当たり判定のルーチンから戻るところです。`v` は速さ、`ab` は覚えている速さ、`sub` はサブ速さ、`bits` は当たりのビット、
 `hs` は横の状態、`P` は位置（1/256 px）です。`N = 32`、`E` は入るフレームです。
 
 ```
-hRest          =  {Player_X_MoveForce, PlayerFacingDir, Player_X_Position, Player_PageLoc, SprObject_X_MoveForce}
+hRest          =  {Player_X_Position, Player_PageLoc, SprObject_X_MoveForce}
+zeroRest       =  {Player_X_MoveForce, PlayerFacingDir}
 AfterR(q, b)   :=  (∀ x ∈ hRest,  b[x] = q[x])  ∧  (v(b) = 0 → v(q) = 0)  ∧  bits(b) = FF
+                   ∧  (v(b) = 0 ∧ sub(b) = 0  →  ∀ x ∈ zeroRest,  b[x] = q[x])
 AtEdge(b)      :=  Player_PageLoc(b) = 0  ∧  Player_X_Position(b) = 0
 after  (フィールド) :  t ∈ [1, N],  t < E,  k ≥ n₀(t),  pc(tr(t, k)) = Q   →   AfterR(tr(t, k), b(t))  ∨  (t = N ∧ AtEdge(b(t)))
 
-vsR            =  {Player_Y_Position, Player_Y_HighPos, Player_Y_Speed, Player_Y_MoveForce, Player_YMF_Dummy, VerticalForce, Player_State}
+vsR            =  {Player_Y_Position, Player_Y_HighPos, Player_Y_Speed, Player_Y_MoveForce, Player_YMF_Dummy, Player_State}
 kI             =  {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump, A_B_Buttons}
+retI           =  kI ∪ {VerticalForce}
 afterV (フィールド) :  t ∈ [1, N],  t < E,  k ≥ n₀(t),  pc(tr(t, k)) = cR   →   ∀ x ∈ vsR,  b(t)[x] = tr(t, k)[x]
 
 Real.frame_step :  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm t),  st(fm t) ∈ {0, 1, 2},  ジャンプ台なし,  |v(fm t)| ≤ top
@@ -29,18 +32,18 @@ Real.frame_step :  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm
                        ∧ ( (hs(b t) = hstep(hs(fm t), in t)  ∧  (P(b t) − P(fm t) − 16·v(b t)) mod 2²⁴ = 0  ∧  Held(b t))
                            ∨ (t = N ∧ AtEdge(b t)) )
 Real.afterVS    :  Checks,  Real,  t ∈ [1, N],  t < E,  Held(fm t)
-                   →   ∀ k ≥ n₀(t),  pc(tr(t, k)) = cR  →  ∀ x ∈ vsR ∪ kI,  b(t)[x] = tr(t, k)[x]              （前のフィールド afterV）
+                   →   ∀ k ≥ n₀(t),  pc(tr(t, k)) = cR  →  ∀ x ∈ vsR ∪ retI,  b(t)[x] = tr(t, k)[x]              （前のフィールド afterV）
 
 OpenAfter.keep_at  :  ctrlCheck,  checkAt(v, q, bs),  StartK(m),  各命令が CleanK_F,  各 x ∈ bs について x も守るガードの CleanK,
                       ルーチン、モード、タスクへのアドレスでの書き込みなし,  AreaOK(v, m),  n₀ はプレイヤーのルーチンに初めて来る命令
                       →   ∀ k ≥ n₀,  pc(tr k) = q  →  ∀ x ∈ bs,  frame(m, i)[x] = tr(k)[x]
-OpenAfter.keep_ret :  keep_at で  q = cR,  bs = kI,  各命令が CleanK_E
+OpenAfter.keep_ret_all :  keep_at で  q = cR,  bs = retI,  各命令が CleanK_E（`keep_ret` は bs = kI のまま）
 ```
 
 `Held(m)` は `ab(m) = |v(m)| ∧ bits(m) = FF ∧` エリアの 3 つのバイトです。`CleanK_E` は `FrameKeep.guardE` の `CleanK`、`CleanK_F` は `FrameKeep.guardF` の `CleanK` です。
 ROM を使わない定理の公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
-Lean: `Theorems/OpenAfter.lean`（`checkAt`、`retCheck`、`keep_at`、`keep_ret`）、`Theorems/OpenFrames.lean`（`hRest`、`AfterR`、`AtEdge`、`Real.frame_step`、
+Lean: `Theorems/OpenAfter.lean`（`checkAt`、`retI`、`retCheck`、`keep_at`、`keep_ret_all`、`keep_ret`）、`Theorems/OpenFrames.lean`（`hRest`、`zeroRest`、`AfterR`、`Checks.zk`、`AtEdge`、`Real.frame_step`、
 `Real.afterVS`、`OpenRunM.endB`）、`Theorems/OpenAirFrame.lean`（`vsR`、`AfterVR`）。非公開の `Proof/OpenAfter.lean`（`open_after_check`）。
 
 ## 前の `after` は本物の実行で偽だった
@@ -79,7 +82,7 @@ Lean: `Theorems/OpenAfter.lean`（`checkAt`、`retCheck`、`keep_at`、`keep_ret
 * `FrameModel.stored_path`: `Q` で覚えている速さは `|v|` です。フレームが始まるときに、速さが最高速以下で、当たりのビットが 4 つの値のどれかであることを使います
   （`Held`、`Run.pipeSpeed`）。フレームはプレイヤーのルーチンのあとで `Q` に 1 回だけ来ます（`GuardE.subs_onceE`）。だから `stored_path` が着くところは、移動が着くところです。
 
-`AfterR` の 5 つのバイトと合わせると、フレームの終わりの横の 8 つのバイトは全部 `Q` のときのもので、フレームの終わりで `ab = |v|` です。これが前のフィールドの内容です。
+`AfterR` の 3 つのバイトと、向きとサブ速さ（`FaceKeep.keepZ_end`。速さ 0 とサブ速さ 0 で終わるときは `AfterR`）と合わせると、フレームの終わりの横の 8 つのバイトは全部 `Q` のときのもので、フレームの終わりで `ab = |v|` です。これが前のフィールドの内容です。
 
 ## しくみ: 当たり判定のルーチンから戻ったあと
 
@@ -139,10 +142,18 @@ Lean: `Theorems/OpenAfter.lean`（`checkAt`、`retCheck`、`keep_at`、`keep_ret
 | 最初のフレームでポーズする自分の実行（60） | 1,856 | 0 |
 | `open-left-real FM2 60`（左への探索） | 22,100 | 0（最後のフレームが左端で終わるもの 624） |
 
+## 17 回目: 縦の力と、0 の場合だけの向きとサブ速さ
+
+縦の力は、当たり判定のルーチンから戻ったところからフレームの終わりまで、歩きで追えます（`retI`、`keep_ret_all`）。`guardE` の `stateE` がすでに守っているので、ガードは増えません。向きとサブ速さは、part e の `FaceKeep.keepZ_end` が、フレームが速さ 0 とサブ速さ 0 で終わる場合を除いて与えます。前の `after` はこの 2 つを常に求めていたので、新しい条件は前の条件から出ます。新しい走りの仮定はありません。`Checks.zk` は既存の `SurfaceFrames.Numbers.zk` から出ます。
+
+残りの縦の 6 つのバイトは、戻ったあとに直接の書き込みがあります。全バイトの探索（`open-after-search all`）での失敗は、高さ 10、その上位バイト 8、縦の速さ 34、縦の速さの端数 8、状態 3 です。状態は `guardE` が守っていても、番地での書き込みは止まりません。縦の力には失敗がありません。足の読みで高さを分けても、戻ったあとの敵や足場の書き込みは消せないので、大きな探索はしていません。
+
+17 回目の確認は全部 exit 0 です: `open-real-check FM2 300`（ムービー、自分の入力 300 回、ポーズする 60 回で違反 0）、`open-left-real FM2 60`（22,100 フレームで失敗 0、フレーム 32 の左端 624）、`open-after-search all`、`open-air-search all`（空中の確認はネイティブで約 4.6 秒）。非公開の `Proof.OpenAfter` は約 2 秒です。
+
 ## 仮定（Lean で証明していないこと）
 
-* `after`: `hRest` の 5 つのバイト、速さを 0 にしないこと、当たりのビットが `FF`。またはフレーム `N` でレベルの左端。
-* `afterV`: `vsR` の 7 つのバイト。
+* `after`: `hRest` の 3 つのバイト、速さ 0 とサブ速さ 0 で終わるときの `zeroRest` の 2 つのバイト、速さを 0 にしないこと、当たりのビットが `FF`。またはフレーム `N` でレベルの左端。
+* `afterV`: `vsR` の 6 つのバイト。
 * `page`（前と同じ）。
 
 **再現.**

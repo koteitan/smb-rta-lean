@@ -4,24 +4,27 @@
 
 **Claim.** Two fields of the first 32 counted frames ask less than before.
 
-* `after` (from the scroll handler to the frame's end) asked 8 horizontal bytes, the stored speed and the collision bits. It now asks 5 bytes, that a speed that is
-  not 0 is not set to 0, and the collision bits. The moving direction, the running speed, the speed and the stored speed are theorems.
-* `afterV` (from the return of the collision routine to the frame's end) asked 11 vertical bytes. It now asks 7. The vertical force down, the jump's origin, the
-  jump's halt value and A and B are theorems.
+* `after` (from the scroll handler to the frame's end) asked 8 horizontal bytes, the stored speed and the collision bits. It now asks the 3 bytes of the position, that a speed that is
+  not 0 is not set to 0, and the collision bits; the facing and the subspeed only when the frame ends with the speed 0 and the subspeed 0 (round 17; 5 bytes before). The moving direction, the running speed, the speed and the stored speed are theorems.
+* `afterV` (from the return of the collision routine to the frame's end) asked 11 vertical bytes. It now asks 6 (round 17; 7 before). The vertical force down, the jump's origin, the
+  jump's halt value, A and B and the vertical force are theorems.
 * The old `after` was **false on a real run** at the counted frame 32. The new one lets frame 32 end at the left end of the level.
 
 `fm(t)` is the machine when the counted frame `t` begins, `b(t)` the machine at its end, `tr(t, k)` the machine after `k` of its instructions, `n₀(t)` the first
 arrival at the player's routine. `Q` is the scroll handler (`PlayerSubs`), `cR` the return of the collision routine in the player's routine. `v` is the speed, `ab`
-the stored speed, `bits` the collision bits, `hs` the horizontal state, `P` the position (1/256 px). `N = 32`, `E` is the entering frame.
+the stored speed, `sub` the subspeed, `bits` the collision bits, `hs` the horizontal state, `P` the position (1/256 px). `N = 32`, `E` is the entering frame.
 
 ```
-hRest          =  {Player_X_MoveForce, PlayerFacingDir, Player_X_Position, Player_PageLoc, SprObject_X_MoveForce}
+hRest          =  {Player_X_Position, Player_PageLoc, SprObject_X_MoveForce}
+zeroRest       =  {Player_X_MoveForce, PlayerFacingDir}
 AfterR(q, b)   :=  (∀ x ∈ hRest,  b[x] = q[x])  ∧  (v(b) = 0 → v(q) = 0)  ∧  bits(b) = FF
+                   ∧  (v(b) = 0 ∧ sub(b) = 0  →  ∀ x ∈ zeroRest,  b[x] = q[x])
 AtEdge(b)      :=  Player_PageLoc(b) = 0  ∧  Player_X_Position(b) = 0
 after  (field) :  t ∈ [1, N],  t < E,  k ≥ n₀(t),  pc(tr(t, k)) = Q   →   AfterR(tr(t, k), b(t))  ∨  (t = N ∧ AtEdge(b(t)))
 
-vsR            =  {Player_Y_Position, Player_Y_HighPos, Player_Y_Speed, Player_Y_MoveForce, Player_YMF_Dummy, VerticalForce, Player_State}
+vsR            =  {Player_Y_Position, Player_Y_HighPos, Player_Y_Speed, Player_Y_MoveForce, Player_YMF_Dummy, Player_State}
 kI             =  {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump, A_B_Buttons}
+retI           =  kI ∪ {VerticalForce}
 afterV (field) :  t ∈ [1, N],  t < E,  k ≥ n₀(t),  pc(tr(t, k)) = cR   →   ∀ x ∈ vsR,  b(t)[x] = tr(t, k)[x]
 
 Real.frame_step :  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm t),  st(fm t) ∈ {0, 1, 2},  no jumpspring,  |v(fm t)| ≤ top
@@ -29,18 +32,18 @@ Real.frame_step :  Checks,  Real,  t ∈ [1, N],  t < E,  StartK(fm t),  Held(fm
                        ∧ ( (hs(b t) = hstep(hs(fm t), in t)  ∧  (P(b t) − P(fm t) − 16·v(b t)) mod 2²⁴ = 0  ∧  Held(b t))
                            ∨ (t = N ∧ AtEdge(b t)) )
 Real.afterVS    :  Checks,  Real,  t ∈ [1, N],  t < E,  Held(fm t)
-                   →   ∀ k ≥ n₀(t),  pc(tr(t, k)) = cR  →  ∀ x ∈ vsR ∪ kI,  b(t)[x] = tr(t, k)[x]              (the old field afterV)
+                   →   ∀ k ≥ n₀(t),  pc(tr(t, k)) = cR  →  ∀ x ∈ vsR ∪ retI,  b(t)[x] = tr(t, k)[x]              (the old field afterV)
 
 OpenAfter.keep_at  :  ctrlCheck,  checkAt(v, q, bs),  StartK(m),  CleanK_F on each instruction,  CleanK of the guard with x protected for each x ∈ bs,
                       no store to the routine, the mode or the task by address,  AreaOK(v, m),  n₀ the first arrival at the player's routine
                       →   ∀ k ≥ n₀,  pc(tr k) = q  →  ∀ x ∈ bs,  frame(m, i)[x] = tr(k)[x]
-OpenAfter.keep_ret :  keep_at  with  q = cR,  bs = kI,  under  CleanK_E on each instruction
+OpenAfter.keep_ret_all :  keep_at  with  q = cR,  bs = retI,  under  CleanK_E on each instruction  (`keep_ret` keeps bs = kI)
 ```
 
 `Held(m)` is `ab(m) = |v(m)| ∧ bits(m) = FF ∧` the area's three bytes. `CleanK_E` is `CleanK` of `FrameKeep.guardE`, `CleanK_F` of `FrameKeep.guardF`. The theorems
 without the ROM use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
-Lean: `Theorems/OpenAfter.lean` (`checkAt`, `retCheck`, `keep_at`, `keep_ret`), `Theorems/OpenFrames.lean` (`hRest`, `AfterR`, `AtEdge`, `Real.frame_step`,
+Lean: `Theorems/OpenAfter.lean` (`checkAt`, `retI`, `retCheck`, `keep_at`, `keep_ret_all`, `keep_ret`), `Theorems/OpenFrames.lean` (`hRest`, `zeroRest`, `AfterR`, `Checks.zk`, `AtEdge`, `Real.frame_step`,
 `Real.afterVS`, `OpenRunM.endB`), `Theorems/OpenAirFrame.lean` (`vsR`, `AfterVR`); private `Proof/OpenAfter.lean` (`open_after_check`).
 
 ## The old `after` was false on a real run
@@ -79,7 +82,7 @@ routine, the mode or the task by address. The frames of the opening meet these (
   begins (`Held`, `Run.pipeSpeed`). The frame comes to `Q` once after the player's routine (`GuardE.subs_onceE`), so the arrival of `stored_path` is that of the
   movement.
 
-With the five bytes of `AfterR`, all 8 horizontal bytes at the frame's end are those at `Q`, and `ab = |v|` at the frame's end. This is what the old field asked.
+With the three bytes of `AfterR` and the facing and the subspeed (`FaceKeep.keepZ_end`; `AfterR` when the frame ends with the speed 0 and the subspeed 0), all 8 horizontal bytes at the frame's end are those at `Q`, and `ab = |v|` at the frame's end. This is what the old field asked.
 
 ## How: after the return of the collision routine
 
@@ -139,10 +142,18 @@ stored speed at `Q` and at the frame's end, the 8 horizontal bytes when `AfterR`
 | own runs that pause on the first frames (60) | 1,856 | 0 |
 | `open-left-real FM2 60` (the search to the left) | 22,100 | 0 (624 last frames at the left end) |
 
+## Round 17: the vertical force, and the facing and the subspeed only in the zero case
+
+A walk follows the vertical force from the return of the collision routine to the frame's end (`retI`, `keep_ret_all`). `stateE` of `guardE` already protects it, so the guard does not grow. Part e's `FaceKeep.keepZ_end` gives the facing and the subspeed except when the frame ends with the speed 0 and the subspeed 0. The old `after` asked these two bytes always, so the new condition follows from the old one. No new hypothesis of the run. `Checks.zk` comes from the existing `SurfaceFrames.Numbers.zk`.
+
+The other six vertical bytes have direct stores after the return. The search of all bytes (`open-after-search all`) fails on the height 10 times, its high byte 8, the vertical speed 34, its fraction 8 and the state 3. `guardE` protects the state, but that does not stop a store by its address. The vertical force has no failure. A split of the height at the feet's read cannot remove the stores of enemies or platforms after the return, so no large search was run.
+
+The checks of round 17 all exit 0: `open-real-check FM2 300` (the movie, 300 own runs and 60 runs with the pause, 0 against), `open-left-real FM2 60` (22,100 frames, 0 failed, 624 frames 32 at the left end), `open-after-search all`, `open-air-search all` (the air check about 4.6 s natively). The private `Proof.OpenAfter` takes about 2 s.
+
 ## Assumed (not proved in Lean)
 
-* `after`: the five bytes of `hRest`, that the speed is not set to 0, the collision bits `FF`; or, on frame `N`, the left end of the level.
-* `afterV`: the seven bytes of `vsR`.
+* `after`: the three bytes of `hRest`, the two bytes of `zeroRest` when the frame ends with the speed 0 and the subspeed 0, that the speed is not set to 0, the collision bits `FF`; or, on frame `N`, the left end of the level.
+* `afterV`: the six bytes of `vsR`.
 * `page` (as before).
 
 **Reproduce.**
