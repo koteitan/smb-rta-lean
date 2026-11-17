@@ -60,6 +60,12 @@ The walk with the control not known at the frame's start (`entry-height-check FM
 
 **What would give the control.** The control is set at a frame's end only when the frame erased a coin. In the map the nearest coin is three columns left of the mouth's column. One frame moves the player by less than one column for every value of the speed byte, since the move adds only the speed's high four bits. So a frame that erases a coin is not followed by a frame that enters. To prove it one needs the position on these two frames in the abstract machine: a walk of the frame before with the position split at the read that finds the coin, and a walk of the entering frame from the positions left of the mouth. This is not done.
 
+## Checked partial result for the previous frame
+
+`EntryBufferNear.map_coin` proves that an actual coin read must be at a map coin under `Solid`. `entry_coin_gap` in private `Proof/EntrySolidFacts.lean` checks that all map coins lie at least three columns left of the mouth. `read_separation` and `not_short_move` prove the conditional geometry: with read offsets shorter than a column, these reads require at least 18 pixels between player positions, incompatible with a smaller one-frame displacement.
+
+The connection from actual instructions on two frames to those read positions and displacement is not proved. A diagnostic starting at the first mouth position with full non-coin map knowledge still had 63 abstract failures (2,016,392 steps). It is not a buffer proof. `buffer₂` remains unchanged.
+
 ## Checked on real frames
 
 A program (`entry-height-check FM2 400 real`, about 3 min): the movie's entering frame, and own inputs from frames of the movie in the room, 400 runs with a small player and 400 with a big one.

@@ -60,7 +60,11 @@ The walk with another size at the frame's start (`entry-height-check FM2 N walka
 | big | 2,300,695 | 4 | 24 | 176 px and 192 px (8 ends) |
 | not known | 2,432,097 | 4 | 24 | 176 px and 192 px (8 ends) |
 
-**Why a big player's height stays.** A big player's upper side read is one row above his lower one. The walk knows the bits that are 0 in the map, not the floor's tiles (1-1-c-7-12). Without the floor, a big player who stands one row lower reads the mouth's lower tile with his upper side read, and enters one row lower (192 px in the table). On the real machine the floor is there: the left side's lower read finds it first, and the frame does not enter (the table below). To prove it one needs the floor's tiles on every frame of the room.
+**Big players: checked partial result.** `RoomBlocks.Solid` now supplies the floor, but the full height proof remains open. `EntrySolid.cond` turns the existing room condition and `Solid` into full knowledge of every non-coin map byte; coins keep the original zero-bit information. The reference agreement is checked by `entry_solid_refs` in private `Proof/EntrySolidFacts.lean`. This adds no run hypothesis.
+
+The solid-map diagnostic still has 62 abstract failures, including eight entering ends at 192 px. Concrete one-frame probes can enter at 192 px with the floor present, but those candidates violate the head-read clause of `SiteOK`. They are therefore not counterexamples to the claim with all its hypotheses. The earlier explanation that the floor alone prevents these entries was incomplete.
+
+An experimental walk kept the head-read position, split the horizontal position into 64 pieces, filtered reads by `SiteOK`, and handled coin erasures with known addresses. Its largest bounded search reached 1,500,001 states with 206,279 pending and no completed frame ends. This proves no height result. These expensive changes are not in the production walk. `height₂` remains unchanged; relating the head and side reads precisely is still required.
 
 ## Checked on real frames
 

@@ -5333,6 +5333,17 @@ theorem area_facts : AreaKeep.Facts sy ctx (SideChangeEnd.refs2 sideBoundNames s
   area_factsA
 ")
 
+/-- The map reference and the coin gap used by the partial entry results. -/
+def genEntrySolidFacts (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/EntrySolidFacts.lean" ("import Proof.ScreenPage\nimport Proof.Rom\nimport Theorems.EntryBufferNear\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+/-- The non-coin map bytes agree with the room reference. -/
+theorem entry_solid_refs : EntrySolid.refs sy screenNames ctx = true := by native_decide
+/-- Every map coin is at least three columns left of the side pipe. -/
+theorem entry_coin_gap : EntryBufferNear.gapCheck sy screenNames ctx 3 = true := by native_decide
+")
+
 /-- the private file of `EntryHeight` and `EntryBuffer`: the walk of the room's frame that follows the height (about 20 s natively) and the references' height; the
 walk with the control of the screen's buffers known, and the references' other bytes -/
 def genEntryHeight (dir : String) : IO Unit :=
@@ -9327,7 +9338,19 @@ def entryHeightCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) (mode : Str
     let all := [("with the reference's size known", r, EntryHeight.knownY sy nmS m0), ("with the size known and big", rBig, EntryHeight.knownY sy nmS m0),
         ("without the size", r, RoomMap.knownT sy nmS m0),
         (s!"with the reference's size and the screen buffer's control known (the reference's control {hex2 (r.ram.get! ctlI)})", r, EntryHeight.knownY sy nmS m0 ++ [(ctlI, 0xFF)])]
-    for (label, r, K) in (if mode == "walkbig" then (all.drop 1).take 1 else if mode == "walkbuf" || mode.startsWith "bufdump" then [] else if mode == "walkall" || mode == "all" then all else all.take 1) do
+    let PS := ScreenPage.placesR sy nmS m0
+    let mapM := RoomMap.mapRef m0
+    let coinsS := RoomBlocks.coinsOf PS
+    let bufS : List (Nat × UInt8) := (List.range PS.bufN).map fun j =>
+      (PS.bufLo + j, if coinsS.contains (mapM.ram.get! (PS.bufLo + j)) then ~~~ mapM.ram.get! (PS.bufLo + j) else 0xFF)
+    let KS := ScreenPage.knownOf nmS ++ bufS ++ RoomMap.scrK sy m0
+    if mode.startsWith "solid" then
+      IO.println s!"solid: coins {coinsS.map hex2}; bytes of the block buffers that are not coins in the map {(bufS.filter (·.2 == 0xFF)).length} of {PS.bufN}; the reference has the map's value at each {(List.range PS.bufN).all fun j => coinsS.contains (mapM.ram.get! (PS.bufLo + j)) || r.ram.get! (PS.bufLo + j) == mapM.ram.get! (PS.bufLo + j)}; maskOK {ScreenPage.maskOK r KS}"
+      IO.println s!"  the map, 13 rows of 32 columns:"
+      for row in List.range 13 do
+        IO.println s!"    {(List.range 32).map fun c => hex2 (mapM.ram.get! (PS.bufLo + (if c < 16 then 0 else PS.bufN / 2) + row * 16 + c % 16))}"
+    let all := if mode.startsWith "solid" then [("solid, with the size known and big", rBig, KS ++ [(szI, 0xFF)]), ("solid, without the size", r, KS)] else all
+    for (label, r, K) in (if mode.startsWith "solid" then (if mode == "solidbig" then all.take 1 else all) else if mode == "walkbig" then (all.drop 1).take 1 else if mode == "walkbuf" || mode.startsWith "bufdump" then [] else if mode == "walkall" || mode == "all" then all else all.take 1) do
       let t0 ← IO.monoMsNow
       let X ← IO.lazyPure fun _ => EntryHeight.searchOf S Z (EntryHeight.optsY S Z E) (EntryHeight.finY S) E r K
       let t1 ← IO.monoMsNow
@@ -9335,8 +9358,8 @@ def entryHeightCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) (mode : Str
       let badEnds := X.ends.toList.filter fun B => !EntryHeight.finY S B
       IO.println s!"the height's walk, {label}: {X.steps} steps, {X.forks} forks, {X.fails} failures, states {X.done.size}, joins {X.joins}; frame ends {X.ends.size}, with the side pipe's routine {evEnds.length}, their heights {(evEnds.map fun B => abS (B.getK S.yI)).eraseDups}; ends that fail {badEnds.length}; search {t1 - t0} ms"
       IO.println s!"  the screen's buffer at the ends with the side pipe's routine (control, offset, bytes 0, 1, 2, 7): {(evEnds.map fun B => [ctlI, offI, bufI, bufI + 1, bufI + 2, bufI + 7].map fun i => abS (B.getK i)).eraseDups}"
-      for B in badEnds.take 6 do
-        IO.println s!"  a failing end: rt {abS (B.getK S.rtI)} height {abS (B.getK S.yI)} size {abS (B.getK szI)} state {abS (B.getK S.P.stI)}"
+      for B in badEnds.take 12 do
+        IO.println s!"  a failing end: rt {abS (B.getK S.rtI)} height {abS (B.getK S.yI)} size {abS (B.getK szI)} state {abS (B.getK S.P.stI)} zp0-7 {(List.range 8).map fun i => abS (B.getK i)} x {abS (B.getK (sy.Player_X_Position &&& 0x7FF).toNat)} page {abS (B.getK (sy.Player_PageLoc &&& 0x7FF).toNat)}"
       match X.firstFail with
       | some A => IO.println s!"  first failure: pc {A.pc} rt {abS (A.getK S.rtI)} height {abS (A.getK S.yI)} size {abS (A.getK szI)} a {abS A.a} x {abS A.x} y {abS A.y}"
       | none => pure ()
@@ -9350,7 +9373,7 @@ def entryHeightCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) (mode : Str
           let ss := (ss0.filter fun q => (q.2.getK S.yI).isK) ++ (ss0.filter fun q => !(q.2.getK S.yI).isK)
           IO.println s!"  states at {pc}: {ss.length}, with the height known {(ss0.filter fun q => (q.2.getK S.yI).isK).length}"
           for (_, A) in ss.take 40 do
-            IO.println s!"    rt {abS (A.getK S.rtI)} height {abS (A.getK S.yI)} state {abS (A.getK S.P.stI)} size {abS (A.getK szI)} a {abS A.a} x {abS A.x} y {abS A.y} zp0-7 {(List.range 8).map fun i => abS (A.getK i)} eb {abS (A.getK 0xeb)} s {A.s} k {A.k}"
+            IO.println s!"    rt {abS (A.getK S.rtI)} height {abS (A.getK S.yI)} state {abS (A.getK S.P.stI)} size {abS (A.getK szI)} a {abS A.a} x {abS A.x} y {abS A.y} zp0-7 {(List.range 8).map fun i => abS (A.getK i)} s {A.s} k {A.k}"
         flush
       if label == "with the reference's size known" && mode.startsWith "trace:" then
         -- a path from a state of the search at a place, with a height, to the write of the side pipe's routine
@@ -9373,7 +9396,7 @@ def entryHeightCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) (mode : Str
           | some p =>
             IO.println s!"  a path of {p.length} states to the write:"
             for B in p do
-              IO.println s!"    pc {B.pc} a {abS B.a} x {abS B.x} y {abS B.y} p {abS B.p} zp0-7 {(List.range 8).map fun i => abS (B.getK i)} eb {abS (B.getK 0xeb)} height {abS (B.getK S.yI)} state {abS (B.getK S.P.stI)}"
+              IO.println s!"    pc {B.pc} a {abS B.a} x {abS B.x} y {abS B.y} p {abS B.p} zp0-7 {(List.range 8).map fun i => abS (B.getK i)} height {abS (B.getK S.yI)} state {abS (B.getK S.P.stI)}"
           | none => IO.println s!"  no path to the write from a state (budget left {← budget.get})"
         flush
       if label == "with the reference's size known" then
@@ -9416,7 +9439,7 @@ def entryHeightCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) (mode : Str
           IO.println s!"  the check {ok}, {(← IO.monoMsNow) - t2} ms; the references agree on the other bytes {ok2}: {Route.restIdxB sy nmS m0}"
           flush
           if !(ok && ok2) then okAll := false
-  if mode.startsWith "walk" || mode.startsWith "trace" || mode.startsWith "bufdump" then return (if okAll then 0 else 1)
+  if mode.startsWith "walk" || mode.startsWith "trace" || mode.startsWith "bufdump" || mode.startsWith "solid" then return (if okAll then 0 else 1)
   -- the real machine
   let ev := SideEntryRule.vs sy
   let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2))
@@ -17870,8 +17893,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!
