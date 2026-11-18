@@ -80,6 +80,7 @@ import Theorems.RoomMusic
 import Theorems.AreaKeep
 import Theorems.EntryHeight
 import Theorems.RoomAddress
+import Theorems.RoomCollision
 import Theorems.EntryBuffer
 import Theorems.CollideKeep
 import Theorems.UpClean
@@ -5365,6 +5366,15 @@ open Smbrta Smbrta.Rom
 set_option maxHeartbeats 0
 /-- All selectors and stack bytes give the map buffer's column pointer. -/
 theorem room_address_check : RoomAddress.check sy screenNames ctx = true := by native_decide
+")
+
+/-- The coordinate-to-tile collision-buffer routine, checked in small pieces. -/
+def genRoomCollision (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/RoomCollision.lean" ("import Proof.ScreenPage\nimport Theorems.RoomCollision\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+/-- Every offset index and player coordinate follows the checked routine pieces. -/
+theorem room_collision_check : RoomCollision.check sy screenNames ctx = true := by native_decide
 ")
 
 /-- The map reference and the coin gap used by the partial entry results. -/
@@ -10870,6 +10880,12 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
   let cr ← IO.lazyPure fun _ => RoomBlocks.rowsCheckR sy nm d nmS m0 [roomV0Of sy m0]
   IO.println s!"rowsCheckR (the rows of the time at the first control: `RoomPair.rowsCheck`, and the blocks) {cr} ({(← IO.monoMsNow) - t2} ms)"
   (← IO.getStdout).flush
+  let collisionP := RoomCollision.places sy m0
+  let ctime ← IO.monoMsNow
+  let collisionOK ← IO.lazyPure fun _ => RoomCollision.check sy nmS m0
+  IO.println s!"RoomCollision.check {collisionOK} ({(← IO.monoMsNow)-ctime} ms)"
+  (← IO.getStdout).flush
+  if !collisionOK then return 1
   let H := EntryHeight.hpOf sy nmS m0
   let xTable := (romByte m0 (sy.BlockBufferCollision + 4)).toUInt16 ||| ((romByte m0 (sy.BlockBufferCollision + 5)).toUInt16 <<< 8)
   -- real frames
@@ -10880,7 +10896,9 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
     "frames that start with a byte not of the map among the bytes that are not coins in the map", "runs with no stand before 34",
     "of them not standing at 34", "of them every read of frame 34 that is not for the head gives an empty byte or a coin", "(not used)",
     "erases with the last read at another address", "erases with the last read not a coin", "column selectors", "of them not the coordinate formula",
-    "block reads", "of them pointer not the selected column", "of them address not selected column plus Y"]
+    "block reads", "of them pointer not the selected column", "of them address not selected column plus Y",
+    "player collision calls", "of them entry not Good", "player collision reads", "of them not the entry coordinate target",
+    "of them row or coordinates changed", "player collision returns", "of them return contract failed", "unfinished player collision calls"]
   -- one frame: the counts, and the machine at its end; `feet` asks for the reads of the frame at the feet
   let scan := fun (m : Machine) (pad : UInt8) (x : Array Nat) (feet : Bool) => Id.run do
     let mut acc := x.set! 0 (x[0]! + 1)
@@ -10895,7 +10913,17 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
     let mut selector : Option UInt8 := none
     let mut selected : Option UInt16 := none
     let mut fr : List (Nat × UInt8) := []
+    let mut collision : Option Machine := none
+    let mut collisionTile : Option UInt8 := none
+    let mut collisionSteps := 0
     while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) do
+      if c.pc == sy.BlockBufferCollision && !c.nmiPending && c.x == 0 && collision.isNone then
+        collision := some c
+        collisionTile := none
+        collisionSteps := 0
+        acc := acc.set! 20 (acc[20]!+1)
+        if !(c.prg == m0.prg && c.prgMask == m0.prgMask && !c.nmiPending && !c.halted && !c.trk && c.ram.size == 2048 && c.ppuCtrl &&& 0x80 == 0) then
+          acc := acc.set! 21 (acc[21]!+1)
       if c.pc == sy.BlockBufferCollision && !c.nmiPending then
         selector := some (RoomAddress.encoded (peek c (sy.Player_PageLoc + c.x.toUInt16))
           (peek c (sy.Player_X_Position + c.x.toUInt16)) (romByte m0 (xTable + c.y.toUInt16)))
@@ -10909,6 +10937,16 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
         if selected.map (· + c.y.toUInt16) != some (ScreenPage.readAddr c) then acc := acc.set! 19 (acc[19]! + 1)
         lastRead := ScreenPage.readAddr c
         lastVal := ScreenPage.readVal c
+        if let some A := collision then
+          acc := acc.set! 22 (acc[22]!+1)
+          let wanted := RoomCollision.readAddress (FrameModel.Rom.of m0) P collisionP A
+          let row := RoomCollision.rowOf collisionP (A.ram.get! collisionP.y)
+            (RoomCollision.yadd (FrameModel.Rom.of m0) collisionP A.y)
+          if lastRead != wanted then acc := acc.set! 23 (acc[23]!+1)
+          if c.y != row || c.ram.get! collisionP.row != row ||
+              !((RoomCollision.coords collisionP).all fun j => c.ram.get! j == A.ram.get! j) then
+            acc := acc.set! 24 (acc[24]!+1)
+          collisionTile := some lastVal
         if feet && !P.heads.contains (c.ram.get! P.saveI) then fr := fr ++ [((lastRead &&& 0x7FF).toNat, lastVal)]
       if c.pc == P.erase && !c.nmiPending then
         let ad := ScreenPage.writeAddr c
@@ -10923,7 +10961,22 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
         if ad != lastRead then acc := acc.set! 13 (acc[13]! + 1)
         if !coins.contains lastVal then acc := acc.set! 14 (acc[14]! + 1)
       c := (PipeTransitionAll.go step c).2
+      if let some A := collision then
+        collisionSteps := collisionSteps+1
+        if c.pc == RoomCollision.returnPc A && c.s == A.s+1+1 then
+          acc := acc.set! 25 (acc[25]!+1)
+          let row := RoomCollision.rowOf collisionP (A.ram.get! collisionP.y)
+            (RoomCollision.yadd (FrameModel.Rom.of m0) collisionP A.y)
+          let ok := collisionSteps ≤ 118 && collisionTile == some c.a &&
+            c.ram.get! collisionP.tile == c.a && c.ram.get! collisionP.row == row &&
+            c.ram.get! collisionP.saved == RoomCollision.lowCoord collisionP A
+          if !ok then acc := acc.set! 26 (acc[26]!+1)
+          collision := none
+        else if collisionSteps > 118 then
+          acc := acc.set! 26 (acc[26]!+1)
+          collision := none
       n := n + 1
+    if collision.isSome then acc := acc.set! 27 (acc[27]!+1)
     if (List.range P.bufN).any fun j => c.ram.get! (P.bufLo + j) != m.ram.get! (P.bufLo + j) && !targets.contains (P.bufLo + j) then acc := acc.set! 7 (acc[7]! + 1)
     return (acc, c, fr)
   let showV := fun (x : Array Nat) => String.intercalate "; " ((List.range names.size).map fun q => s!"{names[q]!} {x[q]!}")
@@ -10986,7 +11039,7 @@ def roomFloorCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 :
     (← IO.getStdout).flush
     tot := (List.range names.size).foldl (fun acc q => acc.set! q (acc[q]! + sub[q]!)) tot
   IO.println s!"total: {showV tot}"
-  return 0
+  return if tot[21]!+tot[23]!+tot[24]!+tot[26]! == 0 then 0 else 1
 
 /-- the two pairs of bytes of the room's frames (`RoomPair`): the two walks, the rows at the first control, and real frames from the room's first control: at each frame's
 end, in a jump the jump's halt value is 1, and bit 7 of A of the frame before is bit 7 of A -/
@@ -18060,8 +18113,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!

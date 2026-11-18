@@ -16,11 +16,11 @@ The routine's entry and pointer bytes are read from the code by the existing `En
 
 `encoded_eq_selector` proves that adding the horizontal offset to the pixel, carrying into the page, and combining the page's parity with the pixel's high nibble gives the selector of the full horizontal coordinate modulo the two buffers. `selector_lt` proves that this selector is below 32. `bytes16_eq` proves the low/high byte reconstruction used by the pointer lemma. These are general bit-vector identities, proved with Lean's standard `bv_decide`, without Mathlib or ROM assumptions.
 
-This arithmetic is not a proof that the preceding CPU instructions receive the required player coordinate and offset. The pointer lemma starts with A already known. The remaining connection is stated explicitly rather than hidden in a definition.
+The pointer lemma itself starts with A already known. The new [RoomCollision](c-7-5-8-RoomCollision.md) proves the preceding coordinate calculation, the row, the actual tile read and the complete return for a player call with any offset index. The whole-frame position and landing links remain separate.
 
 ## What the landing still needs
 
-`Solid` supplies the floor tile once its buffer index is known. This result identifies the column pointer at the end of its small routine. To remove `land_at`, one still needs its relation to the player's position at each foot read, the vertical row offset, the relevant map columns, and the rest of the landing frame. The pointer must be kept from this return to the tile read. The same gap affects `stand_wall` and `wall`. All three fields remain unchanged; no new Run field was added.
+`Solid` supplies the floor tile once its buffer index is known. This result identifies the column pointer at the end of its small routine. `RoomCollision` now proves the coordinate/row calculation and pointer preservation through the actual read inside the call. To remove `land_at`, one still needs the position after the frame's move at each foot call, the relevant map cells, and the rest of the landing control flow. The same whole-frame gap affects `stand_wall` and `wall`. All three fields remain unchanged; no new Run field was added.
 
 The whole-frame trial started from a first-fall state one frame before the expected landing, full non-coin map knowledge and one horizontal nibble. The first bounded search had 1,062,638 steps, 169,175 states and 2,433 pending. Admitting paused ends and using a 300,000-state cap gave 2,236,722 steps, 300,001 states and 2,638 pending, with 77 diagnostic failures. This is neither a proof nor a real counterexample. Horizontal arithmetic still loses the column correlation in that abstraction, so a larger search was not retained.
 
