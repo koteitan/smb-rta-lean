@@ -265,12 +265,13 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (`chg.roomSites`)
     - ✅ 1-1-d-2-4-3 Each frame up to the entry starts in the player's routine (from the definition of `a₂`)
   - 🚨 1-1-d-2-5 The 3 bytes at the entry (`chg.entry₂`; from 16). The rest are 3 music bytes that need the timer. The height and the screen's buffer are conditional (`height₂`, `buffer₂`)
-    <details><summary>5 lines of proved parts (the parent's own assumptions remain)</summary>
+    <details><summary>6 lines of proved parts (the parent's own assumptions remain)</summary>
 
     - ✅ 1-1-d-2-5-1 Five music bytes from the room's walk (the music bytes in a table)
     - ✅ 1-1-d-2-5-2 The routine at the entry, from the room's entering frame (out of `entry₂`; new field `dR_pos`)
     - ✅ 1-1-d-2-5-3 The level's number from the vertical pipe's entry (out of `entry₂`; `area₁` a theorem: 1-1-b-3-4-5)
     - ✅ 1-1-d-2-5-4 The height from the entering frame (when it starts with a small player; new field `height₂`)
+      - ✅ 1-1-d-2-5-4-1 A read near the mouth returns no coin, and the map's byte at a head read is in `SiteOK`'s head class (`EntryCollisionNear`; the eight ends at 192 px remain)
     - ✅ 1-1-d-2-5-5 The screen buffer's 5 bytes from the entering frame (when it starts with the control at 0; new field `buffer₂`)
 
     </details>
