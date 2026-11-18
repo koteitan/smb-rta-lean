@@ -204,3 +204,7 @@ TAS の操作できる 3442 フレームでは、`Clean` は 3404 で、モデ�
 .lake/build/bin/smbrta mask-model-check          # maskOK とその部分、約 0.1 秒
 .lake/build/bin/smbrta stored-check              # storedOK とその部分、約 0.4 秒
 ```
+
+## スクロール後の二つの位置変更
+
+[ImpedePosition](../1-1/e-2-10-3-3-ImpedePosition-ja.md) は、当たり判定の押し戻しを、呼び出し元への復帰まで 65 命令以内で証明します。位置の端数とサブ速さは変わらず、明示した位置の余白の条件のもとで、1 ピクセルの変化が分かります。`SurfaceFrames.AfterP.impede_return` は、正の速さからの呼び出し一回に対して既存の位置の関係を証明します。[ScreenClamp](../1-1/e-2-10-3-4-ScreenClamp-ja.md) は、画面端の補正を復帰まで 37 命令以内で証明します。位置は、選んだ現在の画面端から ROM の量を引いた値と合同です。明示した範囲の条件があれば等式になります。フレーム全体の `AfterP` と `CollideS` は残ります。呼び出しとほかの書き込みをつなぎ、現在の画面端とフレーム開始時の位置を結ぶことが必要です。

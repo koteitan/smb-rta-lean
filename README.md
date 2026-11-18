@@ -348,10 +348,12 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
       - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`)
-        <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
+        <details><summary>4 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; `spareV` is a part of `keep.cleanE`)
         - ✅ 1-1-e-2-10-3-2 The subspeed on the other frames (a walk that follows it)
+        - ✅ 1-1-e-2-10-3-3 The position and the return of one collision push (`ImpedePosition`; the link to the whole frame remains)
+        - ✅ 1-1-e-2-10-3-4 The screen edge's clamp and its return (`ScreenClamp`; the relation of the screen's edge to the position at the frame's start remains)
 
         </details>
       - ✅ 1-1-e-2-10-4 A touch after frame 745 (`farLate` gone: the bound from the count of frames, `SurfaceLate`)
@@ -419,6 +421,6 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 0-0-0-3-1 Real frames have the form of `Frame`: `frame_read` (`ReadFrame` remains)
     - ✅ 0-0-0-3-2 `hstep` and `vstep` are the horizontal and vertical parts of one frame (`move_model`, `vert_model`)
     - 🚨 0-0-0-3-3 Only the 5 checked routines write the speed and position: proved in the movement (`before`, `after`, `collide` remain)
-    - 🚨 0-0-0-3-4 Each routine depends only on the checked bytes: proved in the movement, not for `ImpedePlayerMove`
+    - 🚨 0-0-0-3-4 Each routine depends only on the checked bytes: proved in the movement; for `ImpedePlayerMove` from the call to the return (1-1-e-2-10-3-3), the link to the whole frame remains
     - 🚨 0-0-0-3-5 Runs that press Start or Select
     - 🚨 0-0-0-3-6 The emulator is the same as the real machine

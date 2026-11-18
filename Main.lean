@@ -1,4 +1,6 @@
 import Smbrta
+import Theorems.ImpedePosition
+import Theorems.ScreenClamp
 import Config
 import Theorems.FastAccel
 import Theorems.TasFastAccel
@@ -284,6 +286,17 @@ set_option maxHeartbeats 0
 /-- a frame from its start in control: up to a first store to the routine, the mode or the task by its address; from such a store to the frame's end, out of
 control -/
 theorem open_store_check : OpenStore.storeCheck sy ctx = true := by native_decide
+")
+
+/-- The actual position step of a side-collision call. -/
+def genImpedePosition (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/ImpedePosition.lean" ("import Proof.Rom\nimport Theorems.ImpedePosition\nimport Theorems.ScreenClamp\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+/-- The checked pieces cover every side/speed byte, pixel, page, carry and arbitrary stack byte. -/
+theorem impede_position_check : ImpedePosition.check sy ctx = true := by native_decide
+/-- The screen clamp copies the selected edge minus its amount, for either selector. -/
+theorem screen_clamp_check : ScreenClamp.check sy ctx = true := by native_decide
 ")
 
 /-- the private file of `OpenFrames`: the checks of the first frames of 1-1, from those of part e (`pole_numbers`) and small checks on the machine at control and the jump
@@ -17228,6 +17241,20 @@ structure PosAfterCount where
   classes : Std.HashMap (Int × Int × Bool) Nat := {}
   /-- frames where the position's fraction at the end is not that at the scroll handler -/
   frac : Nat := 0
+  calls : Nat := 0
+  callBad : Nat := 0
+  goodBad : Nat := 0
+  callOpen : Nat := 0
+  marginOff : Nat := 0
+  clamps : Nat := 0
+  clampBad : Nat := 0
+  clampOpen : Nat := 0
+  clampRangeOff : Nat := 0
+  clampSelectors : Std.HashMap Nat Nat := {}
+  outsideStores : Std.HashMap (Nat × Nat) Nat := {}
+  deltas : Std.HashMap Int Nat := {}
+  outside : Std.HashMap (Nat × Nat) Nat := {}
+  examples : List String := []
 
 /-- the three bytes of the position -/
 def posAfterBytes (sy : Syms) : List (String × UInt16) :=
@@ -17242,17 +17269,75 @@ def posAfterFrame (sy : Syms) (m : Machine) (pad : UInt8) (c0 : PosAfterCount) :
   let t := m.frame + 1
   let mut arr := false
   let mut q : Option Machine := none
+  let D := ImpedePosition.sites sy m
+  let P := ScreenClamp.places sy m
+  let mut clamp : Option Machine := none
+  let mut clampSteps := 0
+  let mut call : Option Machine := none
+  let mut callSteps := 0
   for _ in [0:40000] do
     if x.frame ≥ t || x.halted then break
     if x.pc == sy.PlayerCtrlRoutine then arr := true
     if arr && q.isNone && x.pc == sy.PlayerSubs then q := some x
+    if q.isSome && x.pc == sy.ImpedePlayerMove && call.isNone then
+      call := some x
+      callSteps := 0
+      c := { c with calls := c.calls + 1 }
+      if !(x.prg == m.prg && x.prgMask == m.prgMask && !x.nmiPending && !x.halted && !x.trk && x.ram.size == 2048 && x.ppuCtrl &&& 0x80 == 0) then
+        c := { c with goodBad := c.goodBad + 1 }
+    if q.isSome && x.pc == P.entry && clamp.isNone then
+      clamp := some x
+      clampSteps := 0
+      c := { c with clamps := c.clamps + 1, clampSelectors := c.clampSelectors.insert x.y.toNat (c.clampSelectors.getD x.y.toNat 0 + 1) }
+      if !(x.prg == m.prg && x.prgMask == m.prgMask && !x.nmiPending && !x.halted && !x.trk && x.ram.size == 2048 && x.ppuCtrl &&& 0x80 == 0) then
+        c := { c with goodBad := c.goodBad + 1 }
+    let inside := call.isSome || clamp.isSome
+    let locs := if q.isSome && !inside then StepWrites.stepLocs x else []
     let before := get x
     let pc := x.pc.toNat
     x := (step.run x).2
+    if let some A := call then
+      callSteps := callSteps + 1
+      if x.pc == ImpedePosition.returnPc A && x.s == A.s + 1 + 1 then
+        let v := peek A sy.Player_X_Speed
+        let side := A.ram.get! D.side
+        let d := ImpedePosition.delta side v
+        c := { c with deltas := c.deltas.insert d (c.deltas.getD d 0 + 1) }
+        let margin := decide (256 ≤ posP sy A ∧ posP sy A + 256 < 0x1000000)
+        if !margin then c := { c with marginOff := c.marginOff + 1 }
+        let ok := callSteps ≤ 65 && peek x sy.Player_X_Speed == (if ImpedePosition.pushes side v then 0 else v) &&
+          peek x sy.SprObject_X_MoveForce == peek A sy.SprObject_X_MoveForce && peek x sy.Player_X_MoveForce == peek A sy.Player_X_MoveForce &&
+          decide ((posP sy x - posP sy A - 256*d) % 0x1000000 = 0) &&
+          (!margin || decide (posP sy x = posP sy A + 256*d)) && (!decide (0 < d) || decide (sbyte v ≤ 0))
+        if !ok then c := { c with callBad := c.callBad + 1, examples := if c.examples.length < 6 then s!"side {side}, v {sbyte v}, shift {posP sy x-posP sy A}, steps {callSteps}" :: c.examples else c.examples }
+        call := none
+      else if callSteps > 65 then
+        c := { c with callBad := c.callBad + 1, examples := if c.examples.length < 6 then "call exceeded65 instructions" :: c.examples else c.examples }
+        call := none
+    if let some A := clamp then
+      clampSteps := clampSteps + 1
+      if x.pc == ImpedePosition.returnPc A && x.s == A.s + 1 + 1 then
+        let t := ScreenClamp.target (FrameModel.Rom.of m) P A A.y
+        let range := decide (0 ≤ t ∧ t < 0x1000000)
+        if !range then c := { c with clampRangeOff := c.clampRangeOff + 1 }
+        let ok := clampSteps ≤ 37 && (A.y == 0 || A.y == 1) &&
+          peek x sy.SprObject_X_MoveForce == peek A sy.SprObject_X_MoveForce &&
+          decide ((posP sy x-t) % 0x1000000 = 0) && (!range || decide (posP sy x=t))
+        if !ok then c := { c with clampBad := c.clampBad + 1, examples := if c.examples.length < 6 then s!"clamp selector {A.y}, target {t}, actual {posP sy x}, steps {clampSteps}" :: c.examples else c.examples }
+        clamp := none
+      else if clampSteps > 37 then
+        c := { c with clampBad := c.clampBad + 1, examples := if c.examples.length < 6 then "clamp exceeded37 instructions" :: c.examples else c.examples }
+        clamp := none
     if q.isSome then
       let after := get x
       for k in [0:idx.length] do
-        if before[k]! != after[k]! then c := { c with writes := c.writes.insert (pc, k) (c.writes.getD (pc, k) 0 + 1) }
+        if locs.contains idx[k]! then c := { c with outsideStores := c.outsideStores.insert (pc,k) (c.outsideStores.getD (pc,k) 0 + 1) }
+      for k in [0:idx.length] do
+        if before[k]! != after[k]! then
+          c := { c with writes := c.writes.insert (pc, k) (c.writes.getD (pc, k) 0 + 1) }
+          if !inside then c := { c with outside := c.outside.insert (pc,k) (c.outside.getD (pc,k) 0 + 1) }
+  if call.isSome then c := { c with callOpen := c.callOpen + 1 }
+  if clamp.isSome then c := { c with clampOpen := c.clampOpen + 1 }
   match q with
   | some Q =>
     let vq := SurfaceFrames.vOf sy Q
@@ -17278,7 +17363,9 @@ def PosAfterCount.str (sy : Syms) (c : PosAfterCount) : String :=
   let names := (posAfterBytes sy).map (·.1)
   let ws := (c.writes.toList.mergeSort (fun a b => a.1.1 ≤ b.1.1)).map fun ((pc, k), n) => s!"{pc}:{names.getD k "?"}×{n}"
   let cs := (c.classes.toList.mergeSort (fun a b => a.2 ≥ b.2)).map fun ((sg, d, kept), n) => s!"(v sign {sg}, P(b) − P(Q) {d}, speed kept {kept})×{n}"
-  s!"frames {c.frames}; the fraction changed {c.frac}\n  changes after the scroll handler: {ws}\n  frames: {cs}"
+  let outside := (c.outside.toList.mergeSort (fun a b => a.1.1 ≤ b.1.1)).map fun ((pc,k),n) => s!"{pc}:{names.getD k "?"}×{n}"
+  let stores := (c.outsideStores.toList.mergeSort (fun a b => a.1.1 ≤ b.1.1)).map fun ((pc,k),n) => s!"{pc}:{names.getD k "?"}×{n}"
+  s!"frames {c.frames}; the fraction changed {c.frac}\n  changes after the scroll handler: {ws}\n  frames: {cs}\n  Impede calls {c.calls}, bad {c.callBad}, Good failures {c.goodBad}, unfinished {c.callOpen}, margin off {c.marginOff}, deltas {c.deltas.toList}, examples {c.examples.reverse}\n  writes outside summarized calls: {outside}\n  clamp calls {c.clamps}, bad {c.clampBad}, unfinished {c.clampOpen}, target range off {c.clampRangeOff}, selectors {c.clampSelectors.toList}\n  stores outside summarized calls (including unchanged bytes): {stores}"
 
 /-- **The position after the scroll handler on real frames above ground**: the movie from 852 for 300 frames, `n` random runs from control (from the movie's machine and
 from the machine of the private proof), runs into the screen's left edge, runs from the movie's frames 1002 to 1091, with Select: which instructions change the three
@@ -17286,6 +17373,14 @@ bytes of the position after the scroll handler, and how far the position at the 
 def posAfterRealProg (sy : Syms) (romPath fm2 : String) (n : Nat) : IO UInt32 := do
   let cart ← loadCart romPath
   let m0 := smb11Start sy cart
+  let ct ← IO.monoMsNow
+  let ck ← IO.lazyPure fun _ => ImpedePosition.check sy m0
+  IO.println s!"ImpedePosition.check {ck}, {(← IO.monoMsNow)-ct} ms"
+  if !ck then return 1
+  let st ← IO.monoMsNow
+  let sc ← IO.lazyPure fun _ => ScreenClamp.check sy m0
+  IO.println s!"ScreenClamp.check {sc}, {(← IO.monoMsNow)-st} ms"
+  if !sc then return 1
   let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2)) fceuxSkip
   let ctlOwn := SurfaceRun.above m0 982
   let mut m := powerOn cart 0
@@ -17327,7 +17422,7 @@ def posAfterRealProg (sy : Syms) (romPath fm2 : String) (n : Nat) : IO UInt32 :=
   for sd in [1:n / 2 + 1] do
     sl := posAfterRun sy ctlOwn (framesInputs (sd.toUInt64 + 99) 120 10 0) sl
   IO.println s!"with Select: {sl.str sy}"
-  return 0
+  return if t.callBad+r.callBad+e.callBad+l.callBad+sl.callBad+t.goodBad+r.goodBad+e.goodBad+l.goodBad+sl.goodBad+t.callOpen+r.callOpen+e.callOpen+l.callOpen+sl.callOpen+t.clampBad+r.clampBad+e.clampBad+l.clampBad+sl.clampBad+t.clampOpen+r.clampOpen+e.clampOpen+l.clampOpen+sl.clampOpen == 0 then 0 else 1
 
 def usage : String := "usage: smbrta [--config FILE] [--poke NAME=VALUE]... COMMAND
   (--poke changes a RAM byte, named as in tools/smb-symbols.txt, in the 1-1 start)
@@ -17965,8 +18060,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!

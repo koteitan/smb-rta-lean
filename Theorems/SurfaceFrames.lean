@@ -10,6 +10,7 @@ import Theorems.CollideKeep
 import Theorems.VertKeep
 import Theorems.FaceKeep
 import Theorems.SurfaceRead
+import Theorems.ImpedePosition
 
 /-!
 # Above ground: the frames from control, one by one
@@ -603,6 +604,25 @@ give `After.coll` (`After.of`). This was `AfterR`, which asked the facing and th
 structure AfterP (sy : Syms) (a Q b : Machine) : Prop where
   keep : 0 < vOf sy Q → peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed → posP sy b = posP sy Q
   stop : 0 < vOf sy Q → peek b sy.Player_X_Speed = 0 → posP sy b ≤ posP sy Q - 256 ∨ posP sy b ≤ posP sy a + 256
+
+/-- A single ImpedePlayerMove call satisfies the local `AfterP` relation.
+This does not identify the call entry with the scroll-handler machine or prove
+that the rest of a frame preserves position. -/
+theorem AfterP.impede_return {a R : Machine}
+    (hc : ImpedePosition.check sy m0 = true)
+    (hg : FrameModel.Good (FrameModel.Rom.of m0) R) (hpc : R.pc = sy.ImpedePlayerMove)
+    (hl : 256 ≤ posP sy R) (hr : posP sy R + 256 < 0x1000000) :
+    ∃ k, k ≤ 65 ∧ (FrameModel.stepN k R).pc = ImpedePosition.returnPc R ∧
+      (FrameModel.stepN k R).s = R.s + 1 + 1 ∧ AfterP sy a R (FrameModel.stepN k R) := by
+  obtain ⟨k,hk,_,pc,sp,vel,_,_,hm,_⟩ := ImpedePosition.routine_return hc hg hpc
+  have ep := ImpedePosition.exact_of_mod hl hr hm
+  refine ⟨k,hk,pc,sp,?_⟩
+  constructor
+  · intro hv same
+    exact (ImpedePosition.positive_effect hv vel ep).1 same
+  · intro hv zero
+    have hp := (ImpedePosition.positive_effect hv vel ep).2 zero
+    exact Or.inl (by omega)
 
 /-- **`After` from `AfterP`, `CollideE`, the facing and the collision bits**, at a machine `Q` at the scroll handler that the move put at `P(a) + 16·v(Q)`. `hfd` is
 what `FaceKeep.keepZ_end` proves of the facing, `hbits` what `FaceKeep.bits_end` proves of the collision bits. -/
