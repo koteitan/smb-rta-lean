@@ -835,4 +835,40 @@ theorem returned_map {E : Rom} {B : ScreenPage.Places} {P : Places} {R T Q M : M
     Q.a = M.ram.get! (I (readAddress E B P R)) :=
   ret.a.trans (solid _ hl hr nc)
 
+/-- On a frame whose non-coin map bytes are kept, an actual player call
+returns the map byte at its computed read. The exported RoomBlocks prefix
+provides the Solid premise without a new Run field. -/
+theorem frame_returned_map {sy : Syms} {nm : PipeTransitionAll.Names} {m0 M : Machine} {i : UInt8} {n : Nat}
+    (hc : check sy nm m0 = true)
+    (g : Good (Rom.of m0) (PipeEntryRule.trace M i n))
+    (pc : (PipeEntryRule.trace M i n).pc = sy.BlockBufferCollision)
+    (x : (PipeEntryRule.trace M i n).x = 0)
+    (hf : (PipeEntryRule.trace M i n).frame = M.frame)
+    (loop : idleAt (Rom.of m0) (ScreenPage.placesR sy nm m0).idle = true)
+    (time : ∀ j, (PipeEntryRule.trace M i j).pc ≠ (ScreenPage.placesR sy nm m0).idle →
+      (PipeEntryRule.trace M i j).fdot ≤ dotsPerFrame-64)
+    (solid : ∀ j, (PipeEntryRule.trace M i j).frame = M.frame →
+      RoomBlocks.SolidR sy nm m0 (PipeEntryRule.trace M i j))
+    (hl : (ScreenPage.placesR sy nm m0).bufLo ≤ I (readAddress (Rom.of m0)
+      (ScreenPage.placesR sy nm m0) (places sy m0) (PipeEntryRule.trace M i n)))
+    (hr : I (readAddress (Rom.of m0) (ScreenPage.placesR sy nm m0) (places sy m0)
+      (PipeEntryRule.trace M i n)) < (ScreenPage.placesR sy nm m0).bufLo+(ScreenPage.placesR sy nm m0).bufN)
+    (nc : (RoomMap.mapRef m0).ram.get! (I (readAddress (Rom.of m0) (ScreenPage.placesR sy nm m0)
+      (places sy m0) (PipeEntryRule.trace M i n))) ∉ RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) :
+    ∃ nr nt, nr ≤ 93 ∧ nt ≤ 25 ∧
+      (PipeEntryRule.trace M i (n+nr+nt)).pc = returnPc (PipeEntryRule.trace M i n) ∧
+      (PipeEntryRule.trace M i (n+nr+nt)).a = (RoomMap.mapRef m0).ram.get! (I (readAddress
+        (Rom.of m0) (ScreenPage.placesR sy nm m0) (places sy m0) (PipeEntryRule.trace M i n))) ∧
+      (PipeEntryRule.trace M i (n+nr+nt)).frame = M.frame := by
+  obtain ⟨nr,nt,hnr,hnt,_,ret,ifr⟩ := routine hc g pc x
+  have er := trace_inFrame loop hf ifr time nr (by omega)
+  have ee := trace_inFrame loop hf ifr time (nr+nt) (Nat.le_refl _)
+  have ss := solid (n+nr) er.2
+  rw [er.1] at ss
+  have tile := returned_map ret ss hl hr nc
+  refine ⟨nr,nt,hnr,hnt,?_,?_,?_⟩
+  · rw [Nat.add_assoc,ee.1]; exact ret.pc
+  · rw [Nat.add_assoc,ee.1]; exact tile
+  · simpa only [Nat.add_assoc] using ee.2
+
 end Smbrta.RoomCollision

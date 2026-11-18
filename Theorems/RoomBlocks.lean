@@ -755,6 +755,320 @@ theorem blocks_frame {P : Places} {cs : List UInt8} {z : UInt8} {o t : Nat} {M r
   rw [hJ3]
   exact hB3.1
 
+
+set_option maxHeartbeats 2000000 in
+/-- The existing non-coin map invariant at every instruction still in this frame.
+All hypotheses are identical to blocks_frame; no new frame condition is added. -/
+theorem blocks_trace {P : Places} {cs : List UInt8} {z : UInt8} {o t : Nat} {M r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat}
+    (h : OKV (phK E P cs z o t) E P r K C Fu) (hc : codeOK E P z o t = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m)
+    (hk : ∀ j, SiteOK P (trace m i j)) (h0 : Solid P cs M m) : ∀ j, (trace m i j).frame = m.frame → Solid P cs M (trace m i j) := by
+  obtain ⟨S, hw, hs, s1, s2, s3⟩ := RoomVert.start_of_room h hm
+  have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
+  have hOE : PlacesOK E P := h.places
+  have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
+  simp only [codeOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, List.all_eq_true, bne_iff_ne, ne_eq] at hc
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨c1, c2⟩, c3⟩, c4⟩, c5⟩, c6⟩, c7⟩, c8⟩, c9⟩, c10⟩, c11⟩, c12⟩, c13⟩, c14⟩, c15⟩, c16⟩, c17⟩, c18⟩, c19⟩, c20⟩, c21⟩, c22⟩, c24⟩, cot⟩, cob⟩, c23⟩ := hc
+  let Φ : Nat → Bool → List Nat → Prop := fun j _ l =>
+    Solid P cs M (trace m i j) ∧
+    (l.head? = some 3 → (trace m i j).ram.get! o = (trace m i j).a) ∧
+    (l.head? = some 6 → (trace m i j).y = (trace m i j).ram.get! o) ∧
+    (l.head? = some 4 → InB P (trace m i j) z o → (trace m i j).a = (trace m i j).ram.get! (idx (trace m i j) z o)) ∧
+    (l.head? = some 5 → InB P (trace m i j) z o → (trace m i j).ram.get! (idx (trace m i j) z o) = (trace m i j).ram.get! t) ∧
+    (l.head? = some 9 → Coin P cs z o t (trace m i j)) ∧
+    (l.head? = some 7 → Coin P cs z o t (trace m i j) ∧ (trace m i j).y = (trace m i j).ram.get! o) ∧
+    (l.head? = some 10 → Coin P cs z o t (trace m i j) ∧ (trace m i j).y = (trace m i j).ram.get! o)
+  have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phK E P cs z o t).zone A', Sim C.E (m.frame, 2) A₁ x := by
+    intro A' x hr hsx
+    obtain ⟨l, hl⟩ := zoneK_eq (E := E) P cs z o t A'
+    refine ⟨{ A' with log := l }, ?_, sim_bits hsx hr _ _⟩
+    show _ ∈ zoneK E P cs z o t A'
+    rw [hl]
+    exact List.mem_singleton.2 rfl
+  have hstep : ∀ j (A' A₁ : AS), Φ j A'.spent A'.log → Sim C.E (m.frame, 2) A' (trace m i j) → (trace m i j).frame = m.frame → A'.rk = false →
+      A₁ ∈ (phK E P cs z o t).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phK E P cs z o t).ok A₁ = true → Φ (j + 1) A₁.spent A₁.log := by
+    intro j A' A₁ ⟨p0, p3, p6, p4, p5, p9, p7, p10⟩ hs' hf hr hA₁ hs₁ hok
+    have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
+    have hsE : Sim E (m.frame, 2) A' (trace m i j) := by rw [← h.env]; exact hs'
+    have hnext : trace m i (j + 1) = (go step (trace m i j)).2 := RoomVert.trace_succ hf hs'.halted
+    have hhalt := hsE.halted
+    have hprg := hsE.prg
+    have hmask := hsE.mask
+    have hpcx := hsE.pc
+    have hnmx := hsE.nmi
+    have hsz := hsE.size
+    -- what the walk asks of the piece
+    have hok' : okK E P z o t A₁ = true := hok
+    simp only [okK, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true', bne_iff_ne, ne_eq, beq_iff_eq] at hok'
+    obtain ⟨⟨⟨o1, o5⟩, o9⟩, o8⟩ := hok'
+    have notErase : A₁.log ≠ [8] → ¬(A₁.pc = P.erase ∧ A₁.nmi = false) := by
+      intro h8 hc
+      rcases o8 with (o | o) | o
+      · rw [hc.2] at o
+        cases o
+      · exact o hc.1
+      · exact h8 o
+    have keepB : A₁.log ≠ [8] → ∀ d ∈ bufL P, (trace m i (j + 1)).ram.get! d = (trace m i j).ram.get! d := by
+      intro h8 d hd
+      rw [hnext]
+      exact keep_of_mayB hs₂ (notErase h8) o1 d hd
+    have solid_keep : A₁.log ≠ [8] → Solid P cs M (trace m i (j + 1)) := by
+      intro h8 d hd1 hd2 hd3
+      rw [keepB h8 d (mem_bufL hd1 hd2)]
+      exact p0 d hd1 hd2 hd3
+    have keepA : A₁.log.head? = some 9 → ∀ d ∈ adrL z o t, (trace m i (j + 1)).ram.get! d = (trace m i j).ram.get! d := by
+      intro h9 d hd
+      rw [hnext]
+      refine keep_of_mayB hs₂ (notErase (fun e => by rw [e] at h9; cases h9)) ?_ d hd
+      rcases o9 with o | o
+      · exact absurd h9 o
+      · exact o
+    -- the instruction at the machine's place
+    have opAt : ∀ (q : UInt16) (v : UInt8), A'.pc = q → E.prg.get! (q &&& E.mask).toNat = v →
+        (trace m i j).prg.get! ((trace m i j).pc &&& (trace m i j).prgMask).toNat = v := by
+      intro q v e1 e2
+      rw [hprg, hmask, hpcx, e1]
+      exact e2
+    have opdAt : ∀ (q : UInt16) (v : UInt8), A'.pc = q → E.prg.get! ((q + 1) &&& E.mask).toNat = v → operand (trace m i j) = v := by
+      intro q v e1 e2
+      unfold operand
+      rw [hprg, hmask, hpcx, e1]
+      exact e2
+    have opdI : ∀ (q : UInt16) (v : Nat), A'.pc = q → zI (E.prg.get! ((q + 1) &&& E.mask).toNat) = v →
+        ((operand (trace m i j)).toUInt16 &&& 0x7FF).toNat = v := by
+      intro q v e1 e2
+      rw [opdAt q _ e1 rfl]
+      exact e2
+    have hA := hA₁
+    change A₁ ∈ zoneK E P cs z o t A' at hA
+    unfold zoneK at hA
+    by_cases hc : (A'.pc == P.read - 3 && !A'.nmi) = true
+    · -- the store of the offset
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [3] := by rw [e]
+      rw [hlog]
+      have hn : (trace m i j).nmiPending = false := by rw [hnmx]; exact hc.2
+      have hp0 : (trace m i j).pc ≥ 0x8000 := by rw [hpcx, hc.1]; exact c11
+      have hp1 : (trace m i j).pc + 1 ≥ 0x8000 := by rw [hpcx, hc.1]; exact c12
+      have a1 := step_sta_zp hn hhalt hp0 hp1 (opAt _ _ hc.1 c1) hsz
+      have a2 := step_sta_zp_a hn hhalt hp0 hp1 (opAt _ _ hc.1 c1)
+      rw [opdI _ _ hc.1 c2] at a1
+      refine ⟨solid_keep (by rw [hlog]; decide), fun _ => ?_, fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+      rw [hnext, a1, a2]
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.read - 1 && !A'.nmi && A'.log.head? == some 3) = true
+    · -- the copy of the offset to Y
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [6] := by rw [e]
+      rw [hlog]
+      have hn : (trace m i j).nmiPending = false := by rw [hnmx]; exact hnm
+      have hp0 : (trace m i j).pc ≥ 0x8000 := by rw [hpcx, hq]; exact c13
+      obtain ⟨a1, a2⟩ := step_tay hn hhalt hp0 (opAt _ _ hq c3)
+      refine ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun _ => ?_, fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+      rw [hnext, a1, a2]
+      exact (p3 hl).symm
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.read && !A'.nmi && A'.log.head? == some 6) = true
+    · -- the read
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [4] := by rw [e]
+      rw [hlog]
+      have hn : (trace m i j).nmiPending = false := by rw [hnmx]; exact hnm
+      have hp0 : (trace m i j).pc ≥ 0x8000 := by rw [hpcx, hq]; exact hOE.read.1
+      have hp1 : (trace m i j).pc + 1 ≥ 0x8000 := by rw [hpcx, hq]; exact c14
+      obtain ⟨a1, a2⟩ := step_lda_izy hn hhalt hp0 (opAt _ _ hq hOE.read.2)
+      have hy := p6 hl
+      have hra : readAddr (trace m i j) = adr (trace m i j) z o := by
+        rw [readAddr_eq hp1, opdAt _ _ hq c4, hy]
+        rfl
+      refine ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun _ hin => ?_, fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+      have ea : adr (trace m i (j + 1)) z o = adr (trace m i j) z o := adr_ram (by rw [hnext, a2])
+      have hlt : adr (trace m i j) z o < 0x2000 := by rw [← ea]; exact hin.1
+      have ei : idx (trace m i (j + 1)) z o = idx (trace m i j) z o := by unfold idx; rw [ea]
+      rw [ei, hnext, a1, a2, readVal_eq (by rw [hra]; exact hlt), hra]
+      rfl
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.read + 2 && !A'.nmi && A'.log.head? == some 4) = true
+    · -- the store of the tile read
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [5] := by rw [e]
+      have hk3 : StepWrites.keepOK E (fun i => i != t) A₁ = true := by
+        rcases o5 with o | o
+        · rw [hlog] at o
+          exact absurd rfl o
+        · exact o
+      rw [hlog]
+      have hn : (trace m i j).nmiPending = false := by rw [hnmx]; exact hnm
+      have hp0 : (trace m i j).pc ≥ 0x8000 := by rw [hpcx, hq]; exact c15
+      have hp1 : (trace m i j).pc + 1 ≥ 0x8000 := by rw [hpcx, hq]; exact c16
+      have a1 := step_sta_zp hn hhalt hp0 hp1 (opAt _ _ hq c6) hsz
+      rw [opdI _ _ hq c7] at a1
+      have keep3 : ∀ d, d ≠ t → (trace m i (j + 1)).ram.get! d = (trace m i j).ram.get! d := by
+        intro d hd
+        rw [hnext]
+        exact StepWrites.keep_step hs₂ hk3 d (by simpa using hd)
+      have ea : adr (trace m i (j + 1)) z o = adr (trace m i j) z o :=
+        adr_congr (keep3 o cot) (fun q hq' => keep3 q (c24 q hq').1.2)
+      have ei : idx (trace m i (j + 1)) z o = idx (trace m i j) z o := by unfold idx; rw [ea]
+      refine ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun _ hin => ?_,
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+      have hin' : InB P (trace m i j) z o := by
+        unfold InB idx at hin ⊢
+        rw [ea] at hin
+        exact hin
+      have h3 : idx (trace m i j) z o ≠ t := by have := hin'.2.1; omega
+      rw [ei, keep3 _ h3, ← p4 hl hin', hnext, a1]
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.read + 4 && !A'.nmi && A'.log.head? == some 5) = true
+    · -- after the store of the tile read: a coin, or the mark is dropped
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = if cs.any (knIs (A'.getK t)) then [9] else [] := by rw [e]
+      by_cases hcoin : cs.any (knIs (A'.getK t)) = true
+      · rw [if_pos hcoin] at hlog
+        have h9 : A₁.log.head? = some 9 := by rw [hlog]; rfl
+        have h8 : A₁.log ≠ [8] := by rw [hlog]; decide
+        rw [hlog]
+        refine ⟨solid_keep h8, fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+          fun _ => ?_, fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+        obtain ⟨c, hcm, hck⟩ := List.any_eq_true.1 hcoin
+        have h3 : (trace m i j).ram.get! t = c := knIs_spec hck (hsE.ram t (by omega))
+        exact coin_keep (keepA h9) (keepB h8) (by rw [h3]; exact hcm) (p5 hl)
+      · rw [if_neg hcoin] at hlog
+        rw [hlog]
+        exact ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+          fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.erase - 4 && !A'.nmi && A'.log.head? == some 9) = true
+    · -- the load of the offset into Y, before the erase
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [7] := by rw [e]
+      rw [hlog]
+      have hn : (trace m i j).nmiPending = false := by rw [hnmx]; exact hnm
+      have hp0 : (trace m i j).pc ≥ 0x8000 := by rw [hpcx, hq]; exact c17
+      have hp1 : (trace m i j).pc + 1 ≥ 0x8000 := by rw [hpcx, hq]; exact c18
+      obtain ⟨a1, a2⟩ := step_ldy_zp hn hhalt hp0 hp1 (opAt _ _ hq c8)
+      rw [opdI _ _ hq c9] at a1
+      refine ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun _ => ⟨coin_ram (by rw [hnext, a2]) (p9 hl), ?_⟩, fun h => absurd h (by decide)⟩
+      rw [hnext, a1, a2]
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.erase - 2 && !A'.nmi && A'.log.head? == some 7) = true
+    · -- the load of the empty tile
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [10] := by rw [e]
+      rw [hlog]
+      have hn : (trace m i j).nmiPending = false := by rw [hnmx]; exact hnm
+      have hp0 : (trace m i j).pc ≥ 0x8000 := by rw [hpcx, hq]; exact c19
+      have hp1 : (trace m i j).pc + 1 ≥ 0x8000 := by rw [hpcx, hq]; exact c20
+      obtain ⟨a1, a2⟩ := step_lda_imm hn hhalt hp0 hp1 (opAt _ _ hq c10)
+      obtain ⟨g1, g2⟩ := p7 hl
+      refine ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun _ => ⟨coin_ram (by rw [hnext, a2]) g1, ?_⟩⟩
+      rw [hnext, a1, a2]
+      exact g2
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hc : (A'.pc == P.erase && !A'.nmi && A'.log.head? == some 10) = true
+    · -- the erase: the byte that it writes holds a coin
+      rw [if_pos hc] at hA
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      obtain ⟨⟨hq, hnm⟩, hl⟩ := hc
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [8] := by rw [e]
+      have hpc1 : A₁.pc = P.erase := by rw [e]; exact hq
+      have hnm1 : A₁.nmi = false := by rw [e]; exact hnm
+      rw [hlog]
+      obtain ⟨⟨g1, g2⟩, g3⟩ := p10 hl
+      have hpe : (trace m i j).pc = P.erase := by rw [hpcx]; exact hq
+      have hp1 : (trace m i j).pc + 1 ≥ 0x8000 := by rw [hpe]; exact c21
+      obtain ⟨w1, w2, w3⟩ := (hk j).erase hpe
+      have hwa : writeAddr (trace m i j) = adr (trace m i j) z o := by
+        rw [writeAddr_eq hp1, opdAt _ _ hq c5, g3]
+        rfl
+      have hin : InB P (trace m i j) z o := by
+        unfold InB idx
+        rw [← hwa]
+        exact ⟨w1, w2, w3⟩
+      have hcoin : (trace m i j).ram.get! (idx (trace m i j) z o) ∈ cs := by rw [g2 hin]; exact g1
+      refine ⟨fun d hd1 hd2 hd3 => ?_, fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+      by_cases hd : d = idx (trace m i j) z o
+      · exfalso
+        apply hd3
+        rw [← p0 d hd1 hd2 hd3, hd]
+        exact hcoin
+      · rw [hnext, erase_other hOE hs₂ hnm1 hpc1 (hk j) (by rw [hwa]; exact hd)]
+        exact p0 d hd1 hd2 hd3
+    rw [if_neg hc] at hA
+    clear hc
+    by_cases hone : oneStep A'.log = true
+    · -- a mark for one step out of its place
+      rw [if_pos hone] at hA
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [] := by rw [e]
+      rw [hlog]
+      exact ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+    rw [if_neg hone] at hA
+    by_cases hc : (A'.log.head? == some 9 && mayWrite E P (adrL z o t) A') = true
+    · -- a step that may write the bytes of the address
+      rw [if_pos hc] at hA
+      have e := List.mem_singleton.1 hA
+      have hlog : A₁.log = [] := by rw [e]
+      rw [hlog]
+      exact ⟨solid_keep (by rw [hlog]; decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide),
+        fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+    rw [if_neg hc] at hA
+    clear hc
+    -- the state stays
+    have e := List.mem_singleton.1 hA
+    have hlog : A₁.log = A'.log := by rw [e]
+    simp only [oneStep, Bool.or_eq_true, beq_iff_eq, not_or] at hone
+    obtain ⟨⟨⟨⟨⟨⟨n3, n6⟩, n4⟩, n5⟩, n7⟩, n10⟩, n8⟩ := hone
+    have h8 : A₁.log ≠ [8] := by rw [hlog]; exact n8
+    rw [hlog]
+    refine ⟨solid_keep h8, fun h => absurd h n3, fun h => absurd h n6, fun h => absurd h n4, fun h => absurd h n5, fun h9 => ?_,
+      fun h => absurd h n7, fun h => absurd h n10⟩
+    have h9' : A₁.log.head? = some 9 := by rw [hlog]; exact h9
+    obtain ⟨g1, g2⟩ := p9 h9
+    exact coin_keep (keepA h9') (keepB h8) g1 g2
+
+  have h0' : Φ 0 S.spent S.log := by
+    refine ⟨fun d a b c => h0 d a b c, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> rw [s2] <;> exact fun h => absurd h (by decide)
+  obtain ⟨hall, _⟩ := RoomVert.frame_of_walkV (Z := phK E P cs z o t) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide)
+    (by rw [h.env]; exact h.pad) hz hw hs hk' h0' hstep
+  intro j hj
+  obtain ⟨_,_,_,hPhi⟩ := hall j hj
+  exact hPhi.1
+
 end
 
 section
@@ -889,6 +1203,22 @@ theorem blocks_run (hW : BChecks sy nmS m0) (hR : rowsCheckR sy nm d nmS m0 v0 =
   intro n h1 h2
   obtain ⟨k, rfl⟩ : ∃ k, n = b + k := ⟨n - b, by omega⟩
   exact key k h2
+
+
+/-- The same room-run assumptions give Solid at every instruction inside each room frame. -/
+theorem blocks_run_trace (hW : BChecks sy nmS m0) (hR : rowsCheckR sy nm d nmS m0 v0 = true) (hF : RoomMap.MapFacts sy nmS m0)
+    (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true)
+    {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat}
+    (hin : InRowsT sy nm d (PipeTransition.entry m0) (seq b)) (hctl : controllable sy (seq b) = true)
+    (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
+    (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
+    ∀ n, b ≤ n → n < a → ∀ j, (trace (seq n) (inp n) j).frame = (seq n).frame →
+      SolidR sy nmS m0 (trace (seq n) (inp n) j) := by
+  have hcnd := RoomMap.cond_of_rows hF hc next hin hctl sites stay
+  have hs := blocks_run hW hR hF hc next hin hctl sites stay
+  intro n hn ha
+  exact blocks_trace (RoomVert.okV_of_check hW.walk) hW.code (hcnd n hn ha)
+    (sites n hn ha) (hs n hn (Nat.le_of_lt ha))
 
 end
 

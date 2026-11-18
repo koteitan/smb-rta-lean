@@ -80,3 +80,7 @@ The map: 113 bytes are not empty and not a coin, 19 are coins. The floor's two r
 ```
 .lake/build/bin/smbrta room-floor-check FM2 [N]    # the map, the checks (about 40 s with the rows) and real frames: N runs of each of 5 kinds (N = 60: about 50 s)
 ```
+
+## The map at instruction cuts
+
+`blocks_trace` and `blocks_run_trace` give `Solid` at each instruction inside the frame, from the same assumptions. [Map bytes at the actual read](c-7-12-2-RoomCollisionMap.md) gives the Run corollaries and the returned-tile connection. No field was added.

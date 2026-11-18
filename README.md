@@ -221,7 +221,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-c-7-5-5 Frames that start standing (`vfall_stand`, `air_in` gone; `fall_stand` → `fall_jump`; new field `read_stop`)
       - ✅ 1-1-c-7-5-6 A jump from a stand during the fall (`fall_jump` gone: from `stand_wall` and `wall`)
       - ✅ 1-1-c-7-5-7 The block buffer's column pointer (`RoomAddress`)
-      - ✅ 1-1-c-7-5-8 The tile read and the return from the entry position (`RoomCollision`; the link to the position after the move and to `Solid` at the read remains)
+      - ✅ 1-1-c-7-5-8 The tile read and the return from the entry position (`RoomCollision`; the map at the read: 1-1-c-7-12-2; the link to the position after the move remains)
 
       </details>
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
@@ -236,9 +236,10 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
 
       </details>
     - 🚨 1-1-c-7-12 The block map: the bits that are 0 in the map are 0 on every frame (proved, `RoomMap`); the numbers of the other fields are assumed
-      <details><summary>1 lines of proved parts (the parent's own assumptions remain)</summary>
+      <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-12-1 The bytes that are not coins in the map keep the map's value (`RoomBlocks`)
+      - ✅ 1-1-c-7-12-2 The map's bytes stay at every instruction, and a real collision call returns them (`RoomCollisionMap`)
 
       </details>
     - 🚨 1-1-c-7-13 Standing during the fall (`facing`, `stand_fast`, `stand_P`)

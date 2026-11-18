@@ -211,7 +211,7 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
     - ✅ 1-1-c-7-2 最初の操作の状態（`start`、`startP0`、`startP1`、`v_start`、`ab_start`）: 切り替えの段から
     - ✅ 1-1-c-7-3 本物のフレームで入る: 横の判定の 1 回の通過
     - 🚨 1-1-c-7-4 左の壁の当たり方（`wall`、`late`、`stop_run`）
-    - 🚨 🤖 1-1-c-7-5 落下と足の高さ（`stand_wall`、`land_at`、`vfloor`、`low_at`、`read_stop`）
+    - 🚨 1-1-c-7-5 落下と足の高さ（`stand_wall`、`land_at`、`vfloor`、`low_at`、`read_stop`）
       <details><summary>証明済みの部分 8 行（親の仮定は残る）</summary>
 
       - ✅ 1-1-c-7-5-1 ジャンプの最初の 8 フレームは `vstep` のとおり（`vframes` の空中の部分。部屋のフレームの歩き 2 つ）
@@ -221,7 +221,7 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
       - ✅ 1-1-c-7-5-5 立って始まるフレーム（`vfall_stand`、`air_in` をなくした。`fall_stand` を `fall_jump` に。新しいフィールド `read_stop`）
       - ✅ 1-1-c-7-5-6 立ってから跳ぶフレーム（`fall_jump` をなくした。`stand_wall` と `wall` から）
       - ✅ 1-1-c-7-5-7 ブロックバッファの列のポインタ（`RoomAddress`）
-      - ✅ 1-1-c-7-5-8 入口の位置からタイルの読みと復帰（`RoomCollision`。移動のあとの位置と、読みの状態の `Solid` へのつながりは残る）
+      - ✅ 1-1-c-7-5-8 入口の位置からタイルの読みと復帰（`RoomCollision`。読みの状態の地図は 1-1-c-7-12-2。移動のあとの位置へのつながりは残る）
 
       </details>
     - 🚨 1-1-c-7-6 覚えている速さ: モデルに従うフレームは証明、`C + 37` より前のほかのフレームは仮定（`ab_early`）
@@ -236,9 +236,10 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
 
       </details>
     - 🚨 1-1-c-7-12 ブロックの地図: 地図で 0 のビットはどのフレームでも 0（証明、`RoomMap`）。ほかのフィールドの数は仮定
-      <details><summary>証明済みの部分 1 行（親の仮定は残る）</summary>
+      <details><summary>証明済みの部分 2 行（親の仮定は残る）</summary>
 
       - ✅ 1-1-c-7-12-1 地図でコインでないバイトは地図の値のまま（`RoomBlocks`）
+      - ✅ 1-1-c-7-12-2 各命令で地図の値が保たれ、実際の当たり判定の呼び出しはその値を返す（`RoomCollisionMap`）
 
       </details>
     - 🚨 1-1-c-7-13 落下中に立つ（`facing`、`stand_fast`、`stand_P`）

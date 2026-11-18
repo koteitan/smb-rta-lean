@@ -80,3 +80,7 @@ room_blocks_run（非公開）  :  この ROM の確かめでの Run.roomBlocks�
 ```
 .lake/build/bin/smbrta room-floor-check FM2 [N]    # 地図、確かめ（段を入れて約 40 秒）、本物のフレーム: 5 種類を N 本ずつ（N = 60 で約 50 秒）
 ```
+
+## 命令ごとの地図の値
+
+`blocks_trace` と `blocks_run_trace` は、同じ前提から、各フレーム内の命令ごとに `Solid` を与えます。[実際の読みでの地図の値](c-7-12-2-RoomCollisionMap-ja.md)で、Run の補題と返るタイルまでの接続を述べます。新しいフィールドはありません。

@@ -28,7 +28,7 @@ The proof reaches T within 93 instructions and Q within another 25. It proves:
 
 `returned_map` combines the result with `RoomBlocks.Solid` at T. The computed address must be in the block buffers and its reference byte must not be a coin. Then Q returns that map byte. An arbitrary entry height need not address the map, so buffer membership is explicit.
 
-`Run.roomBlocks` supplies map agreement at frame boundaries. Its existing one-frame proof carries agreement through instructions internally; this page does not claim an exported link to every read state. That connection, the position after the move at each call, the chosen head/foot/side index and the control flow after the returned tile still need to be joined. `land_at`, `stand_wall` and `wall` remain. No field was removed or added, and no whole-frame search was enlarged.
+`Run.roomBlocks` supplies map agreement at frame boundaries. [RoomCollisionMap](c-7-12-2-RoomCollisionMap.md) now exports agreement at each instruction and proves the returned-map-byte result on actual room frame traces. The position after the move at each call, the chosen head/foot/side index and the control flow after the returned tile still need to be joined. `land_at`, `stand_wall` and `wall` remain. No field was removed or added, and no whole-frame search was enlarged.
 
 Part d can use the same offset-index theorem for head and side reads near the pipe. Part f can use it for the address and value in `TileRead`. Both uses still need their actual call entry and subsequent control flow.
 
