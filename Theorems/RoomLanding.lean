@@ -74,7 +74,7 @@ end Smbrta.RoomCollision
 namespace Smbrta.RoomCollision
 set_option maxRecDepth 100000 in
 /-- The BIT used to skip the overlapping side-load in the head/feet wrapper
-keeps all RAM, even though the current FrameWalk executor has no BIT case. -/
+keeps all RAM. FrameWalk also supports the full BIT transition. -/
 theorem bit_abs_ram {R : Machine} (hn : R.nmiPending = false) (hh : R.halted = false)
     (hp : 0x8000 ≤ R.pc) (op : R.prg.get! (R.pc &&& R.prgMask).toNat = 0x2C) :
     (PipeTransitionAll.go step R).2.ram = R.ram := by

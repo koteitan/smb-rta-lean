@@ -270,8 +270,12 @@ def adcS (a v p : UInt8) : UInt8 × UInt8 :=
   let ovf := (a ^^^ r) &&& (v ^^^ r) &&& 0x80 != 0
   (r, (p &&& 0x3C) ||| (if s > 0xFF then 0x01 else 0) ||| (if r == 0 then 0x02 else 0) ||| (r &&& 0x80) ||| (if ovf then 0x40 else 0))
 
+/-- BIT copies N/V from memory and computes Z from A AND memory. -/
+def bitP (p a v : UInt8) : UInt8 :=
+  (p &&& 0x3D) ||| (v &&& 0xC0) ||| (if a &&& v == 0 then 0x02 else 0)
+
 /-- instructions that read a byte -/
-inductive RF | lda | ldx | ldy | and' | ora | eor | adc | sbc | cmp | cpx | cpy
+inductive RF | lda | ldx | ldy | and' | ora | eor | adc | sbc | cmp | cpx | cpy | bit
   deriving DecidableEq, Repr
 
 /-- what an instruction does with the byte it reads -/
@@ -287,6 +291,7 @@ def rf : RF → UInt8 → M Unit
   | .cmp, v => do cmpV (← get).a v
   | .cpx, v => do cmpV (← get).x v
   | .cpy, v => do cmpV (← get).y v
+  | .bit, v => modify fun m => {m with p := bitP m.p m.a v}
 
 def cmpP (p r v : UInt8) : UInt8 := setF (znP p (r - v)) 0x01 (r ≥ v)
 
@@ -303,6 +308,7 @@ def rfE : RF → UInt8 → Machine → Machine
   | .cmp, v, m => { m with p := cmpP m.p m.a v }
   | .cpx, v, m => { m with p := cmpP m.p m.x v }
   | .cpy, v, m => { m with p := cmpP m.p m.y v }
+  | .bit, v, m => {m with p := bitP m.p m.a v}
 
 theorem rf_eff (f : RF) (v : UInt8) (n : Machine) : (go (rf f v) n).2 = rfE f v n := by
   cases f <;> rfl
@@ -411,7 +417,8 @@ def insList : List (UInt8 × Ins) :=
    (0x0A, .acc .asl), (0x4A, .acc .lsr), (0x2A, .acc .rol), (0x6A, .acc .ror),
    (0x10, .br .pl), (0x30, .br .mi), (0x90, .br .cc), (0xB0, .br .cs), (0xD0, .br .ne), (0xF0, .br .eq),
    (0x4C, .jmp), (0x6C, .jmpi), (0x20, .jsr), (0x60, .rts), (0x48, .pha), (0x68, .pla), (0x18, .clc), (0x38, .sec),
-   (0xAA, .tax), (0xA8, .tay), (0x8A, .txa), (0x98, .tya), (0xE8, .inx), (0xC8, .iny), (0xCA, .dex), (0x88, .dey)]
+   (0xAA, .tax), (0xA8, .tay), (0x8A, .txa), (0x98, .tya), (0xE8, .inx), (0xC8, .iny), (0xCA, .dex), (0x88, .dey),
+   (0x24, .rd .bit .zp), (0x2C, .rd .bit .abs)]
 
 def lookupOp (op : UInt8) : List (UInt8 × Ins) → Option Ins
   | [] => none
@@ -505,6 +512,27 @@ theorem znP_n (p v : UInt8) : bt (znP p v) 7 = (v &&& 0x80 != 0) := by
   unfold znP
   rw [bt_or, bt_or, bt_and, bt_and, show bt 0x7D 7 = false by decide, show bt 0x80 7 = true by decide]
   split <;> simp [show bt 2 7 = false by decide, show bt 0 7 = false by decide]
+
+theorem bitP_c (p a v : UInt8) : bt (bitP p a v) 0 = bt p 0 := by
+  unfold bitP
+  rw [bt_or,bt_or,bt_and,bt_and,show bt 0x3D 0 = true by decide,show bt 0xC0 0 = false by decide]
+  split <;> simp [show bt 2 0 = false by decide,show bt 0 0 = false by decide]
+
+theorem bitP_z (p a v : UInt8) : bt (bitP p a v) 1 = (a &&& v == 0) := by
+  unfold bitP
+  rw [bt_or,bt_or,bt_and,bt_and,show bt 0x3D 1 = false by decide,show bt 0xC0 1 = false by decide]
+  split <;> simp_all [show bt 2 1 = true by decide,show bt 0 1 = false by decide]
+
+theorem bitP_n (p a v : UInt8) : bt (bitP p a v) 7 = (v &&& 0x80 != 0) := by
+  rw [and80]
+  unfold bitP
+  rw [bt_or,bt_or,bt_and,bt_and,show bt 0x3D 7 = false by decide,show bt 0xC0 7 = true by decide]
+  split <;> simp [show bt 2 7 = false by decide,show bt 0 7 = false by decide]
+
+theorem bitP_v (p a v : UInt8) : bt (bitP p a v) 6 = bt v 6 := by
+  unfold bitP
+  rw [bt_or,bt_or,bt_and,bt_and,show bt 0x3D 6 = false by decide,show bt 0xC0 6 = true by decide]
+  split <;> simp [show bt 2 6 = false by decide,show bt 0 6 = false by decide]
 
 theorem setF_c (p : UInt8) (b : Bool) : bt (setF p 0x01 b) 0 = b := by
   unfold setF
@@ -1331,6 +1359,7 @@ def rfT : RF → Tag → TS → TS
   | .cmp, t, Q => let A := cmpT Q.a t; { Q with c := A.c, z := A.z, n := A.n }
   | .cpx, t, Q => let A := cmpT Q.x t; { Q with c := A.c, z := A.z, n := A.n }
   | .cpy, t, Q => let A := cmpT Q.y t; { Q with c := A.c, z := A.z, n := A.n }
+  | .bit, t, Q => {Q with z := zT (binT AB.and Q.a t),n := nT t}
 
 /-- the registers after a load-like change -/
 theorem regs_zn {Q : TS} {m n : Machine} {r r' : UInt8} {t : Tag} (h : Regs Q m n) (ht : t.R r r') :
@@ -1427,6 +1456,16 @@ theorem rfT_R {f : RF} {t : Tag} {v v' : UInt8} (h : Regs Q m n) (ht : t.R v v')
     · show (cmpT Q.y t).n.R (bt (cmpP m.p m.y v) 7) (bt (cmpP n.p n.y v') 7)
       rw [cmpP_n, cmpP_n]
       exact hr.n_
+
+  | bit =>
+    have hr := binT_R (f := fun x y => x &&& y) (op := AB.and) (fun _ _ _ _ h1 h2 => mem_and h1 h2) h.a ht
+    refine ⟨h.a,h.x,h.y,?_,?_,?_⟩
+    · show Q.c.R (bt (bitP m.p m.a v) 0) (bt (bitP n.p n.a v') 0)
+      rw [bitP_c,bitP_c]; exact h.c
+    · show (zT (binT AB.and Q.a t)).R (bt (bitP m.p m.a v) 1) (bt (bitP n.p n.a v') 1)
+      rw [bitP_z,bitP_z]; exact zT_R hr
+    · show (nT t).R (bt (bitP m.p m.a v) 7) (bt (bitP n.p n.a v') 7)
+      rw [bitP_n,bitP_n]; exact nT_R ht
 
 /-- a change of the registers only, on both machines -/
 theorem Lk.regs_only {Q' : TS} {a b : Machine} (h : Lk E m₀ n₀ Q m n)
