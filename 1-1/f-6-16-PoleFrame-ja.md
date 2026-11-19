@@ -122,3 +122,7 @@ pole_frame_check（非公開） :  poleFrameCheck(sy, m₀) = true（native_deci
 .lake/build/bin/smbrta pole-frame-check FM2 1200  # 本物のフレームでの仮定（約 6 分）
 .lake/build/bin/smbrta touch-move-check FM2 300   # 触るフレーム: 始まりの状態と移動（約 5 分）
 ```
+
+## フレームの始まりのバッファの不変条件
+
+[PoleTiles](f-6-17-1-PoleTiles-ja.md) は、始まりのタイルの分類を、値の変更を許す書き込みの条件で保ち、範囲内の実際の RAM の読みから `TileRead` を出します。バッファの条件と書き込みの確認は、TAS、乱数入力、位置と高さを変えた 6,864 フレームで通りました。頭の当たり判定で途中の値が変わる 90 回の読みも含みます。列のバッファまで広げた条件は、実際のフレームで偽でした。書き込みの条件、読みの範囲、直前の `LDA` への接続は仮定に残り、`tiles` は変えていません。

@@ -523,6 +523,15 @@ theorem room_vert : RoomPair.RoomWalks sy screenNames ctx roomNums.h roomNums.ri
     room_vert_jump⟩
 ")
 
+/-- Metadata for the value-aware pole tile invariant's actual read. -/
+def genPoleTiles (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/PoleTiles.lean" ("import Proof.Rom\nimport Theorems.PoleTiles\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+theorem pole_tiles_load_metadata :
+    PoleTiles.readCheck (FrameModel.Rom.of ctx) (PoleFrame.spotsF sy ctx) = true := by native_decide
+")
+
 /-- The machine-based pole arc uses the movement routine's fixed stack and halt value. -/
 def genPoleJump (dir : String) : IO Unit :=
   IO.FS.writeFile s!"{dir}/PoleJump.lean" ("import Proof.RoomVert\nimport Theorems.PoleJump\n" ++ s!"/-! {privateNote} -/\n" ++ "
@@ -18122,8 +18131,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!

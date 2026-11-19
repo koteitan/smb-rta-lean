@@ -122,3 +122,7 @@ Only the left end of the range is used. The height decides the row, but no bound
 .lake/build/bin/smbrta pole-frame-check FM2 1200  # the hypotheses on real frames (about 6 min)
 .lake/build/bin/smbrta touch-move-check FM2 300   # the touch's frame: its start state and its move (about 5 min)
 ```
+
+## A frame-start invariant for buffer tiles
+
+[PoleTiles](f-6-17-1-PoleTiles.md) now carries a frame-start classification through value-aware writes and derives `TileRead` at actual RAM loads in the classified interval. The buffer condition and write checks passed on the TAS, random inputs and 6,864 overwritten frames, including 90 reads of bytes changed by the head collision. Extending the condition to the column buffer is false on real frames. The write checks, read interval and preceding-load links remain explicit; `tiles` is unchanged.

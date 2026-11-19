@@ -395,6 +395,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
     - 🚨 1-1-f-6-17 The pole's tiles are read only in its column (`tiles`, `TileRead`; about the byte read, not its address)
+      <details><summary>1 lines of proved parts (the parent's own assumptions remain)</summary>
+
+      - ✅ 1-1-f-6-17-1 `TileRead` at an actual load from a frame-start tile condition (`PoleTiles`; the write checks and the read range remain)
+
+      </details>
     - 🚨 1-1-f-6-18 The edge store does not bring him into the range (`edge`); `P₂(g)` is the position at the end of the move (`moved` removed: 1-1-f-6-18-2)
       <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
 
