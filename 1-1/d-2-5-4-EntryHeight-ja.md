@@ -107,3 +107,7 @@ Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`�
 .lake/build/bin/smbrta entry-height-check FM2 10 walkall    # 大きいプレイヤーと、大きさを知らない場合も、約 2 分
 .lake/build/bin/smbrta entry-height-check FM2 400 real      # 本物のフレームの表、約 3 分
 ```
+
+## 頭と横の局所的な矛盾
+
+[EntryHeadHeight](d-2-5-4-2-EntryHeadHeight-ja.md) は、大きいプレイヤーの最初の上側の横の添字で、候補の低い高さでは頭のマスが `SiteOK` と `Solid` を同時に満たせないことを証明します。具体的な候補 2,240 フレーム中、低い入口になった 256 個は、すべて頭の条件に反しました。表の確認は約 1.2〜2.0 秒です。フレームの歩きは変えず、8 個の抽象的な終端もまだ消していません。すべての入口で実際の頭と横の呼び出しをつなぐ部分が残ります。

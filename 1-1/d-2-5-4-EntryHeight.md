@@ -107,3 +107,7 @@ Removed from the assumptions: the height of `entry₂`, for a run whose entering
 .lake/build/bin/smbrta entry-height-check FM2 10 walkall    # also with a big player and with the size not known, about 2 min
 .lake/build/bin/smbrta entry-height-check FM2 400 real      # the table of real frames, about 3 min
 ```
+
+## A checked local head/side exclusion
+
+[EntryHeadHeight](d-2-5-4-2-EntryHeadHeight.md) now proves a local geometric contradiction for the big player's first upper side offset at the candidate lower height: its head cell cannot satisfy `SiteOK` and `Solid`. All 256 concrete lower-entry candidates among 2,240 frames violated precisely the head condition. The finite check takes about 1.2–2.0 seconds; it does not change the frame walk or eliminate its eight bad abstract ends. Connecting the actual head and side calls throughout every entering frame remains.
