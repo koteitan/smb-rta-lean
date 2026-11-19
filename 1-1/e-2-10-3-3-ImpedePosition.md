@@ -34,3 +34,5 @@ The speed stays unchanged or becomes zero according to the branch. The position 
 `pos-after-real FM2 200` checked 128,679 frames from the TAS and own inputs: 3,053 collision-push calls and 13,551 screen-clamp calls. Entry `Good`, return, speed, fraction, modular position, margins and target range had zero failures. After the scroll handler, no instruction outside these two routines stored to a position byte. The command exited 0. The sampled frames start in control and store to none of the routine, mode or task bytes. This is a check of runs, not a proof about every frame.
 
 The ROM predicates were true in 430 ms for the collision push and 6 ms for the screen clamp. Both private facts are generated with `native_decide`. The observed clamps selected only one edge; the ROM check and general theorem cover both.
+
+[PositionPieces](e-2-10-3-5-PositionPieces.md) combines the modular return with position margins into an exact call piece and sums explicit effects on frame cuts. Constructing the cuts for every frame and proving the final global bounds remain open.
