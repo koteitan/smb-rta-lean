@@ -53,7 +53,7 @@ Lean: `Theorems/RoomVert.lean`（`walkV`、`frame_of_walkV`、`before_R`、`afte
 
 **フレーム.** 最初に `R` に来たところで `before_R` です。これはフレームの終わりより前です（歩きのフレームの終わりの状態は `R` にありません）。そこで `vert_air`、`FrameModel.trace_inFrame` でその機械をフレームの `k + kk` 命令目に置きます。ルーチンの各ステップは、フレームの終わりより 64 ドット以上前に走るならフレームを保ち（`InFrameN`）、`SiteOK` は 6000 を与えるからです。そこから終わりまで `after_Q` です。
 
-**`RoomJoin` では.** フィールド `vframes` は 2 種類のフレームで使われていました。床のフレームは `vfloor` として残ります。ジャンプの最初の 8 フレーム（`OnArc`）のフレームは `RoomCore.varc` です。`RoomRun.varc_of` がこれを、`InRoom.vert`（上のフレーム）、`read_vs`、`clean`（到着での状態 `AtV`）、`InRoom.pair`（`halt`、`prevA`）、ジャンプの弧から証明します。`InRoom.vert` はフレームがプレイヤーのルーチンで終わることを求めるので、`n + 1 < E` について述べます。そのために `low_by` とその上の補題は `t0 < E` を取るようになりました（`t0_lt_E`。かたまりからの離れ方と、新しい数の事実 `vf` から）。これらのフレームの入力 `AirIn` は、今はフィールド `air_in` から出ます。
+**`RoomJoin` では.** フィールド `vframes` は 2 種類のフレームで使われていました。床のフレームは `vfloor` として残りましたが、これも今は定理です（`RoomRun.vfloor_of`、項目 1-1-c-7-5-14）。ジャンプの最初の 8 フレーム（`OnArc`）のフレームは `RoomCore.varc` です。`RoomRun.varc_of` がこれを、`InRoom.vert`（上のフレーム）、`read_vs`、`clean`（到着での状態 `AtV`）、`InRoom.pair`（`halt`、`prevA`）、ジャンプの弧から証明します。`InRoom.vert` はフレームがプレイヤーのルーチンで終わることを求めるので、`n + 1 < E` について述べます。そのために `low_by` とその上の補題は `t0 < E` を取るようになりました（`t0_lt_E`。かたまりからの離れ方と、新しい数の事実 `vf` から）。これらのフレームの入力 `AirIn` は、今はフィールド `air_in` から出ます。
 
 ## 本物のフレームで確かめたこと
 
@@ -71,7 +71,7 @@ Lean: `Theorems/RoomVert.lean`（`walkV`、`frame_of_walkV`、`before_R`、`afte
 
 ## 仮定（Lean で証明していないこと）
 
-* `vfloor`（1 フレーム）: `C + 34` から `C + 49` までのフレームで床から始まるものは、`VFrame` のとおり、入力とともに立つか跳びます。床のフレームでの前の `vframes` です。
+* `vfloor`（1 フレーム。今は項目 1-1-c-7-5-14 で証明）: `C + 34` から `C + 49` までのフレームで床から始まるものは、`VFrame` のとおり、入力とともに立つか跳びます。床のフレームでの前の `vframes` です。
 * `halt` と `prevA` はもう仮定ではありません。[ジャンプを止める値と前のフレームの A](c-7-5-2-RoomPair-ja.md) が証明します。
 * 部屋のフレームの各命令の `SiteOK`。[ブロックの地図](c-7-12-RoomMap-ja.md) と同じです。
 * 項目 1-1-c-7-5 のほかのフィールド（`air_in`、`stand_wall`、`fall_long`、`stand_row`、`vfall`、`floor_at`、`low_at`）には、ここでは触れていません。

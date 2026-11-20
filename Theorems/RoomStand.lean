@@ -6,8 +6,9 @@ import Theorems.RoomJoin
 
 `RoomFall` follows a frame of the room in the air. Here a fourth walk of one whole frame of the room (`walkS`) follows a frame that comes to the player's routine `R`
 standing (the state 0) with no new press of A: A not pressed, or pressed on the frame before too. Then the frame does not jump. From `R` to the frame's end no step writes
-the height's fraction, the two forces and the jump's origin (`vRestS`); and the height, the vertical speed and its fraction (`vLand3`) stay and the state is 0 or 2 at the
-end (he stands, or falls off), or he lands: the state 0, the speed and its fraction 0, the height with its low four bits 0 (`after_RS`).
+the height's fraction, the two forces, the jump's origin and the vertical page (`vRestS`); and the height, the vertical speed and its fraction (`vLand3`) stay and the state
+is 0 or 2 at the end (he stands, or falls off), or he lands: the state 0, the speed and its fraction 0, the height with its low four bits 0 (`after_RS`). In the first case
+no step from `R` on comes to the side check in the state 0 (`sideOK`): so a frame that comes there in the state 0 lands (`RoomFloor.floor_frame`).
 
 At `R` the walk splits a state by the player's state (0 or not) and, in the state 0, by bit 7 of the joypad's bits and of A of the frame before. A state standing with no new
 press gets the bit and the list `[7, 1]` (A not pressed) or `[7, 2]` (pressed on the frame before too), kept apart up to the jump's check; at the scroll handler `Q` both
@@ -30,8 +31,8 @@ open RoomFall (vLand vRest withHi canHi his yPieces isAndY mayWrite landed)
 
 /-! ## The bytes -/
 
-/-- the bytes a frame that starts standing keeps from `R` on: the height's fraction, the two forces, the jump's origin -/
-def vRestS (sy : Syms) : List Nat := [I sy.Player_YMF_Dummy, I sy.VerticalForce, I sy.VerticalForceDown, I sy.JumpOrigin_Y_Position]
+/-- the bytes a frame that starts standing keeps from `R` on: the height's fraction, the two forces, the jump's origin, the vertical page -/
+def vRestS (sy : Syms) : List Nat := [I sy.Player_YMF_Dummy, I sy.VerticalForce, I sy.VerticalForceDown, I sy.JumpOrigin_Y_Position, I sy.Player_Y_HighPos]
 
 /-- the bytes of the landing but the state: the height, the vertical speed, its fraction -/
 def vLand3 (sy : Syms) : List Nat := [I sy.Player_Y_Position, I sy.Player_Y_Speed, I sy.Player_Y_MoveForce]
@@ -68,6 +69,10 @@ or a state with a bit above bit 1 -/
 def piecesS (sy : Syms) (A : AS) : List AS :=
   standP0 sy A ++ standP1 sy A ++ newP sy A ++ knP sy A 1 ++ knP sy A 2 ++ knP sy A 3 ++ hiP sy A
 
+/-- a state with the bit that has not landed (marked `[7, _]` or `[5, _]`) is not in the state 0 at the side check -/
+def sideOK (sy : Syms) (A : AS) : Bool :=
+  !(A.spent && (A.log.head? == some 7 || A.log.head? == some 5) && A.pc == sy.DoPlayerSideCheck && canBe (A.getK (I sy.Player_State)) 0)
+
 /-- the bit says that the frame came to the player's routine `R` standing with no new press, and that no step since has written the bytes of `vRestS`. The list says what
 happened to the bytes of the landing: `[7, _]` the height, the speed and its fraction not written (the state may be; `[7, 1]`, `[7, 2]` up to `Q`, `[7, 7]` after); `[5, h]` the same, the height's high bits known to be
 `h` (split at the landing's `AND` with the height); `[1, h, 0]` written since; `[6]` landed: the four known (the state, the speed and its fraction 0, the height `h`), then the
@@ -85,8 +90,8 @@ def phS (sy : Syms) (E : Env) (P : Places) : Ph where
     else if A.spent && A.log.head? == some 1 && landed sy A then [{ A.setK (I sy.Player_Y_Position) AB.top with log := [6] }]
     else [A]
   pre := fun A => !(A.pc == sy.PlayerCtrlRoutine && (A.spent || !A.log.isEmpty))
-  ok := fun A => !A.spent || (!mayWrite E P (vRestS sy) A &&
-    (A.log.head? == some 1 || (A.log == [6] && !mayWrite E P (vLand sy) A) || (A.log != [6] && !mayWrite E P (vLand3 sy) A)))
+  ok := fun A => (!A.spent || (!mayWrite E P (vRestS sy) A &&
+    (A.log.head? == some 1 || (A.log == [6] && !mayWrite E P (vLand sy) A) || (A.log != [6] && !mayWrite E P (vLand3 sy) A)))) && sideOK sy A
 
 /-- the routine byte is known at the frame's end and is not the reference's: the frame leaves the player's routine -/
 def outR (P : Places) (r : Machine) (B : AS) : Bool :=
@@ -295,10 +300,10 @@ def apartS (sy : Syms) (P : Places) : Bool :=
   RoomFall.apartC sy P && I sy.Player_State != I sy.SavedJoypadBits && I sy.Player_State != I sy.PreviousA_B_Buttons &&
     I sy.SavedJoypadBits != I sy.PreviousA_B_Buttons
 
-theorem vRestS_sub (sy : Syms) : ∀ x ∈ vRestS sy, x ∈ vKeep sy := by
+theorem vRestS_sub (sy : Syms) : ∀ x ∈ vRestS sy, x ∈ RoomVert.vKeepA sy := by
   intro x hx
   simp only [vRestS, List.mem_cons, List.not_mem_nil, or_false] at hx
-  rcases hx with rfl | rfl | rfl | rfl <;> simp [vKeep]
+  rcases hx with rfl | rfl | rfl | rfl | rfl <;> simp [RoomVert.vKeepA, vKeep]
 
 theorem vLand3_sub (sy : Syms) : ∀ x ∈ vLand3 sy, x ∈ vKeep sy := by
   intro x hx
@@ -311,16 +316,18 @@ theorem l77_2 : ([7, 7] : List Nat) ≠ [2] := by decide
 
 set_option maxHeartbeats 1000000 in
 /-- **The frame from the player's routine, standing.** The frame comes to the player's routine at most once. If it comes there standing with no new press of A, and ends in
-the player's routine, then from there to its end no step writes the height's fraction, the forces and the jump's origin; and the height, the vertical speed and its fraction
-stay and the state is 0 or 2 at the end, or he lands: the state, the vertical speed and its fraction are 0, and the height is the one at the player's routine with the low
-four bits 0. The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
+the player's routine, then from there to its end no step writes the height's fraction, the forces, the jump's origin and the vertical page; and the height, the vertical
+speed and its fraction stay and the state is 0 or 2 at the end, and no step from the player's routine on comes to the side check in the state 0; or he lands: the state, the
+vertical speed and its fraction are 0, and the height is the one at the player's routine with the low four bits 0. The frame starts in the room's condition, and each
+instruction meets `SiteOK`. -/
 theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phS sy E P) E P r K C Fu)
     (hfin : C.fin = finS sy P r) (hap : apartS sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
     (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame → StandAt sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
        (∀ x ∈ vRestS sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
        (((∀ x ∈ vLand3 sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
-         ((frame m i).ram.get! (I sy.Player_State) = 0 ∨ (frame m i).ram.get! (I sy.Player_State) = 2)) ∨
+         ((frame m i).ram.get! (I sy.Player_State) = 0 ∨ (frame m i).ram.get! (I sy.Player_State) = 2) ∧
+         (∀ j₁, j ≤ j₁ → (trace m i j₁).frame = m.frame → (trace m i j₁).pc = sy.DoPlayerSideCheck → (trace m i j₁).ram.get! (I sy.Player_State) ≠ 0)) ∨
         ((frame m i).ram.get! (I sy.Player_State) = 0 ∧ (frame m i).ram.get! (I sy.Player_Y_Speed) = 0 ∧
          (frame m i).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
          (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0))) := by
@@ -329,10 +336,19 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
   have hsz : ∀ (A : AS) (y : Machine), Sim C.E (m.frame, 2) A y → A.ram.size = 2048 ∧ A.kn.size = 2048 := fun _ _ hs => ⟨hs.szR, hs.szK⟩
   simp only [apartS, RoomFall.apartC, Bool.and_eq_true, bne_iff_ne, ne_eq] at hap
-  obtain ⟨⟨⟨⟨⟨⟨hapB, _⟩, _⟩, _⟩, h12⟩, h13⟩, h23⟩ := hap
+  obtain ⟨⟨⟨⟨⟨⟨hapB, _⟩, _⟩, hHo⟩, h12⟩, h13⟩, h23⟩ := hap
   have hout : ∀ x ∈ vKeep sy, x < P.bufLo ∨ P.bufLo + P.bufN ≤ x := by
     simp only [RoomVert.apartB, Bool.and_eq_true, List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at hapB
     exact hapB.1
+  have houtR : ∀ x ∈ vRestS sy, x < P.bufLo ∨ P.bufLo + P.bufN ≤ x := by
+    intro x hx
+    simp only [vRestS, List.mem_cons, List.not_mem_nil, or_false] at hx
+    rcases hx with rfl | rfl | rfl | rfl | rfl
+    · exact hout _ (by simp [vKeep])
+    · exact hout _ (by simp [vKeep])
+    · exact hout _ (by simp [vKeep])
+    · exact hout _ (by simp [vKeep])
+    · simpa only [Bool.or_eq_true, decide_eq_true_eq] using hHo
   have hyL : I sy.Player_Y_Position ∈ vLand sy := by simp [vLand]
   have hvL : I sy.Player_Y_Speed ∈ vLand sy := by simp [vLand]
   have hmL : I sy.Player_Y_MoveForce ∈ vLand sy := by simp [vLand]
@@ -340,11 +356,12 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have hy3 : I sy.Player_Y_Position ∈ vLand3 sy := by simp [vLand3]
   let R := sy.PlayerCtrlRoutine
   let Vs : List Nat → Nat → Nat → Prop := fun L j j₀ => ∀ x ∈ L, (trace m i j).ram.get! x = (trace m i j₀).ram.get! x
+  let Sd : Nat → Nat → Prop := fun j j₀ => ∀ j₁, j₀ ≤ j₁ → j₁ < j → (trace m i j₁).pc = sy.DoPlayerSideCheck → (trace m i j₁).ram.get! (I sy.Player_State) ≠ 0
   let yQ : Nat → Nat := fun j₀ => ((trace m i j₀).ram.get! (I sy.Player_Y_Position) &&& 0xF0).toNat
   let Φ : Nat → Bool → List Nat → Prop := fun j b l =>
     (∀ j₀, j₀ < j → (trace m i j₀).pc = R → (b = true ∨ l ≠ [])) ∧
     (b = true → ∃ j₀, j₀ < j ∧ (trace m i j₀).pc = R ∧ StandAt sy (trace m i j₀) ∧ Vs (vRestS sy) j j₀ ∧
-      (((l = [7, 1] ∨ l = [7, 2] ∨ l = [7, 7]) ∧ Vs (vLand3 sy) j j₀) ∨ (l = [5, yQ j₀] ∧ Vs (vLand3 sy) j j₀) ∨ l = [1, yQ j₀, 0] ∨
+      (((l = [7, 1] ∨ l = [7, 2] ∨ l = [7, 7]) ∧ Vs (vLand3 sy) j j₀ ∧ Sd j j₀) ∨ (l = [5, yQ j₀] ∧ Vs (vLand3 sy) j j₀ ∧ Sd j j₀) ∨ l = [1, yQ j₀, 0] ∨
        (l = [6] ∧ (trace m i j).ram.get! (I sy.Player_Y_Position) = (trace m i j₀).ram.get! (I sy.Player_Y_Position) &&& 0xF0 ∧
         (trace m i j).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (trace m i j).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
         (trace m i j).ram.get! (I sy.Player_State) = 0))) ∧
@@ -387,8 +404,9 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     have okS : A₁.spent = true → mayWrite E P (vRestS sy) A₁ = false ∧ (A₁.log.head? = some 1 ∨ (A₁.log = [6] ∧ mayWrite E P (vLand sy) A₁ = false) ∨
         (A₁.log ≠ [6] ∧ mayWrite E P (vLand3 sy) A₁ = false)) := by
       intro hb
-      have hok' : (!A₁.spent || (!mayWrite E P (vRestS sy) A₁ &&
-          (A₁.log.head? == some 1 || (A₁.log == [6] && !mayWrite E P (vLand sy) A₁) || (A₁.log != [6] && !mayWrite E P (vLand3 sy) A₁)))) = true := hok
+      have hok0 : ((!A₁.spent || (!mayWrite E P (vRestS sy) A₁ &&
+          (A₁.log.head? == some 1 || (A₁.log == [6] && !mayWrite E P (vLand sy) A₁) || (A₁.log != [6] && !mayWrite E P (vLand3 sy) A₁)))) && sideOK sy A₁) = true := hok
+      have hok' := ((Bool.and_eq_true _ _).mp hok0).1
       simp only [hb, Bool.not_true, Bool.false_or, Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true, beq_iff_eq, bne_iff_ne, ne_eq] at hok'
       obtain ⟨o1, o2⟩ := hok'
       refine ⟨o1, ?_⟩
@@ -399,7 +417,7 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     have keepR : A₁.spent = true → Vs (vRestS sy) (j + 1) j := by
       intro hb x hx
       rw [hnext]
-      exact RoomFall.keep_of_may h.places (fun x hx => hout x (vRestS_sub sy x hx)) hs₂ (hk j) (okS hb).1 x hx
+      exact RoomFall.keep_of_may h.places houtR hs₂ (hk j) (okS hb).1 x hx
     have keep3 : A₁.spent = true → A₁.log.head? ≠ some 1 → A₁.log ≠ [6] → Vs (vLand3 sy) (j + 1) j := by
       intro hb h1 h6 x hx
       have h3 : mayWrite E P (vLand3 sy) A₁ = false := by
@@ -424,11 +442,29 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
       intro hb hl
       rw [hb, hl]
       exact ⟨fun _ _ _ => Or.inr (by simp), fun h => absurd h (by decide), fun h => by simp at h, fun _ => Or.inr (Or.inr rfl)⟩
+    -- a state with the bit that has not landed is not in the state 0 at the side check (`sideOK`)
+    have sdStep : ∀ {j₀ : Nat}, A₁.spent = true → (A₁.log.head? = some 7 ∨ A₁.log.head? = some 5) → Sd j j₀ → Sd (j + 1) j₀ := by
+      intro j₀ hb hl hS j₁ h1 h2 hq
+      rcases Nat.lt_or_ge j₁ j with hlt | hge
+      · exact hS j₁ h1 hlt hq
+      · have e : j₁ = j := by omega
+        subst e
+        have hside : sideOK sy A₁ = true := ((Bool.and_eq_true _ _).mp (show (_ && sideOK sy A₁) = true from hok)).2
+        have hpcA : A₁.pc = sy.DoPlayerSideCheck := by rw [← hs₁.pc]; exact hq
+        have h75 : (A₁.log.head? == some 7 || A₁.log.head? == some 5) = true := by rcases hl with e | e <;> simp [e]
+        have hcb : canBe (A₁.getK (I sy.Player_State)) 0 = false := by
+          simp only [sideOK, hb, h75, hpcA, beq_self_eq_true, Bool.true_and, Bool.not_eq_true'] at hside
+          exact hside
+        intro h0
+        have hmm := hs₁.ram (I sy.Player_State) (PipeTransitionAll.mask_lt _)
+        rw [h0] at hmm
+        rw [RoomVert.canBe_of hmm] at hcb
+        cases hcb
     -- the list of a state with the bit
-    have cases7 : ∀ {j₀ : Nat} {l : List Nat}, (((l = [7, 1] ∨ l = [7, 2] ∨ l = [7, 7]) ∧ Vs (vLand3 sy) j j₀) ∨ (l = [5, yQ j₀] ∧ Vs (vLand3 sy) j j₀) ∨
+    have cases7 : ∀ {j₀ : Nat} {l : List Nat}, (((l = [7, 1] ∨ l = [7, 2] ∨ l = [7, 7]) ∧ Vs (vLand3 sy) j j₀ ∧ Sd j j₀) ∨ (l = [5, yQ j₀] ∧ Vs (vLand3 sy) j j₀ ∧ Sd j j₀) ∨
         l = [1, yQ j₀, 0] ∨ (l = [6] ∧ (trace m i j).ram.get! (I sy.Player_Y_Position) = (trace m i j₀).ram.get! (I sy.Player_Y_Position) &&& 0xF0 ∧
         (trace m i j).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (trace m i j).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
-        (trace m i j).ram.get! (I sy.Player_State) = 0)) → l.head? = some 7 → ((l = [7, 1] ∨ l = [7, 2] ∨ l = [7, 7]) ∧ Vs (vLand3 sy) j j₀) := by
+        (trace m i j).ram.get! (I sy.Player_State) = 0)) → l.head? = some 7 → ((l = [7, 1] ∨ l = [7, 2] ∨ l = [7, 7]) ∧ Vs (vLand3 sy) j j₀ ∧ Sd j j₀) := by
       intro j₀ l a5 hl
       rcases a5 with e | ⟨e, _⟩ | e | ⟨e, _⟩
       · exact e
@@ -455,7 +491,8 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
         have n6 : A₁.log ≠ [6] := by rcases c2 with e | e <;> rw [e] <;> simp
         have n2 : A₁.log ≠ [2] := by rcases c2 with e | e <;> rw [e] <;> simp
         rw [c1]
-        exact ⟨fun _ _ _ => Or.inl rfl, fun _ => ⟨j, by omega, hqj, c3, keepR c1, Or.inl ⟨by rcases c2 with e | e <;> simp [e], keep3 c1 n1 n6⟩⟩,
+        exact ⟨fun _ _ _ => Or.inl rfl, fun _ => ⟨j, by omega, hqj, c3, keepR c1, Or.inl ⟨by rcases c2 with e | e <;> simp [e], keep3 c1 n1 n6,
+          sdStep c1 (Or.inl (by rcases c2 with e | e <;> rw [e] <;> rfl)) (fun j₁ h1 h2 _ => absurd h2 (by omega))⟩⟩,
           fun h => absurd h n2, fun h => absurd h (by decide)⟩
       · rw [c1, c2, hsp]
         exact ⟨fun _ _ _ => Or.inr (by simp), fun h => absurd h (by decide), fun _ => ⟨j, by omega, hqj, c3⟩, fun _ => Or.inr (Or.inl rfl)⟩
@@ -467,10 +504,12 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
         simp only [Bool.and_eq_true, beq_iff_eq, Bool.or_eq_true] at hc2
         obtain ⟨⟨hb, _⟩, hl⟩ := hc2
         obtain ⟨j₀, a1, a2, a3, a4, a5⟩ := p2 hb
-        have hL := (cases7 a5 (by rcases hl with e | e <;> rw [e] <;> rfl)).2
+        have hL := (cases7 a5 (by rcases hl with e | e <;> rw [e] <;> rfl)).2.1
+        have hSd := (cases7 a5 (by rcases hl with e | e <;> rw [e] <;> rfl)).2.2
         have hb' : ({ A' with log := [7, 7] } : AS).spent = true := hb
         exact ⟨fun _ _ _ => Or.inl hb, fun _ => ⟨j₀, by omega, a2, a3, tr (keepR hb') a4,
-          Or.inl ⟨Or.inr (Or.inr rfl), tr (keep3 hb' (by show ([7, 7] : List Nat).head? ≠ some 1; decide) (by show ([7, 7] : List Nat) ≠ [6]; decide)) hL⟩⟩,
+          Or.inl ⟨Or.inr (Or.inr rfl), tr (keep3 hb' (by show ([7, 7] : List Nat).head? ≠ some 1; decide) (by show ([7, 7] : List Nat) ≠ [6]; decide)) hL,
+            sdStep hb' (Or.inl rfl) hSd⟩⟩,
           fun h => absurd h l77_2, fun h => absurd (h.symm.trans hb) (by decide)⟩
       · split at hA₁
         · obtain rfl := List.mem_singleton.1 hA₁
@@ -482,11 +521,13 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
             obtain ⟨⟨hb, hl⟩, _⟩ := hc4
             obtain ⟨c1, c2⟩ := RoomFall.yPieces_class (hsz A' _ hs') hA₁ hs₁
             obtain ⟨j₀, a1, a2, a3, a4, a5⟩ := p2 hb
-            have hL := (cases7 a5 hl).2
+            have hL := (cases7 a5 hl).2.1
+            have hSd := (cases7 a5 hl).2.2
             have hb1 : A₁.spent = true := by rw [c1, hb]
+            have hSd' := sdStep hb1 (Or.inr (by rw [c2]; rfl)) hSd
             rw [c1, c2, hb]
             refine ⟨fun _ _ _ => Or.inl rfl, fun _ => ⟨j₀, by omega, a2, a3, tr (keepR hb1) a4,
-              Or.inr (Or.inl ⟨?_, tr (keep3 hb1 (by rw [c2]; simp) (by rw [c2]; simp)) hL⟩)⟩, fun h => by simp at h, fun h => absurd h (by decide)⟩
+              Or.inr (Or.inl ⟨?_, tr (keep3 hb1 (by rw [c2]; simp) (by rw [c2]; simp)) hL, hSd'⟩)⟩, fun h => by simp at h, fun h => absurd h (by decide)⟩
             show [5, ((trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0).toNat] = [5, yQ j₀]
             rw [hL _ hy3]
           · split at hA₁
@@ -556,9 +597,10 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
                         | false => exact Or.inr (hc hsp)
                     · obtain ⟨j₀, a1, a2, a3, a4, a5⟩ := p2 hb
                       refine ⟨j₀, by omega, a2, a3, tr (keepR hb) a4, ?_⟩
-                      rcases a5 with ⟨e, f⟩ | ⟨e, f⟩ | e | ⟨e, f1, f2, f3, f4⟩
-                      · exact Or.inl ⟨e, tr (keep3 hb (by rcases e with e | e | e <;> rw [e] <;> simp) (by rcases e with e | e | e <;> rw [e] <;> simp)) f⟩
-                      · exact Or.inr (Or.inl ⟨e, tr (keep3 hb (by rw [e]; simp) (by rw [e]; simp)) f⟩)
+                      rcases a5 with ⟨e, f, g⟩ | ⟨e, f, g⟩ | e | ⟨e, f1, f2, f3, f4⟩
+                      · exact Or.inl ⟨e, tr (keep3 hb (by rcases e with e | e | e <;> rw [e] <;> simp) (by rcases e with e | e | e <;> rw [e] <;> simp)) f,
+                          sdStep hb (Or.inl (by rcases e with e | e | e <;> rw [e] <;> rfl)) g⟩
+                      · exact Or.inr (Or.inl ⟨e, tr (keep3 hb (by rw [e]; simp) (by rw [e]; simp)) f, sdStep hb (Or.inr (by rw [e]; rfl)) g⟩)
                       · exact Or.inr (Or.inr (Or.inl e))
                       · have hkL := keepL hb e
                         exact Or.inr (Or.inr (Or.inr ⟨e, by rw [hkL _ hyL]; exact f1, by rw [hkL _ hvL]; exact f2, by rw [hkL _ hmL]; exact f3,
@@ -590,6 +632,15 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
       have e := PipeEntryRule.trace_stop (m := m) (i := i) (j := J) (by simp [hJ1]) (jq - J)
       rw [show J + (jq - J) = jq by omega] at e
       rw [e, hJ1] at hf
+      omega
+  have inJ : ∀ j₁, (trace m i j₁).frame = m.frame → j₁ < J := by
+    intro j₁ hf₁
+    rcases Nat.lt_or_ge j₁ J with h1 | h1
+    · exact h1
+    · exfalso
+      have e := PipeEntryRule.trace_stop (m := m) (i := i) (j := J) (by simp [hJ1]) (j₁ - J)
+      rw [show J + (j₁ - J) = j₁ by omega] at e
+      rw [e, hJ1] at hf₁
       omega
   have hfinB : finS sy P r B = true := by rw [← hfin]; exact hB1
   -- the frame does not end out of the player's routine
@@ -627,13 +678,13 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     obtain ⟨j₀, a1, a2, _, a4, a5⟩ := q2 hb
     have e0 := only j₀ a1 a2
     subst e0
-    rcases a5 with ⟨e, f⟩ | ⟨e, f⟩ | e | ⟨_, f1, f2, f3, f4⟩
+    rcases a5 with ⟨e, f, g⟩ | ⟨e, f, g⟩ | e | ⟨_, f1, f2, f3, f4⟩
     · have hst := stK (by rcases e with e | e | e <;> simp [e])
       rw [hJ3] at hst ⊢
-      exact ⟨a4, Or.inl ⟨f, hst⟩⟩
+      exact ⟨a4, Or.inl ⟨f, hst, fun j₁ h1 h2 h3 => g j₁ h1 (inJ j₁ h2) h3⟩⟩
     · have hst := stK (Or.inr (Or.inr (Or.inr ⟨_, e⟩)))
       rw [hJ3] at hst ⊢
-      exact ⟨a4, Or.inl ⟨f, hst⟩⟩
+      exact ⟨a4, Or.inl ⟨f, hst, fun j₁ h1 h2 h3 => g j₁ h1 (inJ j₁ h2) h3⟩⟩
     · exact absurd e (notOut _ (Or.inr ⟨_, rfl⟩))
     · rw [hJ3]
       exact ⟨a4, Or.inr ⟨f4, f2, f3, f1⟩⟩
@@ -692,11 +743,12 @@ theorem stand_frame {sy : Syms} {S' : UInt8} {pz : Nat} {E : Env} {P : Places} {
   have hstd : StandAt sy (trace M i k) := ⟨hs0, nopress_of hs0 hn⟩
   obtain ⟨e1, e2⟩ := (after_RS hS hfS hap hm hk).2 k hR hfk hstd hrt
   have f : ∀ a : UInt16, I a ∈ vRestS sy → peek (frame M i) a = peek M a := fun a ha => by
-    rw [← eq a (vRestS_sub sy _ ha)]
+    show (frame M i).ram.get! (I a) = M.ram.get! (I a)
+    rw [← hkeep _ (vRestS_sub sy _ ha)]
     exact e1 _ ha
   refine ⟨f sy.Player_YMF_Dummy (by simp [vRestS]), f sy.VerticalForce (by simp [vRestS]), f sy.VerticalForceDown (by simp [vRestS]),
     f sy.JumpOrigin_Y_Position (by simp [vRestS]), ?_⟩
-  rcases e2 with ⟨g1, g2⟩ | ⟨g1, g2, g3, g4⟩
+  rcases e2 with ⟨g1, g2, _⟩ | ⟨g1, g2, g3, g4⟩
   · have g : ∀ a : UInt16, I a ∈ vLand3 sy → peek (frame M i) a = peek M a := fun a ha => by
       rw [← eq a (vLand3_sub sy _ ha)]
       exact g1 _ ha

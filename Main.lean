@@ -405,7 +405,7 @@ theorem room_fall : RoomFall.FChecks sy screenNames ctx roomNums.h := ⟨room_fa
 
 /-- the private proof of the room's frames that start standing (`RoomStand`): the walk from the player's routine standing, and the bytes apart -/
 def genRoomStand (dir : String) : IO Unit :=
-  IO.FS.writeFile s!"{dir}/RoomStand.lean" ("import Proof.ScreenPage\nimport Proof.Rom\nimport Theorems.RoomStand\n" ++ s!"/-! {privateNote} -/
+  IO.FS.writeFile s!"{dir}/RoomStand.lean" ("import Proof.ScreenPage\nimport Proof.Rom\nimport Theorems.RoomStand\nimport Theorems.VertStand\n" ++ s!"/-! {privateNote} -/
 open Smbrta Smbrta.Rom
 
 set_option maxHeartbeats 0
@@ -417,6 +417,9 @@ theorem room_stand_c : RoomStand.checkS sy screenNames ctx = true := by native_d
 theorem room_stand_apart : RoomStand.apartS sy (ScreenPage.placesR sy screenNames ctx) = true := by native_decide
 
 theorem room_stand : RoomStand.SChecks sy screenNames ctx := ⟨room_stand_c, room_stand_apart⟩
+
+/-- the movement routine standing with no new press of A: the height, the vertical speed and its fraction, the state and the vertical page are not written -/
+theorem stand_vert_check : VertStand.standOK sy ctx (FrameModel.ctrlStack sy ctx) = true := by native_decide
 ")
 
 /-- the private proofs of the blocks of the room's map (`RoomBlocks`): the walk that follows the tile read up to the erase of a coin, the code around the read and the
@@ -572,6 +575,14 @@ set_option maxHeartbeats 0
 
 /-- the landing frame's checks, on the room -/
 theorem room_land : RoomLand.Checks sy screenNames ctx roomNums.landX (RoomJoin.landY sy) where
+  family := by native_decide
+  cells := by native_decide
+  control := by native_decide
+  ref := by native_decide
+  xB := by decide
+
+/-- the same checks on the floor's height: a frame that stands on the floor -/
+theorem room_floor : RoomLand.Checks sy screenNames ctx roomNums.landX (Jump.groundY sy).toUInt8 where
   family := by native_decide
   cells := by native_decide
   control := by native_decide
@@ -1610,6 +1621,9 @@ theorem room_checks : Checks sy ctx roomNums where
   land := by native_decide
   landP := by native_decide
   high := by native_decide
+  off := by native_decide
+  floorP := by native_decide
+  floorRow := by native_decide
 
 open Smbrta.RoomJoin in
 /-- **The bonus room**: in a run with these frames, the side pipe is entered at least {98 + joinT.aboveF} frames after first control -/
@@ -1790,7 +1804,7 @@ theorem route_1_1 (R : Run sy ctx {pipeN} {pipeD} roomNums (beside ctx) (beforeG
       (R.pipeP1 lag_check walk_check pause_check title_check title_pos_check title_ctl_check entry_checks open_checks.pause)
       (R.pipeOpenB lag_check walk_check pause_check title_check title_pos_check title_ctl_check open_checks open_map_check open_title_map_check opening.1 open_left entry_checks (by decide)) (R.pipe.reads lag_check walk_check pause_check hcl hs₁) (R.still lag_check walk_check pause_check title_check title_ctl_check entry_checks open_checks.pause hE1) hE1
   have h₃ := room_join R.room (Run.roomStart pipe_end room_start title_check entry_checks R)
-    (Run.inRoom pipe_end map_facts map_start map_startF side_entry_end_check side_rest_check room_vert ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ room_blocks room_blocks_rows room_land open_vert_check title_check entry_checks R)
+    (Run.inRoom pipe_end map_facts map_start map_startF side_entry_end_check side_rest_check room_vert ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ room_blocks room_blocks_rows room_land open_vert_check room_floor stand_vert_check title_check entry_checks R)
   have hst := Run.start (PA := ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩) side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ (SideChangeSound.sideCheckK_parts side_sound_checks).2.1 title_check entry_checks R
   have hc0 := Run.atCtl₀ side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ (SideChangeSound.sideCheckK_parts side_sound_checks).2.2 title_check entry_checks R
   -- a touch later than the frames that the position's range covers: the bound from the count of frames (`SurfaceLate`)
@@ -10001,7 +10015,7 @@ def roomVsCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 := d
 
 /-- the vertical bytes of the room's frames (`RoomVert`, `RoomJoin.RoomRun.varc_of`): the checks on the ROM, and on real frames from the room's first control: no step before the player's
 routine writes them; a frame rising at the scroll handler keeps them to its end; a frame in the air that `vstep` leaves rising follows `vstep` on the machine at control; the
-fields `halt` and `prevA` at each frame's end; and the floor frames of `vfloor` (stay or take off, with the input read at the player's routine) -/
+fields `halt` and `prevA` at each frame's end; and the floor frames after the fall (stay or take off, `RoomRun.vfloor_of`, with the input read at the player's routine) -/
 def roomVertCheck (sy : Syms) (romPath fm2 : String) (runs : Nat) : IO UInt32 := do
   let cart ← loadCart romPath
   let m0 := smb11Start sy cart

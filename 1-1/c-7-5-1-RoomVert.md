@@ -53,7 +53,7 @@ Since item 1-1-c-7-1-2, `walkA` also asks `cutOK` at `R` (the stack, the NMI, th
 
 **The frame.** `before_R` with the first arrival at `R`, which is before the frame's end (the walk's states at the frame's end are not at `R`); `vert_air` there; `FrameModel.trace_inFrame` puts its machine at instruction `k + kk` of the frame, since each step of the routine keeps the frame (`InFrameN`) when it runs 64 dots or more before the frame's end, and `SiteOK` gives 6000; `after_Q` from there to the end.
 
-**In `RoomJoin`.** The field `vframes` was used on two kinds of frames. Floor frames stay as `vfloor`. The frames of a jump's first 8 frames (`OnArc`) are `RoomCore.varc`, which `RoomRun.varc_of` proves from `InRoom.vert` (the frame above), `read_vs`, `clean` (the state `AtV` at the arrival), `InRoom.pair` (`halt`, `prevA`), and the jump's arcs. `InRoom.vert` asks the frame to end in the player's routine, so it is stated for `n + 1 < E`. For that `low_by` and the lemmas above it now take `t0 < E` (`t0_lt_E`, from the way he leaves the block and the new numeric fact `vf`). The input `AirIn` of these frames now comes from the field `air_in`.
+**In `RoomJoin`.** The field `vframes` was used on two kinds of frames. Floor frames stayed as `vfloor`, now a theorem too (`RoomRun.vfloor_of`, item 1-1-c-7-5-14). The frames of a jump's first 8 frames (`OnArc`) are `RoomCore.varc`, which `RoomRun.varc_of` proves from `InRoom.vert` (the frame above), `read_vs`, `clean` (the state `AtV` at the arrival), `InRoom.pair` (`halt`, `prevA`), and the jump's arcs. `InRoom.vert` asks the frame to end in the player's routine, so it is stated for `n + 1 < E`. For that `low_by` and the lemmas above it now take `t0 < E` (`t0_lt_E`, from the way he leaves the block and the new numeric fact `vf`). The input `AirIn` of these frames now comes from the field `air_in`.
 
 ## Checked on real frames
 
@@ -71,7 +71,7 @@ On 1,800 of the 25,114 frames in the air and rising, the stored speed at the pla
 
 ## Assumptions (not proved in Lean)
 
-* `vfloor` (one frame): a frame from `C + 34` to `C + 49` that starts on the floor stands or takes off as `VFrame` says, with the input. This is the old `vframes` on floor frames.
+* `vfloor` (one frame, now proved in item 1-1-c-7-5-14): a frame from `C + 34` to `C + 49` that starts on the floor stands or takes off as `VFrame` says, with the input. This is the old `vframes` on floor frames.
 * `halt` and `prevA` are no longer assumed: [The halt value and A of the frame before](c-7-5-2-RoomPair.md) proves them.
 * `SiteOK` on each instruction of the room's frames, as [the block map](c-7-12-RoomMap.md).
 * The other fields of item 1-1-c-7-5 (`air_in`, `stand_wall`, `fall_long`, `stand_row`, `vfall`, `floor_at`, `low_at`) are not touched here.

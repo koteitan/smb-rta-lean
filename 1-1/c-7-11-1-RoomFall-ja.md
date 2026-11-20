@@ -91,7 +91,7 @@ Lean: `Theorems/RoomFall.lean`（`phC`、`finC`、`piecesC`、`yPieces`、`after
 
 `varc_all` は床からのジャンプの各フレームを着地まで出します。[部屋をつなぐ](c-5-RoomJoin-ja.md) の証明は、まだジャンプを全体として、フィールド `way` の中で述べています（`Approach.reach`、`Over.reach`、`Off.jump.reach`）。
 
-* 跳ぶフレーム: ジャンプの入力のある床のフレームが `arcStart` の状態を出すこと（`vfloor`、仮定）。かたまりの横とかたまりの上からも同じこと（高さからの `Over`、`Off.jump`）。それらの高さからの `bridgeAll` はプログラムでは真ですが、`OnArc` と Lean は床からだけを使います。
+* かたまりの横とかたまりの上から跳ぶフレーム（高さからの `Over`、`Off.jump`）。床からは証明しました。ジャンプの入力のある床のフレームは `arcStart` の状態を出します（1-1-c-7-5-14、`RoomRun.takeoff_of`）。それらの高さからの `bridgeAll` はプログラムでは真ですが、`OnArc` と Lean は床からだけを使います。
 * どのフレームで着地するか: `varc_all` は着地が `vstep` の状態の `land` であることを言いますが、どのフレームで着地するかは言いません。`Approach` の窓（かたまりの上に着地する）と `Off` のフレーム `F`（床に着く）には、ブロックの地図の上での当たり判定の足の確かめが要ります。
 * 地面かそれより下で落下中に始まるフレーム（`varc_all` はそこにいないことを求めます）。
 * 空中のフレームの入力（`Approach.air`）。`air_in` は [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) で証明しました。

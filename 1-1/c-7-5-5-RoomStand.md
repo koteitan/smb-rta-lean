@@ -4,7 +4,7 @@
 
 **Claim.** A frame of the bonus room that starts standing (the state 0) with no new press of A does not jump. The height's fraction, the two forces and the jump's origin stay. The height, the vertical speed and its fraction stay, and the state at the end is 0 or 2 (he stands, or he falls off); or he lands. So with no jump since first control the vertical states are again a finite set, from the states at first control. A check on this set proves the field `vfall_stand` and the part of `fall_stand` with no jump (item 1-1-c-7-5 of [Joining the bonus room](c-5-RoomJoin.md)). What stayed was the field `fall_jump`: after a jump from the wall he is not on the floor before `C + 34`. Item 1-1-c-7-5-6 ([A jump from a stand during the fall in the room](c-7-5-6-RoomJump.md)) now proves it, with the fields `stand_wall` and `wall`. The input of every frame is now read from the machine at the player's routine (the new field `read_stop` on the frames that do not follow the model), and with it the field `air_in` is proved too.
 
-The notation is that of [The first fall in the room](c-7-5-4-FirstFall.md). `R` is the player's routine, `tr(j)` the machine `j` instructions into the frame, `end` the machine at the frame's end, `rt` the routine byte. `V_S` are the height's fraction, the two forces and the jump's origin; `V_3` are the height `y`, the vertical speed `vy` and its fraction `mf`. `A(x)` is bit 7 of the joypad's bits, `A'(x)` bit 7 of A of the frame before. `jump(n)` is the jump bit of the input of frame `n` (`Frames.inp`); `readIn` is the input that the model reads at `R`.
+The notation is that of [The first fall in the room](c-7-5-4-FirstFall.md). `R` is the player's routine, `tr(j)` the machine `j` instructions into the frame, `end` the machine at the frame's end, `rt` the routine byte, `SC` the side check (`DoPlayerSideCheck`), `yhigh` the vertical page. `V_S` are the height's fraction, the two forces and the jump's origin; `V_3` are the height `y`, the vertical speed `vy` and its fraction `mf`. `A(x)` is bit 7 of the joypad's bits, `A'(x)` bit 7 of A of the frame before. `jump(n)` is the jump bit of the input of frame `n` (`Frames.inp`); `readIn` is the input that the model reads at `R`.
 
 ```
 StandAt(x)    :  st(x) = 0  ∧  (A(x) = 0  ∨  A'(x) = 1)
@@ -13,7 +13,9 @@ StandNext(s, t):  V_S(t) = V_S(s)  ∧  ( (V_3(t) = V_3(s)  ∧  st(t) ∈ {0, 2
 after_RS      :  RoomCond(M),  SiteOK on each instruction
                  →  pc(tr(j)) = R  for at most one j of the frame,
                     and  pc(tr(j)) = R,  StandAt(tr(j)),  rt(end) = rt_room  →
-                      V_S(end) = V_S(tr(j))  ∧  ( (V_3(end) = V_3(tr(j)) ∧ st(end) ∈ {0, 2})  ∨  (st(end) = 0 ∧ vy(end) = 0 ∧ mf(end) = 0 ∧ y(end) = y(tr(j)) & F0) )
+                      V_S(end) = V_S(tr(j))  ∧  yhigh(end) = yhigh(tr(j))  ∧
+                      ( (V_3(end) = V_3(tr(j)) ∧ st(end) ∈ {0, 2} ∧ (∀ i ≥ j,  pc(tr(i)) = SC  →  st(tr(i)) ≠ 0))
+                        ∨  (st(end) = 0 ∧ vy(end) = 0 ∧ mf(end) = 0 ∧ y(end) = y(tr(j)) & F0) )
 stand_frame   :  RoomCond(M),  SiteOK,  pc(tr(k)) = R,  st(M) = 0,  jump(readIn(tr(k))) = false,  rt(end) = rt_room   →   StandNext(vs(M), vs(end))
 vstand_of     :  C ≤ n < t₀,  n + 1 < E,  st(vs(n)) = 0,  jump(n + 1) = false   →   StandNext(vs(n), vs(n + 1))
 StandNext.vdrop:  StandNext(s, t)  →  VDrop(s, t)
@@ -68,6 +70,8 @@ New in `InRoom`: `stand` (proved, `Route.Run.roomStand`) and `stR` (proved, `Rou
 | `[4, 4, 4]` | a step that the list does not allow may have written a byte (the bit is dropped) |
 
 At the frame's end (`finS`) a state marked `[4, 4, 4]` or `[1, h, 0]` must be out of the room's routine; a state marked `[7, _]` or `[5, h]` must know the state 0 or 2, or be out of the room's routine. The collision routine stores the state 2 before the foot check; the lists `[7, _]` and `[5, h]` allow that store. `after_RS` reads the walk with one fact outside the abstract states, as `RoomFall.after_QC` does.
+
+Item 1-1-c-7-5-14 added two things to the walk standing: it keeps the vertical page `yhigh` too (`vRestS`), and a state marked `[7, _]` or `[5, h]` must not allow the state 0 at the side check `SC` (`sideOK`). So in the first case of `after_RS` no step from `R` on comes to the side check in the state 0. [The floor frames after the fall](c-7-5-14-FloorFrames.md) uses this: a frame that does come there in the state 0 has landed.
 
 The first try marked both pieces `[7, 7]` at `R`. The search joined them, so the abstract machine no longer knew `A` and `A'` at the jump's check, and the jump's start wrote the height's fraction (6 ends failed). Two lists up to `Q` keep them apart.
 

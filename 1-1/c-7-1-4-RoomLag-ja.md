@@ -18,7 +18,7 @@ fe(n)     :  seq(b₁ + ix(n − C))                      部屋のフレーム 
 fm(n)     :  seq(b₁ + ix(n + 1 − C) − 1)              部屋のフレーム n + 1 が始まるところ
 ```
 
-これらは定義です（`RoomJoin.ixR`、`endAt`、`startAt`、`inpAt`。`RoomRun.fe`、`RoomRun.fm`）。`RoomRun` は新しいパラメータ `lim` をとります。モデルは各フレームの終わりで横の状態、位置、縦の状態を読みます（`read_hs`、`read_P`、`read_vs` は `fe(n)` で）。1 フレームの条件（`clean`、`read_in`、`read_ab`、`ab_early`、`farNear`、`vfloor`、`enters`、`read_PE`）は `fm(n)` からの本物のフレームについてです。
+これらは定義です（`RoomJoin.ixR`、`endAt`、`startAt`、`inpAt`。`RoomRun.fe`、`RoomRun.fm`）。`RoomRun` は新しいパラメータ `lim` をとります。モデルは各フレームの終わりで横の状態、位置、縦の状態を読みます（`read_hs`、`read_P`、`read_vs` は `fe(n)` で）。1 フレームの条件（`clean`、`read_in`、`read_ab`、`ab_early`、`farNear`、`enters`、`read_PE`。以前は `vfloor` も）は `fm(n)` からの本物のフレームについてです。
 
 ```
 RoomRun.next     :  C ≤ n,  n + 1 − C ≤ ups  →  fe(n + 1) = frame(fm(n), inAt(n))

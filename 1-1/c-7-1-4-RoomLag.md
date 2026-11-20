@@ -18,7 +18,7 @@ fe(n)     :  seq(b₁ + ix(n − C))                      the end of the room's 
 fm(n)     :  seq(b₁ + ix(n + 1 − C) − 1)              where the room's frame n + 1 begins
 ```
 
-These are definitions (`RoomJoin.ixR`, `endAt`, `startAt`, `inpAt`; `RoomRun.fe`, `RoomRun.fm`). `RoomRun` takes `lim` as a new parameter. The model reads the state, the position and the vertical state at the end of each frame (`read_hs`, `read_P`, `read_vs` at `fe(n)`). The conditions on one frame (`clean`, `read_in`, `read_ab`, `ab_early`, `farNear`, `vfloor`, `enters`, `read_PE`) speak of the real frame from `fm(n)`.
+These are definitions (`RoomJoin.ixR`, `endAt`, `startAt`, `inpAt`; `RoomRun.fe`, `RoomRun.fm`). `RoomRun` takes `lim` as a new parameter. The model reads the state, the position and the vertical state at the end of each frame (`read_hs`, `read_P`, `read_vs` at `fe(n)`). The conditions on one frame (`clean`, `read_in`, `read_ab`, `ab_early`, `farNear`, `enters`, `read_PE`; once also `vfloor`) speak of the real frame from `fm(n)`.
 
 ```
 RoomRun.next     :  C ≤ n,  n + 1 − C ≤ ups  →  fe(n + 1) = frame(fm(n), inAt(n))

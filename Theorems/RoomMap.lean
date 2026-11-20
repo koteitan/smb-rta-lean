@@ -22,7 +22,7 @@ screen's bytes that the scroll handler reads are known at each frame's start and
 routine of the head's collision with a block (`PipeWrites.headAt`) and the bump of the head on a solid block (`SideFrame.bumpAt`). No state of the walk is at either of them
 (`cuts_run`, `head_of_rows`, `bump_of_rows`): `SiteOK` lets a read for the head give only nothing or a coin. So no frame of the room changes the vertical motion by the head's
 collision with a block. The walks of the entering frame (`SideEntryEnd`, `SideEntryRest`) use these facts on the entering frame (and `SideFrame` four of them), and
-`RoomJoin.RoomRun.vfloor` the last one on the frames before it; `RoomVert` uses the condition at each frame's start (`cond_of_rows`).
+`Route.Run.roomBump` the last one on the frames before it (`RoomJoin.InRoom.bump`); `RoomVert` uses the condition at each frame's start (`cond_of_rows`).
 
 What stays assumed is what `ScreenPage` assumes: `SiteOK` on each instruction of the frames, and that each frame before the entry starts in the player's routine. The condition at
 the first control comes from the rows of the time of the change (`start_of_rows`). No game data: the map comes from a reference machine. Page: `1-1/c-7-12-RoomMap.md`.
