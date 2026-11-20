@@ -13,3 +13,5 @@ On 13 runs (the TAS, ten random and two fixed), the 500-instruction check passed
 The start cut and prefix check are explicit local hypotheses. They have not been derived for every landing frame from current `Run` fields. The floor-cell classification, caller's tile branch, landing-state stores and preservation to frame end remain. `land_at` remains; no field is removed or added. No result uses `floor_at_of` to prove landing.
 
 **Files:** `Theorems/RoomFootPrefix.lean`, `Theorems/FrameWalk.lean`.
+
+Later, item 1-1-c-7-5-12 ([The landing frame of the first fall](c-7-5-12-RoomLand.md)) removed `land_at`; the field `landQ` in its place asks four bytes at the end of the landing frame's move.

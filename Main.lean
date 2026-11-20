@@ -561,6 +561,24 @@ theorem room_foot_reference_cells : RoomFootCut.referenceCellsCheck sy screenNam
     roomFootSliceHeight roomFootSliceEmpty sy.GroundTile.toUInt8 = true := by native_decide
 ")
 
+/-- The landing frame's walks from the end of the move (`RoomLand.Checks`): the family for every horizontal coordinate below `landX`, the cells, the room's walk
+watching the routine, the screen and the jump spring at the end of the move, and the reference machine. -/
+def genRoomLand (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/RoomLand.lean" ("import Proof.ScreenPage
+import Proof.RoomJoin
+import Theorems.RoomLand
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+
+/-- the landing frame's checks, on the room -/
+theorem room_land : RoomLand.Checks sy screenNames ctx roomNums.landX (RoomJoin.landY sy) where
+  family := by native_decide
+  cells := by native_decide
+  control := by native_decide
+  ref := by native_decide
+  xB := by decide
+")
+
 /-- Metadata for the value-aware pole tile invariant's actual read. -/
 def genPoleTiles (dir : String) : IO Unit :=
   IO.FS.writeFile s!"{dir}/PoleTiles.lean" ("import Proof.Rom\nimport Theorems.PoleTiles\n" ++ s!"/-! {privateNote} -/\n" ++ "
@@ -1496,7 +1514,8 @@ def roomNums : Nums :=
     startW := 608
     fallF := (peek ctx sy.VerticalForceDown).toNat
     gaps := [(16, 32), (17, 32), (18, 28), (19, 28), (20, 28), (21, 25)]
-    vStart := [{repr (roomV0Of sy m0)}] }
+    vStart := [{repr (roomV0Of sy m0)}]
+    landX := 248 }
 
 open Smbrta.RoomJoin in
 theorem room_nums : NumFacts sy ctx roomNums where
@@ -1588,6 +1607,7 @@ theorem room_checks : Checks sy ctx roomNums where
   first := by native_decide
   nojump := by native_decide
   anyin := by native_decide
+  land := by native_decide
 
 open Smbrta.RoomJoin in
 /-- **The bonus room**: in a run with these frames, the side pipe is entered at least {98 + joinT.aboveF} frames after first control -/
@@ -1738,7 +1758,7 @@ theorem flag_check : FlagRule.flagCheck flagCtx (FlagRule.dataOf flagCtx) = true
 theorem flag_checked : FlagRule.Checked flagCtx (FlagRule.dataOf flagCtx) := FlagRule.checked_of_check flag_check
 ")
   -- the whole route
-  IO.FS.writeFile s!"{dir}/Route.lean" ("import Proof.PipeWrites\nimport Proof.RoomJoin\nimport Proof.RoomVert\nimport Proof.RoomStart\nimport Proof.ScreenStart\nimport Proof.PoleJoin\nimport Proof.CastleToLevel\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.SideChangeEnd\nimport Proof.FlagRule\nimport Proof.SurfaceFrames\nimport Proof.ScreenPage\nimport Proof.TitleStart\nimport Proof.EntryKeep\nimport Proof.ControlStart\nimport Proof.StartRun\nimport Proof.RoomMap\nimport Proof.LagPause\nimport Proof.Opening\nimport Proof.OpenFrames\nimport Proof.SideEntryEnd\nimport Proof.SideEntryRest\nimport Proof.SideChangeSound\nimport Proof.SidePause\nimport Proof.RoomPause\nimport Proof.AreaJoin\nimport Proof.EntryHeight\nimport Proof.OpenMap\n" ++ head ["Route", "SurfaceLate"] ++ s!"
+  IO.FS.writeFile s!"{dir}/Route.lean" ("import Proof.PipeWrites\nimport Proof.RoomJoin\nimport Proof.RoomVert\nimport Proof.RoomStart\nimport Proof.ScreenStart\nimport Proof.PoleJoin\nimport Proof.CastleToLevel\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.SideChangeEnd\nimport Proof.FlagRule\nimport Proof.SurfaceFrames\nimport Proof.ScreenPage\nimport Proof.TitleStart\nimport Proof.EntryKeep\nimport Proof.ControlStart\nimport Proof.StartRun\nimport Proof.RoomMap\nimport Proof.LagPause\nimport Proof.Opening\nimport Proof.OpenFrames\nimport Proof.SideEntryEnd\nimport Proof.SideEntryRest\nimport Proof.SideChangeSound\nimport Proof.SidePause\nimport Proof.RoomPause\nimport Proof.AreaJoin\nimport Proof.EntryHeight\nimport Proof.OpenMap\nimport Proof.RoomBlocks\nimport Proof.RoomLand\n" ++ head ["Route", "SurfaceLate"] ++ s!"
 open Smbrta.SideChangeSound in
 /-- the rows of the change out of the side pipe with the sound's bytes in tables: the frames up to control, the state at control above ground, and the machine there as the
 walk of `FrameKeep` needs it, with the rows made once -/
@@ -1768,7 +1788,7 @@ theorem route_1_1 (R : Run sy ctx {pipeN} {pipeD} roomNums (beside ctx) (beforeG
       (R.pipeP1 lag_check walk_check pause_check title_check title_pos_check title_ctl_check entry_checks open_checks.pause)
       (R.pipeOpenB lag_check walk_check pause_check title_check title_pos_check title_ctl_check open_checks open_map_check open_title_map_check opening.1 open_left entry_checks (by decide)) (R.pipe.reads lag_check walk_check pause_check hcl hs₁) (R.still lag_check walk_check pause_check title_check title_ctl_check entry_checks open_checks.pause hE1) hE1
   have h₃ := room_join R.room (Run.roomStart pipe_end room_start title_check entry_checks R)
-    (Run.inRoom pipe_end map_facts map_start map_startF side_entry_end_check side_rest_check room_vert ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ title_check entry_checks R)
+    (Run.inRoom pipe_end map_facts map_start map_startF side_entry_end_check side_rest_check room_vert ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ room_blocks room_blocks_rows room_land title_check entry_checks R)
   have hst := Run.start (PA := ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩) side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ (SideChangeSound.sideCheckK_parts side_sound_checks).2.1 title_check entry_checks R
   have hc0 := Run.atCtl₀ side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ (SideChangeSound.sideCheckK_parts side_sound_checks).2.2 title_check entry_checks R
   -- a touch later than the frames that the position's range covers: the bound from the count of frames (`SurfaceLate`)
@@ -18169,8 +18189,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genRoomLand dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genRoomLand dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!

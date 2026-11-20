@@ -48,15 +48,6 @@ end Smbrta.RoomJoin
 
 namespace Smbrta.RoomCollision
 open FrameModel
-/-- If the movement-end and call-entry coordinate bytes agree, the computed
-cell can be read at the movement end with the actual call's offset index.
-This is a local transport lemma, not a new Run field or a proof of agreement. -/
-theorem readAddress_from_coords {E : Rom} {B : ScreenPage.Places} {P : Places} {R Q : Machine}
-    (hc : ∀ j ∈ coords P, R.ram.get! j = Q.ram.get! j) :
-    readAddress E B P R = readAddress E B P {Q with y := R.y} := by
-  unfold readAddress
-  rw [hc P.pg (by simp [coords]),hc P.x (by simp [coords]),hc P.y (by simp [coords])]
-
 /-- The map-return result expressed using movement-end coordinates, provided
 the actual instruction prefix preserves them. No call or preservation is assumed globally. -/
 theorem returned_map_from_coords {E : Rom} {B : ScreenPage.Places} {P : Places} {R Q T U M : Machine} {cs : List UInt8}

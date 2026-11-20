@@ -97,6 +97,8 @@ Lean: `Theorems/RoomFall.lean`（`phC`、`finC`、`piecesC`、`yPieces`、`after
 * 空中のフレームの入力（`Approach.air`）。`air_in` は [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) で証明しました。
 * 最初の操作からの落下（状態 2、ジャンプなし）は `vstepR` で `vair_of` に入ります。[部屋での最初の落下](c-7-5-4-FirstFall-ja.md) がそれを使います。最初の操作での状態は分かっているので、最初に立つまでの状態は有限の集まりで、そこでは `vfall`、`fall_long`、`floor_at` を証明します。壁に立ったあとは、跳ばなければ [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) が証明します。壁から跳んだあとは `fall_jump` が仮定のままです。`C + 34` での着地（`land_at`）も仮定のままです。
 
+`after_QH` は `after_QC` に履歴を足したものです。着地しない場合、Q からフレームの各命令で着地の 4 バイトが Q の値のままです。そのため、Q のあとで状態が 0 になる命令があれば、フレームは着地して終わります（`landed_of_write`、`land_frame`）。[最初の落下の着地のフレーム](c-7-5-12-RoomLand-ja.md) がこれを使います。
+
 **ファイル.** `Theorems/RoomFall.lean`、`Theorems/VertAir.lean`、非公開の `Proof/RoomFall.lean`。
 
 **再現.**

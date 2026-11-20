@@ -211,8 +211,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`): from the change's rows
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
-    - 🚨 1-1-c-7-5 The fall and the height of the feet (`stand_wall`, `land_at`, `vfloor`, `low_at`, `read_stop`)
-      <details><summary>11 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-c-7-5 The fall and the height of the feet (`stand_wall`, `landQ`, `vfloor`, `low_at`, `read_stop`)
+      <details><summary>12 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-5-1 A jump's first 8 frames follow `vstep` (the air part of `vframes`: two walks of the room's frames)
       - ✅ 1-1-c-7-5-2 The halt value and A of the frame before (`halt`, `prevA` gone: two walks of the room and the rows of the change)
@@ -223,8 +223,9 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-c-7-5-7 The block buffer's column pointer (`RoomAddress`)
       - ✅ 1-1-c-7-5-8 The tile read and the return from the entry position (`RoomCollision`; the map at the read: 1-1-c-7-12-2; the link to the position after the move remains)
       - ✅ 1-1-c-7-5-9 The state before the landing is in the fall's layer, and the last step is the move or the landing (`RoomLanding`, without `land_at`; the link to the foot calls' entries remains)
-      - ✅ 1-1-c-7-5-10 A foot call's entry and its map byte under a local check (`RoomFootPrefix`; `BIT` added to the walk; `land_at` remains)
-      - ✅ 1-1-c-7-5-11 A small foot cut from the end of the move, and the room walk's control values (`RoomFootCut`; `land_at` remains)
+      - ✅ 1-1-c-7-5-10 A foot call's entry and its map byte under a local check (`RoomFootPrefix`; `BIT` added to the walk)
+      - ✅ 1-1-c-7-5-11 A small foot cut from the end of the move, and the room walk's control values (`RoomFootCut`)
+      - ✅ 1-1-c-7-5-12 The landing frame of the first fall (`land_at` gone; new field `landQ`: four bytes at the end of the move)
 
       </details>
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)

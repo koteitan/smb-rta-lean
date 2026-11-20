@@ -136,6 +136,8 @@ def stackI : List Nat := (List.range 256).map fun n => stkI n.toUInt8
 def coords (P : Places) : List Nat := [P.x,P.pg,P.y]
 def keep (P : Places) : List Nat := coords P ++ stackI
 
+
+
 def xadd (E : Rom) (P : Places) (i : UInt8) : UInt8 := E.b (P.xtable+i.toUInt16)
 def yadd (E : Rom) (P : Places) (i : UInt8) : UInt8 := E.b (P.ytable+i.toUInt16)
 def rowOf (P : Places) (y off : UInt8) : UInt8 := ((y+off) &&& P.mask) - P.top
@@ -624,6 +626,15 @@ theorem ptr_bytes {T : Machine} {z : UInt8} {v : UInt16} (hp : RoomBlocks.ptrZ T
 def readAddress (E : Rom) (B : ScreenPage.Places) (P : Places) (R : Machine) : UInt16 :=
   RoomAddress.target B (RoomAddress.selector (R.ram.get! P.pg) (R.ram.get! P.x) (xadd E P R.y)) +
     (rowOf P (R.ram.get! P.y) (yadd E P R.y)).toUInt16
+
+/-- If the movement-end and call-entry coordinate bytes agree, the computed
+cell can be read at the movement end with the actual call's offset index.
+This is a local transport lemma, not a new Run field or a proof of agreement. -/
+theorem readAddress_from_coords {E : Rom} {B : ScreenPage.Places} {P : Places} {R Q : Machine}
+    (hc : ∀ j ∈ coords P, R.ram.get! j = Q.ram.get! j) :
+    readAddress E B P R = readAddress E B P {Q with y := R.y} := by
+  unfold readAddress
+  rw [hc P.pg (by simp [coords]),hc P.x (by simp [coords]),hc P.y (by simp [coords])]
 
 def lowCoord (P : Places) (R : Machine) : UInt8 :=
   (if R.a == 0 then R.ram.get! P.y else R.ram.get! P.x) &&& P.lowMask

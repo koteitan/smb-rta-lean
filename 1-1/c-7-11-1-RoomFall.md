@@ -97,6 +97,8 @@ Of the 2,621 landings, 2,595 were on the floor. On every frame in the air, `vste
 * The inputs of the air frames (`Approach.air`). `air_in` is proved in [Frames that start standing in the room](c-7-5-5-RoomStand.md).
 * The fall from the first control (state 2, no jump) is covered by `vair_of` with `vstepR`. [The first fall in the room](c-7-5-4-FirstFall.md) uses it: the state at first control is known, so up to the first stand the states are a finite set, and `vfall`, `fall_long` and `floor_at` are proved there. After a stand on the wall [Frames that start standing in the room](c-7-5-5-RoomStand.md) proves them with no jump; after a jump from the wall `fall_jump` stays assumed, and so does the landing at `C + 34` (`land_at`).
 
+`after_QH` is `after_QC` with a history: when he does not land, every instruction of the frame from Q on has the four landing bytes of Q. So if some instruction after Q has the state 0, the frame ends landed (`landed_of_write`, `land_frame`). [The landing frame of the first fall](c-7-5-12-RoomLand.md) uses it.
+
 **Files.** `Theorems/RoomFall.lean`, `Theorems/VertAir.lean`, private `Proof/RoomFall.lean`.
 
 **Reproduce.**
