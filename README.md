@@ -355,13 +355,14 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
       - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`)
-        <details><summary>5 lines of proved parts (the parent's own assumptions remain)</summary>
+        <details><summary>6 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; `spareV` is a part of `keep.cleanE`)
         - ✅ 1-1-e-2-10-3-2 The subspeed on the other frames (a walk that follows it)
         - ✅ 1-1-e-2-10-3-3 The position and the return of one collision push (`ImpedePosition`; the link to the whole frame remains)
         - ✅ 1-1-e-2-10-3-4 The screen edge's clamp and its return (`ScreenClamp`; the relation of the screen's edge to the position at the frame's start remains)
         - ✅ 1-1-e-2-10-3-5 The sum of the effects on the position (`PositionPieces`; the frame's cuts and the clamp's bound remain)
+        - ✅ 1-1-e-2-10-3-6 Position cuts from local entry conditions (`PositionDispatch`; coverage and the screen edge's relation remain)
 
         </details>
       - ✅ 1-1-e-2-10-4 A touch after frame 745 (`farLate` gone: the bound from the count of frames, `SurfaceLate`)
