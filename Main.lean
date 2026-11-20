@@ -523,6 +523,44 @@ theorem room_vert : RoomPair.RoomWalks sy screenNames ctx roomNums.h roomNums.ri
     room_vert_jump⟩
 ")
 
+/-- Small landing cuts and the existing room walk's control bytes. -/
+def genRoomFootCut (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/RoomFootCut.lean" ("import Proof.ScreenPage
+import Theorems.RoomFootCut
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+def roomFootSliceHeight : UInt8 := (Jump.groundY sy+sy.MaxFallSpeed.toNat).toUInt8
+
+def roomFootSliceEmpty : UInt8 :=
+  (RoomMap.mapRef ctx).ram.get! (RoomFootCut.cell (FrameModel.Rom.of ctx)
+    (ScreenPage.placesR sy screenNames ctx) (RoomCollision.places sy ctx)
+    (RoomFootCut.referenceQ sy ctx roomFootSliceHeight)
+    (RoomFootCut.headIndex sy (FrameModel.Rom.of ctx)))
+
+/-- Both feet for every horizontal coordinate selected by the reference geometry. -/
+theorem room_foot_reference_check : RoomFootCut.referenceCheck sy screenNames ctx
+    roomFootSliceHeight roomFootSliceEmpty sy.GroundTile.toUInt8 500 = true := by native_decide
+/-- The finite slice has eighty coordinates, two foot calls each. -/
+theorem room_foot_reference_count :
+    (RoomFootCut.floorXs sy (FrameModel.Rom.of ctx) (ScreenPage.placesR sy screenNames ctx)
+      (RoomCollision.places sy ctx) (RoomMap.mapRef ctx)
+      (RoomFootCut.referenceQ sy ctx (Jump.groundY sy+sy.MaxFallSpeed.toNat).toUInt8)
+      roomFootSliceEmpty sy.GroundTile.toUInt8).length = 80 := by native_decide
+/-- The old room walk already knows all six controls at PlayerSubs. -/
+theorem room_foot_controls : RoomFootCut.controlCheck sy screenNames ctx = true := by native_decide
+def footSecondReturn : UInt16 :=
+  let first := PipeEntryRule.findOp ctx sy.DoFootCheck 0x20 20
+  ScreenPage.findJsr ctx (first+3) ((FrameModel.Rom.of ctx).w (first+1)) 64+3
+
+theorem room_foot_landing_stores : RoomFootCut.landingCheck sy (FrameModel.Rom.of ctx)
+    (RoomCollision.places sy ctx) footSecondReturn
+    ((RoomFootCut.referenceQ sy ctx (Jump.groundY sy+sy.MaxFallSpeed.toNat).toUInt8).s-3)
+    (Jump.groundY sy+sy.MaxFallSpeed.toNat).toUInt8 sy.GroundTile.toUInt8 200 = true := by native_decide
+/-- The head and both foot cells have buffer bounds and are noncoins. -/
+theorem room_foot_reference_cells : RoomFootCut.referenceCellsCheck sy screenNames ctx
+    roomFootSliceHeight roomFootSliceEmpty sy.GroundTile.toUInt8 = true := by native_decide
+")
+
 /-- Metadata for the value-aware pole tile invariant's actual read. -/
 def genPoleTiles (dir : String) : IO Unit :=
   IO.FS.writeFile s!"{dir}/PoleTiles.lean" ("import Proof.Rom\nimport Theorems.PoleTiles\n" ++ s!"/-! {privateNote} -/\n" ++ "
@@ -18131,8 +18169,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genPoleJump dir; genPoleTiles dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!
