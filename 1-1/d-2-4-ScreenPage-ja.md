@@ -25,7 +25,7 @@ Leaves(m')  :=  page(m') = page(r) ∧ lock(m') = lock(r) ∧ rt(m') ≠ rt(r)
 EntryRest(m) :=  ∃ (v, X) ∈ V,  ∀ b ∈ X ∩ R,  m[b] = v[b]
 ```
 
-`K` は 82 バイトの既知のビットです。下に挙げます。`T` は `r` のブロックバッファにあるタイルと 0 です。`V` は `Entry2` の 2 つの参照の機械と、それぞれのバイトのリスト `X` です（`SideChangeEnd.refs2`）。`RoomCond(v, Y)` は、`Room` の `r` を `v` にし、バイト `Y` の全部のビットを知るものです。`R` は下の 16 バイトのリストです（`restIdx`）。
+`K` は 83 バイトの既知のビットです。下に挙げます。`T` は `r` のブロックバッファにあるタイルと 0 です。`V` は `Entry2` の 2 つの参照の機械と、それぞれのバイトのリスト `X` です（`SideChangeEnd.refs2`）。`RoomCond(v, Y)` は、`Room` の `r` を `v` にし、バイト `Y` の全部のビットを知るものです。`R` は下の 16 バイトのリストです（`restIdx`）。
 
 ```
 room_step    :  Room(m) ∧ (∀ j, SiteOK(tr(j)))  →  Room(frame(m, i)) ∨ Leaves(frame(m, i))
@@ -68,6 +68,8 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 これらのバイトの 1 つを `K` に足すと、歩きは失敗します（前の回に、`Player_State` と `Player_Y_HighPos` がまだ `R` にあったときに測りました）。`Player_Y_HighPos` で失敗 1、`VRAM_Buffer1_Offset` で 3、`EventMusicBuffer` で 1、`MusicOffset_Square1` で 1、`NoiseSoundBuffer` で 1、`VRAM_Buffer1` で 2 です。最後の組と `MusicData`、`EventMusicQueue`、`Player_Y_Position`、`Player_State`、`AreaMusicBuffer` は、部屋に入る切り替えの段が操作のときに参照の値を知りません（操作できる 4 つの状態のうち 0 か 2）。6 バイトは両方の確かめを通ったので `K` に入れました。`ScreenRoutineTask`、`DisableScreenFlag`、`Fireball_State` (2)、`JoypadOverride`、`GameTimerExpiredFlag` です。段は操作のときにこれらを知っていて、[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md) の確認はこれらを入れても通ります。
 
 前の回、さらに 3 バイトを `K` に入れました。`AreaPointer`、`EntrancePage`、`PrimaryHardMode` で、次の面とハードモードです。部屋に入る切り替えの時間の段は、操作のときにこれらを参照の値で知っています（操作できる 2 つの状態の両方）。これらを `K` に入れても歩きは失敗 0 で、表も同じです。[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md) の確認も通ります。ですから `EntryRest` はもうこれらを求めません。`AreaNumber` も歩きは通りますが、段がこれを知りません。ルートのほかの部分も `AreaNumber` を追っていません。縦の土管に入るときの条件、パート a の 1 フレーム全部で保つこと、部屋に入る切り替えの段のどれにもありません。ゲームの始まりから 0 で、これらのフレームのコードはこれを書きませんが、証明していません。部屋の本物の走り（113 回、入るのは 36 回。一時的なプログラムで測り、残していません）では、この 4 バイトと `Player_Y_HighPos` と `R` の音のバイトは変わりません。音のバイトを `K` に入れると歩きは通りますが、入るフレームの終わりではこれらを知りません。探索が、これらの違う状態をまとめるからです。
+
+項目 1-1-c-7-5-13 で、もう 1 バイトを `K` に入れました。プレイヤーの当たり判定を止める旗 `DisableCollisionDet` です。部屋に入る切り替えがこの旗を 0 にし、部屋のどの命令も書きません。切り替えの段は操作のときにこの旗を参照の値で知っていて、歩きもこの値を保ち、確認は前と同じく通ります。最初の落下の着地は、この旗の値を歩きから取ります（[最初の落下での当たり判定を止める旗と縦のページ](c-7-5-13-LandBytes-ja.md)）。
 
 **この回: プレイヤーの状態と画面の上での高さ.** `K` は `Player_State` の上のビットだけを知り、`Player_Y_HighPos` は知りません。どちらも部屋の中で変わるからです。けれども土管に入る道では、コードがこれらを確かめます。
 
@@ -132,7 +134,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 | 最初の状態でゲームタイマーを 100 の近くに書き換え、入力なし | 900 | 0 | 0 | 0 | | | 3 / 3 | 0 | 0 |
 | 土管の右に書き換え、右と B、ポーズ | 4,800 | 2,328 | 0 | 0 | | | 12 / 12 | 0 | 192 |
 
-ここの `Room` は 82 バイトの `K` です。`Entry2` はタイマー 160 以上です。
+ここの `Room` は 83 バイトの `K` です。`Entry2` はタイマー 160 以上です。
 
 * 入ったフレームのタイマーはどれも `long` です。
 * 本物の入るフレームはどれも `EntryRest` を満たし、`entry_rest` のとおり `Entry2` を満たします。
@@ -144,7 +146,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 ## 前提（Lean では証明していない）
 
 * **`EntryRest(seq(e))`.** 入るフレームの終わりで `R` の 16 バイトが `Entry2` の参照の値であること（(4) を見てください）。急ぎの音楽が鳴ると成り立ちません（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。項目 1-1-d-2-5 です。 道筋はいまそのうち 11 バイトを求めます。音楽の 5 バイトは部屋のフレームから出ます（[部屋のフレームを通る音楽のバイト](d-2-5-1-RoomMusic-ja.md)）。
-* **`Room(seq(c))`.** 部屋で最初に操作できる状態の 82 バイト。ルートでは 1 つ目の切り替えの時間の段から証明しました（[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md)）。以下はこのページを書いたときの説明です。走りが違っても変わらないバイトだけを `K` に残しました。ファイアマリオ（`PlayerStatus` が 2）では成り立ちません。1-1 のこの土管より前のパワーアップは 1 つです。部屋に入る切り替えの段を歩けば出るはずです。切り替えのあとの状態はほとんど知られているからです。項目 1-1-b-3-2 の段の最後の状態が `K` の値を知っていれば、`AS.le` の確認 1 つで済みます。`K` のうち面の準備が消さないバイトは `AreaType`、`CurrentPlayer`、`PlayerStatus`、`WorldNumber`、`OperMode`、`OperMode_Task`、`AreaMusicBuffer_Alt` です。その段の出口の条件がこれらを知る必要があります。ここではその段に頼っていません。動かしてもいません。
+* **`Room(seq(c))`.** 部屋で最初に操作できる状態の 83 バイト。ルートでは 1 つ目の切り替えの時間の段から証明しました（[部屋で最初に操作できる状態の条件](d-2-4-1-ScreenStart-ja.md)）。以下はこのページを書いたときの説明です。走りが違っても変わらないバイトだけを `K` に残しました。ファイアマリオ（`PlayerStatus` が 2）では成り立ちません。1-1 のこの土管より前のパワーアップは 1 つです。部屋に入る切り替えの段を歩けば出るはずです。切り替えのあとの状態はほとんど知られているからです。項目 1-1-b-3-2 の段の最後の状態が `K` の値を知っていれば、`AS.le` の確認 1 つで済みます。`K` のうち面の準備が消さないバイトは `AreaType`、`CurrentPlayer`、`PlayerStatus`、`WorldNumber`、`OperMode`、`OperMode_Task`、`AreaMusicBuffer_Alt` です。その段の出口の条件がこれらを知る必要があります。ここではその段に頼っていません。動かしてもいません。
 * **`SiteOK` の時間.** 部屋のフレームがはみ出さないことです。
 * **読みの番地.** `LDA (zp),Y` がレジスタを読まないこと。一時的なプログラムで測りました（残していません）。この条件の代わりに [切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の規則（ポインタの上のバイトが `0x1E` 以下か `0x80` 以上とわかる）を使うと、部屋の歩きは画面の更新の最初の読み `LDA ($00),Y` で失敗します。NMI はこのポインタを、`VRAM_Buffer_AddrCtrl` を位置として表から読みます。`Room` はこのバイトを知りません（コインをとると変わります）。ですから歩きには、`Room` にこのバイトのビットと、その読みの分け方が要ります。また [部屋のブロックの地図](c-7-12-RoomMap-ja.md) は、知っているポインタを通したものも含めてすべての `LDA (zp),Y` に `SiteOK` のこの部分を使います。ですから、そのページの定理に与えるものを変えずには、この部分を `chg.roomSites` から外せません。項目 1-1-d-2-4-2 です。
 * **タイル.** ブロックバッファの読みが `T` の値を返すこと。読む番地がブロックバッファの中にあり、部屋のブロックバッファが初めの値かコインの消えた値であることから来ます。これは証明していません。
@@ -169,7 +171,7 @@ roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)        （定理。a₂ 
 
 **リスト `K`**（名前）:
 
-`GameEngineSubroutine`、`Enemy_Flag` (6)、`Enemy_ID+5`、`Player_State`（ビット 0xfc）、`Block_State` (2)、`Misc_State` (9)、`EnemyData`、`EnemyDataHigh`、`AreaMusicBuffer`（ビット 0xfb）、`AreaMusicQueue`、`FloateyNum_Timer` (6)、`VineFlagOffset`、`Block_RepFlag` (2)、`Cannon_PageLoc` (6)、`Cannon_X_Position` (6)、`Cannon_Y_Position` (4)、`EnemyFrenzyBuffer`、`SecondaryHardMode`、`EnemyFrenzyQueue`、`SprDataOffset`、`SwimmingFlag`、`JumpspringAnimCtrl`、`FireballThrowingTimer`、`ScreenLeft_PageLoc`、`ScreenRight_PageLoc`、`ScreenRight_X_Pos`、`AreaParserTaskNum`、`ScrollLock`、`EnemyDataOffset`、`EnemyObjectPageLoc`、`ScrollThirtyTwo`、`CloudTypeOverride`、`AreaType`、`CurrentPlayer`、`PlayerStatus`（ビット 0xfe）、`WorldNumber`、`OperMode`、`OperMode_Task`、`StarInvincibleTimer`、`AreaMusicBuffer_Alt`（ビット 0xfb）、`ScreenRoutineTask`、`DisableScreenFlag`、`Fireball_State` (2)、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaPointer`、`EntrancePage`、`PrimaryHardMode`
+`GameEngineSubroutine`、`Enemy_Flag` (6)、`Enemy_ID+5`、`Player_State`（ビット 0xfc）、`Block_State` (2)、`Misc_State` (9)、`EnemyData`、`EnemyDataHigh`、`AreaMusicBuffer`（ビット 0xfb）、`AreaMusicQueue`、`FloateyNum_Timer` (6)、`VineFlagOffset`、`Block_RepFlag` (2)、`Cannon_PageLoc` (6)、`Cannon_X_Position` (6)、`Cannon_Y_Position` (4)、`EnemyFrenzyBuffer`、`SecondaryHardMode`、`EnemyFrenzyQueue`、`SprDataOffset`、`SwimmingFlag`、`JumpspringAnimCtrl`、`FireballThrowingTimer`、`ScreenLeft_PageLoc`、`ScreenRight_PageLoc`、`ScreenRight_X_Pos`、`AreaParserTaskNum`、`ScrollLock`、`EnemyDataOffset`、`EnemyObjectPageLoc`、`ScrollThirtyTwo`、`CloudTypeOverride`、`AreaType`、`CurrentPlayer`、`PlayerStatus`（ビット 0xfe）、`WorldNumber`、`OperMode`、`OperMode_Task`、`StarInvincibleTimer`、`AreaMusicBuffer_Alt`（ビット 0xfb）、`ScreenRoutineTask`、`DisableScreenFlag`、`Fireball_State` (2)、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaPointer`、`EntrancePage`、`PrimaryHardMode`、`DisableCollisionDet`
 
 **リスト `R`**（名前）: `GameEngineSubroutine`、`Player_Y_Position`、`VRAM_Buffer1_Offset`、`VRAM_Buffer1`（+0、+1、+2、+7）、`AreaMusicBuffer`、`EventMusicBuffer`、`MusicData` (2)、`MusicOffset_Square1`、`NoiseSoundBuffer`、`EventMusicQueue`、`NoteLengthTblAdder`、`AreaNumber`
 

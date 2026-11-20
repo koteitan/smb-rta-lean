@@ -99,6 +99,8 @@ Lean: `Theorems/RoomFall.lean`（`phC`、`finC`、`piecesC`、`yPieces`、`after
 
 `after_QH` は `after_QC` に履歴を足したものです。着地しない場合、Q からフレームの各命令で着地の 4 バイトが Q の値のままです。そのため、Q のあとで状態が 0 になる命令があれば、フレームは着地して終わります（`landed_of_write`、`land_frame`）。[最初の落下の着地のフレーム](c-7-5-12-RoomLand-ja.md) がこれを使います。
 
+項目 1-1-c-7-5-13（[最初の落下での当たり判定を止める旗と縦のページ](c-7-5-13-LandBytes-ja.md)）から、歩きは Q のあとで縦のページも保ちます（`vRestW`：`vRest` と縦のページ。`apartC` で縦のページがブロックバッファの外にあることを確かめます）。`after_QH` はこれも言います。`high_frame` と `high_room` は空中のフレームで縦のページをたどります。
+
 **ファイル.** `Theorems/RoomFall.lean`、`Theorems/VertAir.lean`、非公開の `Proof/RoomFall.lean`。
 
 **再現.**

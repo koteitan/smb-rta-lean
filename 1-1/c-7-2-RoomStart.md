@@ -8,17 +8,17 @@
 
 `s₀`, `P₀`, `P₁`, `Y_s`, `W_s`, `f_s` are numbers of the room (`RoomJoin.room`, `Nums`). `s₀` is the state (speed, fraction, facing, moving direction, running speed) = (0, 0, 1, 0, 0): stopped, facing right. `P₀ = 256·x_s` and `P₁ = 256·x_s + 255`, where `x_s` is the room's first `x`. `Y_s` is 50 px from the top, `W_s` is 2.375 px per frame, `f_s` is the machine's first fall force.
 
-`hs(m)` is the machine's horizontal state (`FrameModel.readHS`), `P(m)` the position (`posP`), `pix(m) = 256·page + x`, `vs(m)` the vertical state (`SurfaceFrames.vsOf`), `ab(m)` the stored speed. `VY(s) = 256·y + fraction`, `VW(s) = 256·vy + fraction`.
+`hs(m)` is the machine's horizontal state (`FrameModel.readHS`), `P(m)` the position (`posP`), `pix(m) = 256·page + x`, `vs(m)` the vertical state (`SurfaceFrames.vsOf`), `ab(m)` the stored speed, `yhigh(m)` the vertical page (since item 1-1-c-7-5-13). `VY(s) = 256·y + fraction`, `VW(s) = 256·vy + fraction`.
 
 ```
 StartAt(m)       :  hs(m) = s₀  ∧  P₀ ≤ P(m) ≤ P₁
                     ∧  vs(m).st = 2  ∧  VY(vs m) ≤ Y_s  ∧  VW(vs m) ≤ W_s  ∧  vs(m).vfd = f_s
-                    ∧  ab(m) = 0
+                    ∧  ab(m) = 0  ∧  yhigh(m) = 1
 
 startCheck       :  every state S of the rows of the time with the sound's bytes in tables where left is 0 (`timeRows`; the old rows rowsA, rowsB are `startCheckO`)
                     knows the bytes of control (OperMode, OperMode_Task, GameEngineSubroutine),
-                    and if it has control, it knows the bytes of the horizontal state, page, x, the vertical state and the stored speed, and
-                    hs(S) = s₀  ∧  P₀ ≤ 256·pix(S)  ∧  256·pix(S) + 255 ≤ P₁  ∧  the vertical state and ab as above
+                    and if it has control, it knows the bytes of the horizontal state, page, x, the vertical state, the stored speed and the vertical page, and
+                    hs(S) = s₀  ∧  P₀ ≤ 256·pix(S)  ∧  256·pix(S) + 255 ≤ P₁  ∧  the vertical state, ab and yhigh as above
 
 start_of_rows    :  startCheck ∧ InRows(m) ∧ ctl(m)  →  StartAt(m)
 left_during      :  During(m)  →  left(m) ≠ 0

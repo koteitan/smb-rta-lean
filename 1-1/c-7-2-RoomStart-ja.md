@@ -8,17 +8,17 @@
 
 `s₀`、`P₀`、`P₁`、`Y_s`、`W_s`、`f_s` は部屋の数（`RoomJoin.room`、`Nums`）です。`s₀` は (速さ, 端数, 向き, 動く向き, 走りの速さ) = (0, 0, 1, 0, 0) の状態です。止まっていて右を向いています。`P₀ = 256·x_s`、`P₁ = 256·x_s + 255` で、`x_s` は部屋の最初の `x` です。`Y_s` は上から 50 ピクセル、`W_s` は 1 フレームに 2.375 ピクセル、`f_s` は機械の最初の落下の力です。
 
-`hs(m)` は機械の横の状態（`FrameModel.readHS`）、`P(m)` は位置（`posP`）、`pix(m) = 256·page + x`、`vs(m)` は縦の状態（`SurfaceFrames.vsOf`）、`ab(m)` は覚えている速さです。`VY(s) = 256·y + 端数`、`VW(s) = 256·vy + 端数` です。
+`hs(m)` は機械の横の状態（`FrameModel.readHS`）、`P(m)` は位置（`posP`）、`pix(m) = 256·page + x`、`vs(m)` は縦の状態（`SurfaceFrames.vsOf`）、`ab(m)` は覚えている速さ、`yhigh(m)` は縦のページ（項目 1-1-c-7-5-13 から）です。`VY(s) = 256·y + 端数`、`VW(s) = 256·vy + 端数` です。
 
 ```
 StartAt(m)       :  hs(m) = s₀  ∧  P₀ ≤ P(m) ≤ P₁
                     ∧  vs(m).st = 2  ∧  VY(vs m) ≤ Y_s  ∧  VW(vs m) ≤ W_s  ∧  vs(m).vfd = f_s
-                    ∧  ab(m) = 0
+                    ∧  ab(m) = 0  ∧  yhigh(m) = 1
 
 startCheck       :  音のバイトを表で運ぶ時間の段の left が 0 の段（`timeRows`。前の段 rowsA、rowsB は `startCheckO`）のどの状態 S も
                     操作のバイト（OperMode、OperMode_Task、GameEngineSubroutine）を知り、
-                    操作できるなら、横の状態、page、x、縦の状態、覚えている速さのバイトを知り、
-                    hs(S) = s₀  ∧  P₀ ≤ 256·pix(S)  ∧  256·pix(S) + 255 ≤ P₁  ∧  縦の状態と ab が上のとおり
+                    操作できるなら、横の状態、page、x、縦の状態、覚えている速さ、縦のページのバイトを知り、
+                    hs(S) = s₀  ∧  P₀ ≤ 256·pix(S)  ∧  256·pix(S) + 255 ≤ P₁  ∧  縦の状態、ab、yhigh が上のとおり
 
 start_of_rows    :  startCheck ∧ InRows(m) ∧ ctl(m)  →  StartAt(m)
 left_during      :  During(m)  →  left(m) ≠ 0

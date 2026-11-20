@@ -144,8 +144,9 @@ theorem land {sy : Syms} {E : Rom} {B : ScreenPage.Places} {P : RoomCollision.Pl
 
 /-! ## The values at `Q` from the room's walk -/
 
-/-- the bytes of the cut that the room's walk knows: the routine, the five screen bytes and the jump spring -/
-def controlKeys (sy : Syms) (m0 : Machine) : List Nat := I sy.GameEngineSubroutine :: SideFrame.screenI sy m0 ++ [I sy.JumpspringAnimCtrl]
+/-- the bytes of the cut that the room's walk knows: the routine, the five screen bytes, the jump spring and the collision-disable flag. The room's condition knows the
+flag (`ScreenPage.roomNames`): the change into the room clears it, and no step of the room writes it -/
+def controlKeys (sy : Syms) (m0 : Machine) : List Nat := I sy.GameEngineSubroutine :: SideFrame.screenI sy m0 ++ [I sy.JumpspringAnimCtrl, disable sy (Rom.of m0)]
 
 /-- the room's walk, watching these bytes at `PlayerSubs` -/
 def controlPh (sy : Syms) (m0 : Machine) : RoomVert.Ph :=
@@ -161,7 +162,7 @@ def controlCheck (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) : Boo
   C.t.all (RoomVert.walkV Z C ScreenPage.fuelS) &&
     (ScreenPage.startsR (ScreenPage.refR m0) (RoomMap.knownT sy nm m0)).all (RoomVert.walkV Z C ScreenPage.fuelS)
 
-/-- **The routine, the screen bytes and the jump spring at an actual `PlayerSubs`** of a frame of the room: those of the reference, from the room's walk. No condition
+/-- **The routine, the screen bytes, the jump spring and the collision-disable flag at an actual `PlayerSubs`** of a frame of the room: those of the reference, from the room's walk. No condition
 at `Q` is assumed. -/
 theorem controls_at_subs {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} {input : UInt8} {n : Nat}
     (H : RoomMap.MapFacts sy nm m0) (hc : controlCheck sy nm m0 = true)
@@ -204,15 +205,15 @@ def refQ (sy : Syms) (m0 : Machine) (y : UInt8) : Machine :=
   let Q := (PipeEntryRule.firstAt sy.PlayerSubs 100000 {M with pad := 0}).getD M
   {Q with ram := Q.ram.set! (I sy.Player_Y_Position) y}
 
-/-- what the reference machine has: the collision-disable flag 0, the vertical page 1, the page 0, the height `y`, the reference's routine, screen bytes and jump
-spring, the stack of the player's routine; and the horizontal coordinate apart from the other sampled bytes -/
+/-- what the reference machine has: the vertical page 1, the page 0, the height `y`, the reference's routine, screen bytes, jump spring and collision-disable flag,
+the stack of the player's routine; and the horizontal coordinate apart from the other sampled bytes -/
 def refCheck (sy : Syms) (m0 : Machine) (y : UInt8) : Bool :=
   let E := Rom.of m0
   let P := RoomCollision.places sy m0
   let Q := refQ sy m0 y
   let ref := ScreenPage.refR m0
   Q.ram.size == 2048 && P.x == I sy.Player_X_Position && P.pg == I sy.Player_PageLoc && P.y == I sy.Player_Y_Position &&
-  Q.ram.get! (disable sy E) == 0 && Q.ram.get! (I sy.Player_Y_HighPos) == 1 && Q.ram.get! P.pg == 0 && Q.ram.get! P.y == y &&
+  Q.ram.get! (I sy.Player_Y_HighPos) == 1 && Q.ram.get! P.pg == 0 && Q.ram.get! P.y == y &&
   (controlKeys sy m0).all (fun j => decide (j < 2048) && Q.ram.get! j == ref.ram.get! j) &&
   ([disable sy E, I sy.Player_Y_HighPos, P.pg, P.y] ++ controlKeys sy m0).all (fun j => j != P.x) &&
   Q.s == ctrlStack sy m0
@@ -227,9 +228,9 @@ structure Checks (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) (xB :
   ref : refCheck sy m0 y = true
   xB : xB ≤ 256
 
-/-- **At the end of the move of a frame of the room, with the collision-disable flag 0, the vertical page 1, the page 0, the horizontal coordinate below `xB`, the
-height `y` and the vertical speed not negative, the player stands at the side check**, with the height `y` with its low four bits 0. The routine, the screen bytes and
-the jump spring come from the room's walk; the cells from the solid map at `Q`; the stack and `Good` are hypotheses. -/
+/-- **At the end of the move of a frame of the room, with the vertical page 1, the page 0, the horizontal coordinate below `xB`, the height `y` and the vertical speed
+not negative, the player stands at the side check**, with the height `y` with its low four bits 0. The routine, the screen bytes, the jump spring and the collision-disable
+flag come from the room's walk; the cells from the solid map at `Q`; the stack and `Good` are hypotheses. -/
 theorem stand_at {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} {xB : Nat} {y : UInt8} (H : Checks sy nm m0 xB y)
     (hM : RoomMap.MapFacts sy nm m0) {input : UInt8} {n : Nat}
     (hm : ScreenPage.RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) m)
@@ -237,7 +238,6 @@ theorem stand_at {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} {xB
     (hf : (PipeEntryRule.trace m input n).frame = m.frame) (pc : (PipeEntryRule.trace m input n).pc = sy.PlayerSubs)
     (hg : Good (Rom.of m0) (PipeEntryRule.trace m input n)) (hs : (PipeEntryRule.trace m input n).s = ctrlStack sy m0)
     (hsolid : RoomBlocks.Solid (ScreenPage.placesR sy nm m0) (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) (RoomMap.mapRef m0) (PipeEntryRule.trace m input n))
-    (hdis : (PipeEntryRule.trace m input n).ram.get! (disable sy (Rom.of m0)) = 0)
     (hhi : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_HighPos) = 1)
     (hpg : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_PageLoc) = 0)
     (hx : ((PipeEntryRule.trace m input n).ram.get! (I sy.Player_X_Position)).toNat < xB)
@@ -249,7 +249,7 @@ theorem stand_at {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} {xB
       InFrameN (Rom.of m0) (PipeEntryRule.trace m input n) k := by
   have hr := H.ref
   simp only [refCheck, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, decide_eq_true_eq] at hr
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hsz, ePx⟩, ePg⟩, ePy⟩, r0⟩, r1⟩, r2⟩, r3⟩, rc⟩, rx⟩, rs⟩ := hr
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨hsz, ePx⟩, ePg⟩, ePy⟩, r1⟩, r2⟩, r3⟩, rc⟩, rx⟩, rs⟩ := hr
   let R := PipeEntryRule.trace m input n
   let Q := refQ sy m0 y
   let x := (R.ram.get! (I sy.Player_X_Position))
@@ -273,9 +273,7 @@ theorem stand_at {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} {xB
       rw [hvar j ne, (rc j hj).2, ctl j hj (rc j hj).1]
     simp only [keys, List.cons_append, List.nil_append, List.mem_cons, List.mem_append, List.mem_singleton, List.not_mem_nil, or_false] at hj
     rcases hj with e | e | e | e | e | e | e | e
-    · subst e
-      rw [hvar _ (rx _ (by simp)), r0]
-      exact hdis
+    · exact hc j (by subst e; simp [controlKeys])
     · subst e
       rw [hvar _ (rx _ (by simp)), r1]
       exact hhi

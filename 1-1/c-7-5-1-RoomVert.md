@@ -6,7 +6,7 @@
 
 It also gives item 1-1-c-7-11 for these frames: in the air the movement routine does not read the stored speed, so the vertical motion does not depend on the horizontal one. Only the takeoff reads it. [Every frame of a jump in the room](c-7-11-1-RoomFall.md) extends this to every frame of a jump from the floor, up to the landing.
 
-`V` is the set of bytes that `vsOf` reads: the height and its fraction, the vertical speed and its fraction, the two forces, the jump's origin, the state, and A and B. `V⁺` is `V` with A and B of the frame before, the jump's halt value, and the 8 horizontal bytes (`vKeepA`). `R` is the player's routine, `Q` the scroll handler (`PlayerSubs`). `tr(j)` is the machine `j` instructions into the frame, `end` the machine at the frame's end. `rt` is the routine byte. "Rising" means the state is 1 or 2 and bit 7 of the vertical speed is 1.
+`V` is the set of bytes that `vsOf` reads: the height and its fraction, the vertical speed and its fraction, the two forces, the jump's origin, the state, and A and B. `V⁺` is `V` with A and B of the frame before, the jump's halt value, the change of size, the collision bits, the vertical page (since item 1-1-c-7-5-13) and the 8 horizontal bytes (`vKeepA`). `R` is the player's routine, `Q` the scroll handler (`PlayerSubs`). `tr(j)` is the machine `j` instructions into the frame, `end` the machine at the frame's end. `rt` is the routine byte. "Rising" means the state is 1 or 2 and bit 7 of the vertical speed is 1.
 
 ```
 before_R :  RoomCond(M),  SiteOK on each instruction

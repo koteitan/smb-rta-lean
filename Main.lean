@@ -1609,6 +1609,7 @@ theorem room_checks : Checks sy ctx roomNums where
   anyin := by native_decide
   land := by native_decide
   landP := by native_decide
+  high := by native_decide
 
 open Smbrta.RoomJoin in
 /-- **The bonus room**: in a run with these frames, the side pipe is entered at least {98 + joinT.aboveF} frames after first control -/
@@ -1759,7 +1760,7 @@ theorem flag_check : FlagRule.flagCheck flagCtx (FlagRule.dataOf flagCtx) = true
 theorem flag_checked : FlagRule.Checked flagCtx (FlagRule.dataOf flagCtx) := FlagRule.checked_of_check flag_check
 ")
   -- the whole route
-  IO.FS.writeFile s!"{dir}/Route.lean" ("import Proof.PipeWrites\nimport Proof.RoomJoin\nimport Proof.RoomVert\nimport Proof.RoomStart\nimport Proof.ScreenStart\nimport Proof.PoleJoin\nimport Proof.CastleToLevel\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.SideChangeEnd\nimport Proof.FlagRule\nimport Proof.SurfaceFrames\nimport Proof.ScreenPage\nimport Proof.TitleStart\nimport Proof.EntryKeep\nimport Proof.ControlStart\nimport Proof.StartRun\nimport Proof.RoomMap\nimport Proof.LagPause\nimport Proof.Opening\nimport Proof.OpenFrames\nimport Proof.SideEntryEnd\nimport Proof.SideEntryRest\nimport Proof.SideChangeSound\nimport Proof.SidePause\nimport Proof.RoomPause\nimport Proof.AreaJoin\nimport Proof.EntryHeight\nimport Proof.OpenMap\nimport Proof.RoomBlocks\nimport Proof.RoomLand\n" ++ head ["Route", "SurfaceLate"] ++ s!"
+  IO.FS.writeFile s!"{dir}/Route.lean" ("import Proof.PipeWrites\nimport Proof.RoomJoin\nimport Proof.RoomVert\nimport Proof.RoomStart\nimport Proof.ScreenStart\nimport Proof.PoleJoin\nimport Proof.CastleToLevel\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.SideChangeEnd\nimport Proof.FlagRule\nimport Proof.SurfaceFrames\nimport Proof.ScreenPage\nimport Proof.TitleStart\nimport Proof.EntryKeep\nimport Proof.ControlStart\nimport Proof.StartRun\nimport Proof.RoomMap\nimport Proof.LagPause\nimport Proof.Opening\nimport Proof.OpenFrames\nimport Proof.SideEntryEnd\nimport Proof.SideEntryRest\nimport Proof.SideChangeSound\nimport Proof.SidePause\nimport Proof.RoomPause\nimport Proof.AreaJoin\nimport Proof.EntryHeight\nimport Proof.OpenMap\nimport Proof.RoomBlocks\nimport Proof.RoomLand\nimport Proof.OpenAir\n" ++ head ["Route", "SurfaceLate"] ++ s!"
 open Smbrta.SideChangeSound in
 /-- the rows of the change out of the side pipe with the sound's bytes in tables: the frames up to control, the state at control above ground, and the machine there as the
 walk of `FrameKeep` needs it, with the rows made once -/
@@ -1789,7 +1790,7 @@ theorem route_1_1 (R : Run sy ctx {pipeN} {pipeD} roomNums (beside ctx) (beforeG
       (R.pipeP1 lag_check walk_check pause_check title_check title_pos_check title_ctl_check entry_checks open_checks.pause)
       (R.pipeOpenB lag_check walk_check pause_check title_check title_pos_check title_ctl_check open_checks open_map_check open_title_map_check opening.1 open_left entry_checks (by decide)) (R.pipe.reads lag_check walk_check pause_check hcl hs₁) (R.still lag_check walk_check pause_check title_check title_ctl_check entry_checks open_checks.pause hE1) hE1
   have h₃ := room_join R.room (Run.roomStart pipe_end room_start title_check entry_checks R)
-    (Run.inRoom pipe_end map_facts map_start map_startF side_entry_end_check side_rest_check room_vert ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ room_blocks room_blocks_rows room_land title_check entry_checks R)
+    (Run.inRoom pipe_end map_facts map_start map_startF side_entry_end_check side_rest_check room_vert ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ room_blocks room_blocks_rows room_land open_vert_check title_check entry_checks R)
   have hst := Run.start (PA := ⟨above ctx {surfCtl}, 4, 40, {poleRows}⟩) side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ (SideChangeSound.sideCheckK_parts side_sound_checks).2.1 title_check entry_checks R
   have hc0 := Run.atCtl₀ side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ (SideChangeSound.sideCheckK_parts side_sound_checks).2.2 title_check entry_checks R
   -- a touch later than the frames that the position's range covers: the bound from the count of frames (`SurfaceLate`)

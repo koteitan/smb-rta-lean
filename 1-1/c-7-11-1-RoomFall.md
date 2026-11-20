@@ -99,6 +99,8 @@ Of the 2,621 landings, 2,595 were on the floor. On every frame in the air, `vste
 
 `after_QH` is `after_QC` with a history: when he does not land, every instruction of the frame from Q on has the four landing bytes of Q. So if some instruction after Q has the state 0, the frame ends landed (`landed_of_write`, `land_frame`). [The landing frame of the first fall](c-7-5-12-RoomLand.md) uses it.
 
+Since item 1-1-c-7-5-13 ([The collision-disable flag and the vertical page in the first fall](c-7-5-13-LandBytes.md)) the walk also keeps the vertical page after Q (`vRestW`: `vRest` and the vertical page; `apartC` says that it is out of the block buffers), and `after_QH` says so. `high_frame` and `high_room` follow the vertical page through a frame in the air.
+
 **Files.** `Theorems/RoomFall.lean`, `Theorems/VertAir.lean`, private `Proof/RoomFall.lean`.
 
 **Reproduce.**

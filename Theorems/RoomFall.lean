@@ -1,4 +1,5 @@
 import Theorems.RoomVert
+import Theorems.OpenVert
 
 /-!
 # The vertical bytes of a frame in the room, falling
@@ -32,6 +33,9 @@ def vLand (sy : Syms) : List Nat := [I sy.Player_Y_Position, I sy.Player_Y_Speed
 
 /-- the other bytes that `VertModel.vsOf` reads: the height's fraction, the two forces, the jump's origin, A and B -/
 def vRest (sy : Syms) : List Nat := [I sy.Player_YMF_Dummy, I sy.VerticalForce, I sy.VerticalForceDown, I sy.JumpOrigin_Y_Position, I sy.A_B_Buttons]
+
+/-- the bytes that the walk from the scroll handler keeps besides those of the landing: `vRest`, and the vertical page -/
+def vRestW (sy : Syms) : List Nat := vRest sy ++ [I sy.Player_Y_HighPos]
 
 /-- **Falling in the air**: the state 1 or 2, and the vertical speed not negative -/
 def Falling (sy : Syms) (m : Machine) : Prop :=
@@ -88,7 +92,7 @@ def landed (sy : Syms) (A : AS) : Bool :=
   knIs (A.getK (I sy.Player_State)) 0 && knIs (A.getK (I sy.Player_Y_Speed)) 0 && knIs (A.getK (I sy.Player_Y_MoveForce)) 0 &&
     knIs (A.getK (I sy.Player_Y_Position)) (A.log.getD 1 0).toUInt8
 
-/-- the bit says that the frame came to the scroll handler `Q` falling in the air, and that no step since has written the bytes of `vRest`. The list says what happened to
+/-- the bit says that the frame came to the scroll handler `Q` falling in the air, and that no step since has written the bytes of `vRestW`. The list says what happened to
 the four bytes of the landing (`vLand`): `[3]` not written; `[5, h]` not written, the height's high bits known to be `h` (split at the landing's `AND` with the height);
 `[1, h, 0]` written since; `[6]` landed: the four known (the state, the speed and its fraction 0, the height `h`), then the height forgotten, and no vertical byte written
 since. A step that may write a vertical byte where the list does not allow it drops the bit and marks the state `[4, 4, 4]`; such a state must end the frame out of the
@@ -96,14 +100,14 @@ player's routine (`finC`). The other states at `Q` are marked `[2]`. The walk as
 def phC (sy : Syms) (E : Env) (P : Places) : Ph where
   zone := fun A =>
     if A.pc == sy.PlayerSubs && !A.spent && A.log.isEmpty then piecesC sy A
-    else if A.spent && mayWrite E P (vRest sy) A then [{ A with spent := false, log := [4, 4, 4] }]
+    else if A.spent && mayWrite E P (vRestW sy) A then [{ A with spent := false, log := [4, 4, 4] }]
     else if A.spent && A.log == [3] && isAndY sy E A then yPieces sy A
     else if A.spent && (A.log == [3] || A.log == [6]) && mayWrite E P (vLand sy) A then [{ A with spent := false, log := [4, 4, 4] }]
     else if A.spent && A.log.head? == some 5 && mayWrite E P (vLand sy) A then [{ A with log := [1, A.log.getD 1 0, 0] }]
     else if A.spent && A.log.head? == some 1 && landed sy A then [{ A.setK (I sy.Player_Y_Position) AB.top with log := [6] }]
     else [A]
   pre := fun A => !(A.pc == sy.PlayerSubs && (A.spent || !A.log.isEmpty))
-  ok := fun A => !A.spent || (!mayWrite E P (vRest sy) A && (A.log.head? == some 1 || !mayWrite E P (vLand sy) A))
+  ok := fun A => !A.spent || (!mayWrite E P (vRestW sy) A && (A.log.head? == some 1 || !mayWrite E P (vLand sy) A))
 
 /-- at the frame's end: a state marked `[4, 4, 4]` or `[1, h, 0]` ends out of the player's routine: the routine byte is known and is not the reference's -/
 def finC (P : Places) (r : Machine) (B : AS) : Bool :=
@@ -340,9 +344,10 @@ end
 
 /-! ## The frame from the scroll handler, falling -/
 
-/-- the bytes of `vKeep` are out of the block buffers, and the state, the vertical speed and the height are three bytes -/
+/-- the bytes of `vKeep` and the vertical page are out of the block buffers, and the state, the vertical speed and the height are three bytes -/
 def apartC (sy : Syms) (P : Places) : Bool :=
-  RoomVert.apartB sy P && I sy.Player_State != I sy.Player_Y_Position && I sy.Player_Y_Speed != I sy.Player_Y_Position
+  RoomVert.apartB sy P && I sy.Player_State != I sy.Player_Y_Position && I sy.Player_Y_Speed != I sy.Player_Y_Position &&
+    (decide (I sy.Player_Y_HighPos < P.bufLo) || decide (P.bufLo + P.bufN ≤ I sy.Player_Y_HighPos))
 
 theorem vLand_sub (sy : Syms) : ∀ x ∈ vLand sy, x ∈ vKeep sy := by
   intro x hx
@@ -375,7 +380,7 @@ theorem keep_of_may {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {y : Mach
     exact StepWrites.keep_step hs hm x (List.contains_iff_mem.2 hx)
 
 /-- **The frame from the scroll handler, falling.** The frame comes to the scroll handler at most once. If it comes there falling in the air, and ends in the player's
-routine, then from there to its end no step writes the bytes of `vKeep`, or he lands: the state, the vertical speed and its fraction are 0 at the end, the height is the one
+routine, then from there to its end no step writes the vertical page; and no step writes the bytes of `vKeep`, or he lands: the state, the vertical speed and its fraction are 0 at the end, the height is the one
 at the scroll handler with the low four bits 0, and the other bytes of `vKeep` (`vRest`) are those at the scroll handler. The frame starts in the room's condition, and each
 instruction meets `SiteOK`. In the first case every instruction of the frame from the scroll handler on has the four bytes of the landing of the scroll
 handler (`after_QC` drops this history). -/
@@ -383,23 +388,30 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     (hfin : C.fin = finC P r) (hap : apartC sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
     (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Falling sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
-       ((∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
+       (frame m i).ram.get! (I sy.Player_Y_HighPos) = (trace m i j).ram.get! (I sy.Player_Y_HighPos) ∧
+       (((∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
         ∀ j', j ≤ j' → (trace m i j').frame = m.frame → ∀ x ∈ vLand sy, (trace m i j').ram.get! x = (trace m i j).ram.get! x) ∨
        ((∀ x ∈ vRest sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧ (frame m i).ram.get! (I sy.Player_State) = 0 ∧
         (frame m i).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (frame m i).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
-        (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0)) := by
+        (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0))) := by
   obtain ⟨S, hw, hs, s1, s2, s3⟩ := RoomVert.start_of_room h hm
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
   have hsz : ∀ (A : AS) (y : Machine), Sim C.E (m.frame, 2) A y → A.ram.size = 2048 ∧ A.kn.size = 2048 := fun _ _ hs => ⟨hs.szR, hs.szK⟩
   simp only [apartC, Bool.and_eq_true, bne_iff_ne, ne_eq] at hap
-  obtain ⟨⟨hapB, hsy⟩, hvy⟩ := hap
+  obtain ⟨⟨⟨hapB, hsy⟩, hvy⟩, hHo⟩ := hap
   have hap2 : I sy.Player_State ≠ I sy.Player_Y_Speed := by
     simp only [RoomVert.apartB, Bool.and_eq_true, bne_iff_ne, ne_eq] at hapB
     exact hapB.2
   have hout : ∀ x ∈ vKeep sy, x < P.bufLo ∨ P.bufLo + P.bufN ≤ x := by
     simp only [RoomVert.apartB, Bool.and_eq_true, List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at hapB
     exact hapB.1
+  have houtW : ∀ x ∈ vRestW sy, x < P.bufLo ∨ P.bufLo + P.bufN ≤ x := by
+    intro x hx
+    simp only [vRestW, List.mem_append, List.mem_singleton] at hx
+    rcases hx with hx | rfl
+    · exact hout x (vRest_sub sy x hx)
+    · simpa only [Bool.or_eq_true, decide_eq_true_eq] using hHo
   have hyL : I sy.Player_Y_Position ∈ vLand sy := by simp [vLand]
   have hvL : I sy.Player_Y_Speed ∈ vLand sy := by simp [vLand]
   have hmL : I sy.Player_Y_MoveForce ∈ vLand sy := by simp [vLand]
@@ -410,7 +422,7 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   let yQ : Nat → Nat := fun j₀ => ((trace m i j₀).ram.get! (I sy.Player_Y_Position) &&& 0xF0).toNat
   let Φ : Nat → Bool → List Nat → Prop := fun j b l =>
     (∀ j₀, j₀ < j → (trace m i j₀).pc = Q → (b = true ∨ l ≠ [])) ∧
-    (b = true → ∃ j₀, j₀ < j ∧ (trace m i j₀).pc = Q ∧ Falling sy (trace m i j₀) ∧ Vs (vRest sy) j j₀ ∧
+    (b = true → ∃ j₀, j₀ < j ∧ (trace m i j₀).pc = Q ∧ Falling sy (trace m i j₀) ∧ Vs (vRestW sy) j j₀ ∧
       ((l = [3] ∧ Hs (vLand sy) j j₀) ∨ (l = [5, yQ j₀] ∧ Hs (vLand sy) j j₀) ∨ l = [1, yQ j₀, 0] ∨
        (l = [6] ∧ (trace m i j).ram.get! (I sy.Player_Y_Position) = (trace m i j₀).ram.get! (I sy.Player_Y_Position) &&& 0xF0 ∧
         (trace m i j).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (trace m i j).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
@@ -420,7 +432,7 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phC sy E P).zone A', Sim C.E (m.frame, 2) A₁ x := by
     intro A' x hr hsx
     show ∃ A₁ ∈ (if A'.pc == sy.PlayerSubs && !A'.spent && A'.log.isEmpty then piecesC sy A'
-      else if A'.spent && mayWrite E P (vRest sy) A' then [{ A' with spent := false, log := [4, 4, 4] }]
+      else if A'.spent && mayWrite E P (vRestW sy) A' then [{ A' with spent := false, log := [4, 4, 4] }]
       else if A'.spent && A'.log == [3] && isAndY sy E A' then yPieces sy A'
       else if A'.spent && (A'.log == [3] || A'.log == [6]) && mayWrite E P (vLand sy) A' then [{ A' with spent := false, log := [4, 4, 4] }]
       else if A'.spent && A'.log.head? == some 5 && mayWrite E P (vLand sy) A' then [{ A' with log := [1, A'.log.getD 1 0, 0] }]
@@ -445,13 +457,13 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     have hpc : (trace m i j).pc = A'.pc := hs'.pc
     have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
     have hnext : trace m i (j + 1) = (go step (trace m i j)).2 := RoomVert.trace_succ hf hs'.halted
-    have keepR : A₁.spent = true → Vs (vRest sy) (j + 1) j := by
+    have keepR : A₁.spent = true → Vs (vRestW sy) (j + 1) j := by
       intro hb x hx
-      have h1 : mayWrite E P (vRest sy) A₁ = false := by
+      have h1 : mayWrite E P (vRestW sy) A₁ = false := by
         simp only [phC, hb, Bool.not_true, Bool.false_or, Bool.and_eq_true, Bool.not_eq_true'] at hok
         exact hok.1
       rw [hnext]
-      exact keep_of_may h.places (fun x hx => hout x (vRest_sub sy x hx)) hs₂ (hk j) h1 x hx
+      exact keep_of_may h.places houtW hs₂ (hk j) h1 x hx
     have keepL : A₁.spent = true → A₁.log.head? ≠ some 1 → Vs (vLand sy) (j + 1) j := by
       intro hb hl x hx
       have h1 : mayWrite E P (vLand sy) A₁ = false := by
@@ -478,7 +490,7 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     -- the bytes of the landing at `j + 1`
     have atL : A₁.spent = true → A₁.log.head? ≠ some 1 → ∀ x ∈ vLand sy, (trace m i (j + 1)).ram.get! x = (trace m i j).ram.get! x := keepL
     change A₁ ∈ (if A'.pc == sy.PlayerSubs && !A'.spent && A'.log.isEmpty then piecesC sy A'
-      else if A'.spent && mayWrite E P (vRest sy) A' then [{ A' with spent := false, log := [4, 4, 4] }]
+      else if A'.spent && mayWrite E P (vRestW sy) A' then [{ A' with spent := false, log := [4, 4, 4] }]
       else if A'.spent && A'.log == [3] && isAndY sy E A' then yPieces sy A'
       else if A'.spent && (A'.log == [3] || A'.log == [6]) && mayWrite E P (vLand sy) A' then [{ A' with spent := false, log := [4, 4, 4] }]
       else if A'.spent && A'.log.head? == some 5 && mayWrite E P (vLand sy) A' then [{ A' with log := [1, A'.log.getD 1 0, 0] }]
@@ -644,6 +656,7 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     have e0 := only j₀ a1 a2
     subst e0
     rw [hJ3]
+    refine ⟨a4 _ (by simp [vRestW]), ?_⟩
     have past : ∀ j', j₀ ≤ j' → (trace m i j').frame = m.frame → j' ≤ J := by
       intro j' _ hj'
       rcases Nat.lt_or_ge J j' with h1 | h1
@@ -657,13 +670,13 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
     · exact Or.inl ⟨fun x hx => by
         rcases vKeep_split sy x hx with h1 | h1
         · exact f J (by omega) (Nat.le_refl _) x h1
-        · exact a4 x h1, fun j' h1 h2 => f j' h1 (past j' h1 h2)⟩
+        · exact a4 x (List.mem_append_left _ h1), fun j' h1 h2 => f j' h1 (past j' h1 h2)⟩
     · exact Or.inl ⟨fun x hx => by
         rcases vKeep_split sy x hx with h1 | h1
         · exact f J (by omega) (Nat.le_refl _) x h1
-        · exact a4 x h1, fun j' h1 h2 => f j' h1 (past j' h1 h2)⟩
+        · exact a4 x (List.mem_append_left _ h1), fun j' h1 h2 => f j' h1 (past j' h1 h2)⟩
     · exact absurd e (notOut _ (Or.inr ⟨_, rfl⟩))
-    · exact Or.inr ⟨a4, f4, f2, f3, f1⟩
+    · exact Or.inr ⟨fun x hx => a4 x (List.mem_append_left _ hx), f4, f2, f3, f1⟩
   | false =>
     rcases q4 hb with e | e | e
     · rcases q1 jq hjJ hq with e2 | e2
@@ -685,7 +698,7 @@ theorem after_QC {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
         (frame m i).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (frame m i).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
         (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0)) := by
   obtain ⟨u, H⟩ := after_QH h hfin hap hm hk
-  exact ⟨u, fun j hq hf hF hrt => (H j hq hf hF hrt).imp (fun e => e.1) id⟩
+  exact ⟨u, fun j hq hf hF hrt => (H j hq hf hF hrt).2.imp (fun e => e.1) id⟩
 
 /-- **A frame falling at `Q` that writes the state 0 later in the frame ends landed**: the other vertical bytes stay, the state, the speed and its fraction are 0, and the
 height is that of `Q` with the low four bits 0 -/
@@ -697,7 +710,7 @@ theorem landed_of_write {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : Li
     (∀ x ∈ vRest sy, (frame m i).ram.get! x = (trace m i jq).ram.get! x) ∧ (frame m i).ram.get! (I sy.Player_State) = 0 ∧
       (frame m i).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (frame m i).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
       (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i jq).ram.get! (I sy.Player_Y_Position) &&& 0xF0 := by
-  rcases (after_QH h hfin hap hm hk).2 jq hq hf hF hrt with ⟨_, hist⟩ | e
+  rcases ((after_QH h hfin hap hm hk).2 jq hq hf hF hrt).2 with ⟨_, hist⟩ | e
   · exfalso
     have e := hist k hjk hfk (I sy.Player_State) (by simp [vLand])
     rw [h0] at e
@@ -825,7 +838,7 @@ theorem jump_frame {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env
   generalize VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0 = t at hv hst2 ⊢
   have hapB : RoomVert.apartB sy P = true := by
     simp only [apartC, Bool.and_eq_true] at hap
-    exact hap.1.1
+    exact hap.1.1.1
   have e1 : (VertModel.vsOf sy (trace M i j)).st = (trace M i j).ram.get! (I sy.Player_State) := rfl
   have e2 : (VertModel.vsOf sy (trace M i j)).vy = (trace M i j).ram.get! (I sy.Player_Y_Speed) := rfl
   refine ⟨hst2, ?_⟩
@@ -875,6 +888,61 @@ theorem land_frame {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env
   obtain ⟨f1, f2, f3, f4, f5⟩ := landed_of_write hC hfC hap hm hk hq hf hF hrt hk1 hk2 hk3
   rw [vsOf_land f1 f2 f3 f4 f5, hv]
 
+/-- **The vertical page of a frame of the room in the air.** As `at_QG`, with the vertical page 1 at the frame's start and the movement routine's check with the
+vertical page (`OpenVert.vertAirHOK`): at each instruction of the frame from `k` on at the scroll handler the vertical page is that of the machine of `vstep` after the
+routine (`VertModel.vRun`): the walk to the player's routine keeps it (`RoomVert.vKeepA`), and the frame comes to the scroll handler once (`after_QH`). If `vstep` does not
+rise and the frame ends in the player's routine, so it is at the frame's end: the walk from the scroll handler falling keeps it (`after_QH`). -/
+theorem high_frame {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {CA CC : CfgS}
+    {Fa Fc : Nat} (hpz : pz < 2048) (hA : OKV (phA sy E S' pz) E P r K CA Fa) (hfA : ∀ B, CA.fin B = true → B.pc ≠ sy.PlayerCtrlRoutine)
+    (hC : OKV (phC sy E P) E P r K CC Fc) (hfC : CC.fin = finC P r)
+    (hap : apartC sy P = true) (hV : OpenVert.vertAirHOK sy m0 S = true) {idle : UInt16} (hidle : FrameModel.idleAt (Rom.of m0) idle = true) {M : Machine}
+    {i : UInt8} {k : Nat} (hm : RoomCond E r K M) (hk : ∀ j, SiteOK P (trace M i j)) (hR : AtV sy (Rom.of m0) S (trace M i k))
+    (ht : ∀ n, (trace M i n).pc ≠ idle → (trace M i n).fdot ≤ dotsPerFrame - 64)
+    (hst : peek M sy.Player_State = 1 ∨ peek M sy.Player_State = 2)
+    (hd : peek M sy.Player_State = 1 → peek M sy.DiffToHaltJump = 1)
+    (hp : peek M sy.PreviousA_B_Buttons &&& 0x80 = peek M sy.A_B_Buttons &&& 0x80)
+    (hhi : peek M sy.Player_Y_HighPos = 1) :
+    (∀ j, k ≤ j → (trace M i j).pc = sy.PlayerSubs → (trace M i j).frame = M.frame →
+      peek (trace M i j) sy.Player_Y_HighPos =
+        peek (VertModel.vRun sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0) sy.Player_Y_HighPos) ∧
+    ((VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).vy &&& 0x80 = 0 →
+      (frame M i).ram.get! P.rtI = r.ram.get! P.rtI →
+      peek (frame M i) sy.Player_Y_HighPos =
+        peek (VertModel.vRun sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0) sy.Player_Y_HighPos) := by
+  obtain ⟨a1, a2, _, a4⟩ := before_R hpz hA hfA hm hk
+  have hfk : (trace M i k).frame = M.frame := a4 k hR.pc
+  have hfirst : ∀ j, j < k → (trace M i j).pc ≠ sy.PlayerCtrlRoutine := fun j hj hR' => a2 j k hj hR' hfk hR.pc
+  have hkeep := a1 k hfk hfirst
+  have eq : ∀ a : UInt16, I a ∈ vKeepA sy → peek (trace M i k) a = peek M a := fun a ha => hkeep _ ha
+  have hvs : VertModel.vsOf sy (trace M i k) = VertModel.vsOf sy M :=
+    vsOf_eq_of (fun x hx => hkeep x (List.mem_append_left _ hx))
+  have est : peek (trace M i k) sy.Player_State = peek M sy.Player_State := eq _ (by simp [vKeepA, vKeep])
+  obtain ⟨kk, _, _, hpc, _, hv, hst2, hIn, hH⟩ := OpenVert.vert_airH hV hR
+    (by rw [eq sy.Player_Y_HighPos (by simp [vKeepA])]; exact hhi) (by rw [est]; exact hst)
+    (by rw [est, eq sy.DiffToHaltJump (by simp [vKeepA])]; exact hd)
+    (by rw [eq sy.PreviousA_B_Buttons (by simp [vKeepA]), eq sy.A_B_Buttons (by simp [vKeepA, vKeep])]; exact hp)
+  rw [hvs] at hv hst2 hH
+  obtain ⟨htr, hfq⟩ := FrameModel.trace_inFrame hidle hfk hIn ht kk (Nat.le_refl kk)
+  rw [← htr] at hpc hv hH
+  obtain ⟨uniq, after⟩ := after_QH hC hfC hap hm hk
+  have only : ∀ j, (trace M i j).pc = sy.PlayerSubs → (trace M i j).frame = M.frame → j = k + kk := by
+    intro j h1 h2
+    rcases Nat.lt_trichotomy j (k + kk) with e | e | e
+    · exact absurd hpc (uniq j (k + kk) e h1 hfq)
+    · exact e
+    · exact absurd h1 (uniq (k + kk) j e hpc h2)
+  refine ⟨fun j _ h1 h2 => by rw [only j h1 h2]; exact hH, fun hvy hrt => ?_⟩
+  have e1 : (VertModel.vsOf sy (trace M i (k + kk))).st = (trace M i (k + kk)).ram.get! (I sy.Player_State) := rfl
+  have e2 : (VertModel.vsOf sy (trace M i (k + kk))).vy = (trace M i (k + kk)).ram.get! (I sy.Player_Y_Speed) := rfl
+  have hF : Falling sy (trace M i (k + kk)) := by
+    unfold Falling
+    rw [← e1, ← e2, hv]
+    exact ⟨hst2, hvy⟩
+  have e3 := (after (k + kk) hpc hfq hF hrt).1
+  show (frame M i).ram.get! (I sy.Player_Y_HighPos) = _
+  rw [e3]
+  exact hH
+
 end
 
 /-! ## On the room -/
@@ -903,5 +971,27 @@ theorem jump_room {sy : Syms} {nm : Names} {m0 : Machine} {h kk : Nat} (hV : Roo
         VertAir.land (VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0))) :=
   jump_frame (CtrlKeep.pauseI_lt sy m0) (RoomVert.okV_of_check hV.a) (fun B hB => RoomVert.finA_pc hB) (RoomVert.okV_of_check hV.b) rfl
     (RoomVert.okV_of_check hF.c) rfl hF.apart hV.air hidle hm hs hR htm hst hd hp hrt
+
+/-- **The vertical page of a frame of the room in the air**, on the room: `high_frame` with the checks of `RoomVert` and of this file, and the movement routine's check
+with the vertical page (`OpenVert.vertAirHOK`, which the opening also uses) -/
+theorem high_room {sy : Syms} {nm : Names} {m0 : Machine} {h kk : Nat} (hV : RoomVert.VChecks sy nm m0 h kk) (hF : FChecks sy nm m0 h)
+    (hH : OpenVert.vertAirHOK sy m0 (FrameModel.ctrlStack sy m0) = true) {idle : UInt16}
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) idle = true) {M : Machine} {i : UInt8} {k : Nat}
+    (hm : RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) M) (hs : ∀ j, SiteOK (ScreenPage.placesR sy nm m0) (trace M i j))
+    (hR : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (trace M i k))
+    (htm : ∀ n, (trace M i n).pc ≠ idle → (trace M i n).fdot ≤ dotsPerFrame - 64)
+    (hst : peek M sy.Player_State = 1 ∨ peek M sy.Player_State = 2)
+    (hd : peek M sy.Player_State = 1 → peek M sy.DiffToHaltJump = 1)
+    (hp : peek M sy.PreviousA_B_Buttons &&& 0x80 = peek M sy.A_B_Buttons &&& 0x80)
+    (hhi : peek M sy.Player_Y_HighPos = 1) :
+    (∀ j, k ≤ j → (trace M i j).pc = sy.PlayerSubs → (trace M i j).frame = M.frame →
+      peek (trace M i j) sy.Player_Y_HighPos =
+        peek (VertModel.vRun sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0) sy.Player_Y_HighPos) ∧
+    ((VertModel.vstepV sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).vy &&& 0x80 = 0 →
+      (frame M i).ram.get! (ScreenPage.placesR sy nm m0).rtI = (ScreenPage.refR m0).ram.get! (ScreenPage.placesR sy nm m0).rtI →
+      peek (frame M i) sy.Player_Y_HighPos =
+        peek (VertModel.vRun sy m0 (FrameModel.ctrlStack sy m0) (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0) sy.Player_Y_HighPos) :=
+  high_frame (CtrlKeep.pauseI_lt sy m0) (RoomVert.okV_of_check hV.a) (fun _ hB => RoomVert.finA_pc hB) (RoomVert.okV_of_check hF.c) rfl hF.apart hH hidle hm hs
+    hR htm hst hd hp hhi
 
 end Smbrta.RoomFall

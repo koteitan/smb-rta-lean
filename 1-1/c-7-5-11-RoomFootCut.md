@@ -14,4 +14,4 @@ In 100 TAS room frames and 1,600 frames from 20 new random runs, the six control
 
 An unrestricted check of all 256 horizontal coordinates fails in 272 of 512 foot cases. It is not the theorem. `land_at` remains. The fall's coordinates still need to imply membership in the finite slice, the caller condition needs to follow from the two actual returns, and standing must survive to frame end. No result uses `floor_at_of` to prove landing.
 
-Later, item 1-1-c-7-5-12 ([The landing frame of the first fall](c-7-5-12-RoomLand.md)) removed `land_at`; the field `landQ` in its place asks two bytes at the end of the landing frame's move.
+Later, item 1-1-c-7-5-12 ([The landing frame of the first fall](c-7-5-12-RoomLand.md)) removed `land_at`; the field `landQ` in its place asks two bytes at the end of the landing frame's move. Item 1-1-c-7-5-13 ([The collision-disable flag and the vertical page in the first fall](c-7-5-13-LandBytes.md)) proves both bytes, and `landQ` is gone.

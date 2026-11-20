@@ -27,15 +27,16 @@ def hsBytes (sy : Syms) : List UInt16 :=
 /-- the pixel: the page and `x` -/
 def pixOf (sy : Syms) (m : Machine) : Nat := (peek m sy.Player_PageLoc).toNat * 256 + (peek m sy.Player_X_Position).toNat
 
-/-- the bytes of the vertical state that the room's start reads, and the stored speed -/
+/-- the bytes of the vertical state that the room's start reads, the stored speed, and the vertical page -/
 def vBytes (sy : Syms) : List UInt16 :=
-  [sy.Player_State, sy.Player_Y_Position, sy.Player_YMF_Dummy, sy.Player_Y_Speed, sy.Player_Y_MoveForce, sy.VerticalForceDown, sy.Player_XSpeedAbsolute]
+  [sy.Player_State, sy.Player_Y_Position, sy.Player_YMF_Dummy, sy.Player_Y_Speed, sy.Player_Y_MoveForce, sy.VerticalForceDown, sy.Player_XSpeedAbsolute,
+   sy.Player_Y_HighPos]
 
-/-- in the air, at most `yMax` down and `wMax` fast, with the fall force `vfd`, and the stored speed 0 -/
+/-- in the air, at most `yMax` down and `wMax` fast, with the fall force `vfd`, the stored speed 0, and the vertical page 1 -/
 def vOK (sy : Syms) (yMax wMax : Int) (vfd : Nat) (m : Machine) : Bool :=
   peek m sy.Player_State == 2 && decide (256 * ((peek m sy.Player_Y_Position).toNat : Int) + ((peek m sy.Player_YMF_Dummy).toNat : Int) ≤ yMax) &&
     decide (256 * ((peek m sy.Player_Y_Speed).toNat : Int) + ((peek m sy.Player_Y_MoveForce).toNat : Int) ≤ wMax) &&
-    (peek m sy.VerticalForceDown).toNat == vfd && peek m sy.Player_XSpeedAbsolute == 0
+    (peek m sy.VerticalForceDown).toNat == vfd && peek m sy.Player_XSpeedAbsolute == 0 && peek m sy.Player_Y_HighPos == 1
 
 /-- a state of a row: it says whether it has control, and if it has, it knows the bytes of the horizontal state, of the pixel and of the vertical state, and they are the room's start -/
 def rowOK (sy : Syms) (rm : Room) (yMax wMax : Int) (vfd : Nat) (S : AS) : Bool :=
@@ -73,8 +74,9 @@ theorem posP_pix (m : Machine) : posP sy m = 256 * (pixOf sy m : Int) + ((peek m
 theorem vOK_of_known {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs : Sim E F S m) (hk : (vBytes sy).all (knowsAd S) = true)
     (h : vOK sy yMax wMax vfd (mOf S) = true) : vOK sy yMax wMax vfd m = true := by
   simp only [vBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at hk
-  obtain ⟨k1, k2, k3, k4, k5, k6, k7⟩ := hk
-  simp only [vOK, peek_of_known hs k1, peek_of_known hs k2, peek_of_known hs k3, peek_of_known hs k4, peek_of_known hs k5, peek_of_known hs k6, peek_of_known hs k7]
+  obtain ⟨k1, k2, k3, k4, k5, k6, k7, k8⟩ := hk
+  simp only [vOK, peek_of_known hs k1, peek_of_known hs k2, peek_of_known hs k3, peek_of_known hs k4, peek_of_known hs k5, peek_of_known hs k6, peek_of_known hs k7,
+    peek_of_known hs k8]
   exact h
 
 /-- a covered machine with control has the room's start -/
@@ -174,16 +176,16 @@ theorem PipeRunK.start (T : EndStatement sy nm d e es) (hc : startCheck sy nm d 
     (hf : ∀ n, R.a ≤ n → n < R.b → controllable sy (R.seq n) = false) : RoomJoin.StartAt sy N (R.seq R.b) := by
   obtain ⟨h1, h2, h3, h4⟩ := start_of_rowsT hc (PipeRunK.inRowsT T R hf) R.atCtl
   simp only [vOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h4
-  obtain ⟨⟨⟨⟨g1, g2⟩, g3⟩, g4⟩, g5⟩ := h4
-  exact ⟨h1, h2, h3, ⟨g1, g2, g3, g4⟩, g5⟩
+  obtain ⟨⟨⟨⟨⟨g1, g2⟩, g3⟩, g4⟩, g5⟩, g6⟩ := h4
+  exact ⟨h1, h2, h3, ⟨g1, g2, g3, g4⟩, g5, g6⟩
 
 /-- **The state at the first control in the room, on a real run**, from the old conditions of the change and `left` not 0 before control. -/
 theorem PipeRun.start (T : EndStatement sy nm d e es) (hc : startCheckO sy nm d e (RoomJoin.room sy N) N.startY N.startW N.fallF = true) (R : PipeRun sy nm d e)
     (hf : ∀ n, R.a ≤ n → n < R.b → leftP sy nm e (R.seq n) ≠ 0) : RoomJoin.StartAt sy N (R.seq R.b) := by
   obtain ⟨h1, h2, h3, h4⟩ := start_of_rows hc (PipeRun.inRows T R hf) R.atCtl
   simp only [vOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h4
-  obtain ⟨⟨⟨⟨g1, g2⟩, g3⟩, g4⟩, g5⟩ := h4
-  exact ⟨h1, h2, h3, ⟨g1, g2, g3, g4⟩, g5⟩
+  obtain ⟨⟨⟨⟨⟨g1, g2⟩, g3⟩, g4⟩, g5⟩, g6⟩ := h4
+  exact ⟨h1, h2, h3, ⟨g1, g2, g3, g4⟩, g5, g6⟩
 
 end Smbrta.RoomStart
 

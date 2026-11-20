@@ -14,4 +14,4 @@ The start cut and prefix check are explicit local hypotheses. They have not been
 
 **Files:** `Theorems/RoomFootPrefix.lean`, `Theorems/FrameWalk.lean`.
 
-Later, item 1-1-c-7-5-12 ([The landing frame of the first fall](c-7-5-12-RoomLand.md)) removed `land_at`; the field `landQ` in its place asks two bytes at the end of the landing frame's move.
+Later, item 1-1-c-7-5-12 ([The landing frame of the first fall](c-7-5-12-RoomLand.md)) removed `land_at`; the field `landQ` in its place asks two bytes at the end of the landing frame's move. Item 1-1-c-7-5-13 ([The collision-disable flag and the vertical page in the first fall](c-7-5-13-LandBytes.md)) proves both bytes, and `landQ` is gone.

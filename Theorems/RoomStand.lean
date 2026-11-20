@@ -329,7 +329,7 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
   have hsz : ∀ (A : AS) (y : Machine), Sim C.E (m.frame, 2) A y → A.ram.size = 2048 ∧ A.kn.size = 2048 := fun _ _ hs => ⟨hs.szR, hs.szK⟩
   simp only [apartS, RoomFall.apartC, Bool.and_eq_true, bne_iff_ne, ne_eq] at hap
-  obtain ⟨⟨⟨⟨⟨hapB, _⟩, _⟩, h12⟩, h13⟩, h23⟩ := hap
+  obtain ⟨⟨⟨⟨⟨⟨hapB, _⟩, _⟩, _⟩, h12⟩, h13⟩, h23⟩ := hap
   have hout : ∀ x ∈ vKeep sy, x < P.bufLo ∨ P.bufLo + P.bufN ≤ x := by
     simp only [RoomVert.apartB, Bool.and_eq_true, List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at hapB
     exact hapB.1

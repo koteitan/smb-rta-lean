@@ -45,7 +45,7 @@ land_at    :  NoWall   →   st(vs(C + 34)) = 0
 
 * `fall_stand` は、床でないところに立ったあと、つまり左の壁に立ったあとの `fall_long` です。
 * `vfall_stand` は、最初に立ったところからの `vfall` です。
-* `land_at` は、高さを除いた `floor_at` です。`C + 34` での床の高さは最初の落下が出します。そこで立つことは当たり判定の足の確かめです。項目 1-1-c-7-5-12（[最初の落下の着地のフレーム](c-7-5-12-RoomLand-ja.md)）から、`land_at` は定理 `land_at_of` です。かわりのフィールド `landQ` は、そのフレームの移動の終わりの 2 バイトを求めます。
+* `land_at` は、高さを除いた `floor_at` です。`C + 34` での床の高さは最初の落下が出します。そこで立つことは当たり判定の足の確かめです。項目 1-1-c-7-5-12（[最初の落下の着地のフレーム](c-7-5-12-RoomLand-ja.md)）から、`land_at` は定理 `land_at_of` です。かわりのフィールド `landQ` はそのフレームの移動の終わりの 2 バイトを求めていましたが、項目 1-1-c-7-5-13（[最初の落下での当たり判定を止める旗と縦のページ](c-7-5-13-LandBytes-ja.md)）でこの 2 バイトを証明しました。
 
 項目 1-1-c-7-5-5（[部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md)）から、`vfall_stand` はなくなり、`fall_stand` は小さなフィールド `fall_jump` になりました。立って始まるフレームの歩きで、跳ばない状態がまた有限の集まりになります。項目 1-1-c-7-5-6（[部屋の落下中に立ってから跳ぶフレーム](c-7-5-6-RoomJump-ja.md)）から、`fall_jump` は `stand_wall` と `wall` を使う定理です。`vfall` は、最初の操作から跳ばないときだけ求めます。
 
@@ -89,13 +89,12 @@ land_at    :  NoWall   →   st(vs(C + 34)) = 0
 
 ## 仮定（Lean で証明していないもの）
 
-* `landQ`（もとの `land_at`）: `C + 34` の移動の終わりの 2 バイトのことだけを言います（1-1-c-7-5-12）。`fall_jump`（もとの `fall_stand`）は項目 1-1-c-7-5-6 から定理です。その証明はフィールド `stand_wall` と `wall` を使います。
+* `landQ`（もとの `land_at`）はなくなりました。`C + 34` の移動の終わりの 2 バイトは証明しました（1-1-c-7-5-13）。`fall_jump`（もとの `fall_stand`）は項目 1-1-c-7-5-6 から定理です。その証明はフィールド `stand_wall` と `wall` を使います。
 * 部屋のフレームの各命令の `SiteOK`。[ブロックの地図](c-7-12-RoomMap-ja.md) と同じです（`vair_of` を通して）。
 
 ## まだ要るもの
 
 * 壁に立ったあとのフレーム: 跳ばない走りでは [部屋で立って始まるフレーム](c-7-5-5-RoomStand-ja.md) で済みました。壁からのジャンプは [部屋の落下中に立ってから跳ぶフレーム](c-7-5-6-RoomJump-ja.md) で済みました。
-* `landQ`: 当たり判定を止める旗と縦のページが最初の落下の各フレームで保たれること（[最初の落下の着地のフレーム](c-7-5-12-RoomLand-ja.md)）。
 
 **ファイル.** `Theorems/RoomJoin.lean`（`fallNext`、`fallLayer`、`vdropB`、`fallStep`、`fallOk`、`fallRun`、`fallCheck`、`fall_ok`、`fallStep_spec`、`first_of`、`RoomRun.vs_start`、`t0_far`、`fall_mem`、`fall_next`、`vfall_first`、`fall_first`、`fall_long_of`、`vfall_of`、`floor_at_of`）、`Theorems/RoomPair.lean`（`vsBytes`、`rowV`、`rowsCheck`、`of_invL`、`v_of_state`、`v_of_rows`）、`Theorems/Route.lean`（`Run.roomV0`、`Run.inRoom`）。非公開の `Proof/RoomJoin.lean`（`room_checks.first`）、`Proof/RoomVert.lean`（`room_pair_rows`）。
 

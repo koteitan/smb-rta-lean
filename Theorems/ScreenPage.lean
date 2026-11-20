@@ -1259,7 +1259,7 @@ def roomNames : List (String × Nat × Nat × UInt8) :=
    ("ScrollThirtyTwo", 0, 1, 255), ("CloudTypeOverride", 0, 1, 255), ("AreaType", 0, 1, 255), ("CurrentPlayer", 0, 1, 255), ("PlayerStatus", 0, 1, 254),
    ("WorldNumber", 0, 1, 255), ("OperMode", 0, 1, 255), ("OperMode_Task", 0, 1, 255), ("StarInvincibleTimer", 0, 1, 255), ("AreaMusicBuffer_Alt", 0, 1, 251),
    ("ScreenRoutineTask", 0, 1, 255), ("DisableScreenFlag", 0, 1, 255), ("Fireball_State", 0, 2, 255), ("JoypadOverride", 0, 1, 255), ("GameTimerExpiredFlag", 0, 1, 255),
-   ("AreaPointer", 0, 1, 255), ("EntrancePage", 0, 1, 255), ("PrimaryHardMode", 0, 1, 255)]
+   ("AreaPointer", 0, 1, 255), ("EntrancePage", 0, 1, 255), ("PrimaryHardMode", 0, 1, 255), ("DisableCollisionDet", 0, 1, 255)]
 
 /-- the list of bits, as RAM indices -/
 def knownOf (nm : Names) : List (Nat × UInt8) :=

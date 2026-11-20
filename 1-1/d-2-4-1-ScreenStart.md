@@ -2,7 +2,7 @@
 
 # The condition `Room` at the first control in the room
 
-**Claim.** [The screen's page in the room, and the long timer](d-2-4-ScreenPage.md) assumed a condition `Room` on the state at the first control in the room. `Room` is the bits of 82 bytes and how the frame ended (the idle loop, the dot, the flags). This is now proved on the real machines. It comes from the rows of the time of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md). The conditions are those of that change, that the time is not up at the exit (`chg.time₁`), and that `b₁` is the first control after the entry (`chg.ctlFirst₁`). The field `chg.roomRest` (5 bytes at control) is gone.
+**Claim.** [The screen's page in the room, and the long timer](d-2-4-ScreenPage.md) assumed a condition `Room` on the state at the first control in the room. `Room` is the bits of 83 bytes and how the frame ended (the idle loop, the dot, the flags). This is now proved on the real machines. It comes from the rows of the time of [The change into the room without `fall`](b-3-2-PipeChangeEnd.md). The conditions are those of that change, that the time is not up at the exit (`chg.time₁`), and that `b₁` is the first control after the entry (`chg.ctlFirst₁`). The field `chg.roomRest` (5 bytes at control) is gone.
 
 ## Statements
 
