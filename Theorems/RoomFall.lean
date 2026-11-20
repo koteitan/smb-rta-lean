@@ -772,7 +772,7 @@ theorem at_QG {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env} {P 
     (hst : peek M sy.Player_State = 1 ∨ peek M sy.Player_State = 2)
     (hd : peek M sy.Player_State = 1 → peek M sy.DiffToHaltJump = 1)
     (hp : peek M sy.PreviousA_B_Buttons &&& 0x80 = peek M sy.A_B_Buttons &&& 0x80) :
-    ∃ j, (trace M i j).pc = sy.PlayerSubs ∧ (trace M i j).frame = M.frame ∧ FrameModel.Good (Rom.of m0) (trace M i j) ∧ (trace M i j).s = S ∧
+    ∃ j, k ≤ j ∧ (trace M i j).pc = sy.PlayerSubs ∧ (trace M i j).frame = M.frame ∧ FrameModel.Good (Rom.of m0) (trace M i j) ∧ (trace M i j).s = S ∧
       VertModel.vsOf sy (trace M i j) = VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0 ∧
       ((VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).st = 1 ∨
        (VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).st = 2) := by
@@ -790,7 +790,7 @@ theorem at_QG {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env} {P 
   rw [hvs] at hv hst2
   obtain ⟨htr, hfq⟩ := FrameModel.trace_inFrame hidle hfk hIn ht kk (Nat.le_refl kk)
   rw [← htr] at hpc hv hg hs
-  exact ⟨k + kk, hpc, hfq, hg, hs, hv, hst2⟩
+  exact ⟨k + kk, Nat.le_add_right _ _, hpc, hfq, hg, hs, hv, hst2⟩
 
 theorem vy_cases (x : UInt8) : x &&& 0x80 = 0 ∨ x &&& 0x80 = 0x80 :=
   RoomVert.u8_all (P := fun t => t &&& 0x80 = 0 ∨ t &&& 0x80 = 0x80) RoomVert.vy_cases x
@@ -858,13 +858,13 @@ theorem land_frame {sy : Syms} {m0 : Machine} {S S' : UInt8} {pz : Nat} {E : Env
     (hd : peek M sy.Player_State = 1 → peek M sy.DiffToHaltJump = 1)
     (hp : peek M sy.PreviousA_B_Buttons &&& 0x80 = peek M sy.A_B_Buttons &&& 0x80)
     (hrt : (frame M i).ram.get! P.rtI = r.ram.get! P.rtI) :
-    ∃ j, (trace M i j).pc = sy.PlayerSubs ∧ (trace M i j).frame = M.frame ∧ FrameModel.Good (Rom.of m0) (trace M i j) ∧ (trace M i j).s = S ∧
+    ∃ j, k ≤ j ∧ (trace M i j).pc = sy.PlayerSubs ∧ (trace M i j).frame = M.frame ∧ FrameModel.Good (Rom.of m0) (trace M i j) ∧ (trace M i j).s = S ∧
       VertModel.vsOf sy (trace M i j) = VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0 ∧
       ((VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0).vy &&& 0x80 = 0 →
         (∃ k', j ≤ k' ∧ (trace M i k').frame = M.frame ∧ (trace M i k').ram.get! (I sy.Player_State) = 0) →
         VertModel.vsOf sy (frame M i) = VertAir.land (VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0)) := by
-  obtain ⟨j, hq, hf, hg, hs, hv, hst2⟩ := at_QG hpz hA hfA hV hidle hm hk hR ht hst hd hp
-  refine ⟨j, hq, hf, hg, hs, hv, fun h0 ⟨k', hk1, hk2, hk3⟩ => ?_⟩
+  obtain ⟨j, hkj, hq, hf, hg, hs, hv, hst2⟩ := at_QG hpz hA hfA hV hidle hm hk hR ht hst hd hp
+  refine ⟨j, hkj, hq, hf, hg, hs, hv, fun h0 ⟨k', hk1, hk2, hk3⟩ => ?_⟩
   generalize VertModel.vstepV sy m0 S (VertModel.vsOf sy M) (peek (trace M i k) sy.SavedJoypadBits &&& 0x80 != 0) 0 = t at hv hst2 h0 ⊢
   have e1 : (VertModel.vsOf sy (trace M i j)).st = (trace M i j).ram.get! (I sy.Player_State) := rfl
   have e2 : (VertModel.vsOf sy (trace M i j)).vy = (trace M i j).ram.get! (I sy.Player_Y_Speed) := rfl

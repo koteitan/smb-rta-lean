@@ -1608,6 +1608,7 @@ theorem room_checks : Checks sy ctx roomNums where
   nojump := by native_decide
   anyin := by native_decide
   land := by native_decide
+  landP := by native_decide
 
 open Smbrta.RoomJoin in
 /-- **The bonus room**: in a run with these frames, the side pipe is entered at least {98 + joinT.aboveF} frames after first control -/

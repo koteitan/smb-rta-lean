@@ -336,6 +336,11 @@ structure LandQ (sy : Syms) (m : Machine) (N : Nums) (q : Machine) : Prop where
   page : q.ram.get! (FrameModel.I sy.Player_PageLoc) = 0
   x : (q.ram.get! (FrameModel.I sy.Player_X_Position)).toNat < N.landX
 
+/-- **The two bytes of `LandQ` that are not proved**: the collision-disable flag 0 and the vertical page 1 -/
+structure LandB (sy : Syms) (m : Machine) (q : Machine) : Prop where
+  disable : q.ram.get! (disableI sy m) = 0
+  high : q.ram.get! (FrameModel.I sy.Player_Y_HighPos) = 1
+
 /-- what a real run in the room gives, apart from the frames' link to `hstep` -/
 structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   fr : Frames
@@ -501,12 +506,13 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (
   read_stop : ∀ n, C ≤ n → n < t0 → ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (startAt sy m S b lim C n) (inpAt sy m S b lim C n)
       (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)) →
     fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (startAt sy m S b lim C n) (inpAt sy m S b lim C n) (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)))
-  /-- with no wall, at the end of the move of frame `C + fall` (the last frame of the first fall) the collision-disable flag is 0, the vertical page 1, the page 0 and the
-  horizontal coordinate below `N.landX` (`LandQ`). With it he stands at the end of that frame (`RoomRun.land_at_of`, by `InRoom.land`). This was the field `land_at`
-  (he stands there), and before it `floor_at` -/
-  landQ : NoWall sy m N fr C → ∀ j, (PipeEntryRule.trace (startAt sy m S b lim C (C + N.fall - 1)) (inpAt sy m S b lim C (C + N.fall - 1)) j).pc = sy.PlayerSubs →
+  /-- with no wall, at the end of the move of frame `C + fall` (the last frame of the first fall), after the player's routine, the collision-disable flag is 0 and the
+  vertical page 1 (`LandB`). The page and the horizontal coordinate there are a theorem (`RoomRun.landQ_pos`), and with all four he stands at the end of that frame
+  (`RoomRun.land_at_of`, by `InRoom.land`). This was the field `land_at` (he stands there), and before it `floor_at` -/
+  landQ : NoWall sy m N fr C → ∀ j, CtrlKeep.arrAt sy (startAt sy m S b lim C (C + N.fall - 1)) (inpAt sy m S b lim C (C + N.fall - 1)) ≤ j →
+    (PipeEntryRule.trace (startAt sy m S b lim C (C + N.fall - 1)) (inpAt sy m S b lim C (C + N.fall - 1)) j).pc = sy.PlayerSubs →
     (PipeEntryRule.trace (startAt sy m S b lim C (C + N.fall - 1)) (inpAt sy m S b lim C (C + N.fall - 1)) j).frame = (startAt sy m S b lim C (C + N.fall - 1)).frame →
-    LandQ sy m N (PipeEntryRule.trace (startAt sy m S b lim C (C + N.fall - 1)) (inpAt sy m S b lim C (C + N.fall - 1)) j)
+    LandB sy m (PipeEntryRule.trace (startAt sy m S b lim C (C + N.fall - 1)) (inpAt sy m S b lim C (C + N.fall - 1)) j)
 
 section
 variable {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} {b lim : Nat}
@@ -937,6 +943,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   anyin : anyCheck sy m N = true
   /-- the landing frame: at the height `landY`, not rising -/
   land : landCheck sy m N = true
+  /-- at the end of the first fall, one pixel right of the farthest frame end is left of `landX`, which is on the first page -/
+  landP : (room sy N).P1 + 16 * (top sy : Int) * (N.fall : Int) + 256 < 256 * (N.landX : Int) ∧ N.landX ≤ 256
 
 /-! ## Lists of frames -/
 
@@ -3649,7 +3657,7 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
     VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) k) →
     (peek (r.fm n) sy.Player_State = 1 → peek (r.fm n) sy.DiffToHaltJump = 1) →
     peek (r.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (r.fm n) sy.A_B_Buttons &&& 0x80 →
-    ∃ j, (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (r.fm n) (r.inAt n) j).frame = (r.fm n).frame ∧
+    ∃ j, k ≤ j ∧ (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (r.fm n) (r.inAt n) j).frame = (r.fm n).frame ∧
       VertModel.vsOf sy (PipeEntryRule.trace (r.fm n) (r.inAt n) j) =
         vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) ∧
       ((vstepR sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)).y = landY sy →
@@ -4434,6 +4442,64 @@ theorem fall_long_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.f
       | false => rfl
       | true => exact absurd ⟨j, a, b, e⟩ h)
 
+/-- the position at the end of frame `C + d` of the first `standF` frames is at most `d` frames of the top speed right of the start's right end -/
+theorem P_upto (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) :
+    ∀ d, d ≤ N.standF → r.fr.P (r.C + d) ≤ (room sy N).P1 + 16 * (top sy : Int) * (d : Int)
+  | 0, _ => by
+    have := (r.start_P st).2
+    simpa using this
+  | d + 1, hd => by
+    have ih := P_upto H hr st d (by omega)
+    have hfar := r.t0_far H hr st
+    have hm := r.move_top_of H hr st (r.C + d) (by omega) (by omega)
+    rw [show r.C + (d + 1) = r.C + d + 1 by omega]
+    have e : 16 * (top sy : Int) * ((d + 1 : Nat) : Int) = 16 * (top sy : Int) * (d : Int) + 16 * (top sy : Int) := by
+      push_cast
+      rw [Int.mul_add, Int.mul_one]
+    rw [e]
+    generalize 16 * (top sy : Int) * (d : Int) = A at ih ⊢
+    generalize 16 * (top sy : Int) = B at hm ⊢
+    omega
+
+/-- **The page and the horizontal coordinate at the end of the move of the landing frame**: after the player's routine, at a `PlayerSubs` of frame `C + fall`, the page is
+0 and the coordinate below `landX`. The frame is `CleanW` (from the scroll handler on nothing writes the position) or `ReadW` (the frame's end is within 1 px of the
+scroll handler's position, `FrameModel.Collide`); the end of the frame is at most `fall` frames of the top speed right of the start (`P_upto`, `landP`) -/
+theorem landQ_pos (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) {j : Nat} (hj : r.arr (r.C + (N.fall - 1)) ≤ j)
+    (hq : (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j).pc = sy.PlayerSubs) :
+    (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j).ram.get! (FrameModel.I sy.Player_PageLoc) = 0 ∧
+      ((PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j).ram.get! (FrameModel.I sy.Player_X_Position)).toNat < N.landX := by
+  obtain ⟨hf0, hfs, _, _⟩ := fall_ok H.first
+  have hfar := r.t0_far H hr st
+  have hE := r.t0_le_E H hr
+  have hC : r.C ≤ r.C + (N.fall - 1) := by omega
+  have ht : r.C + (N.fall - 1) < r.t0 := by omega
+  have hup := r.P_upto H hr st N.fall (by omega)
+  have hend : r.fr.P (r.C + (N.fall - 1) + 1) =
+      posP sy (PipeTransition.frame (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1)))) := by
+    rw [r.P_fe (n := r.C + (N.fall - 1) + 1) (by omega) (by omega), r.next hC (r.ups_lt hr hC (by omega))]
+  rw [show r.C + N.fall = r.C + (N.fall - 1) + 1 by omega, hend] at hup
+  obtain ⟨hlp, hl256⟩ := H.landP
+  have hQ : posP sy (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) ≤
+      posP sy (PipeTransition.frame (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1)))) + 256 := by
+    rcases r.clean (r.C + (N.fall - 1)) hC ht with hc | ⟨_, hc⟩
+    · have e := FrameModel.posP_congr (sy := sy) ((r.cleanR_of H hr hC ht hc).after j hj hq)
+      omega
+    · have hd := (r.far_inD H hr st (N.fall - 1) (by omega)).2
+      have hc' := (r.readR_of H hr hC ht hd hc).collide j hj hq
+      rcases hc'.P with e | e | ⟨e, _⟩ <;> omega
+  have hp := FrameModel.posP_eq sy (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j)
+  unfold FrameModel.posOf at hp
+  have p1 := (peek (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) sy.Player_PageLoc).toNat_lt
+  have p2 := (peek (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) sy.Player_X_Position).toNat_lt
+  have p3 := (peek (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) sy.SprObject_X_MoveForce).toNat_lt
+  have htop : (0 : Int) ≤ 16 * (top sy : Int) * (N.fall : Int) := Int.mul_nonneg (Int.mul_nonneg (by omega) (by omega)) (by omega)
+  generalize 16 * (top sy : Int) * (N.fall : Int) = T at hup hlp htop
+  refine ⟨?_, ?_⟩
+  · have : (peek (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) sy.Player_PageLoc).toNat = 0 := by omega
+    exact UInt8.toNat_inj.mp (by simpa [peek] using this)
+  · show (peek (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) sy.Player_X_Position).toNat < N.landX
+    omega
+
 /-- **`land_at`**: with no wall he stands at the end of the fall, on frame `C + fall`. There is no stand before (`fall_first`, `stand_wall`), so the state one frame before
 is one of the first fall (`fall_mem`), from which `vstepR` is at the height `landY` and does not rise (`landCheck`); with `landQ` at the end of the move the frame ends
 on the landing (`InRoom.land`). This was the field `land_at` -/
@@ -4463,7 +4529,7 @@ theorem land_at_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe 
     have e : (VertModel.vsOf sy (r.fm (r.C + (N.fall - 1)))).st = peek (r.fm (r.C + (N.fall - 1))) sy.Player_State := rfl
     rw [← e, ← hv0, (fallOk_spec hok).1]
     decide
-  obtain ⟨j, hq, hf, _, himp⟩ := hr.land (r.C + (N.fall - 1)) hC hE' hst' (r.arr (r.C + (N.fall - 1))) hcl
+  obtain ⟨j, hkj, hq, hf, _, himp⟩ := hr.land (r.C + (N.fall - 1)) hC hE' hst' (r.arr (r.C + (N.fall - 1))) hcl
     (hr.pair (r.C + (N.fall - 1)) hC (by omega)).1 (hr.pair (r.C + (N.fall - 1)) hC (by omega)).2
   have hlc := List.all_eq_true.mp H.land _ hmem
   rw [hv0] at hlc
@@ -4476,7 +4542,9 @@ theorem land_at_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe 
   have hl : LandQ sy m N (PipeEntryRule.trace (r.fm (r.C + (N.fall - 1))) (r.inAt (r.C + (N.fall - 1))) j) := by
     have q := r.landQ hw j
     rw [e1] at q
-    exact q hq hf
+    have hb := q hkj hq hf
+    obtain ⟨hpg, hx⟩ := r.landQ_pos H hr st hkj hq
+    exact ⟨hb.disable, hb.high, hpg, hx⟩
   have e2 := himp hya.1 hya.2 hl
   rw [show r.C + N.fall = r.C + (N.fall - 1) + 1 by omega, hv1, e2]
   rfl

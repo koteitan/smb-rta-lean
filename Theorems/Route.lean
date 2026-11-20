@@ -1548,7 +1548,7 @@ theorem Run.roomLand {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
     (hAt : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k))
     (hd : peek (R.room.fm n) sy.Player_State = 1 → peek (R.room.fm n) sy.DiffToHaltJump = 1)
     (hp : peek (R.room.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (R.room.fm n) sy.A_B_Buttons &&& 0x80) :
-    ∃ j, (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).frame = (R.room.fm n).frame ∧
+    ∃ j, k ≤ j ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).frame = (R.room.fm n).frame ∧
       VertModel.vsOf sy (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j) =
         RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) ∧
       ((RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0)).y = RoomJoin.landY sy →
@@ -1575,9 +1575,9 @@ theorem Run.roomLand {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
     · exact Or.inl e
     · exact Or.inr e
   have htime := fun j hj => late_of (hsites j) hj
-  obtain ⟨j, hqj, hfj, hg, hs, hv, himp⟩ := RoomFall.land_frame (CtrlKeep.pauseI_lt sy m0) (RoomVert.okV_of_check hV.a) (fun B hB => RoomVert.finA_pc hB)
+  obtain ⟨j, hkj, hqj, hfj, hg, hs, hv, himp⟩ := RoomFall.land_frame (CtrlKeep.pauseI_lt sy m0) (RoomVert.okV_of_check hV.a) (fun B hB => RoomVert.finA_pc hB)
     (RoomVert.okV_of_check hF.c) rfl hF.apart hV.air hI hcond hsites hAt htime hst hd hp hstay
-  refine ⟨j, hqj, hfj, hv, fun hy hvy hl => himp hvy ?_⟩
+  refine ⟨j, hkj, hqj, hfj, hv, fun hy hvy hl => himp hvy ?_⟩
   have hsolid := RoomBlocks.blocks_run_trace hW hRw hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1 j hfj
   have hy' : (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_Y_Position) = RoomJoin.landY sy :=
     (congrArg Jump.VS.y hv).trans hy

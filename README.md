@@ -225,7 +225,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-c-7-5-9 The state before the landing is in the fall's layer, and the last step is the move or the landing (`RoomLanding`, without `land_at`; the link to the foot calls' entries remains)
       - ✅ 1-1-c-7-5-10 A foot call's entry and its map byte under a local check (`RoomFootPrefix`; `BIT` added to the walk)
       - ✅ 1-1-c-7-5-11 A small foot cut from the end of the move, and the room walk's control values (`RoomFootCut`)
-      - ✅ 1-1-c-7-5-12 The landing frame of the first fall (`land_at` gone; new field `landQ`: four bytes at the end of the move)
+      - ✅ 1-1-c-7-5-12 The landing frame of the first fall (`land_at` gone; new field `landQ`: two bytes at the end of the move; the page and x are proved)
 
       </details>
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
