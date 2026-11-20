@@ -15,3 +15,5 @@ The interval cannot simply be extended to the column buffer. That stronger start
 The original field `tiles` remains unchanged. Deriving the write tests from existing ROM/control assumptions, proving all relevant reads lie in the classified interval, and connecting every post-read program counter to its preceding actual load remain open. The actual-load theorem also explicitly requires a RAM address and a good machine. No new field replaces these gaps.
 
 **Files:** `Theorems/PoleTiles.lean`; private `Proof/PoleTiles.lean` checks only load metadata.
+
+**Round 21:** the field `tiles` is gone. `TileRead` is proved along the walk of the touch's frame from a map at the frame's start and conditions on single stores and reads: [The pole's tiles at the touch](f-6-17-2-PoleTileWalk.md).

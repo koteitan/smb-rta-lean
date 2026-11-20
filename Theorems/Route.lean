@@ -35,6 +35,7 @@ import Theorems.EntryRoutine
 import Theorems.UpClean
 import Theorems.AreaKeep
 import Theorems.EntryHeight
+import Theorems.EntryHeightBig
 import Theorems.EntryBuffer
 
 /-!
@@ -279,8 +280,8 @@ def restIdxR (sy : Syms) (nmS : Names) (m0 : Machine) : List Nat :=
 def restIdxA (sy : Syms) (nmS : Names) (m0 : Machine) : List Nat :=
   (restIdxR sy nmS m0).filter fun i => i != AreaKeep.areaI nmS
 
-/-- the 8 bytes of `restIdxA` without the player's height. The height comes from the room's entering frame when it starts with a small player (`EntryHeight`,
-`Run.y₂`); for another size `Run.height₂` asks it. -/
+/-- the 8 bytes of `restIdxA` without the player's height. The height comes from the room's entering frame when it starts with a small player (`EntryHeight`)
+or a big one (`EntryHeightBig`), `Run.y₂`; for another value of the size byte `Run.height₂` asks it. -/
 def restIdxY (sy : Syms) (nmS : Names) (m0 : Machine) : List Nat :=
   (restIdxA sy nmS m0).filter fun i => i != EntryHeight.heightI sy
 
@@ -508,9 +509,10 @@ structure RoomChecks (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChan
   /-- the walk of the room's frames with the level's number known, and its small checks: with them and the rows of the first change (`start`) the level's number
   at the side pipe's entry is that of the vertical pipe's entry (`AreaKeep`, `Run.area₂`) -/
   area : AreaKeep.Facts sy m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) nmS
-  /-- the walk of the room's frame that follows the height, with the player's size of the reference known, and the references' height: with them a frame of the
-  room that starts with that size and ends with the side pipe's routine ends with the height of the reference entry (`EntryHeight`, `Run.y₂`) -/
-  height : EntryHeight.Facts sy nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0))
+  /-- the walks of the room's frame that follow the height (with the player's size of the reference known, and with a big player and the map's bytes on each
+  instruction), the references' height, and the checks of `RoomBlocks`: with them a frame of the room that starts with a small or a big player and ends with the
+  side pipe's routine ends with the height of the reference entry (`EntryHeight`, `EntryHeightBig`, `Run.y₂`) -/
+  height : EntryHeightBig.Facts sy nm₁ d₁ nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0))
   /-- the walk of the room's frame with the control of the screen's buffers known at its start, and the references agree on the other bytes that the entry asks:
   with them a frame of the room that starts with the control of the reference and ends with the side pipe's routine ends with the five bytes of the first screen
   buffer of a reference (`EntryBuffer`, `Run.buf₂`) -/
@@ -680,10 +682,12 @@ structure Run (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) (rN : RoomJoin.Nums
   chg : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS base clock.kind pipe.E room.C room.E Cs (restIdxB sy nmS m0)
   /-- the search for the side pipe's entry (`Base.a₂`) looks at least one frame past the room's first control. With it the room has a frame (`Run.b₁_lt_a₂`) -/
   dR_pos : 1 ≤ base.dR
-  /-- the frame that enters the side pipe starts with the player's size of the reference (small), or the height at the entry is the reference entry's. For a small
-  player the height is proved (`EntryHeight.height_of_rows`, `Run.y₂`); before, `entry₂` asked the height of every run. A big player's height stays assumed: the walk
-  does not know the floor's tiles, and without the floor a big player enters one row lower. -/
+  /-- the frame that enters the side pipe starts with the player's size of the reference (small) or with the size 0 (big), or the height at the entry is the
+  reference entry's. For a small player the height is proved (`EntryHeight.height_of_rows`), and since round 21 for a big one (`EntryHeightBig.height_of_rowsB`:
+  the walk splits the height and the position before the head's read, and reads the map's bytes); `Run.y₂`. Before, `entry₂` asked the height of every run, and
+  round 15 to 20 asked it here of every run that does not start small. It stays assumed for the other values of the size byte. -/
   height₂ : (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (EntryHeight.sizeI sy) = (ScreenPage.refR m0).ram.get! (EntryHeight.sizeI sy) ∨
+    (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (EntryHeight.sizeI sy) = 0 ∨
     (base.seq (base.a₂ sy nmS m0)).ram.get! (EntryHeight.heightI sy) = (SideTransition.entry m0).ram.get! (EntryHeight.heightI sy)
   /-- the frame that enters the side pipe starts with the control of the screen's buffers of the reference (0: this frame's screen update empties the first buffer),
   or the five bytes of the first screen buffer at the entry are those of a reference of the entry. With the control at 0 the bytes are proved
@@ -1159,19 +1163,27 @@ theorem entryAt_of_area (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) {m : 
 
 /-- **The height at the side pipe's entry is the reference entry's** (it was a byte of `entry₂`, now the theorem). The frame before `a₂` is a frame of the room
 (`Run.b₁_lt_a₂`) and it ends with the side pipe's routine (`Run.rt₂`). If it starts with the reference's size, the walk of `EntryHeight` gives the height
-(`EntryHeight.height_of_rows`, on the room's condition with the map's bits of `RoomMap.cond_of_rows`); else `height₂` asks it. `hR`, `hB`, `hK` are checks on the ROM. -/
+(`EntryHeight.height_of_rows`, on the room's condition with the map's bits of `RoomMap.cond_of_rows`); if it starts with the size 0 (big), the walk of
+`EntryHeightBig` (`EntryHeightBig.height_of_rowsB`, with the map's bytes on each instruction of `RoomBlocks.blocks_run_trace`); else `height₂` asks it. `hR`, `hB`,
+`hK` are checks on the ROM. -/
 theorem Run.y₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     (R.base.seq (R.base.a₂ sy nmS m0)).ram.get! (EntryHeight.heightI sy) = (SideTransition.entry m0).ram.get! (EntryHeight.heightI sy) := by
-  rcases R.height₂ with hs | hy
-  · have hlt := R.b₁_lt_a₂ hR hB hK
-    have he := R.entry₁ hB hK
-    obtain ⟨k, hk⟩ : ∃ k, R.base.a₂ sy nmS m0 = k + 1 := ⟨R.base.a₂ sy nmS m0 - 1, by omega⟩
-    have hrt := R.rt₂ hR hB hK
-    rw [hk] at hrt hs ⊢
+  have hlt := R.b₁_lt_a₂ hR hB hK
+  have he := R.entry₁ hB hK
+  obtain ⟨k, hk⟩ : ∃ k, R.base.a₂ sy nmS m0 = k + 1 := ⟨R.base.a₂ sy nmS m0 - 1, by omega⟩
+  have hrt := R.rt₂ hR hB hK
+  rcases R.height₂ with hs | hs | hy
+  · rw [hk] at hrt hs ⊢
     rw [Nat.add_sub_cancel] at hs
     rw [R.base.next k] at hrt ⊢
     exact EntryHeight.height_of_rows hR.map hR.mapStart hR.height.walk R.base.next ((R.chg.run₁ he).inRowsT hR.pipe R.chg.ctlFirst₁)
+      R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (show R.base.b₁ sy ≤ k by omega) (show k < R.base.a₂ sy nmS m0 by omega) hs hrt
+  · rw [hk] at hrt hs ⊢
+    rw [Nat.add_sub_cancel] at hs
+    rw [R.base.next k] at hrt ⊢
+    obtain ⟨v0, hrows⟩ := hR.height.rows
+    exact EntryHeightBig.height_of_rowsB hR.map hR.mapStart hR.height.big hR.height.blocks hrows R.base.next ((R.chg.run₁ he).inRowsT hR.pipe R.chg.ctlFirst₁)
       R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (show R.base.b₁ sy ≤ k by omega) (show k < R.base.a₂ sy nmS m0 by omega) hs hrt
   · exact hy
 

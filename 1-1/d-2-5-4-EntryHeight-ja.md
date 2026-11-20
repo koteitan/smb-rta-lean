@@ -18,7 +18,7 @@ height_frame    :  WalkOK(finY),  RoomCond(K_Y, m),  ∀ j, SiteOK(tr(j)),  rt(f
 height_of_rows  :  [b, a) での RoomMap.map_of_rows の仮定,  確認,  b ≤ k < a,
                    size(seq k) = size(r),   rt(frame(seq k, inp k)) = e_s           →   y(frame(seq k, inp k)) = y_e
 
-Run.height₂     :  size(seq(a₂ − 1)) = size(r)   ∨   y(seq a₂) = y_e                 （フィールド、新しい）
+Run.height₂     :  size(seq(a₂ − 1)) = size(r)   ∨   size(seq(a₂ − 1)) = 0   ∨   y(seq a₂) = y_e    （フィールド。真ん中はラウンド 21 から）
 Run.y₂          :  y(seq a₂) = y_e                                                    （定理）
 entryAt_of_y    :  m[y] = y_e  ∧  EntryAt(R₈, m)   →   EntryAt(R₉, m)
 ```
@@ -96,7 +96,7 @@ Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`�
 
 ## 仮定（Lean で証明していない）
 
-* `height₂`: 入るフレームは小さいプレイヤーで始まる、または入口の高さは基準の入口のもの。
+* `height₂`: 入るフレームは小さいプレイヤーか大きいプレイヤー（大きさのバイト 0）で始まる、または入口の高さは基準の入口のもの。ラウンド 21 から大きい場合も証明しました（[EntryHeightBig](d-2-5-4-3-EntryHeightBig-ja.md)）。仮定に残るのは、大きさのバイトのほかの値だけです。
 * 部屋の各命令の `SiteOK`（`chg.roomSites`）。前と同じです。
 
 **ファイル.** `Theorems/EntryHeight.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/EntryHeight.lean`（`Main.lean` の `genEntryHeight`）。
@@ -111,3 +111,7 @@ Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`�
 ## 頭と横の局所的な矛盾
 
 [EntryHeadHeight](d-2-5-4-2-EntryHeadHeight-ja.md) は、大きいプレイヤーの最初の上側の横の添字で、候補の低い高さでは頭のマスが `SiteOK` と `Solid` を同時に満たせないことを証明します。具体的な候補 2,240 フレーム中、低い入口になった 256 個は、すべて頭の条件に反しました。表の確認は約 1.2〜2.0 秒です。フレームの歩きは変えず、8 個の抽象的な終端もまだ消していません。すべての入口で実際の頭と横の呼び出しをつなぐ部分が残ります。
+
+## ラウンド 21: 大きいプレイヤー
+
+[EntryHeightBig](d-2-5-4-3-EntryHeightBig-ja.md) は、大きいプレイヤー（大きさのバイト 0）で始まるフレームの高さを、新しい歩きで証明します。頭の確認の前で高さを分け、頭の読みで横の位置とページを分け、ブロックバッファのルーチンの `ADC #0` でページを残し、読みの場所がわかるところでは地図のバイトを読みます（各命令の `Solid`）。8,326,333 ステップに失敗はなく、192 px の終わりもありません。`Run.y₂` は大きいプレイヤーにこの歩きを使います。`height₂` には真ん中の選択肢 `size(seq(a₂ − 1)) = 0` が増えました。小さいプレイヤーの証明は、このページの歩きのままです。

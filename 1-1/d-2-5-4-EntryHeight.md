@@ -18,7 +18,7 @@ height_frame    :  WalkOK(finY),  RoomCond(K_Y, m),  ∀ j, SiteOK(tr(j)),  rt(f
 height_of_rows  :  the hypotheses of RoomMap.map_of_rows on [b, a),  the checks,  b ≤ k < a,
                    size(seq k) = size(r),   rt(frame(seq k, inp k)) = e_s           →   y(frame(seq k, inp k)) = y_e
 
-Run.height₂     :  size(seq(a₂ − 1)) = size(r)   ∨   y(seq a₂) = y_e                 (field, new)
+Run.height₂     :  size(seq(a₂ − 1)) = size(r)   ∨   size(seq(a₂ − 1)) = 0   ∨   y(seq a₂) = y_e    (field; the middle disjunct since round 21)
 Run.y₂          :  y(seq a₂) = y_e                                                    (theorem)
 entryAt_of_y    :  m[y] = y_e  ∧  EntryAt(R₈, m)   →   EntryAt(R₉, m)
 ```
@@ -96,7 +96,7 @@ Removed from the assumptions: the height of `entry₂`, for a run whose entering
 
 ## Assumptions (not proved in Lean)
 
-* `height₂`: the entering frame starts with a small player, or the height at the entry is the reference entry's.
+* `height₂`: the entering frame starts with a small player, or with a big one (the size byte 0), or the height at the entry is the reference entry's. Since round 21 the big case is proved too ([EntryHeightBig](d-2-5-4-3-EntryHeightBig.md)), so it is assumed only for the other values of the size byte.
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/EntryHeight.lean`, `Theorems/Route.lean`; the private check is in `Proof/EntryHeight.lean` (`genEntryHeight` in `Main.lean`).
@@ -111,3 +111,7 @@ Removed from the assumptions: the height of `entry₂`, for a run whose entering
 ## A checked local head/side exclusion
 
 [EntryHeadHeight](d-2-5-4-2-EntryHeadHeight.md) now proves a local geometric contradiction for the big player's first upper side offset at the candidate lower height: its head cell cannot satisfy `SiteOK` and `Solid`. All 256 concrete lower-entry candidates among 2,240 frames violated precisely the head condition. The finite check takes about 1.2–2.0 seconds; it does not change the frame walk or eliminate its eight bad abstract ends. Connecting the actual head and side calls throughout every entering frame remains.
+
+## Round 21: the big player
+
+[EntryHeightBig](d-2-5-4-3-EntryHeightBig.md) proves the height for a frame that starts with a big player (the size byte 0), with a new walk: it splits the height before the head's check, the horizontal position and the page at the head's read, keeps the page through the block buffer routine's `ADC #0`, and reads the map's bytes (`Solid` on each instruction) where the place of a read is known. Its 8,326,333 steps have no failure and no end at 192 px. `Run.y₂` now uses this walk for a big player; `height₂` gets the middle disjunct `size(seq(a₂ − 1)) = 0`. The walk of this page stays the proof for a small player.

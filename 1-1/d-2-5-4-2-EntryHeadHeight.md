@@ -15,3 +15,5 @@ The normal real check passed for the TAS and 50 own runs per size: 20 small and 
 What remains: identify and join those actual head and side calls for every entering frame, prove their horizontal coordinate agreement and prelanding-height band, and exclude other call branches. The eight abstract frame ends are not removed merely by checking this local table; their lost history must be recovered. `height₂` and `buffer₂` remain unchanged. No field is added or widened.
 
 **Files:** `Theorems/EntryHeadHeight.lean`; private `Proof/EntryHeadHeight.lean`.
+
+**Round 21.** The link to the entering frame is now made in another way: the walk of [EntryHeightBig](d-2-5-4-3-EntryHeightBig.md) knows the head's cell on the frames that could end at 192 px and removes them with `SiteOK` and `Solid`. It does not use `excludes_head`.
