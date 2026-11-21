@@ -2,7 +2,7 @@
 
 # A big player at the block's corner
 
-The field `way` of [Joining the bonus room](c-5-RoomJoin.md) gives, with no wall hit and no stop from `C + 37` to `t₀`, the last takeoff from the floor before a landing on the block (`Approach`). Its part `low` said that every low frame of that jump (the feet at the corner's height or lower) is `LowAt`: the collision routine keeps him left of the corner, or stops him, or he moves left. This is false for a big player on measured runs. This page replaces `low` by a statement that holds for a big player too, proves the fast takeoff of a big player and the slow takeoff after the first frame after the fall, and leaves one hypothesis for the slow takeoff of a big player on that first frame.
+The field `way` of [Joining the bonus room](c-5-RoomJoin.md) gives, with no wall hit and no stop from `C + 37` to `t₀`, the last takeoff from the floor before a landing on the block (`Approach`). Its part `low` said that every low frame of that jump (the feet at the corner's height or lower) is `LowAt`: the collision routine keeps him left of the corner, or stops him, or he moves left. This is false for a big player on measured runs. This page replaces `low` by a statement that holds for a big player too, proves the fast takeoff of a big player and the slow takeoff after the first frame after the fall, and left one hypothesis for the slow takeoff of a big player on that first frame (`Approach.slowBig`). Round 26 proves it too: [A big player's slow takeoff on C + 35](c-7-14-2-LandDist.md).
 
 **False, measured (round 24).** `Approach.low` is false for a big player: on 2 measured runs with no wall hit, no stop and a landing on the block, the last low frame (10 frames after the takeoff, at the height 138, moving right) ends 336/256 px and 48/256 px past the corner, not stopped. The cause: a big player's side check has two points, 8 px and 24 px below his top. At the heights 136 to 151 the upper point is in the row above the block, where a coin is above the block's left column. The routine takes the coin and leaves the side check, so on that frame the lower point does not push him back. The coin is then gone, so this happens on one frame only.
 
@@ -14,7 +14,7 @@ The field `way` of [Joining the bonus room](c-5-RoomJoin.md) gives, with no wall
 Approach.low (field, was  ∀ n ∈ [T1 + 1, s],  LowAt(n)):
   ∀ n ∈ [T1 + 1, s],   LowAt(n)  ∨  (sz = 0  ∧  n = s  ∧  P(n) ≤ c_P + S_low)
 
-Approach.slowBig (new field):
+Approach.slowBig (field of round 25; gone in round 26, proved by LandDist.slow_short):
   sz = 0  →  fast = false  →  ¬LowAt(s)  →  T1 = C + 34  →  C + 98 < t₀
 
 slowBigOk (new check, in Checks.roomBig): for each slow pair (q₁, q₂) ∈ {(10, 17), (11, 16)},
@@ -28,9 +28,9 @@ landed_short (proved, same statement): with no wall hit and no stop, a landing o
 
 `landed_short` splits on `LowAt(s)`:
 - `LowAt(s)` (always for a player who is not big): as before. Every low frame is `LowAt`, so every frame up to `s` is left of the corner (`left_at`); a slow takeoff is short by the air speed cap (the pairs `(10, 17)`, `(11, 16)`, 65/256 and 193/256 px to spare), a fast one by the search of `FastTakeoff` with 8 low air frames (`roomOk`).
-- not `LowAt(s)`: then `sz = 0` and only the last low frame may be past the corner. Every frame up to `s − 1` is left of it (`left_at` with `w = s − 1`). A fast jump has at least 8 low air frames (`s ≥ T1 + 9`), so the 7 air frames after the jump frame are left of the corner, and the search of `FastTakeoff` with 7 low air frames (`roomB`, the new check `Checks.roomBig`) gives the contradiction. A slow takeoff after `C + 35` (`T1 ≥ C + 35`) has the bound from `s − 1`: one more frame in the air, but the landing is one frame later too, and `capDist(n + 1) ≥ 384 + capDist(n)`; `pair_bound` with the pair `(q₁, q₂ + 1)` and `slowBigOk` give the contradiction. A slow takeoff on `C + 35` is `slowBig`.
+- not `LowAt(s)`: then `sz = 0` and only the last low frame may be past the corner. Every frame up to `s − 1` is left of it (`left_at` with `w = s − 1`). A fast jump has at least 8 low air frames (`s ≥ T1 + 9`), so the 7 air frames after the jump frame are left of the corner, and the search of `FastTakeoff` with 7 low air frames (`roomB`, the new check `Checks.roomBig`) gives the contradiction. A slow takeoff after `C + 35` (`T1 ≥ C + 35`) has the bound from `s − 1`: one more frame in the air, but the landing is one frame later too, and `capDist(n + 1) ≥ 384 + capDist(n)`; `pair_bound` with the pair `(q₁, q₂ + 1)` and `slowBigOk` give the contradiction. A slow takeoff on `C + 35` was `slowBig`; since round 26 it is the search of `LandDist` (`Checks.slowLand`).
 
-**Why `slowBig` is not proved.** On `C + 35` the landing is not later. From `P(s − 1) < c_P` the slow takeoff's bound has one more frame at the air speed: `c_P − 1 + 384·8 + capDist(46)` is 319/256 px past the goal at `C + 98` (it was 65/256 px short from `P(s) < c_P`). No condition at or before the landing helps: a measured big run has `P(L) − c_P = 2880/256` px on its landing frame, while the bound would need at most about 2752. The looseness is after the landing: `capDist(46)` is 28480, and the TAS covers 27984 in those 46 frames. A tighter bound needs a new search after the landing.
+**Why `slowBig` was not proved here** (round 26 does it with a table of the frames after the landing and a search from the room's first frame: [A big player's slow takeoff on C + 35](c-7-14-2-LandDist.md)). On `C + 35` the landing is not later. From `P(s − 1) < c_P` the slow takeoff's bound has one more frame at the air speed: `c_P − 1 + 384·8 + capDist(46)` is 319/256 px past the goal at `C + 98` (it was 65/256 px short from `P(s) < c_P`). No condition at or before the landing helps: a measured big run has `P(L) − c_P = 2880/256` px on its landing frame, while the bound would need at most about 2752. The looseness is after the landing: `capDist(46)` is 28480, and the TAS covers 27984 in those 46 frames. A tighter bound needs a new search after the landing (round 26: the exact table alone is still 15/256 px past the goal; the search from the room's first frame closes it).
 
 ## Measured
 
@@ -42,7 +42,7 @@ landed_short (proved, same statement): with no wall hit and no stop, a landing o
 
 ## What remains
 
-- `slowBig`: a hypothesis on whole runs (when `t₀` comes), asked only of a big player whose last low frame is past the corner, after a slow takeoff on `C + 35`. The measured best of such runs is 320/256 px short at `C + 98`.
+- `slowBig`: proved in round 26 ([A big player's slow takeoff on C + 35](c-7-14-2-LandDist.md)); the field is gone.
 - `Approach.low` itself is still a field: that the collision routine keeps a low frame `LowAt` (or a big player's last one not far past the corner) is not derived.
 
 **Files.** `Theorems/RoomJoin.lean`: `Approach` takes `sz` (`low` changed, new `slowBig`), `Way` and `RoomFields`, `RoomCore` take `sz`, `RoomRun` sets it to the size byte of `S.seq b` (the machine at first control), new `roomB`, `slowBigOk`, `Checks.roomBig`, `fast_short`; `landed_short` keeps its statement. Private: `roomBig` in `room_checks` (`Proof/RoomJoin.lean`). Programs `room-approach-check`, `room-big` (probe, beam, fast).

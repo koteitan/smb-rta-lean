@@ -3,8 +3,8 @@ import Theorems.BufferControl
 /-!
 # A frame that starts with the control at 6 left of the mouth does not enter
 
-`Route.Run.buffer₂` asks that the frame that enters the side pipe does not start with the control of the screen's buffers at 6 (the value after a frame that erased
-a coin). Here half of it: a frame of the room that starts with the control at 6, on page 0, with the position `x` in `[lo, hi)`, comes to the end of the move
+The route needs that the frame that enters the side pipe does not start with the control of the screen's buffers at 6 (the value after a frame that erased
+a coin); until round 26 the field `Route.Run.buffer₂` asked it, and now `Route.Run.buf₂` proves it. Here half of it: a frame of the room that starts with the control at 6, on page 0, with the position `x` in `[lo, hi)`, comes to the end of the move
 (`PlayerSubs`) only left of the mouth's left end. So `SideFrame.entry_right_of_left` (the walk of one whole frame, `side_frame_check`) says that it does not enter.
 
 The move adds the speed's high four bits (sign extended) and a carry to the position, so it moves the position by at most 8 px for every value of the speed byte.
@@ -154,8 +154,13 @@ def searchOfG (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : E
 def cfgOfG (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (r : Machine) (K : List (Nat × UInt8)) : CfgS :=
   let X := searchOfG S M Z O fin E r K
   let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2 || q.2.pc == M.subs
+  -- the accumulator is taken apart first, so that each part is updated in place (projections of a shared tuple copy the array at each push; round 26)
   let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
-      (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
+      match acc with
+      | (arr, hm, ba) =>
+        let i := arr.size
+        let l := hm.getD e.1 []
+        (arr.push e.2, hm.insert e.1 (i :: l), ba.set! e.2.pc.toNat 1))
     (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
   let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd] ++ O.normAt).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
   { E, ops := (aRows E).toArray, P := S.P, fin, t := q.1, key := O.key, idx := q.2.1, cut := q.2.2, norm := O.norm, normAt := at0 }
@@ -178,8 +183,13 @@ def searchOfG2 (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : 
 def cfgOfG2 (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (rs : List (Machine × List (Nat × UInt8))) : CfgS :=
   let X := searchOfG2 S M Z O fin E rs
   let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2 || q.2.pc == M.subs
+  -- the accumulator is taken apart first, so that each part is updated in place (projections of a shared tuple copy the array at each push; round 26)
   let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
-      (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
+      match acc with
+      | (arr, hm, ba) =>
+        let i := arr.size
+        let l := hm.getD e.1 []
+        (arr.push e.2, hm.insert e.1 (i :: l), ba.set! e.2.pc.toNat 1))
     (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
   let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd] ++ O.normAt).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
   { E, ops := (aRows E).toArray, P := S.P, fin, t := q.1, key := O.key, idx := q.2.1, cut := q.2.2, norm := O.norm, normAt := at0 }

@@ -102,7 +102,7 @@ Removed from the assumptions: the five bytes of the screen's buffer of `entry₂
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: the entering frame does not start with the control of the screen's buffers at 6, or it starts on page 0 at 16 to 180 px, or the five bytes at the entry are those of a reference (round 24). With `Run.ctl₂` and `Run.coin₂` this excludes only a start with the control at 6 outside page 0 at 16 to 180 px. Round 25 ([BufferEnd](d-2-5-5-3-BufferEnd.md), 1-1-d-2-5-5-3): a frame that ends with the control at 6 ends at 16 to 180 px (`Run.end₂`), so `buffer₂` now asks only page 0 there.
+* `buffer₂`: the entering frame does not start with the control of the screen's buffers at 6, or it starts on page 0 at 16 to 180 px, or the five bytes at the entry are those of a reference (round 24). With `Run.ctl₂` and `Run.coin₂` this excludes only a start with the control at 6 outside page 0 at 16 to 180 px. Round 25 ([BufferEnd](d-2-5-5-3-BufferEnd.md), 1-1-d-2-5-5-3): a frame that ends with the control at 6 ends at 16 to 180 px (`Run.end₂`), so `buffer₂` now asks only page 0 there. Round 26: `buffer₂` is gone: a frame that erases a coin also ends on page 0 ([BufferPage](d-2-5-5-4-BufferPage.md), 1-1-d-2-5-5-4).
 * `chg.entry₂`: 3 bytes at the entry have the values of a reference: the area music's buffer, the event music's queue, the added note length. They wait for the game timer (see [The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 

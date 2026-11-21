@@ -66,8 +66,8 @@ The walk of the block's left side passes for the state 1 moving up only from the
 
 ## What remains
 
-- The field `low_at` for a frame that ends above 152 (from 136 to 151 px): the walk of the block's left side does not pass there with the size not known, and a big player is not pushed back there on measured frames.
-- `Approach.low`: false on measured runs of a big player; `landed_short` would need another argument for the frames of a big player at the corner (done in round 25, with the new field `Approach.slowBig`: [A big player at the block's corner](c-7-14-1-BigApproach.md)).
+- The field `low_at` for a frame that ends above 152 (from 136 to 151 px): the walk of the block's left side does not pass there with the size not known, and a big player is not pushed back there on measured frames. Since round 26 asked only after a frame at or past the corner ([A frame above 152 px after a frame left of the corner](c-7-5-19-BandStart.md)).
+- `Approach.low`: false on measured runs of a big player; `landed_short` would need another argument for the frames of a big player at the corner (done in round 25: [A big player at the block's corner](c-7-14-1-BigApproach.md); its field `Approach.slowBig` is proved in round 26: [A big player's slow takeoff on C + 35](c-7-14-2-LandDist.md)).
 - `stand_wall`: not touched.
 
 **Files.** `Theorems/RoomHigh.lean` (new: `vTagsJH`, `goalVJH`, `caseOKJH`, `jumpHOK`, `vert_jumpH`, `jump_frameH`, `jump_roomH`, `air_roomH`, `offCheck`, `arcCheckH`, `Checks`, `off_spec`, `arc_specH`), `Theorems/RoomVert.lean` (`vKeepH`; `mayWriteV` over `vKeepH`; `apartH`, `keepVH_step`, `after_QP`), `Theorems/RoomJoin.lean` (`InRoom.highJ`, `InRoom.highA`, `RoomCore.low_jump`, `low_step`, `varc_at`, `high_next`, `low_jump_of`, `v_chain2`, `arcDown`, `Checks.down`, `arc_down`; `low_by` and the field `low_at`), `Theorems/Route.lean` (`mem_ysUp`, `Run.roomHighJ`, `Run.roomHighA`; `Run.inRoom` takes the checks of `RoomHigh`). Private `Proof/RoomHigh.lean` (`room_high`), and `down` in `room_checks` (`Proof/RoomJoin.lean`). Programs `room-high-probe`, `room-approach-check`.

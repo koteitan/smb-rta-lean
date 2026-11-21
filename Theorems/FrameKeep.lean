@@ -1381,11 +1381,22 @@ def faceE (sy : Syms) : List Nat := [(sy.PlayerFacingDir &&& 0x7FF).toNat, (sy.P
 a part of the old field `vAfter` of the frames above ground) -/
 def stateE (sy : Syms) : List Nat := [(sy.Player_State &&& 0x7FF).toNat, (sy.VerticalForce &&& 0x7FF).toNat]
 
-/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the player's state and the vertical force (`stateE`), the facing and the
-subspeed (`faceE`), the bytes of `spareE`, the collision bits (`collE`), the speed (`speedE`) and three vertical bytes (`vertE`) protected too. The walks of this file use `guardK` or `guardF`, and
-`CleanK` of `guardE` gives both (`cleanK_of_E`, `cleanK_sub`); the walk of `PhaseFrame` uses `guardE` with two more bytes. -/
+/-- a word of the program, its low byte first (round 26) -/
+def romWE (m0 : Machine) (a : UInt16) : UInt16 := (romByte m0 a).toUInt16 ||| ((romByte m0 (a + 1)).toUInt16 <<< 8)
+
+/-- **The screen's left edge, its pixel and its page** (round 26), which no frame of a run writes through an index or a pointer: the operands of the two loads of the
+clamp at the screen's edge, found from the scroll handler's call as `ScreenClamp.places` finds them (`EdgeStep.eI`; the walks of `EdgeStep` follow them) -/
+def edgeE (sy : Syms) (m0 : Machine) : List Nat :=
+  let entry := PipeEntryRule.findOp m0 (romWE m0 (sy.PlayerSubs + 1)) 0xB9 256
+  let pg := PipeEntryRule.findOp m0 (entry + 1) 0xB9 32
+  [(romWE m0 (entry + 1) &&& 0x7FF).toNat, (romWE m0 (pg + 1) &&& 0x7FF).toNat]
+
+/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the screen's left edge (`edgeE`, round 26), the player's
+state and the vertical force (`stateE`), the facing and the subspeed (`faceE`), the bytes of `spareE`, the collision bits (`collE`), the speed (`speedE`) and three
+vertical bytes (`vertE`) protected too. The walks of this file use `guardK` or `guardF`, and `CleanK` of `guardE` gives both (`cleanK_of_E`, `cleanK_sub`); the walk of
+`PhaseFrame` uses `guardE` with two more bytes. -/
 def guardE (sy : Syms) (m0 : Machine) : Guard :=
-  { guardF sy m0 with prot := stateE sy ++ faceE sy ++ spareE sy ++ collE sy ++ speedE sy ++ vertE sy ++ (guardF sy m0).prot }
+  { guardF sy m0 with prot := edgeE sy m0 ++ stateE sy ++ faceE sy ++ spareE sy ++ collE sy ++ speedE sy ++ vertE sy ++ (guardF sy m0).prot }
 
 /-- `CleanK` of `guardE` gives `CleanK` of `guardF` -/
 theorem cleanK_of_E {sy : Syms} {m0 : Machine} {q : UInt16} {m : Machine} (h : CleanK (guardE sy m0) q m) : CleanK (guardF sy m0) q m := cleanK_weak h
@@ -1417,7 +1428,7 @@ structure Frames (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) (s
   /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardE`: no store through an index or a pointer writes the bytes of
   `guardK` (but the player's own store of the fraction), the pause byte, the area's type, the swimming flag, the change of size, A and B, A and B of the frame before,
   the moving direction, the running speed, the stored speed, the player's collision bits, the player's speed, the vertical force down, the jump's origin, the jump's
-  halt value, the player's facing, the player's subspeed, the player's state or the vertical force -/
+  halt value, the player's facing, the player's subspeed, the player's state, the vertical force or the screen's left edge (round 26) -/
   cleanE : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardE sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section

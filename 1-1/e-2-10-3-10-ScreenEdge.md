@@ -40,7 +40,7 @@ On the false frame of round 23 (`edgeJump`, frame 190): P(b) = 730096, edge(M) =
 
 At control (the movie's frame 852) edge − P = −14081 (pixel 2616, left edge 2560). On the frames after one that starts below the edge, P(b) − P(a) ≤ 496. Both new bounds are reached exactly (256 and 0). `collide-real FM2 200` (exit 0) checks `CollideS` at every arrival at the scroll handler and `edge` on every frame of its runs: 0 failures. `surface-frames-check FM2 200` checks the new move of `TopSpeed.Frame` on every frame in control (`impedeP`) and `Moves` with `edge` on the clean frames.
 
-**Not proved.** The fields `collide` and `edge` are assumptions (`edge₀` is a theorem since round 25). That one push at most follows the clamp, and that the screen does not scroll when he moves left or not at all, are read from the code and measured.
+**Not proved.** The field `collide` is an assumption (`edge₀` is a theorem since round 25; `edge` is a theorem since round 26, from the new one-state field `near`: [The edge's step of a frame](e-2-10-3-13-EdgeStep.md)). That one push at most follows the clamp, and that the screen does not scroll when he moves left or not at all, are read from the code and measured.
 
 **Notation.** At a machine m, left(m) is the screen's left edge and pixel(m) the player's whole pixel, both with their pages (256 per page). They are read at the two operands of the clamp at the screen's edge (`ScreenClamp.places`). M is the machine at a frame's start, Q the machine at the scroll handler, b the machine at the frame's end. P is the position in 1/256 px (`posP`), v the speed.
 

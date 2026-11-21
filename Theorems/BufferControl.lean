@@ -3,8 +3,8 @@ import Theorems.EntryBuffer
 /-!
 # The control of the screen's buffers through the room
 
-`Route.Run` asks (field `buffer₂`) that the frame that enters the side pipe starts with the control of the screen's buffers (`VRAM_Buffer_AddrCtrl`) at the
-reference's value 0, or else that the five bytes of the first screen buffer at the entry are those of a reference. With the control at 0 the five bytes are proved
+The route needs that the frame that enters the side pipe starts with the control of the screen's buffers (`VRAM_Buffer_AddrCtrl`) at the
+reference's value 0, or else that the five bytes of the first screen buffer at the entry are those of a reference (until round 26 the field `buffer₂` asked it; now `Route.Run.buf₂` proves it). With the control at 0 the five bytes are proved
 (`EntryBuffer.buffer_of_rows`).
 
 Here a step toward the control at 0: on every frame of the room the control is 0 or 6 when the frame starts. The screen update at the start of each frame sets it

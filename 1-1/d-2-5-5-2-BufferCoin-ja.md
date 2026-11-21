@@ -79,7 +79,7 @@ Lean: `Theorems/BufferCoin.lean`（`bitP`、`MP`、`zoneM`、`preZ`、`walkG`、
 
 ## 仮定（Lean で証明していない）
 
-* `buffer₂`: 入るフレームの前のフレームがコインを消したなら、そのフレームはページ 0 の 16 から 180 px で終わった（そうでなければ入口の 5 バイトは基準のもの）。これをなくすには、制御 6 で終わるフレームがそこで終わることを示します。そのコインは口より 3 列以上左にあるので、衝突のルーチンがコインを読むときの位置が要ります。ラウンド 25（[BufferEnd](d-2-5-5-3-BufferEnd-ja.md)、1-1-d-2-5-5-3）: 制御 6 で終わるフレームは 16 から 180 px で終わる（`Run.end₂`）ので、`buffer₂` が求めるのはそこでのページ 0 だけになりました。
+* `buffer₂`: 入るフレームの前のフレームがコインを消したなら、そのフレームはページ 0 の 16 から 180 px で終わった（そうでなければ入口の 5 バイトは基準のもの）。これをなくすには、制御 6 で終わるフレームがそこで終わることを示します。そのコインは口より 3 列以上左にあるので、衝突のルーチンがコインを読むときの位置が要ります。ラウンド 25（[BufferEnd](d-2-5-5-3-BufferEnd-ja.md)、1-1-d-2-5-5-3）: 制御 6 で終わるフレームは 16 から 180 px で終わる（`Run.end₂`）ので、`buffer₂` が求めるのはそこでのページ 0 だけになりました。ラウンド 26: `buffer₂` はなくなりました。コインを消したフレームはページ 0 でも終わります（[BufferPage](d-2-5-5-4-BufferPage-ja.md)、1-1-d-2-5-5-4）。
 * 部屋の各命令の `SiteOK`（`chg.roomSites`）、前と同じ。
 
 **ファイル.** `Theorems/BufferCoin.lean`、`Theorems/Route.lean`、`Theorems/BufferControl.lean`（`ref_of_ne6` を加えた）。非公開の確認は `Proof/BufferCoin.lean`（`Main.lean` の `genBufferCoin`）。

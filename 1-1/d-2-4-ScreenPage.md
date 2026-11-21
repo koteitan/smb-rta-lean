@@ -143,6 +143,28 @@ A program (`screen-check`). On runs not overwritten, no part of `SiteOK` fails. 
 * The last instruction of the slowest handler is at dot 43,009; `L` is 83,342.
 * He does not run right past the screen. While the scroll lock is on, `ChkPOffscr` puts him back on the screen. Written right of the pipe, holding Right and B, he reaches at most pixel 240, and his page stays 0.
 
+## Round 26: what the room's walk knows of each part of `SiteOK` (measured)
+
+Item 1-1-d-2-4-2. The question: which parts of `SiteOK` could a walk of the room's frames prove from the rows at the room's first control, as the walks of the control and of the coin frames do. The most precise walk of the room is that of [BufferEnd](d-2-5-5-3-BufferEnd.md) (the room's condition, the control of the screen's buffers at 0 or 6, the position's pieces, and since round 26 the page, [BufferPage](d-2-5-5-4-BufferPage.md)). `buffer-ctl-check FM2 4000 sites26` takes every state of its table and follows the walk's steps up to a covered state or the frame's end, and at each state asks whether the state alone already gives the part (no part of the proof).
+
+| part | what it asks | from the control 0: known / not known | from the control 6: known / not known | places where not known |
+|---|---|---|---|---|
+| `reads` | an `LDA (zp),Y` reads RAM or ROM (pointer's high byte at most 0x1E or at least 0x80) | 15,007 / 294 | 15,009 / 308 | the screen update's reads of the buffer (4 places), the music routine (5 places) |
+| `off` | the screen buffer's offset below 64 where it is an index | 119 / 0 | 1,703 / 242 | the three places that write into the buffer |
+| `xbit` | the position's low bits not 0 at the side pipe's read | 12 / 64 | 12 / 64 | the side pipe's read |
+| `read` | the block buffer routine reads a tile of the list (place in the block buffers) | 13,202 / 1,204 | 13,202 / 1,204 | the routine's read |
+| `erase` | the coin is erased in the block buffers | 0 / 310 | 0 / 310 | the erase |
+| `late` | the handler is done before dot `L` | 50,543 / 1,603,443 | 73,948 / 2,003,652 | almost everywhere |
+
+What this says:
+
+* `off` is known on every frame that starts with the control at 0. A frame that starts with 6 draws the second buffer, and the first buffer's offset is not reset; the room's condition does not know it. So `off` would need the offset in the room's condition, kept from frame to frame (as `BufferControl` keeps the control), and a version of the walk's theorems that proves `off` instruction by instruction instead of assuming it.
+* `reads` is known at all but about 2% of the reads. The rest go through pointers that the walk does not know: the screen update's pointer into the buffer after its loop, and the music data's pointer.
+* `xbit`, `read`, `erase` need the position (and the height) at the instruction, which a walk from the room's condition does not know: they need bounds over several frames (the walls, the floor).
+* `late`: the walk's own bound on the dot is above `L` at most states; it is the clamp by `SiteOK.late` that keeps it. A proof needs the time of each path of the handler.
+
+So no part can be split off by the walks as they are. Every theorem that uses the room's walks takes `SiteOK` on every instruction as one hypothesis, and so does `RoomMap.cond_of_rows`, which gives the room's condition; a proved part needs the walks' theorems in a form with the parts apart. `chg.roomSites` stays as it is.
+
 ## Assumptions (not proved in Lean)
 
 * **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5. The route now asks 11 of them: five music bytes follow from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).

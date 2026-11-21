@@ -2,7 +2,7 @@
 
 # A frame that erases a coin ends at 16 to 180 px
 
-**Claim.** A frame of the room that starts with the control of the screen's buffers at 0 or 6 and ends with it at 6 ends with the position on the page from 16 to 180 px. This is proved, with one check on the ROM (two walks of the room's frame, about 60 to 80 s natively). So the field `buffer₂` now asks only the page: if the frame before the entering frame erased a coin (the control is then 6), it ended on page 0. On real runs the page in the room is always 0. That it always is is not proved.
+**Claim.** A frame of the room that starts with the control of the screen's buffers at 0 or 6 and ends with it at 6 ends with the position on the page from 16 to 180 px. This is proved, with one check on the ROM (two walks of the room's frame, about 60 to 80 s natively). So the field `buffer₂` now asks only the page: if the frame before the entering frame erased a coin (the control is then 6), it ended on page 0. On real runs the page in the room is always 0. That it always is is not proved. Round 26: such a frame also ends on page 0, so `buffer₂` is gone ([BufferPage](d-2-5-5-4-BufferPage.md)); the walk of this page now also follows the page.
 
 The names are those of [The control of the screen's buffers through the room](d-2-5-5-1-BufferControl.md) and [A frame that starts with the control at 6 left of the mouth does not enter](d-2-5-5-2-BufferCoin.md). `x(m)` and `page(m)` are the player's position on the page and the page. `Q` is the end of the move (`PlayerSubs`). `r` is the room's reference machine (control 0), `r₆` the same with the control 6. `K_B = K_T ∪ { every bit of c }`.
 
@@ -81,7 +81,7 @@ Coin frames end at most at 173 px; after the erase the position does not change 
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: if the frame before the entering frame erased a coin, it ended on page 0 (else the five bytes at the entry are those of a reference). To remove it one would prove that the page is 0 on every frame of the room. The move and a push carry into the page, so that needs the position on every frame of the room, near the walls too.
+* `buffer₂`: if the frame before the entering frame erased a coin, it ended on page 0 (else the five bytes at the entry are those of a reference). To remove it one would prove that the page is 0 on every frame of the room. The move and a push carry into the page, so that needs the position on every frame of the room, near the walls too. Round 26: `buffer₂` is gone: a frame that erases a coin also ends on page 0 ([BufferPage](d-2-5-5-4-BufferPage.md), 1-1-d-2-5-5-4).
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/BufferEnd.lean`, `Theorems/Route.lean`; the private check is in `Proof/BufferEnd.lean` (`genBufferEnd` in `Main.lean`).

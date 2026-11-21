@@ -8,6 +8,7 @@ import Theorems.PoleTileRead
 import Theorems.PoleTileHeight
 import Theorems.PoleTileFar
 import Theorems.PoleTileKeep
+import Theorems.PoleKeepFar
 import Theorems.StopRead
 
 /-!
@@ -1357,13 +1358,18 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   touches : PoleEntryRule.Touches sy (keep.fm g) (keep.pad g)
   /-- each instruction of each frame up to the touch's frame, counted or not: a store through an index or a pointer writes a pole's tile into the block buffers
   only in the pole's column. With the map at control (`PoleTileCtl.colMap₀`, from the rows of the change) the map holds at the start of the touch's frame
-  (`Run.tilesStart`); the old field `tiles` is a theorem from that, this, `keepB` and `tilesCol` (`PoleTileKeep.no_write_frameZ`) -/
-  bufAll : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleTileWalk.BufAt (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
+  (`Run.tilesStart`); the old field `tiles` is a theorem from that, this, `keepB` and `tilesCol` (`PoleTileKeep.no_write_frameZ`).
+  Round 26: asked only of a store that `PoleKeepFar.farBuf` does not settle, and of an `STA` through an absolute address and an index or through a pointer
+  only when A holds one of the pole's two tiles (`PoleKeepFar.BufV`): not of a store through an absolute address and an index from whose base no index reaches the
+  block buffers, nor of a store through the zero page and `X`, nor of an `STA` of another byte (`PoleKeepFar.bufAt_of_V`) -/
+  bufAll : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleKeepFar.BufV (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- round 25: each instruction of each frame up to the touch's frame, counted or not: a store through an index or a pointer writes neither of the two bytes that
   `PoleTileKeep` watches, the block objects' offset and the player's number (`PoleTileKeep.KeepB`). With their values at control (`PoleTileCtl.watch₀`) every
   frame keeps them (`PoleTileKeep.frames_keepY`), and the walk of the touch's frame tests each store inside the collision routine against the height
-  (`PoleTileKeep.zoneTest`): the old field `yKeep` (inside the collision routine no such store writes the height) is a theorem (`PoleTileKeep.no_write_frameZ`) -/
-  keepB : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleTileKeep.KeepB sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
+  (`PoleTileKeep.zoneTest`): the old field `yKeep` (inside the collision routine no such store writes the height) is a theorem (`PoleTileKeep.no_write_frameZ`).
+  Round 26: asked only of a store that `PoleKeepFar.farStore` does not settle (`PoleKeepFar.KeepR`): not of a store through an absolute address and an index from
+  whose base no index reaches either byte, nor of a store through the zero page and `X` (`PoleKeepFar.keepB_of_R`) -/
+  keepB : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleKeepFar.KeepR sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- up to the routine's write, right after a read of the side check with the page two or more before the pole's, at the pole's column, the byte read is not one
   of the pole's tiles (the old field `tilesFar` asked it at every column: the walk of `PoleTileFar.no_write_frameF` knows that such a read is in the block buffers,
   and the map says that a pole's tile there is in the pole's column) -/
@@ -1540,21 +1546,21 @@ theorem Run.tilesStart {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   exact PoleTileKeep.frames_keepY hk (PoleTileKeep.keepY_of_Z hc) R.keep.toFrames hc0.start (R.watched₀ st hq hc0.castle) hwb hmap
-    (fun n hn k => R.keepB n (by omega) k) (fun n hn k => R.bufAll n (by omega) k) (R.keep.toFrames.ix R.g - 1) (by omega)
+    (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k)) (fun n hn k => PoleKeepFar.bufAt_of_V (R.bufAll n (by omega) k)) (R.keep.toFrames.ix R.g - 1) (by omega)
 
-/-- the touch's frame meets `KeepB` on each instruction: `keepB` on its frame -/
+/-- the touch's frame meets `KeepB` on each instruction: `keepB` on its frame, with `PoleKeepFar.keepB_of_R` -/
 theorem Run.keepB₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (j : Nat) : PoleTileKeep.KeepB sy m0 (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j) := by
   have b := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
-  exact R.keepB (R.keep.toFrames.ix R.g - 1) (by omega) j
+  exact PoleKeepFar.keepB_of_R (R.keepB (R.keep.toFrames.ix R.g - 1) (by omega) j)
 
-/-- the touch's frame meets `BufAt` on each instruction: `bufAll` on its frame -/
+/-- the touch's frame meets `BufAt` on each instruction: `bufAll` on its frame, with `PoleKeepFar.bufAt_of_V` -/
 theorem Run.bufAt₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (j : Nat) : PoleTileWalk.BufAt (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j) := by
   have b := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
-  exact R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j
+  exact PoleKeepFar.bufAt_of_V (R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j)
 
 /-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleTileKeep.inRange_of_frameZ`, the walk of `PoleFrame` with more
 splits and more tests) on frame `g` of `keep`. The frame starts in control (`FrameKeep.Frames.start`, from the machine at control) with the two bytes' values

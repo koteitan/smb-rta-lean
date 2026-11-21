@@ -178,8 +178,13 @@ def cfgOfP (P : Places) (Z : Aids) (E : Env) (G : Reg) (r : Machine) (K : List (
   let X := searchOfP P Z E G r K
   let Z := aidsP Z G
   let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2
+  -- the accumulator is taken apart first, so that each part is updated in place (projections of a shared tuple copy the array at each push; round 26)
   let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
-      (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
+      match acc with
+      | (arr, hm, ba) =>
+        let i := arr.size
+        let l := hm.getD e.1 []
+        (arr.push e.2, hm.insert e.1 (i :: l), ba.set! e.2.pc.toNat 1))
     (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
   let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd]).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
   { E, ops := (aRows E).toArray, P, fin := finP P r K G.gI G.needG, t := q.1, key := keyP Z E, idx := q.2.1, cut := q.2.2, norm := Z.norm, normAt := at0 }

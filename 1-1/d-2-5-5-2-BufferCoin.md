@@ -79,7 +79,7 @@ No entering frame starts with the control at 6 (the first case of `buffer₂` ho
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: if the frame before the entering frame erased a coin, it ended on page 0 at 16 to 180 px (else the five bytes at the entry are those of a reference). To remove it one would prove that a frame that ends with the control at 6 ends there: its coin is at least three columns left of the mouth, so it needs the position at the collision routine's read of the coin. Round 25 ([BufferEnd](d-2-5-5-3-BufferEnd.md), 1-1-d-2-5-5-3): a frame that ends with the control at 6 ends at 16 to 180 px (`Run.end₂`), so `buffer₂` now asks only page 0 there.
+* `buffer₂`: if the frame before the entering frame erased a coin, it ended on page 0 at 16 to 180 px (else the five bytes at the entry are those of a reference). To remove it one would prove that a frame that ends with the control at 6 ends there: its coin is at least three columns left of the mouth, so it needs the position at the collision routine's read of the coin. Round 25 ([BufferEnd](d-2-5-5-3-BufferEnd.md), 1-1-d-2-5-5-3): a frame that ends with the control at 6 ends at 16 to 180 px (`Run.end₂`), so `buffer₂` now asks only page 0 there. Round 26: `buffer₂` is gone: a frame that erases a coin also ends on page 0 ([BufferPage](d-2-5-5-4-BufferPage.md), 1-1-d-2-5-5-4).
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/BufferCoin.lean`, `Theorems/Route.lean`, `Theorems/BufferControl.lean` (`ref_of_ne6` added); the private check is in `Proof/BufferCoin.lean` (`genBufferCoin` in `Main.lean`).

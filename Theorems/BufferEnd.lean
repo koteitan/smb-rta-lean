@@ -2,11 +2,12 @@ import Theorems.BufferCoin
 import Theorems.EntryHeightBig
 
 /-!
-# A frame that erases a coin ends at 16 to 180 px
+# A frame that erases a coin ends at 16 to 180 px, on page 0
 
 `Route.Run.buffer₂` asked (round 24) that a frame of the room that ends with the control of the screen's buffers at 6 (the value after the erase of a coin) ends on
-page 0 at 16 to 180 px, or that the screen buffer's bytes at the entry are a reference's. Here the position part is proved: a frame of the room that starts with
-the control at 0 or 6 and ends with it at 6 ends with the position on the page (`x`) from 16 to 180 px (`end_frame`, `end_of_rows`).
+page 0 at 16 to 180 px, or that the screen buffer's bytes at the entry are a reference's. Here both parts are proved: a frame of the room that starts with the
+control at 0 or 6 and ends with it at 6 ends with the position on the page (`x`) from 16 to 180 px (round 25) and on page 0 (round 26) (`end_frame`,
+`end_of_rows`). So `buffer₂` is gone.
 
 Every way to a coin in the collision routine (a read for the head, for a foot or for a side) goes to the erase of the coin, which sets the control to 6, and then
 returns from the collision routine; so does every push of a side collision. So on a frame that erases a coin, after the end of the move only the scroll handler
@@ -17,12 +18,16 @@ pieces whose known bits are a run of high bits: the pieces of `[16, 181)` and th
 adds the position (the player's, `X = 0`) it splits the position into its values (`fillB`); with the position known, where the routine makes the block buffer's
 address it splits the page's bit (bit 4 of the accumulator), and at the mask of the row the high bits of the accumulator. So the read has a known place: it takes
 the byte's bits that the room's condition knows (the bits that are 0 in the map), and after the save of the byte its values (`tileAt`); a coin is read only in a
-coin's column. With a piece inside, the read may give any tile, a coin too, and the piece stays up to the frame's end. At the frame's end (`finX`) the control is
-known not to be 6, or every value of the position's piece is from 16 to 180.
+coin's column. With a piece inside, the read may give any tile, a coin too, and the piece stays up to the frame's end.
 
-What stays assumed is the page: a frame that ends with the control at 6 is not shown to end on page 0. That needs the position on every frame of the room.
+The page (round 26). The scroll handler comes right after the end of the move, before the collision routine. Its routine of the offscreen bits compares the
+position with the screen's edges (known in the room's condition), and the clamp puts the player at an edge when he is off the screen. The abstract machine
+subtracts bytes only when all their bits are known, so with a piece inside, at the routine's subtraction of the position from the right edge (`xSbc`, `X = 0`,
+`Y = 1`) the walk splits the page into its values, and for the pages 128 and 255 also the position into its values; at the subtraction of the page (`pSbc`) with
+the page known and not 0 it splits the carry (`pageSplit`, `zoneX`). Then every page but 0 ends at the clamp to the left edge, on page 0, and page 0 stays. At the
+frame's end (`finX`) the control is known not to be 6, or every value of the position's piece is from 16 to 180 and the page is known to be 0.
 
-There is no game data in this file. Page: `1-1/d-2-5-5-3-BufferEnd.md`.
+There is no game data in this file. Pages: `1-1/d-2-5-5-3-BufferEnd.md`, `1-1/d-2-5-5-4-BufferPage.md`.
 -/
 
 namespace Smbrta.BufferEnd
@@ -73,7 +78,24 @@ structure MX where
   /-- the bounds of the inside -/
   lo : Nat
   hi : Nat
+  /-- the page of the position, and the two subtractions of the routine of the offscreen bits: of the position and of the page -/
+  pI : Nat
+  xSbc : UInt16
+  pSbc : UInt16
+  /-- the routine of the offscreen bits, the scroll handler, and the byte where the routine keeps the pixel difference: only for the search -/
+  offLo : UInt16
+  scrLo : UInt16
+  difI : Nat
+  /-- the load of the offscreen bits from their table, the indices whose bits have bit 7 (the clamp to the left edge follows), and the return address of the
+  scroll handler's call of the routine: only for the search -/
+  xLd : UInt16
+  xd7 : List UInt8
+  chkRet : UInt16
   deriving Inhabited
+
+/-- with the page known 128 or 255, the position by its values -/
+def pageSplit (M : MX) (A : AS) : List AS :=
+  if (A.getK M.pI).v == 0x80 || (A.getK M.pI).v == 0xFF then SideFrame.fillB M.xI A else [A]
 
 /-- the pieces of the position's walk: at the end of the move, with the position not known, its pieces; with the position's piece not inside: at the load of the
 adders' offset the offset's bits, at the block buffer routine's add of the player's position the position's values, at the start of the address's routine the page's
@@ -84,13 +106,17 @@ def zoneX (M : MX) (A : AS) : List AS :=
   else if A.pc == M.adc && A.x.isK && A.x.v == 0 && !inside M.lo M.hi (A.getK M.xI) then SideFrame.fillB M.xI A
   else if A.pc == M.colAt && !inside M.lo M.hi (A.getK M.xI) then PipeChangeEnd.bitA 16 A
   else if A.pc == M.andAt && !inside M.lo M.hi (A.getK M.xI) then SideFrame.highA A
+  else if A.pc == M.xSbc && A.x.isK && A.x.v == 0 && A.y.isK && A.y.v == 1 && inside M.lo M.hi (A.getK M.xI) && !(A.getK M.pI).isK then
+    (SideFrame.fillB M.pI A).flatMap (pageSplit M)
+  else if A.pc == M.pSbc && A.x.isK && A.x.v == 0 && (A.getK M.pI).isK && (A.getK M.pI).v != 0 then BufferCoin.bitP 1 A
   else [A]
 
 /-- the pieces before a step: those of the room's walk (with the tile's values after its save), then those of the position -/
 def preX (S : HP) (M : MX) (A : AS) : List AS := (preY S A).flatMap (zoneX M)
 
-/-- at the frame's end: the control `c` known not to be 6, or the position's piece inside -/
-def finX (c : Nat) (M : MX) (B : AS) : Bool := notV 6 (B.getK c) || inside M.lo M.hi (B.getK M.xI)
+/-- at the frame's end: the control `c` known not to be 6, or the position's piece inside and the page known 0 -/
+def finX (c : Nat) (M : MX) (B : AS) : Bool :=
+  notV 6 (B.getK c) || (inside M.lo M.hi (B.getK M.xI) && (B.getK M.pI).isK && (B.getK M.pI).v == 0)
 
 /-- the read of the block buffer routine with its pointer and `Y` known, in the RAM -/
 def readAt (P : Places) (E : Env) (A : AS) : Bool :=
@@ -138,13 +164,25 @@ def keyX (Z : Aids) (E : Env) (c : Nat) (M : MX) (A : AS) : Nat :=
       ((((((num A.a * 65536 + num A.x) * 65536 + num A.y) * 65536 + num (A.getK M.ptrI)) * 65536 + num (A.getK (M.ptrI + 1))) * 65536 + num (A.getK M.rowI)) * 65536 +
         num (A.getK M.sumI)) * 4 + 1
     else if A.pc == M.gbb + 3 && !inside M.lo M.hi (A.getK M.xI) then num A.y * 4 + 2 else 0
-  let K := Z.key E A + ((num (A.getK c) * 65536 + num (A.getK M.xI)) * (1 <<< 120) + r) * (1 <<< 300)
+  -- in the routine of the offscreen bits and in the scroll handler, with the page known: the registers, the flags, the position and the pixel difference
+  let inO := (A.getK M.pI).isK && ((M.offLo ≤ A.pc && A.pc < M.offLo + 0x90) || (M.scrLo ≤ A.pc && A.pc < M.scrLo + 0xB0))
+  let r := if inO then
+      (((((r * 65536 + num A.a) * 65536 + num A.x) * 65536 + num A.y) * 65536 + num A.p) * 65536 + num (A.getK M.difI)) * 4 + 3
+    else r
+  let K := Z.key E A + (((num (A.getK c) * 65536 + num (A.getK M.xI)) * 65536 + num (A.getK M.pI)) * (1 <<< 200) + r) * (1 <<< 300)
   K * 18446744073709551616 + mix64 K
 
 /-- what a state forgets: what the room's search forgets, but with the position's piece not inside not the adders' offset; and at the return from the collision
 routine the position, or with the control not known to differ from 6 a known position down to its piece -/
 def normX (Z : Aids) (c : Nat) (M : MX) (A : AS) : AS :=
   let B := Z.norm A
+  let lo := A.getK (0x100 + (A.s + 1).toNat)
+  let hi := A.getK (0x100 + (A.s + 2).toNat)
+  -- in the scroll handler's call of the routine of the offscreen bits, at the load of bits with bit 7: the clamp to the left edge writes the position and the page
+  -- next, so the page, the position, the pixel difference, A and the flags N, V, Z, C are forgotten (the pieces of the page join here)
+  if A.pc == M.xLd && A.x.isK && M.xd7.contains A.x.v && lo.isK && hi.isK && lo.v == M.chkRet.toUInt8 && hi.v == (M.chkRet >>> 8).toUInt8 then
+    { ((B.setK M.pI AB.top).setK M.xI AB.top).setK M.difI AB.top with a := AB.top, p := ⟨B.p.v &&& 0x3C, B.p.k &&& 0x3C⟩ }
+  else
   let B := if A.pc != M.colEnd && !inside M.lo M.hi (A.getK M.xI) then B.setK M.sideI (A.getK M.sideI) else B
   -- after the add of the position: the position down to its piece, the sum down to its high bits (the column)
   if A.pc == M.adc + 2 && (B.getK M.xI).isK then
@@ -156,8 +194,32 @@ def normX (Z : Aids) (c : Nat) (M : MX) (A : AS) : AS :=
   else B
 
 def optsX (Z : Aids) (E : Env) (c : Nat) (M : MX) : Opts :=
-  { key := keyX Z E c M, norm := normX Z c M, stops := [M.subs, M.gbb, M.adc, M.adc + 2, M.colAt, M.andAt, M.tileAt] ++ M.stopsX,
-    normAt := [M.colEnd, M.adc + 2, M.tileAt] }
+  { key := keyX Z E c M, norm := normX Z c M, stops := [M.subs, M.gbb, M.adc, M.adc + 2, M.colAt, M.andAt, M.tileAt, M.xLd] ++ M.stopsX,
+    normAt := [M.colEnd, M.adc + 2, M.tileAt, M.xLd] }
+
+/-- a piece of the page: in the routine of the offscreen bits or in the scroll handler, with the page known and not 0, before the load of bits with bit 7 (where the
+pieces join) -/
+def pieceRun (M : MX) (B : AS) : Bool :=
+  (B.getK M.pI).isK && (B.getK M.pI).v != 0 && !(B.pc == M.xLd && B.x.isK && M.xd7.contains B.x.v) &&
+    ((M.offLo ≤ B.pc && B.pc < M.offLo + 0x90) || (M.scrLo ≤ B.pc && B.pc < M.scrLo + 0xB0))
+
+/-- the steps of a piece of the page, without the table, up to the place where the pieces join -/
+partial def runP (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (ops : Array (AM Unit)) (X0 : SearchS) (A : AS) (d : Nat) : SearchS := Id.run do
+  let mut X := X0
+  let rs := (preX S M (clampS S.P A)).flatMap (stepZ S.P E ops)
+  X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
+  let bad := rs.any fun r => match r with
+    | none => true
+    | some B => B.k != A.k && !fin B
+  if bad then
+    X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some A }
+  for b in rs.filterMap id do
+    if b.k != A.k then X := { X with ends := X.ends.push b }
+    else if pieceRun M b && d < 200 then X := runP S M Z O fin E ops X b (d + 1)
+    else
+      X := { X with leaders := X.leaders.insert b.pc.toNat () }
+      X := routeY S.P O X b
+  return X
 
 partial def runX (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (ops : Array (AM Unit)) (X0 : SearchS) (A0 : AS) : SearchS := Id.run do
   let mut X := X0
@@ -183,6 +245,7 @@ partial def runX (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E 
     | _ => pure ()
     for b in good do
       if b.k != cur.k then X := { X with ends := X.ends.push b }
+      else if pieceRun M b then X := runP S M Z O fin E ops X b 0
       else
         X := { X with leaders := X.leaders.insert b.pc.toNat () }
         X := routeY S.P O X b
@@ -211,8 +274,13 @@ def searchOfX (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : E
 def cfgOfX (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (r : Machine) (K : List (Nat × UInt8)) : CfgS :=
   let X := searchOfX S M Z O fin E r K
   let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2
+  -- the accumulator is taken apart first, so that each part is updated in place (projections of a shared tuple copy the array at each push)
   let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
-      (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
+      match acc with
+      | (arr, hm, ba) =>
+        let i := arr.size
+        let l := hm.getD e.1 []
+        (arr.push e.2, hm.insert e.1 (i :: l), ba.set! e.2.pc.toNat 1))
     (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
   let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd] ++ O.normAt).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
   { E, ops := (aRows E).toArray, P := S.P, fin, t := q.1, key := O.key, idx := q.2.1, cut := q.2.2, norm := O.norm, normAt := at0 }
@@ -221,7 +289,8 @@ def cfgOfX (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env)
 def walkCheckX (S : HP) (M : MX) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (r : Machine) (K : List (Nat × UInt8)) : Bool :=
   let C := cfgOfX S M Z O fin E r K
   ScreenPage.placesOK E S.P && E.pad.v == 0 && E.pad.k == 0 && ScreenPage.maskOK r K &&
-    decide (S.yI < 2048) && decide (S.tileI < 2048) && decide (M.xI < 2048) && piecesCover M.lo M.hi && decide (0x8000 ≤ S.P.read + 1) && decide (0x8000 ≤ S.P.erase + 1) &&
+    decide (S.yI < 2048) && decide (S.tileI < 2048) && decide (M.xI < 2048) && decide (M.pI < 2048) && piecesCover M.lo M.hi && decide (0x8000 ≤ S.P.read + 1) &&
+    decide (0x8000 ≤ S.P.erase + 1) &&
     C.t.all (walkX S M C ScreenPage.fuelS) && (startsR r K).all (walkX S M C ScreenPage.fuelS)
 
 /-! ## The pieces cover the machine -/
@@ -237,8 +306,18 @@ theorem piece_of_cover {lo hi : Nat} (hc : piecesCover lo hi = true) (x : UInt8)
   rw [hv] at h
   exact ⟨a, ha, SideFrame.memB_iff.1 h⟩
 
+/-- the split by the page's values 128 and 255 covers every machine -/
+theorem cov_pageSplit {M : MX} (hx : M.xI < 2048) : Cov E F (pageSplit M) := by
+  intro A m hs
+  unfold pageSplit
+  by_cases h : ((A.getK M.pI).v == 0x80 || (A.getK M.pI).v == 0xFF) = true
+  · rw [if_pos h]
+    exact SideFrame.cov_fill hx A m hs
+  · rw [if_neg h]
+    exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
+
 /-- the pieces of the position's walk cover every machine -/
-theorem cov_zoneX {M : MX} (hx : M.xI < 2048) (hc : piecesCover M.lo M.hi = true) : Cov E F (zoneX M) := by
+theorem cov_zoneX {M : MX} (hx : M.xI < 2048) (hpI : M.pI < 2048) (hc : piecesCover M.lo M.hi = true) : Cov E F (zoneX M) := by
   intro A m hs
   unfold zoneX
   by_cases h1 : (A.pc == M.subs && (A.getK M.xI).k == 0) = true
@@ -262,12 +341,20 @@ theorem cov_zoneX {M : MX} (hx : M.xI < 2048) (hc : piecesCover M.lo M.hi = true
   · rw [if_pos h4]
     exact SideFrame.cov_highA A m hs
   rw [if_neg h4]
+  by_cases h5 : (A.pc == M.xSbc && A.x.isK && A.x.v == 0 && A.y.isK && A.y.v == 1 && inside M.lo M.hi (A.getK M.xI) && !(A.getK M.pI).isK) = true
+  · rw [if_pos h5]
+    exact PipeWrites.cov_then (SideFrame.cov_fill hpI) (cov_pageSplit hx) A m hs
+  rw [if_neg h5]
+  by_cases h6 : (A.pc == M.pSbc && A.x.isK && A.x.v == 0 && (A.getK M.pI).isK && (A.getK M.pI).v != 0) = true
+  · rw [if_pos h6]
+    exact BufferCoin.cov_bitP (by decide) A m hs
+  rw [if_neg h6]
   exact ⟨A, List.mem_singleton.2 rfl, hs, rfl⟩
 
-theorem cov_preX {S : HP} {M : MX} (hO : PlacesOK E S.P) (hy : S.yI < 2048) (ht : S.tileI < 2048) (hx : M.xI < 2048) (hc : piecesCover M.lo M.hi = true)
+theorem cov_preX {S : HP} {M : MX} (hO : PlacesOK E S.P) (hy : S.yI < 2048) (ht : S.tileI < 2048) (hx : M.xI < 2048) (hpI : M.pI < 2048) (hc : piecesCover M.lo M.hi = true)
     {A : AS} {m : Machine} (hs : Sim E F A m) (hh : SiteOK S.P m) : ∃ B ∈ preX S M A, Sim E F B m ∧ B.k = A.k := by
   obtain ⟨B, hB, h1, k1⟩ := EntryHeight.cov_preY hO hy ht hs hh
-  obtain ⟨D, hD, h2, k2⟩ := cov_zoneX hx hc B m h1
+  obtain ⟨D, hD, h2, k2⟩ := cov_zoneX hx hpI hc B m h1
   exact ⟨D, List.mem_flatMap.2 ⟨B, hB, hD⟩, h2, k2.trans k1⟩
 
 /-- **One step of the walk** is sound, if the instruction meets `SiteOK`: at a read with its place known, the byte read is a tile of `SiteOK`'s list and it meets
@@ -371,7 +458,7 @@ theorem cover_liveX (ht : C.t.all (walkX S M C Fu) = true) {B : AS} {m : Machine
   · cases h2
 
 /-- **One step of the walk**: the next machine is covered by a live state in the same frame, or the frame ends in a state that `fin` accepts -/
-theorem live_stepX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 2048) (htl : S.tileI < 2048) (hx : M.xI < 2048) (hc : piecesCover M.lo M.hi = true)
+theorem live_stepX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 2048) (htl : S.tileI < 2048) (hx : M.xI < 2048) (hpI : M.pI < 2048) (hc : piecesCover M.lo M.hi = true)
     (hr1 : 0x8000 ≤ C.P.read + 1) (he1 : 0x8000 ≤ C.P.erase + 1) (ht : C.t.all (walkX S M C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
     {A : AS} {m : Machine} (hl : LiveX S M C F A m)
     (hh : SiteOK C.P m) (hh2 : SiteOK C.P (go step m).2) :
@@ -384,7 +471,7 @@ theorem live_stepX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 2048) (
     have hs0 := ScreenPage.sim_clamp hO.late hs hh.late
     have hhS : SiteOK S.P m := by rw [← hP]; exact hh
     have hOS : PlacesOK C.E S.P := by rw [← hP]; exact hO
-    obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preX hOS hy htl hx hc hs0 hhS
+    obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preX hOS hy htl hx hpI hc hs0 hhS
     obtain ⟨r, hr, hB⟩ := s_stepZ hO hops hT hr1 he1 hs1 hh
     simp only [walkX, List.all_eq_true] at hw
     have hw2 := hw A₁ hA r hr
@@ -421,7 +508,7 @@ theorem live_stepX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 2048) (
         exact ⟨k2, B, hw2.2, k1, h1⟩
 
 /-- **One frame.** A walk from `A₀` that succeeds covers the frame of every machine of `A₀`, for every input, if each instruction meets `SiteOK`. -/
-theorem frame_of_walkX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 2048) (htl : S.tileI < 2048) (hx : M.xI < 2048) (hc : piecesCover M.lo M.hi = true)
+theorem frame_of_walkX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 2048) (htl : S.tileI < 2048) (hx : M.xI < 2048) (hpI : M.pI < 2048) (hc : piecesCover M.lo M.hi = true)
     (hr1 : 0x8000 ≤ C.P.read + 1) (he1 : 0x8000 ≤ C.P.erase + 1) (ht : C.t.all (walkX S M C Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
     (hp : C.E.pad = AB.top)
     {A₀ : AS} {m : Machine} {i : UInt8} (hw : walkX S M C Fu A₀ = true) (hs : Sim C.E F A₀ m) (hk : ∀ j, SiteOK C.P (trace m i j)) :
@@ -443,7 +530,7 @@ theorem frame_of_walkX (hO : PlacesOK C.E C.P) (hP : C.P = S.P) (hy : S.yI < 204
           simp only [nxt, if_neg hc']
         have hh2 := hk (j + 1)
         rw [e2] at hh2 ⊢
-        rcases live_stepX hO hP hy htl hx hc hr1 he1 ht hops hT h1 (hk j) hh2 with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a3, a4⟩
+        rcases live_stepX hO hP hy htl hx hpI hc hr1 he1 ht hops hT h1 (hk j) hh2 with ⟨A', a1, a2, a3, a4⟩ | ⟨a1, B, a2, a3, a4⟩
         · exact Or.inl ⟨A', a1, by rw [a2, h2], by rw [a3, h3], by omega⟩
         · exact Or.inr ⟨by rw [a1, h3], B, a2, by rw [a3, h2], a4⟩
       · have hc' : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
@@ -478,6 +565,7 @@ structure WalkOKX (S : HP) (M : MX) (fin : AS → Bool) (E : Env) (r : Machine) 
   yI : S.yI < 2048
   tileI : S.tileI < 2048
   xI : M.xI < 2048
+  pI : M.pI < 2048
   cover : piecesCover M.lo M.hi = true
   read1 : 0x8000 ≤ S.P.read + 1
   erase1 : 0x8000 ≤ S.P.erase + 1
@@ -487,14 +575,14 @@ structure WalkOKX (S : HP) (M : MX) (fin : AS → Bool) (E : Env) (r : Machine) 
 theorem walkOKX_of_check {S : HP} {M : MX} {Z : Aids} {O : Opts} {fin : AS → Bool} {E : Env} {r : Machine} {K : List (Nat × UInt8)}
     (h : walkCheckX S M Z O fin E r K = true) : WalkOKX S M fin E r K (cfgOfX S M Z O fin E r K) := by
   simp only [walkCheckX, Bool.and_eq_true, List.all_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, hr⟩, he⟩, h8⟩, h9⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h3⟩, h4⟩, h5⟩, h6⟩, h6'⟩, h7⟩, hr⟩, he⟩, h8⟩, h9⟩ := h
   have hp : E.pad = AB.top := by
     show E.pad = ⟨0, 0⟩
     cases hq : E.pad
     rw [hq] at h2 h2'
     simp only at h2 h2'
     rw [h2, h2']
-  exact ⟨ScreenPage.placesOK_spec h1, hp, ScreenPage.maskOK_spec h3, rfl, rfl, rfl, rfl, h4, h5, h6, h7, hr, he, h8, h9⟩
+  exact ⟨ScreenPage.placesOK_spec h1, hp, ScreenPage.maskOK_spec h3, rfl, rfl, rfl, rfl, h4, h5, h6, h6', h7, hr, he, h8, h9⟩
 
 /-- **The end of a frame of the room.** A frame that starts in the room's condition with the bits `K`, with `SiteOK` on each instruction, ends in a machine that a
 state accepted by `fin` covers. -/
@@ -504,34 +592,36 @@ theorem frame_endX {S : HP} {M : MX} {fin : AS → Bool} {E : Env} {r : Machine}
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hw := h.starts S0 hS
   have hs' : Sim C.E (m.frame, 2) S0 m := by rw [h.env]; exact hs
-  obtain ⟨_, B, h2, _, h4⟩ := frame_of_walkX (i := i) hO h.pl h.yI h.tileI h.xI h.cover (by rw [h.pl]; exact h.read1) (by rw [h.pl]; exact h.erase1) h.table h.ops (show 2 ≤ (2 : UInt8).toNat by decide)
+  obtain ⟨_, B, h2, _, h4⟩ := frame_of_walkX (i := i) hO h.pl h.yI h.tileI h.xI h.pI h.cover (by rw [h.pl]; exact h.read1) (by rw [h.pl]; exact h.erase1) h.table h.ops (show 2 ≤ (2 : UInt8).toNat by decide)
     (by rw [h.env]; exact h.pad) hw hs' (by rw [h.pl]; exact hk)
   rw [h.fin] at h2
   rw [h.env] at h4
   exact ⟨B, h2, h4⟩
 
 /-- what `finX` says of a machine that its state covers -/
-theorem fin_spec {E : Env} {F : Nat × UInt8} {c : Nat} {M : MX} {B : AS} {m : Machine} (hs : Sim E F B m) (hc : c < 2048) (hx : M.xI < 2048)
-    (h : finX c M B = true) : m.ram.get! c ≠ 6 ∨ (M.lo ≤ (m.ram.get! M.xI).toNat ∧ (m.ram.get! M.xI).toNat < M.hi) := by
-  simp only [finX, Bool.or_eq_true] at h
-  rcases h with h | h
+theorem fin_spec {E : Env} {F : Nat × UInt8} {c : Nat} {M : MX} {B : AS} {m : Machine} (hs : Sim E F B m) (hc : c < 2048) (hx : M.xI < 2048) (hpI : M.pI < 2048)
+    (h : finX c M B = true) : m.ram.get! c ≠ 6 ∨ ((M.lo ≤ (m.ram.get! M.xI).toNat ∧ (m.ram.get! M.xI).toNat < M.hi) ∧ m.ram.get! M.pI = 0) := by
+  simp only [finX, Bool.or_eq_true, Bool.and_eq_true, beq_iff_eq] at h
+  rcases h with h | ⟨⟨h, hk⟩, hv⟩
   · exact Or.inl (ne_of_notV h (hs.ram c hc))
   · right
-    simp only [inside, List.all_eq_true, List.mem_range, Bool.or_eq_true, Bool.not_eq_true', Bool.and_eq_true, decide_eq_true_eq] at h
-    have hm := SideFrame.memB_iff.2 (hs.ram M.xI hx)
-    have hv : (m.ram.get! M.xI).toNat.toUInt8 = m.ram.get! M.xI := by simp
-    rcases h (m.ram.get! M.xI).toNat (m.ram.get! M.xI).toNat_lt with h3 | h3
-    · rw [hv, hm] at h3
-      cases h3
-    · exact h3
+    refine ⟨?_, ?_⟩
+    · simp only [inside, List.all_eq_true, List.mem_range, Bool.or_eq_true, Bool.not_eq_true', Bool.and_eq_true, decide_eq_true_eq] at h
+      have hm := SideFrame.memB_iff.2 (hs.ram M.xI hx)
+      have hv : (m.ram.get! M.xI).toNat.toUInt8 = m.ram.get! M.xI := by simp
+      rcases h (m.ram.get! M.xI).toNat (m.ram.get! M.xI).toNat_lt with h3 | h3
+      · rw [hv, hm] at h3
+        cases h3
+      · exact h3
+    · rw [PipeEntryRule.known_eq hk (hs.ram M.pI hpI), hv]
 
-/-- **A frame of the room that ends with the control at 6 ends with the position from `lo` before `hi`**, if the walk from the room's condition with the bits `K`
-succeeds, with `SiteOK` on each instruction -/
+/-- **A frame of the room that ends with the control at 6 ends with the position from `lo` before `hi`, on page 0**, if the walk from the room's condition with the
+bits `K` succeeds, with `SiteOK` on each instruction -/
 theorem end_frame {S : HP} {M : MX} {c : Nat} {E : Env} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} (h : WalkOKX S M (finX c M) E r K C) (hc : c < 2048)
     {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK S.P (trace m i j)) (h6 : (frame m i).ram.get! c = 6) :
-    M.lo ≤ ((frame m i).ram.get! M.xI).toNat ∧ ((frame m i).ram.get! M.xI).toNat < M.hi := by
+    (M.lo ≤ ((frame m i).ram.get! M.xI).toNat ∧ ((frame m i).ram.get! M.xI).toNat < M.hi) ∧ (frame m i).ram.get! M.pI = 0 := by
   obtain ⟨B, h2, h4⟩ := frame_endX h hm hk
-  rcases fin_spec h4 hc h.xI h2 with h3 | h3
+  rcases fin_spec h4 hc h.xI h.pI h2 with h3 | h3
   · exact absurd h6 h3
   · exact h3
 
@@ -553,6 +643,16 @@ def mxOf (sy : Syms) (m0 : Machine) : MX :=
     colAt := (romByte m0 (jsr + 1)).toUInt16 ||| ((romByte m0 (jsr + 2)).toUInt16 <<< 8),
     andAt := PipeEntryRule.findOp m0 loadY 0x29 16,
     colEnd := ScreenPage.findJsr m0 sy.PlayerSubs sy.PlayerBGCollision 64 + 3, lo := 16, hi := 181,
+    pI := (sy.Player_PageLoc &&& 0x7FF).toNat,
+    xSbc := PipeEntryRule.findOp m0 sy.GetXOffscreenBits 0xF5 16,
+    pSbc := PipeEntryRule.findOp m0 (PipeEntryRule.findOp m0 sy.GetXOffscreenBits 0xF5 16 + 2) 0xF5 16,
+    offLo := sy.GetXOffscreenBits,
+    scrLo := (romByte m0 (sy.PlayerSubs + 1)).toUInt16 ||| ((romByte m0 (sy.PlayerSubs + 2)).toUInt16 <<< 8),
+    difI := (romByte m0 (PipeEntryRule.findOp m0 sy.GetXOffscreenBits 0xF5 16 + 3)).toNat,
+    xLd := sy.XLdBData,
+    xd7 := ((List.range 256).filter fun i =>
+      romByte m0 (((romByte m0 (sy.XLdBData + 1)).toUInt16 ||| ((romByte m0 (sy.XLdBData + 2)).toUInt16 <<< 8)) + i.toUInt16) &&& 0x80 != 0).map (·.toUInt8),
+    chkRet := ScreenPage.findJsr m0 ((romByte m0 (sy.PlayerSubs + 1)).toUInt16 ||| ((romByte m0 (sy.PlayerSubs + 2)).toUInt16 <<< 8)) sy.GetXOffscreenBits 200 + 2,
     stopsX := [PipeEntryRule.findOp m0 sy.BlockBufferCollision 0xB1 64, PipeEntryRule.findOp m0 sy.BlockBufferCollision 0xB1 64 + 2, PipeEntryRule.findOp m0 sy.ErACM 0x91 16],
     sideI := (romByte m0 (sy.DoFootCheck + 1)).toNat,
     ptrI := (romByte m0 (PipeEntryRule.findOp m0 sy.BlockBufferCollision 0xB1 64 + 1)).toNat,
@@ -579,13 +679,14 @@ section
 variable {sy : Syms} {nmS : Names} {m0 : Machine}
 
 /-- **One frame of the room**: a frame that starts in the room's condition (with the map's bits) and with the control at 0 or 6, with `SiteOK` on each
-instruction, and ends with the control at 6, ends with the position from 16 to 180 px -/
+instruction, and ends with the control at 6, ends with the position from 16 to 180 px on page 0 -/
 theorem end_step (hK : BufferControl.keepCheck sy nmS m0 = true) (hE : endCheck sy nmS m0 = true) {m : Machine} {i : UInt8}
     (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMap.knownT sy nmS m0) m)
     (hk : ∀ j, SiteOK (placesR sy nmS m0) (trace m i j))
     (hv : m.ram.get! (EntryBuffer.ctlI nmS) = 0 ∨ m.ram.get! (EntryBuffer.ctlI nmS) = 6)
     (h6 : (frame m i).ram.get! (EntryBuffer.ctlI nmS) = 6) :
-    16 ≤ ((frame m i).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat ∧ ((frame m i).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat < 181 := by
+    (16 ≤ ((frame m i).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat ∧ ((frame m i).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat < 181) ∧
+      (frame m i).ram.get! (sy.Player_PageLoc &&& 0x7FF).toNat = 0 := by
   obtain ⟨h1, h2, h3, _, _⟩ := BufferControl.keep_parts hK
   simp only [endCheck, Bool.and_eq_true] at hE
   obtain ⟨e1, e2⟩ := hE
@@ -604,7 +705,7 @@ section
 open PipeChangeEnd (Data InRowsT)
 variable {sy : Syms} {nm nmS : Names} {d : Data} {e m0 : Machine}
 
-/-- **Every frame of the room that ends with the control at 6 ends with the position from 16 to 180 px**, on the real machines: from the room's first control `b`
+/-- **Every frame of the room that ends with the control at 6 ends with the position from 16 to 180 px on page 0**, on the real machines: from the room's first control `b`
 (a machine with control in the rows of the time of the first change) before `a`, under the conditions of `RoomMap.map_of_rows` -/
 theorem end_of_rows (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d e nmS m0 = true) (hK : BufferControl.keepCheck sy nmS m0 = true)
     (hs : BufferControl.startCheckC sy nm d e nmS m0 = true) (hE : endCheck sy nmS m0 = true)
@@ -613,7 +714,8 @@ theorem end_of_rows (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT 
     (sites : ∀ n, b ≤ n → n < a → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j))
     (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI)
     {n : Nat} (h1 : b ≤ n) (h2 : n < a) (h6 : (seq (n + 1)).ram.get! (EntryBuffer.ctlI nmS) = 6) :
-    16 ≤ ((seq (n + 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat ∧ ((seq (n + 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat < 181 := by
+    (16 ≤ ((seq (n + 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat ∧ ((seq (n + 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat < 181) ∧
+      (seq (n + 1)).ram.get! (sy.Player_PageLoc &&& 0x7FF).toNat = 0 := by
   have hcond := RoomMap.cond_of_rows hF hc next hin hctl sites stay n h1 h2
   have hv := BufferControl.ctl_of_rows hF hc hK hs next hin hctl sites stay n h1 (Nat.le_of_lt h2)
   rw [next] at h6 ⊢

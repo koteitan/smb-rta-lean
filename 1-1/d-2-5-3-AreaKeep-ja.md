@@ -101,7 +101,7 @@ Lean: `Theorems/AreaKeep.lean`（`areaI`、`regA`、`cfgA`、`roomCheckA`、`sma
 ## 仮定（Lean で証明していない）
 
 * `area₁` はもう仮定ではありません（15 回目）。タイトルで Start を押したときの条件がこのバイトを求め（`title.boot`）、`upCleanU` のガードがそれを守り、`EntryKeep` の歩きが入口まで保ちます。そのぶん、この 2 つの仮定は 1 バイトずつ多く求めます。
-* `chg.entry₂`: 横の土管の入口で 9 バイト: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ。 回 15 から、高さと画面のバッファの 5 バイトは入るフレームから出ます。入るフレームが小さいプレイヤーで、画面のバッファの制御が 0 で始まるときです（[1-1-d-2-5-4](d-2-5-4-EntryHeight-ja.md)、[1-1-d-2-5-5](d-2-5-5-EntryBuffer-ja.md)）。`chg.entry₂` は 3 バイトを求め、ほかの走りのために `Run` に 2 つのフィールド `height₂`、`buffer₂` があります。
+* `chg.entry₂`: 横の土管の入口で 9 バイト: プレイヤーの高さ、画面のバッファ（5 バイト）、エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ。 回 15 から、高さと画面のバッファの 5 バイトは入るフレームから出ます。入るフレームが小さいプレイヤーで、画面のバッファの制御が 0 で始まるときです（[1-1-d-2-5-4](d-2-5-4-EntryHeight-ja.md)、[1-1-d-2-5-5](d-2-5-5-EntryBuffer-ja.md)）。`chg.entry₂` は 3 バイトを求め、ほかの走りのために `Run` に 2 つのフィールド `height₂`、`buffer₂` がありました（どちらも今はありません: `height₂` は[部屋を通した大きさ](d-2-5-4-4-SizeKeep-ja.md)で、`buffer₂` は[コインのフレームはページ 0 で終わる](d-2-5-5-4-BufferPage-ja.md)でなくなりました）。
 * `chg.time₂`: 横の土管の入口でゲームタイマーは 000 でない。
 
 **ファイル.** `Theorems/AreaKeep.lean`、`Theorems/ScreenStart.lean`、`Theorems/PipeChangeEnd.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/AreaKeep.lean` と `Proof/AreaJoin.lean`（`Main.lean` の `genAreaKeep`）。
