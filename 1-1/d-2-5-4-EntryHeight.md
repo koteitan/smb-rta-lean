@@ -2,7 +2,7 @@
 
 # The height at the side pipe's entry
 
-**Claim.** A frame of the room that starts with a small player and ends with the side pipe's routine ends with the height of the reference entry. This is proved, with one check on the ROM (a walk of the room's frame). So `Route.Run` no longer asks the height (`Player_Y_Position`) at the side pipe's entry of a run whose entering frame starts with a small player. For a run whose entering frame starts with another size it still asks it (the new field `height₂`). `chg.entry₂` asks 8 bytes, not 9 (1-1-d-2-5); with [the screen's buffer](d-2-5-5-EntryBuffer.md) it asks 3.
+**Claim.** A frame of the room that starts with a small player and ends with the side pipe's routine ends with the height of the reference entry. This is proved, with one check on the ROM (a walk of the room's frame). So `Route.Run` no longer asks the height (`Player_Y_Position`) at the side pipe's entry of a run whose entering frame starts with a small player. Round 21 proved it for a big player too ([EntryHeightBig](d-2-5-4-3-EntryHeightBig.md)), and round 22 proved that the entering frame starts with one of these two sizes ([SizeKeep](d-2-5-4-4-SizeKeep.md)): the field `height₂` is gone, with no new field. `chg.entry₂` asks 8 bytes, not 9 (1-1-d-2-5); with [the screen's buffer](d-2-5-5-EntryBuffer.md) it asks 3.
 
 `m[i]` is the RAM byte `i` of `m`. `frame(m, i)` is one frame of `m` with the input `i`, and `tr(j)` the machine `j` instructions into it. `seq(n)` and `inp(n)` are the machine when frame `n` of the run begins and its input. `rt(m)`, `y(m)`, `size(m)` are the routine byte, the height and the player's size. `e_s` is the side pipe's routine, `r` the reference machine of the room (a small player), `y_e` the height of the reference entry. `b₁` is the room's first control and `a₂` the side pipe's entry. `RoomCond`, `SiteOK` are those of [The screen's page in the room](d-2-4-ScreenPage.md), `K_T` the bits of [The block map in the room](c-7-12-RoomMap.md): the room's bytes, in each byte of the block buffers the bits that are 0 in the map, and the screen's bytes.
 
@@ -18,16 +18,17 @@ height_frame    :  WalkOK(finY),  RoomCond(K_Y, m),  ∀ j, SiteOK(tr(j)),  rt(f
 height_of_rows  :  the hypotheses of RoomMap.map_of_rows on [b, a),  the checks,  b ≤ k < a,
                    size(seq k) = size(r),   rt(frame(seq k, inp k)) = e_s           →   y(frame(seq k, inp k)) = y_e
 
-Run.height₂     :  size(seq(a₂ − 1)) = size(r)   ∨   size(seq(a₂ − 1)) = 0   ∨   y(seq a₂) = y_e    (field; the middle disjunct since round 21)
+Run.size₁       :  size(seq b₁) = size(r)   ∨   size(seq b₁) = 0                       (theorem, round 22, SizeKeep)
+Run.size₂       :  size(seq(a₂ − 1)) = size(r)   ∨   size(seq(a₂ − 1)) = 0              (theorem, SizeKeep)
 Run.y₂          :  y(seq a₂) = y_e                                                    (theorem)
 entryAt_of_y    :  m[y] = y_e  ∧  EntryAt(R₈, m)   →   EntryAt(R₉, m)
 ```
 
 `R₉` is the 9 bytes of `restIdxA`, `R₈ := R₉ \ {y}` (`restIdxY`). `EntryAt` is that of [The routine at the side pipe's entry](d-2-5-2-EntryRoutine.md).
 
-**`Run.y₂`.** `b₁ < a₂` (`Run.b₁_lt_a₂`), so frame `a₂ − 1` is a frame of the room, and it ends with the side pipe's routine (`Run.rt₂`). If `size(seq(a₂ − 1)) = size(r)`, `height_of_rows` gives the height. Else `height₂` gives it.
+**`Run.y₂`.** `b₁ < a₂` (`Run.b₁_lt_a₂`), so frame `a₂ − 1` is a frame of the room, and it ends with the side pipe's routine (`Run.rt₂`). It starts with `size(r)` or 0 (`Run.size₂`). If `size(seq(a₂ − 1)) = size(r)`, `height_of_rows` gives the height; if it is 0, `EntryHeightBig.height_of_rowsB` gives it.
 
-Lean: `Theorems/EntryHeight.lean` (`HP`, `bitSet`, `top2`, `top1`, `topY`, `lowA`, `zoneY`, `preY`, `stepY`, `finY`, `walkY`, `mix64`, `keyY`, `normY`, `Opts`, `optsY`, `putY`, `routeY`, `runY`, `searchY`, `searchOf`, `cfgOf`, `walkCheckY`, `cov_top2`, `cov_top1`, `cov_topY`, `cov_lowA`, `cov_zoneY`, `cov_preY`, `s_stepY`, `LiveY`, `cover_liveY`, `live_stepY`, `frame_of_walkY`, `WalkOK`, `walkOK_of_check`, `frame_end`, `height_frame`, `sizeI`, `heightI`, `hpOf`, `aidsY`, `knownY`, `heightCheck`, `refsCheck`, `Facts`, `factsOf`, `height_of_rows`), `Theorems/Route.lean` (`restIdxY`, `RoomChecks.height`, `Run.height₂`, `Run.y₂`, `entryAt_of_y`, `Run.chgK`), private `Proof/EntryHeight.lean` (`entry_height_walk`, `entry_height_refs`, `height_facts`). There is no game data in the public files. `height_frame` and `height_of_rows` use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
+Lean: `Theorems/EntryHeight.lean` (`HP`, `bitSet`, `top2`, `top1`, `topY`, `lowA`, `zoneY`, `preY`, `stepY`, `finY`, `walkY`, `mix64`, `keyY`, `normY`, `Opts`, `optsY`, `putY`, `routeY`, `runY`, `searchY`, `searchOf`, `cfgOf`, `walkCheckY`, `cov_top2`, `cov_top1`, `cov_topY`, `cov_lowA`, `cov_zoneY`, `cov_preY`, `s_stepY`, `LiveY`, `cover_liveY`, `live_stepY`, `frame_of_walkY`, `WalkOK`, `walkOK_of_check`, `frame_end`, `height_frame`, `sizeI`, `heightI`, `hpOf`, `aidsY`, `knownY`, `heightCheck`, `refsCheck`, `Facts`, `factsOf`, `height_of_rows`), `Theorems/Route.lean` (`restIdxY`, `RoomChecks.height`, `Run.size₁`, `Run.size₂`, `Run.y₂`, `entryAt_of_y`, `Run.chgK`), private `Proof/EntryHeight.lean` (`entry_height_walk`, `entry_height_refs`, `height_facts`). There is no game data in the public files. `height_frame` and `height_of_rows` use only the axioms `propext`, `Classical.choice`, `Quot.sound`.
 
 ## How it works
 
@@ -78,7 +79,7 @@ A program (`entry-height-check FM2 400 real`, about 3 min).
 | own inputs from frames of the movie in the room, small (400 runs) | 164,375 | 142 | 142 | 142 | 142 | 176 px | 142 |
 | the same, big | 161,042 | 151 | 151 | 0 | 151 | 176 px | 151 |
 
-For a big player the left disjunct of `height₂` is false and the right one holds.
+For a big player the left disjunct of the old field `height₂` (round 15) is false and the right one holds.
 
 ## Uses from other parts
 
@@ -94,9 +95,11 @@ For a big player the left disjunct of `height₂` is false and the right one hol
 
 Removed from the assumptions: the height of `entry₂`, for a run whose entering frame starts with a small player. Added: `height₂`, which the old assumption implies.
 
+Round 22 ([SizeKeep](d-2-5-4-4-SizeKeep.md)): removed `height₂`; no field added. The vertical pipe's entry and the exit of the first change know bits 1 to 7 of the size byte (`PipeChangeEnd.entryMasks`, `exitMasks`), and the guard of `chg.upCleanU` protects the byte.
+
 ## Assumptions (not proved in Lean)
 
-* `height₂`: the entering frame starts with a small player, or with a big one (the size byte 0), or the height at the entry is the reference entry's. Since round 21 the big case is proved too ([EntryHeightBig](d-2-5-4-3-EntryHeightBig.md)), so it is assumed only for the other values of the size byte.
+* None of its own since round 22: the size at the entering frame is proved ([SizeKeep](d-2-5-4-4-SizeKeep.md)). Until round 21 the field `height₂` asked the size, or the height, at the entering frame.
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/EntryHeight.lean`, `Theorems/Route.lean`; the private check is in `Proof/EntryHeight.lean` (`genEntryHeight` in `Main.lean`).
@@ -115,3 +118,7 @@ Removed from the assumptions: the height of `entry₂`, for a run whose entering
 ## Round 21: the big player
 
 [EntryHeightBig](d-2-5-4-3-EntryHeightBig.md) proves the height for a frame that starts with a big player (the size byte 0), with a new walk: it splits the height before the head's check, the horizontal position and the page at the head's read, keeps the page through the block buffer routine's `ADC #0`, and reads the map's bytes (`Solid` on each instruction) where the place of a read is known. Its 8,326,333 steps have no failure and no end at 192 px. `Run.y₂` now uses this walk for a big player; `height₂` gets the middle disjunct `size(seq(a₂ − 1)) = 0`. The walk of this page stays the proof for a small player.
+
+## Round 22: the size through the room
+
+[SizeKeep](d-2-5-4-4-SizeKeep.md) proves that the room's frames keep the player's size (two walks of the room's frames with the size byte at the reference's value and at 0, about 3 s each natively). The rows of the first change know bits 1 to 7 of the size byte at the room's first control (the vertical pipe's entry and its exit have them under a mask, `Run.size₁`). So the entering frame starts with the reference's size or 0 (`Run.size₂`), and `Run.y₂` needs no field of its own: `height₂` is gone, with no new field.

@@ -19,8 +19,8 @@ the frame ends out of the player's routine. So the frame ends as it was at `retB
 
 `neg_of_check` checks one frame of `hstep` from a state that moves left fast, and `not_follow_of` joins them to `hstep` before the end of the fall: with the fields
 `stand_fast` and `clean`, a stand away from the floor whose end of the move gives the speed 0 at the frame's end (what `wall_frame` gives) is on a frame that does not
-follow `hstep`. Not proved here: that the end of the move of such a frame meets the conditions of `wall_at` on the real machines, and the frames from the end of the fall to
-`standF`; the field `RoomJoin.RoomFields.stand_wall` stays. There is no game data in this file. Page: `1-1/c-7-5-15-RoomWall.md`. -/
+follow `hstep`. `RoomJoin.RoomRun.stand_first` proves the conditions of `wall_at` at the end of the move of the first stand of the fall on the real machines (`InRoom.wall`,
+`Route.Run.roomWall`); the field `RoomJoin.RoomFields.stand_wall` asks only the later stands (page `1-1/c-7-5-16-FirstStand.md`). There is no game data in this file. Page: `1-1/c-7-5-15-RoomWall.md`. -/
 namespace Smbrta.RoomWall
 open FrameModel
 
@@ -106,6 +106,15 @@ def check2 (sy : Syms) (E : Rom) (s0 v : UInt8) (fuel : Nat) : Bool :=
 
 /-- the speeds of the second walk: 0, and the negative bytes but −128 -/
 def speeds : List UInt8 := 0 :: ((List.range 127).map fun k => (129 + k).toUInt8)
+
+/-- the byte 0 and the bytes from 129 on are the speeds of the second walk (`RoomJoin.WallQ.v`) -/
+theorem speeds_of {v : UInt8} (h : v = 0 ∨ 129 ≤ v.toNat) : v ∈ speeds := by
+  rcases h with h | h
+  · rw [h]
+    exact List.mem_cons_self
+  · have hv := v.toNat_lt
+    exact List.mem_cons_of_mem _ (List.mem_map.2 ⟨v.toNat - 129, List.mem_range.2 (by omega), by
+      rw [show 129 + (v.toNat - 129) = v.toNat by omega]; simp⟩)
 
 /-- `Q` with the horizontal coordinate `x`, the height `y` and the state `st` -/
 def variantW (sy : Syms) (P : RoomCollision.Places) (Q : Machine) (x y st : UInt8) : Machine :=

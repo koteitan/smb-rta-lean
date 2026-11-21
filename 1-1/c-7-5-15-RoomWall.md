@@ -2,7 +2,7 @@
 
 # A stand away from the floor in the room
 
-The field `stand_wall` of [Joining the bonus room](c-5-RoomJoin.md) says: before `C + 51`, he stands away from the floor only at the end of a frame that does not follow `hstep`. On real frames such a stand is a landing on the room's left wall column: on the same frame the side check finds the wall, and `ImpedePlayerMove` sets the speed to 0 and pushes him 1 px right. This page proves this part of one frame on the machine, from the end of the move to the frame's end. It is a partial result: the field `stand_wall` stays.
+The field `stand_wall` of [Joining the bonus room](c-5-RoomJoin.md) said (before item 1-1-c-7-5-16): before `C + 51`, he stands away from the floor only at the end of a frame that does not follow `hstep`. On real frames such a stand is a landing on the room's left wall column: on the same frame the side check finds the wall, and `ImpedePlayerMove` sets the speed to 0 and pushes him 1 px right. This page proves this part of one frame on the machine, from the end of the move to the frame's end. [The first stand of the fall](c-7-5-16-FirstStand.md) joins it to the route.
 
 ## Statements
 
@@ -49,11 +49,9 @@ The ROM checks are in the private `Proof/RoomWall.lean` (`room_wall`, `room_wall
 
 ## What remains
 
-The field `stand_wall` stays. To prove it before `C + 34` from `not_follow_of`, the following are still needed.
+[The first stand of the fall](c-7-5-16-FirstStand.md) uses `wall_frame` on the real machines (`InRoom.wall`, `Route.Run.roomWall`) and proves the conditions at `Q` for the first stand of the fall (`RoomRun.stand_first`). The field `stand_wall` now asks only for a stand after an earlier frame that ends in the state 0. Still not proved here:
 
-- `hq` on a frame before `C + 34` that ends standing away from the floor: the conditions of `wall_at` at its end of the move (`x < 16`, from the field `stand_P` and the move; the height from 32 to 206; the vertical page 1; the page 0; the state; `vy ≥ 0`), and the frame's facts on the real machines that `wall_frame` asks (the room's condition, `SiteOK`, `Solid`, `Good` and the stack at `Q`, the frame's time, and that the frame ends in the player's routine), as `Route.Run.roomLand` gives them for `InRoom.land`.
-- `hQ`: `InRoom.land` gives it for a frame that starts in the air, `InRoom.floor` for one that starts standing.
-- `stand_fast` holds only before `C + 34`. For the frames from `C + 34` to `C + 50` nothing gives the speed. These frames are used by `wall_turn` (through `st_ne`).
+- `stand_fast` holds only before `C + 34`. For the frames from `C + 34` to `C + 50` nothing gives the speed.
 - `wall_frame` asks a speed at `Q` that is 0 or negative. With a positive speed a landing on the wall column keeps the speed (`ImpedePlayerMove` keeps a speed toward the right). Before `C + 34` under `Follow` the speed is negative (above). No real frame lands on the wall column with a positive speed: it needs a frame that ends inside the wall column.
 
 **Files.** `Theorems/RoomWall.lean` (`retBG`, `cellsW`, `keysW`, `cutW`, `endOK`, `impCut0`, `impCut`, `stop1`, `goal1`, `check1`, `check2`, `speeds`, `family1`, `family2`, `cellsOKW`, `endOK_spec`, `wall_end`, `cutW_eq`, `at_cutW`, `cells_of_familyW`, `refCheckW`, `Checks`, `wall_at`, `hW`, `phW`, `finW`, `apartW`, `after_G`, `checkW`, `wall_frame`, `negCheck`, `neg_of_check`, `not_follow_of`). Private `Proof/RoomWall.lean` (`room_wall`, `room_wall_after`, `room_wall_apart`, `room_wall_neg`). Programs `room-wall-family`, `room-wall-real`, `room-wall-check`.

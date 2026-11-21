@@ -17,3 +17,5 @@ What remains: identify and join those actual head and side calls for every enter
 **Files:** `Theorems/EntryHeadHeight.lean`; private `Proof/EntryHeadHeight.lean`.
 
 **Round 21.** The link to the entering frame is now made in another way: the walk of [EntryHeightBig](d-2-5-4-3-EntryHeightBig.md) knows the head's cell on the frames that could end at 192 px and removes them with `SiteOK` and `Solid`. It does not use `excludes_head`.
+
+**Round 22.** The field `height₂` is gone: the frame that enters the side pipe starts with a small or a big player ([the size through the room](d-2-5-4-4-SizeKeep.md)).

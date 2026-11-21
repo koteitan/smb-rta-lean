@@ -1,6 +1,5 @@
 import Theorems.CollideKeep
 import Theorems.PositionDispatch
-import Theorems.SurfaceFrames
 
 /-!
 # Above ground: the instructions that write the position after the scroll handler
@@ -14,10 +13,14 @@ A frame in control comes to the scroll handler (`PlayerSubs`, the machine `Q`), 
   calls (`innerP`);
 * at the clamp's entry the bits 1 to 7 of `Y` are known to be 0;
 * the instruction is in the program's half of the address space, and the followed byte is never marked spent;
-* a step into the inside of the two calls comes from the inside or from an entry, and a step never starts to follow the speed again.
+* a step into the inside of the two calls comes from the inside or from an entry, and a step never starts to follow the speed again;
+* whether the call of the scroll handler is open (`Ph0`: the stack two bytes or more below that at `Q`, the four stack bytes `phQ` of that call and of the routine
+  it is in): at the clamp's entry it is open and the stack is two bytes below that at `Q`; at the push's entry it is not; a step into a machine where it is open
+  comes from one where it is open, or from `Q` (`phK`, `phN`; `AtW.phC`, `AtW.phI`, `FrameW.ph`; used by `PositionOrder`).
 
 So (`writers_end`, `FrameW`): each machine of the frame from the scroll handler on meets `AtW`, and a step into the inside of the calls comes from the inside or
-an entry. From this and four conditions on single instructions (none of the instructions of `outside` runs; an instruction that is not `plainOp` does not write the
+an entry. Each machine from `Q` on is in the frame or the next one, the frame ends within `fuelPerFrame` instructions, and a machine at the scroll handler from
+the player's routine on is in the frame or is its end (`subs_frame`). From this and four conditions on single instructions (none of the instructions of `outside` runs; an instruction that is not `plainOp` does not write the
 position; the margins at the push; `Y = 0` at the clamp) every reached cut of `PositionDispatch` is `Ready` (`ready_all`), so the frame is a chain whose effects
 add up (`chain_of`). If the frame ends with the speed of the scroll handler and that speed is not 0, the speed stays on every machine (`FrameW.kept`,
 `speedKW`); so on a frame that moves right and keeps its speed, with the clamp's target the position, the position stays (`keep_of`: the field `AfterP.keep`
@@ -48,33 +51,89 @@ def retOK (inn : UInt16 → Bool) (A : AS) : Bool :=
   let hi := A.getK (FrameModel.stkI (A.s + 1 + 1))
   lo.k == 0xFF && hi.k == 0xFF && !inn ((lo.v.toUInt16 ||| (hi.v.toUInt16 <<< 8)) + 1)
 
+/-- **The bytes of an open call of the scroll handler**: on the stack's page, at `sQ − 1` and `sQ` the return address `rt` that the call at the scroll handler
+pushes, and at `sQ + 1` and `sQ + 2` the return address `rc` of the routine that the scroll handler is in (as the stack holds it at the player's routine) -/
+def phL (sQ : UInt8) (rt rc : UInt16) : List (UInt8 × UInt8) :=
+  [(sQ - 1, rt.toUInt8), (sQ, (rt >>> 8).toUInt8), (sQ + 1, rc.toUInt8), (sQ + 2, (rc >>> 8).toUInt8)]
+
+/-- **The scroll handler's call is open, as the walk knows it**: the stack is at least two bytes below `sQ` (the stack at the scroll handler), and the bytes of `L`
+on the stack's page are known and have their values -/
+def phK (sQ : UInt8) (L : List (UInt8 × UInt8)) (A : AS) : Bool :=
+  decide (A.s.toNat + 2 ≤ sQ.toNat) && L.all fun p => (A.getK (FrameModel.stkI p.1)).k == 0xFF && (A.getK (FrameModel.stkI p.1)).v == p.2
+
+/-- **The scroll handler's call is not open, as the walk knows it**: the stack is above `sQ − 2`, or a known bit of a byte of `L` differs from its value -/
+def phN (sQ : UInt8) (L : List (UInt8 × UInt8)) (A : AS) : Bool :=
+  decide (sQ.toNat < A.s.toNat + 2) || L.any fun p => FrameKeep.excl (A.getK (FrameModel.stkI p.1)) p.2
+
+/-- **The scroll handler's call is open, on the machine** -/
+def Ph0 (sQ : UInt8) (L : List (UInt8 × UInt8)) (m : Machine) : Prop :=
+  m.s.toNat + 2 ≤ sQ.toNat ∧ ∀ p ∈ L, m.ram.get! (FrameModel.stkI p.1) = p.2
+
+/-- the return address of the routine that the player's routine is in, as the stack holds it when the frame first comes to the player's routine -/
+def callerRet (sy : Syms) (m0 : Machine) : UInt16 :=
+  match PipeEntryRule.firstAt sy.PlayerCtrlRoutine 100000 { m0 with pad := 0x01 } with
+  | some m => (m.ram.get! (FrameModel.stkI (m.s + 1))).toUInt16 ||| ((m.ram.get! (FrameModel.stkI (m.s + 1 + 1))).toUInt16 <<< 8)
+  | none => 0
+
+/-- the bytes of an open call of the scroll handler, on the ROM -/
+def phQ (sy : Syms) (m0 : Machine) : List (UInt8 × UInt8) := phL (FrameModel.ctrlStack sy m0) (sy.PlayerSubs + 2) (callerRet sy m0)
+
+theorem stkI_lt0 (s : UInt8) : FrameModel.stkI s < 2048 := by
+  have h : ∀ n : Fin 256, FrameModel.stkI (UInt8.ofNat n.val) < 2048 := by decide +kernel
+  simpa using h ⟨s.toNat, s.toNat_lt⟩
+
+/-- `phK` of a state gives `Ph0` of the machines it covers -/
+theorem ph0_of {sQ : UInt8} {L : List (UInt8 × UInt8)} {A : AS} {m : Machine} (h : phK sQ L A = true) (hs : m.s = A.s)
+    (hr : ∀ i, i < 2048 → (A.getK i).mem (m.ram.get! i)) : Ph0 sQ L m := by
+  simp only [phK, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq] at h
+  refine ⟨by rw [hs]; exact h.1, fun p hp => ?_⟩
+  obtain ⟨h2, h3⟩ := h.2 p hp
+  rw [isK_eq (by simp [AB.isK, h2]) (hr _ (stkI_lt0 _)), h3]
+
+theorem excl_ne {b : AB} {x v : UInt8} (h : FrameKeep.excl b v = true) (hm : b.mem x) : x ≠ v := by
+  intro e
+  subst e
+  simp only [FrameKeep.excl, bne_iff_ne, ne_eq] at h
+  exact h hm
+
+/-- `phN` of a state gives that the machines it covers are not `Ph0` -/
+theorem not_ph0_of {sQ : UInt8} {L : List (UInt8 × UInt8)} {A : AS} {m : Machine} (h : phN sQ L A = true) (hs : m.s = A.s)
+    (hr : ∀ i, i < 2048 → (A.getK i).mem (m.ram.get! i)) : ¬ Ph0 sQ L m := by
+  intro ⟨p1, p2⟩
+  simp only [phN, Bool.or_eq_true, decide_eq_true_eq, List.any_eq_true] at h
+  rcases h with h | ⟨p, hp, he⟩
+  · rw [hs] at p1; omega
+  · exact excl_ne he (hr _ (stkI_lt0 _)) (p2 p hp)
+
 /-- **What the walk asks at each state**: a store of the position by its address only at `w`; at `ip` and `cp` no interrupt pending and bit 7 of the PPU's control
 known 0; at `cp` the bits 1 to 7 of `Y` known 0; at `ip` and `cp` the followed byte (the speed) still followed, or known 0; the instruction and its two
 next bytes in the program's half of the address space -/
-def okW (E : Env) (pl : List Nat) (w : List UInt16) (ip cp : UInt16) (inn : UInt16 → Bool) (A : AS) : Bool :=
+def okW (E : Env) (pl : List Nat) (w : List UInt16) (ip cp : UInt16) (inn : UInt16 → Bool) (sQ : UInt8) (L : List (UInt8 × UInt8)) (A : AS) : Bool :=
   (!FrameKeep.storesTo pl E.prg E.mask A.pc || w.contains A.pc) &&
   ((A.pc != ip && A.pc != cp) || (!A.nmi && A.ppuCtrl.k &&& 0x80 == 0x80 && A.ppuCtrl.v &&& 0x80 == 0)) &&
   (A.pc != cp || (A.y.k &&& 0xFE == 0xFE && A.y.v &&& 0xFE == 0)) &&
   ((A.pc != ip && A.pc != cp) || (A.rk && !A.spent) || CollideKeep.zeroAt E.rkI A) &&
   (decide (0x8000 ≤ A.pc) && decide (0x8000 ≤ A.pc + 1) && decide (0x8000 ≤ A.pc + 1 + 1)) &&
-  ((A.pc != ip && A.pc != cp) || retOK inn A) && !A.spent
+  ((A.pc != ip && A.pc != cp) || retOK inn A) && (A.pc != cp || (phK sQ L A && A.s + 2 == sQ)) && (A.pc != ip || phN sQ L A) && !A.spent
 
 /-- **The walk**: `CollideKeep.walkKV` that asks `okW` at each state -/
-def walkKW (C : FrameKeep.CfgK) (sp : AS → List AS) (l : List Nat) (Q : UInt16) (pl : List Nat) (w : List UInt16) (ip cp : UInt16) (inn : UInt16 → Bool) : Nat → AS → Bool
+def walkKW (C : FrameKeep.CfgK) (sp : AS → List AS) (l : List Nat) (Q : UInt16) (pl : List Nat) (w : List UInt16) (ip cp : UInt16) (inn : UInt16 → Bool)
+    (sQ : UInt8) (L : List (UInt8 × UInt8)) : Nat → AS → Bool
   | 0, _ => false
-  | n + 1, A => okW C.E pl w ip cp inn A && (FrameKeep.storesTo l C.E.prg C.E.mask A.pc || ((FrameKeep.preK C.S C.G A).flatMap sp).all fun A₁ =>
+  | n + 1, A => okW C.E pl w ip cp inn sQ L A && (FrameKeep.storesTo l C.E.prg C.E.mask A.pc || ((FrameKeep.preK C.S C.G A).flatMap sp).all fun A₁ =>
     !isRkDec C.E A₁.pc (LagFrames.opOf C.E A₁) && (FrameKeep.kstep C.S C.G C.E C.ops A₁).all fun r =>
     match r with
     | none => false
     | some B =>
       if B.k == A.k then B.pc != Q && (!inn B.pc || inn A.pc || A.pc == ip || A.pc == cp) && (!B.rk || A.rk) &&
-        ((C.cut.get! B.pc.toNat != 0 && FrameKeep.coverK C B) || walkKW C sp l Q pl w ip cp inn n B)
+        (phN sQ L B || phK sQ L A || A.pc == Q) &&
+        ((C.cut.get! B.pc.toNat != 0 && FrameKeep.coverK C B) || walkKW C sp l Q pl w ip cp inn sQ L n B)
       else B.k == A.k + 1 && FrameKeep.watchOK C.W B && FrameKeep.endOK C.G B && C.fin B && (!B.rk || A.rk))
 
 /-- what the first walk asks at the scroll handler: this walk succeeds -/
 def atQW (sy : Syms) (m0 : Machine) (w : List UInt16) (C2 : FrameKeep.CfgK) (B : AS) : Bool :=
-  walkKW C2 (CollideKeep.rkOff C2.E) (FrameKeep.ctlI sy) sy.PlayerSubs (posI sy) w sy.ImpedePlayerMove (ScreenClamp.places sy m0).entry (innerP sy m0) FrameKeep.fuelK
-    (AfterKeep.rkOn B)
+  walkKW C2 (CollideKeep.rkOff C2.E) (FrameKeep.ctlI sy) sy.PlayerSubs (posI sy) w sy.ImpedePlayerMove (ScreenClamp.places sy m0).entry (innerP sy m0)
+    (FrameModel.ctrlStack sy m0) (phQ sy m0) FrameKeep.fuelK (AfterKeep.rkOn B)
 
 /-- the walk of the pause bit up to the cut, then the first walk of `AfterKeep`, then this walk -/
 def cfgPW (sy : Syms) (m0 : Machine) (v : UInt8) (w : List UInt16) (q : CtrlKeep.Table) (C1 C2 : FrameKeep.CfgK) : CtrlKeep.CfgR :=
@@ -95,7 +154,8 @@ def wCheck (sy : Syms) (m0 : Machine) (v : UInt8) (w : List UInt16) : Bool :=
     sy.ImpedePlayerMove != (ScreenClamp.places sy m0).entry &&
     ScreenClamp.amount (FrameModel.Rom.of m0) (ScreenClamp.places sy m0) 0 == 0 && offStack sy &&
     CtrlKeep.ctrlCheck1 (cfgPW sy m0 v w q C1 C2) && C1.t.all (AfterKeep.walkQ1 C1 (FrameKeep.ctlI sy) sy.PlayerSubs (atQW sy m0 w C2) FrameKeep.fuelK) &&
-    C2.t.all (walkKW C2 (CollideKeep.rkOff C2.E) (FrameKeep.ctlI sy) sy.PlayerSubs (posI sy) w sy.ImpedePlayerMove (ScreenClamp.places sy m0).entry (innerP sy m0) FrameKeep.fuelK)
+    C2.t.all (walkKW C2 (CollideKeep.rkOff C2.E) (FrameKeep.ctlI sy) sy.PlayerSubs (posI sy) w sy.ImpedePlayerMove (ScreenClamp.places sy m0).entry (innerP sy m0)
+      (FrameModel.ctrlStack sy m0) (phQ sy m0) FrameKeep.fuelK)
 
 /-- **The instructions that store the position by its address, as the walk meets them** (from the states of the table and of the scroll handler): the list
 that the private check takes for `w` -/
@@ -139,6 +199,10 @@ structure AtW (sy : Syms) (m0 : Machine) (w : List UInt16) (s0 : UInt8) (R : Mac
   rom : 0x8000 ≤ R.pc ∧ 0x8000 ≤ R.pc + 1 ∧ 0x8000 ≤ R.pc + 1 + 1
   /-- at both entries, the call returns outside the inside of the two calls (`innerP`) -/
   ret : R.pc = sy.ImpedePlayerMove ∨ R.pc = (ScreenClamp.places sy m0).entry → innerP sy m0 (ImpedePosition.returnPc R) = false
+  /-- at the clamp's entry the scroll handler's call is open (`Ph0`), and the stack is two bytes below the stack at the scroll handler -/
+  phC : R.pc = (ScreenClamp.places sy m0).entry → Ph0 (FrameModel.ctrlStack sy m0) (phQ sy m0) R ∧ R.s + 2 = FrameModel.ctrlStack sy m0
+  /-- at the push's entry the scroll handler's call is not open -/
+  phI : R.pc = sy.ImpedePlayerMove → ¬ Ph0 (FrameModel.ctrlStack sy m0) (phQ sy m0) R
 
 /-- a byte that agrees with `v` on the known bits `k`, with bit 7 of `k` set and of `v` clear, has bit 7 clear -/
 theorem and80 {x k v : UInt8} (h : x &&& k = v &&& k) (hk : k &&& 0x80 = 0x80) (hv : v &&& 0x80 = 0) : x &&& 0x80 = 0 := by
@@ -171,10 +235,11 @@ theorem stkI_lt (s : UInt8) : FrameModel.stkI s < 2048 := by
 /-- **`okW` of a state gives `AtW` of each machine it covers** -/
 theorem atW_of {sy : Syms} {m0 : Machine} {w : List UInt16} {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine}
     (hE : E.prg = m0.prg) (hM : E.mask = m0.prgMask) (hrk : E.rkI = CollideKeep.spI sy) (hs : Sim E F A m)
-    (h : okW E (posI sy) w sy.ImpedePlayerMove (ScreenClamp.places sy m0).entry (innerP sy m0) A = true) : AtW sy m0 w F.2 m := by
+    (h : okW E (posI sy) w sy.ImpedePlayerMove (ScreenClamp.places sy m0).entry (innerP sy m0) (FrameModel.ctrlStack sy m0) (phQ sy m0) A = true) :
+    AtW sy m0 w F.2 m := by
   simp only [okW, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true', bne_iff_ne, ne_eq, beq_iff_eq, List.contains_iff_mem] at h
-  obtain ⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, ⟨h5, h6⟩, h7⟩, h8⟩, _⟩ := h
-  refine ⟨fun hw => ?_, fun he => ?_, fun he => ?_, fun he => ?_, ?_, fun he => ?_⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, ⟨h5, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, _⟩ := h
+  refine ⟨fun hw => ?_, fun he => ?_, fun he => ?_, fun he => ?_, ?_, fun he => ?_, fun he => ?_, fun he => ?_⟩
   · rw [hs.prg, hs.mask, hs.pc] at hw
     rcases h1 with h1 | h1
     · rw [h1] at hw; cases hw
@@ -221,6 +286,14 @@ theorem atW_of {sy : Syms} {m0 : Machine} {w : List UInt16} {E : Env} {F : Nat �
       unfold ImpedePosition.returnPc
       rw [hs.s, e1, e2]
       exact k3
+  · rw [hs.pc] at he
+    rcases h9 with h9 | ⟨hk, hs2⟩
+    · exact absurd he h9
+    · exact ⟨ph0_of hk hs.s hs.ram, by rw [hs.s]; exact hs2⟩
+  · rw [hs.pc] at he
+    rcases h10 with h10 | hn
+    · exact absurd he h10
+    · exact not_ph0_of hn hs.s hs.ram
 
 /-! ## The walk covers the frame from the scroll handler to its end -/
 
@@ -230,14 +303,14 @@ open PipeTransition (frame)
 open PipeTransitionAll (go)
 
 variable {C : FrameKeep.CfgK} {sp : AS → List AS} {l : List Nat} {Q : UInt16} {pl : List Nat} {w : List UInt16} {ip cp : UInt16} {inn : UInt16 → Bool} {Fu : Nat}
-  {F : Nat × UInt8}
+  {F : Nat × UInt8} {sQ : UInt8} {L : List (UInt8 × UInt8)}
 
 /-- `A` covers `m`, and a walk from `A` succeeds -/
-def LiveKW (C : FrameKeep.CfgK) (sp : AS → List AS) (l : List Nat) (Q : UInt16) (pl : List Nat) (w : List UInt16) (ip cp : UInt16) (inn : UInt16 → Bool) (F : Nat × UInt8)
-    (A : AS) (m : Machine) : Prop :=
-  Sim C.E F A m ∧ ∃ n, walkKW C sp l Q pl w ip cp inn n A = true
+def LiveKW (C : FrameKeep.CfgK) (sp : AS → List AS) (l : List Nat) (Q : UInt16) (pl : List Nat) (w : List UInt16) (ip cp : UInt16) (inn : UInt16 → Bool)
+    (sQ : UInt8) (L : List (UInt8 × UInt8)) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
+  Sim C.E F A m ∧ ∃ n, walkKW C sp l Q pl w ip cp inn sQ L n A = true
 
-theorem LiveKW.ok {A : AS} {m : Machine} (h : LiveKW C sp l Q pl w ip cp inn F A m) : okW C.E pl w ip cp inn A = true := by
+theorem LiveKW.ok {A : AS} {m : Machine} (h : LiveKW C sp l Q pl w ip cp inn sQ L F A m) : okW C.E pl w ip cp inn sQ L A = true := by
   obtain ⟨_, n, hw⟩ := h
   cases n with
   | zero => simp [walkKW] at hw
@@ -245,8 +318,8 @@ theorem LiveKW.ok {A : AS} {m : Machine} (h : LiveKW C sp l Q pl w ip cp inn F A
     simp only [walkKW, Bool.and_eq_true] at hw
     exact hw.1
 
-theorem cover_liveKW (ht : C.t.all (walkKW C sp l Q pl w ip cp inn Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf) {B : AS} {m : Machine}
-    (hs : Sim C.E F B m) (h : FrameKeep.coverK C B = true) : ∃ D, LiveKW C sp l Q pl w ip cp inn F D m ∧ D.k = B.k ∧ D.rk = B.rk := by
+theorem cover_liveKW (ht : C.t.all (walkKW C sp l Q pl w ip cp inn sQ L Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf) {B : AS} {m : Machine}
+    (hs : Sim C.E F B m) (h : FrameKeep.coverK C B = true) : ∃ D, LiveKW C sp l Q pl w ip cp inn sQ L F D m ∧ D.k = B.k ∧ D.rk = B.rk := by
   unfold FrameKeep.coverK at h
   obtain ⟨i, _, h2⟩ := List.any_eq_true.1 h
   split at h2
@@ -266,11 +339,12 @@ theorem cover_liveKW (ht : C.t.all (walkKW C sp l Q pl w ip cp inn Fu) = true) (
     exact ⟨D, ⟨sim_le hle hs, Fu, hall⟩, (PipeWrites.le_k hle).symm, h2'.1.2.symm⟩
   · cases h2
 
-theorem live_stepKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf)
-    (hops : C.ops = (aRows C.E).toArray) {A : AS} {m : Machine} (hl : LiveKW C sp l Q pl w ip cp inn F A m) (hh : FrameKeep.CleanK C.G C.S.store m)
+theorem live_stepKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn sQ L Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf)
+    (hops : C.ops = (aRows C.E).toArray) {A : AS} {m : Machine} (hl : LiveKW C sp l Q pl w ip cp inn sQ L F A m) (hh : FrameKeep.CleanK C.G C.S.store m)
     (hx : FrameKeep.storesTo l m.prg m.prgMask m.pc = false) :
-    (∃ A', LiveKW C sp l Q pl w ip cp inn F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot ∧
-      (go step m).2.pc ≠ Q ∧ (inn (go step m).2.pc = true → inn m.pc = true ∨ m.pc = ip ∨ m.pc = cp) ∧ (A'.rk = true → A.rk = true)) ∨
+    (∃ A', LiveKW C sp l Q pl w ip cp inn sQ L F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot ∧
+      (go step m).2.pc ≠ Q ∧ (inn (go step m).2.pc = true → inn m.pc = true ∨ m.pc = ip ∨ m.pc = cp) ∧ (A'.rk = true → A.rk = true) ∧
+      (Ph0 sQ L (go step m).2 → Ph0 sQ L m ∨ m.pc = Q)) ∨
     ((go step m).2.frame = m.frame + 1 ∧ ∃ B, FrameKeep.watchOK C.W B = true ∧ FrameKeep.endOK C.G B = true ∧ C.fin B = true ∧ B.k = A.k + 1 ∧
       Sim C.E F B (go step m).2 ∧ (B.rk = true → A.rk = true)) := by
   obtain ⟨hs, n, hw⟩ := hl
@@ -293,7 +367,7 @@ theorem live_stepKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip 
         rw [hk1] at k1
         rw [if_pos (by simp [k1])] at hw3
         simp only [Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true', beq_iff_eq] at hw3
-        obtain ⟨⟨⟨hq, hin⟩, hrk⟩, hw4⟩ := hw3
+        obtain ⟨⟨⟨⟨hq, hin⟩, hrk⟩, hph⟩, hw4⟩ := hw3
         have hq' : (go step m).2.pc ≠ Q := by rw [h1.pc]; exact hq
         have hin' : inn (go step m).2.pc = true → inn m.pc = true ∨ m.pc = ip ∨ m.pc = cp := by
           intro hb
@@ -309,10 +383,16 @@ theorem live_stepKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip 
           rcases hrk with e | e
           · rw [e] at hb; cases hb
           · exact e
+        have hph' : Ph0 sQ L (go step m).2 → Ph0 sQ L m ∨ m.pc = Q := by
+          intro hP
+          rcases hph with (e | e) | e
+          · exact absurd hP (not_ph0_of e h1.s h1.ram)
+          · exact Or.inl (ph0_of e hs.s hs.ram)
+          · exact Or.inr (by rw [hs.pc]; exact e)
         rcases hw4 with ⟨_, h3⟩ | h3
         · obtain ⟨D, hD, hk, hDr⟩ := cover_liveKW ht hkl h1 h3
-          exact ⟨D, hD, by rw [hk, k1], k2, k3, hq', hin', fun hd => hrk' (hDr ▸ hd)⟩
-        · exact ⟨B, ⟨h1, n, h3⟩, k1, k2, k3, hq', hin', hrk'⟩
+          exact ⟨D, hD, by rw [hk, k1], k2, k3, hq', hin', fun hd => hrk' (hDr ▸ hd), hph'⟩
+        · exact ⟨B, ⟨h1, n, h3⟩, k1, k2, k3, hq', hin', hrk', hph'⟩
       · right
         rw [hk1] at k1
         rw [if_neg (by simp [k1])] at hw3
@@ -324,15 +404,16 @@ theorem live_stepKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip 
 
 /-- **The walk, from the scroll handler to the frame's end.** The machine `k` instructions into the frame of `m`, covered by a state from which the walk succeeds:
 every machine of the same frame from there on is covered by a state that meets `okW` -/
-theorem okKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf)
-    (hops : C.ops = (aRows C.E).toArray) {m : Machine} {i : UInt8} {k Fu' : Nat} {A : AS} (hw : walkKW C sp l Q pl w ip cp inn Fu' A = true)
+theorem okKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn sQ L Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf)
+    (hops : C.ops = (aRows C.E).toArray) {m : Machine} {i : UInt8} {k Fu' : Nat} {A : AS} (hw : walkKW C sp l Q pl w ip cp inn sQ L Fu' A = true)
     (hs : Sim C.E F A (trace m i k)) (hf : (trace m i k).frame = m.frame) (hcl : ∀ j, FrameKeep.CleanK C.G C.S.store (trace m i j))
     (hx : ∀ j, FrameKeep.storesTo l (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false) :
-    ∀ d, ((trace m i (k + d)).frame = m.frame ∧ (∃ B, Sim C.E F B (trace m i (k + d)) ∧ okW C.E pl w ip cp inn B = true) ∧ (1 ≤ d → (trace m i (k + d)).pc ≠ Q) ∧
+    ∀ d, ((trace m i (k + d)).frame = m.frame ∧ (∃ B, Sim C.E F B (trace m i (k + d)) ∧ okW C.E pl w ip cp inn sQ L B = true) ∧ (1 ≤ d → (trace m i (k + d)).pc ≠ Q) ∧
         ((trace m i (k + d + 1)).frame = m.frame → inn (trace m i (k + d + 1)).pc = true →
-          inn (trace m i (k + d)).pc = true ∨ (trace m i (k + d)).pc = ip ∨ (trace m i (k + d)).pc = cp)) ∨
+          inn (trace m i (k + d)).pc = true ∨ (trace m i (k + d)).pc = ip ∨ (trace m i (k + d)).pc = cp) ∧
+        ((trace m i (k + d + 1)).frame = m.frame → Ph0 sQ L (trace m i (k + d + 1)) → Ph0 sQ L (trace m i (k + d)) ∨ (trace m i (k + d)).pc = Q)) ∨
       (trace m i (k + d)).frame = m.frame + 1 := by
-  have key : ∀ d, (∃ A, LiveKW C sp l Q pl w ip cp inn F A (trace m i (k + d)) ∧ (trace m i (k + d)).frame = m.frame ∧ (1 ≤ d → (trace m i (k + d)).pc ≠ Q)) ∨
+  have key : ∀ d, (∃ A, LiveKW C sp l Q pl w ip cp inn sQ L F A (trace m i (k + d)) ∧ (trace m i (k + d)).frame = m.frame ∧ (1 ≤ d → (trace m i (k + d)).pc ≠ Q)) ∨
       (trace m i (k + d)).frame = m.frame + 1 := by
     intro d
     induction d with
@@ -345,7 +426,7 @@ theorem okKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn 
           show PipeEntryRule.nxt (m.frame + 1) (trace m i (k + d)) = _
           simp only [PipeEntryRule.nxt, if_neg hn]
         rw [e]
-        rcases live_stepKW hsp ht hkl hops h1 (hcl (k + d)) (hx (k + d)) with ⟨A', a1, _, a3, _, a5, _⟩ | ⟨a1, _⟩
+        rcases live_stepKW hsp ht hkl hops h1 (hcl (k + d)) (hx (k + d)) with ⟨A', a1, _, a3, _, a5, _, _, _⟩ | ⟨a1, _⟩
         · exact Or.inl ⟨A', a1, by rw [a3, h2], fun _ => a5⟩
         · exact Or.inr (by rw [a1, h2])
       · have hst : ((trace m i (k + d)).frame ≥ m.frame + 1 || (trace m i (k + d)).halted) = true := by simp [h1]
@@ -353,34 +434,38 @@ theorem okKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn 
         exact Or.inr h1
   intro d
   rcases key d with ⟨B, hB, hf, hq⟩ | h
-  · refine Or.inl ⟨hf, ⟨B, hB.1, hB.ok⟩, hq, fun hf1 hin => ?_⟩
-    have hh := hB.1.halted
+  · have hh := hB.1.halted
     have hn : ¬ (((trace m i (k + d)).frame ≥ m.frame + 1 || (trace m i (k + d)).halted) = true) := by simp [hf, hh]
     have e : trace m i (k + d + 1) = (go step (trace m i (k + d))).2 := by
       show PipeEntryRule.nxt (m.frame + 1) (trace m i (k + d)) = _
       simp only [PipeEntryRule.nxt, if_neg hn]
-    rw [e] at hf1 hin
-    rcases live_stepKW hsp ht hkl hops hB (hcl (k + d)) (hx (k + d)) with ⟨_, _, _, _, _, _, a6, _⟩ | ⟨a1, _⟩
-    · exact a6 hin
-    · rw [a1, hf] at hf1; omega
+    refine Or.inl ⟨hf, ⟨B, hB.1, hB.ok⟩, hq, fun hf1 hin => ?_, fun hf1 hP => ?_⟩
+    · rw [e] at hf1 hin
+      rcases live_stepKW hsp ht hkl hops hB (hcl (k + d)) (hx (k + d)) with ⟨_, _, _, _, _, _, a6, _, _⟩ | ⟨a1, _⟩
+      · exact a6 hin
+      · rw [a1, hf] at hf1; omega
+    · rw [e] at hf1 hP
+      rcases live_stepKW hsp ht hkl hops hB (hcl (k + d)) (hx (k + d)) with ⟨_, _, _, _, _, _, _, _, a8⟩ | ⟨a1, _⟩
+      · exact a8 hP
+      · rw [a1, hf] at hf1; omega
   · exact Or.inr h
 
 
 /-- **The followed byte along the walk**: the frame of `m` ends, and if the state at its end still follows the byte, the byte was `F.2` at every machine of the frame
 from `k` on (a step of the walk never starts to follow the byte again, and the walk never marks it spent) -/
-theorem speedKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf)
-    (hops : C.ops = (aRows C.E).toArray) {m : Machine} {i : UInt8} {k Fu' : Nat} {A : AS} (hw : walkKW C sp l Q pl w ip cp inn Fu' A = true)
+theorem speedKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp inn sQ L Fu) = true) (hkl : C.kl = C.t.map PipeWrites.knownOf)
+    (hops : C.ops = (aRows C.E).toArray) {m : Machine} {i : UInt8} {k Fu' : Nat} {A : AS} (hw : walkKW C sp l Q pl w ip cp inn sQ L Fu' A = true)
     (hs : Sim C.E F A (trace m i k)) (hf : (trace m i k).frame = m.frame) (hd : m.fdot + 3 * k ≤ (trace m i k).fdot)
     (hcl : ∀ j, FrameKeep.CleanK C.G C.S.store (trace m i j))
     (hx : ∀ j, FrameKeep.storesTo l (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false) :
     (frame m i).frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ Sim C.E F B (frame m i) ∧
       (B.rk = true → ∀ d, (trace m i (k + d)).frame = m.frame → (trace m i (k + d)).ram.get! C.E.rkI = F.2) := by
-  have spentF : ∀ {A : AS} {m' : Machine}, LiveKW C sp l Q pl w ip cp inn F A m' → A.spent = false := by
+  have spentF : ∀ {A : AS} {m' : Machine}, LiveKW C sp l Q pl w ip cp inn sQ L F A m' → A.spent = false := by
     intro A m' h
     have := h.ok
     simp only [okW, Bool.and_eq_true, Bool.not_eq_true'] at this
     exact this.2
-  have key : ∀ d, (∃ A, LiveKW C sp l Q pl w ip cp inn F A (trace m i (k + d)) ∧ (trace m i (k + d)).frame = m.frame ∧
+  have key : ∀ d, (∃ A, LiveKW C sp l Q pl w ip cp inn sQ L F A (trace m i (k + d)) ∧ (trace m i (k + d)).frame = m.frame ∧
         m.fdot + 3 * (k + d) ≤ (trace m i (k + d)).fdot ∧
         (A.rk = true → ∀ j, j ≤ d → (trace m i (k + j)).frame = m.frame → (trace m i (k + j)).ram.get! C.E.rkI = F.2)) ∨
       ((trace m i (k + d)).frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ Sim C.E F B (trace m i (k + d)) ∧
@@ -401,7 +486,7 @@ theorem speedKW (hsp : Cov C.E F sp) (ht : C.t.all (walkKW C sp l Q pl w ip cp i
         have e : trace m i (k + (d + 1)) = (go step (trace m i (k + d))).2 := by
           show PipeEntryRule.nxt (m.frame + 1) (trace m i (k + d)) = _
           simp only [PipeEntryRule.nxt, if_neg hn]
-        rcases live_stepKW hsp ht hkl hops h1 (hcl (k + d)) (hx (k + d)) with ⟨A', a1, _, a3, a4, _, _, a7⟩ | ⟨a1, B, _, _, a2, _, a3, a4⟩
+        rcases live_stepKW hsp ht hkl hops h1 (hcl (k + d)) (hx (k + d)) with ⟨A', a1, _, a3, a4, _, _, a7, _⟩ | ⟨a1, B, _, _, a2, _, a3, a4⟩
         · refine Or.inl ⟨A', by rw [e]; exact a1, by rw [e, a3, h2], by rw [e]; omega, fun hr j hj hfj => ?_⟩
           rcases Nat.lt_or_ge j (d + 1) with hj' | hj'
           · exact h4 (a7 hr) j (by omega) hfj
@@ -469,6 +554,13 @@ structure FrameW (sy : Syms) (m0 : Machine) (w : List UInt16) (s0 : UInt8) (T : 
     innerP sy m0 (T j).pc = true ∨ (T j).pc = sy.ImpedePlayerMove ∨ (T j).pc = (ScreenClamp.places sy m0).entry
   /-- if the frame ends (at `e`) with the speed `s0` and `s0 ≠ 0`, then every machine of the frame from `k` on has the speed `s0` -/
   kept : ∀ e, (T e).frame = f + 1 → peek (T e) sy.Player_X_Speed = s0 → s0 ≠ 0 → ∀ j, k ≤ j → (T j).frame = f → peek (T j) sy.Player_X_Speed = s0
+  /-- every machine from `k` on is in the frame or in the next one -/
+  two : ∀ j, k ≤ j → (T j).frame = f ∨ (T j).frame = f + 1
+  /-- the frame ends within `fuelPerFrame` instructions -/
+  ends : (T fuelPerFrame).frame = f + 1
+  /-- a machine of the frame after `k` where the scroll handler's call is open (`Ph0`) comes after one where it is open, or right after `k` -/
+  ph : ∀ j, k ≤ j → (T (j + 1)).frame = f → Ph0 (FrameModel.ctrlStack sy m0) (phQ sy m0) (T (j + 1)) →
+    Ph0 (FrameModel.ctrlStack sy m0) (phQ sy m0) (T j) ∨ j = k
 
 /-- **A frame in control, from the scroll handler to its end, writes the position by its address only at `w`; it is `Good` at the entries of the push and of the
 clamp, and `Y` is 0 or 1 at the clamp's entry.** The hypotheses are those of `CollideKeep.speed_end`: the frame starts in the idle loop in control
@@ -539,13 +631,13 @@ theorem writers_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} {w : List
         · rw [show k₁ + (k - k₁) = k by omega, hfk] at hst
           omega
     subst hkk
-    refine ⟨fun j hj hfj => ?_, fun j hj hf1 hin => ?_, fun e he hve hnz j hj hfj => ?_⟩
+    refine ⟨fun j hj hfj => ?_, fun j hj hf1 hin => ?_, fun e he hve hnz j hj hfj => ?_, fun j hj => ?_, ?_, fun j hj hf1 hP => ?_⟩
     · rcases hok (j - k) with ⟨_, ⟨B, hB, hokB⟩, _⟩ | hst
       · rw [show k + (j - k) = j by omega] at hB
         exact atW_of rfl rfl rfl hB hokB
       · rw [show k + (j - k) = j by omega, hfj] at hst
         omega
-    · rcases hok (j - k) with ⟨_, _, _, hs4⟩ | hst
+    · rcases hok (j - k) with ⟨_, _, _, hs4, _⟩ | hst
       · rw [show k + (j - k) = j by omega] at hs4
         exact hs4 hf1 hin
       · rw [show k + (j - k) = j by omega] at hst
@@ -577,6 +669,104 @@ theorem writers_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} {w : List
         have e0 := (isK_eq hz.1 hm).trans hz.2
         rw [hend] at e0
         exact hnz (hve.symm.trans e0)
+    · rcases hok (j - k) with ⟨hf, _⟩ | hst
+      · rw [show k + (j - k) = j by omega] at hf
+        exact Or.inl hf
+      · rw [show k + (j - k) = j by omega] at hst
+        exact Or.inr hst
+    · have hfe := hsk.1
+      rw [PipeEntryRule.frame_trace] at hfe
+      exact hfe
+    · rcases hok (j - k) with ⟨_, _, hq, _, hs5⟩ | hst
+      · rw [show k + (j - k) = j by omega] at hs5 hq
+        rcases hs5 hf1 hP with h | h
+        · exact Or.inl h
+        · by_cases hjk : j = k
+          · exact Or.inr hjk
+          · exact absurd h (hq (by omega))
+      · rw [show k + (j - k) = j by omega] at hst
+        have hs' : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by simp [hst]
+        have e := PipeEntryRule.trace_stop hs' 1
+        rw [e, hst] at hf1
+        omega
+  · exact absurd harr (hno n₀ hf0)
+
+/-- **The scroll handler's machine is in the frame, or it is the frame's end**: with the hypotheses of `writers_end`, a machine from the player's routine on at the
+scroll handler is in the frame of `m`, or the trace has stopped there and it is the machine at the frame's end -/
+theorem subs_frame (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} {w : List UInt16} (hh : wCheck sy m0 v w = true) {m : Machine} {i : UInt8}
+    (h0 : FrameKeep.StartK sy m0 m) (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
+    (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
+    (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
+    ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → (trace m i k).frame = m.frame ∨ trace m i k = PipeTransition.frame m i := by
+  simp only [wCheck, Bool.and_eq_true, bne_iff_ne, ne_eq, beq_iff_eq] at hh
+  obtain ⟨⟨⟨⟨⟨⟨⟨hne1, hne2⟩, _⟩, _⟩, _⟩, hp1⟩, hp2⟩, hp3⟩ := hh
+  generalize CtrlKeep.cutTable sy m0 true = q at hp1 hp2 hp3
+  generalize CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q) = cuts at hp1 hp2 hp3
+  generalize AfterKeep.q1Search sy m0 v cuts = P at hp1 hp2 hp3
+  have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_of_E (hcl n)
+  have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_of_F (hclF n)
+  have hx' : ∀ j, FrameKeep.storesTo (FrameKeep.ctlI sy) (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false := hx
+  rcases CtrlKeep.cut_or_end2 (C := cfgPW sy m0 v w q (AfterKeep.q1Cfg sy m0 v P) (CollideKeep.vCfg sy m0 P.stops.toList)) hp1 rfl rfl rfl
+      (CtrlKeep.cfg_start q _ true h0) hclK with ⟨k₀, h1, h2, _, h4, h5, B, _, hB2, hs⟩ | ⟨hno, _⟩
+  · have hk0 : k₀ = n₀ := by
+      rcases Nat.lt_trichotomy k₀ n₀ with h | h | h
+      · exact absurd h1 (hfirst k₀ h)
+      · exact h
+      · exact absurd harr (h4 n₀ h)
+    subst hk0
+    have A := CtrlKeep.ctrl_keep hc h0 hclK h1 h2 h4
+    have hV : FrameKeep.Watched (CtrlKeep.valA sy v) (trace m i k₀) := by
+      intro w hw
+      simp only [CtrlKeep.valA, List.mem_cons, List.not_mem_nil, or_false] at hw
+      rcases hw with rfl | rfl | rfl
+      · show (trace m i k₀).ram.get! (sy.AreaType &&& 0x7FF).toNat &&& 0xFF = v &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [CtrlKeep.keepA])).trans hv.1
+      · show (trace m i k₀).ram.get! (sy.SwimmingFlag &&& 0x7FF).toNat &&& 0xFF = 0 &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [CtrlKeep.keepA])).trans hv.2.1
+      · show (trace m i k₀).ram.get! (sy.PlayerChangeSizeFlag &&& 0x7FF).toNat &&& 0xFF = 0 &&& 0xFF
+        rw [FrameKeep.and_ff, FrameKeep.and_ff]
+        exact (A.keep _ (by simp [CtrlKeep.keepA])).trans hv.2.2
+    have hsA := CtrlKeep.sim_toA (W := CtrlKeep.watchA sy m0 v) hs (CtrlKeep.watchA_lt v) hV
+    have hw : AfterKeep.walkQ1 (AfterKeep.q1Cfg sy m0 v P) (FrameKeep.ctlI sy) sy.PlayerSubs (atQW sy m0 w (CollideKeep.vCfg sy m0 P.stops.toList)) FrameKeep.fuelK
+        (CtrlKeep.toA (CtrlKeep.watchA sy m0 v) (CtrlKeep.valA sy v) B) = true := hB2
+    obtain ⟨k₁, hk1, hq1, hf1, hd1, hbt, B₁, hat, hs₁⟩ :=
+      AfterKeep.q1_run (C := AfterKeep.q1Cfg sy m0 v P) hp2 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw hsA h2 h5 hclF hx'
+    have hs2 : Sim (CollideKeep.vCfg sy m0 P.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! (CollideKeep.spI sy)) (AfterKeep.rkOn B₁)
+        (trace m i k₁) := AfterKeep.sim_rkOn hs₁
+    have hclV : ∀ j, FrameKeep.CleanK (CollideKeep.vCfg sy m0 P.stops.toList).G (CollideKeep.vCfg sy m0 P.stops.toList).S.store (trace m i j) :=
+      fun j => CollideKeep.cleanV_of (hcl j)
+    have hok := okKW (C := CollideKeep.vCfg sy m0 P.stops.toList) CollideKeep.cov_rkOff hp3 rfl rfl hat hs2 hf1 hclV hx'
+    have hsk := speedKW (C := CollideKeep.vCfg sy m0 P.stops.toList) CollideKeep.cov_rkOff hp3 rfl rfl hat hs2 hf1 hd1 hclV hx'
+    intro k hk hpc
+    rcases Nat.lt_trichotomy k k₁ with h | h | h
+    · exfalso
+      by_cases e : k = k₀
+      · subst e
+        rw [h1] at hpc
+        exact hne1 hpc
+      · exact hbt k (by omega) h hpc
+    · rw [h]
+      exact Or.inl hf1
+    · rcases hok (k - k₁) with ⟨_, _, hq, _⟩ | hst
+      · exfalso
+        have := hq (by omega)
+        rw [show k₁ + (k - k₁) = k by omega] at this
+        exact this hpc
+      · right
+        rw [show k₁ + (k - k₁) = k by omega] at hst
+        have s1 : ((trace m i k).frame ≥ m.frame + 1 || (trace m i k).halted) = true := by simp [hst]
+        have hfe := hsk.1
+        rw [PipeEntryRule.frame_trace] at hfe ⊢
+        have s2 : ((trace m i fuelPerFrame).frame ≥ m.frame + 1 || (trace m i fuelPerFrame).halted) = true := by simp [hfe]
+        rcases Nat.lt_or_ge k fuelPerFrame with hl | hl
+        · have := PipeEntryRule.trace_stop s1 (fuelPerFrame - k)
+          rw [show k + (fuelPerFrame - k) = fuelPerFrame by omega] at this
+          exact this.symm
+        · have := PipeEntryRule.trace_stop s2 (k - fuelPerFrame)
+          rw [show fuelPerFrame + (k - fuelPerFrame) = k by omega] at this
+          exact this
   · exact absurd harr (hno n₀ hf0)
 
 end
@@ -946,31 +1136,6 @@ theorem keep_of (hi : ImpedePosition.check sy m0 = true) (hcC : ScreenClamp.chec
   have hz := chain_zero hi idle time live F hall hnz hclamp ch (Nat.le_refl _) (Nat.le_refl _)
   rw [hsum, hz]
   omega
-
-end
-
-/-! ## On the frames above ground -/
-
-section
-open PipeEntryRule (trace)
-variable {sy : Syms} {m0 : Machine} {B : PoleJoin.Box} {T J g : Nat} {seq : Nat → Machine} {Sr : FrameKeep.RealRun} {ar : Nat}
-  {K : FrameKeep.Frames sy m0 Sr ar g seq}
-
-/-- **Each counted frame before the touch meets `FrameW` from the scroll handler on** (`writers_end` on the frames of `K`, as `SurfaceFrames.OnFrames.collideAt`
-uses `CollideKeep.speed_end`): the frame starts in control (`hst`), each instruction meets `CleanK` of `FrameKeep.guardE` (`K.cleanE`) and stores no routine, mode
-or task by address (`K.noStore`), the area is `v` (`AreaRun`). The machine at the scroll handler is asked to be in the frame. -/
-theorem writersAt (hck : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} {w : List UInt16} (hw : wCheck sy m0 v w = true)
-    (O : SurfaceFrames.OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) (Ar : SurfaceFrames.AreaRun sy m0 K v)
-    {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
-    ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs → (trace (K.fm j) (K.pad j) k).frame = (K.fm j).frame →
-      FrameW sy m0 w (peek (trace (K.fm j) (K.pad j) k) sy.Player_X_Speed) (trace (K.fm j) (K.pad j)) k (K.fm j).frame := by
-  have a1 := K.order (j - 1) (by omega)
-  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
-  rw [show j - 1 + 1 = j by omega] at a1
-  have harr := O.arrive hck hst h1 (by omega)
-  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
-  exact writers_end hck hw (SurfaceFrames.start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
-    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
 
 end
 

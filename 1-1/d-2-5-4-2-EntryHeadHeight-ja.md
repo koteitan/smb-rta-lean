@@ -17,3 +17,5 @@
 **ファイル:** `Theorems/EntryHeadHeight.lean`、非公開の `Proof/EntryHeadHeight.lean`。
 
 **ラウンド 21.** 入るフレームへのつなぎは、別の方法でできました。[EntryHeightBig](d-2-5-4-3-EntryHeightBig-ja.md) の歩きは、192 px で終わりうるフレームで頭のマスを知り、`SiteOK` と `Solid` でそれを除きます。`excludes_head` は使いません。
+
+**22 回目.** フィールド `height₂` はなくなりました。横の土管に入るフレームは小さいか大きいプレイヤーで始まります（[部屋を通る大きさ](d-2-5-4-4-SizeKeep-ja.md)）。

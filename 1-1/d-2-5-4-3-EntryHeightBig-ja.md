@@ -78,3 +78,5 @@ Lean: `Theorems/EntryHeightBig.lean`（`HB`、`meets`、`band`、`bits`、`inBan
 `Proof/EntryHeight.lean` は `checkB` もネイティブに走らせます。ラウンド 21 の全体の `prove.py` で 355 秒かかりました（前は小さいプレイヤーの歩きだけで約 45 秒）。プログラムでは `checkB` だけで 324 秒です（探索 44 秒、その後に表の上の歩き）。数秒よりずっと長いです。
 
 **ファイル.** `Theorems/EntryHeightBig.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/EntryHeight.lean`（`Main.lean` の `genEntryHeight`）です。プログラム `entry-head-diag check 0` が探索と確認を走らせます。
+
+**22 回目.** フィールド `height₂` はなくなりました。横の土管に入るフレームは小さいか大きいプレイヤーで始まります（[部屋を通る大きさ](d-2-5-4-4-SizeKeep-ja.md)）。

@@ -13,3 +13,5 @@ The eight ends at 192 px are not yet removed. The actual head index chosen from 
 `entry-height-check FM2 5 real` exited 0. Some groups of these few own-input runs never entered, so this does not exhaust big-player entry cases. No new ROM check, search or `Run` field was added.
 
 **File:** `Theorems/EntryCollisionNear.lean`.
+
+**Round 22.** The field `height₂` is gone: the frame that enters the side pipe starts with a small or a big player ([the size through the room](d-2-5-4-4-SizeKeep.md)).

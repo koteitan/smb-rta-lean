@@ -32,7 +32,7 @@ touch_right_of_left :  poleFrameCheck,  Touches,  StartK(fm g),  ∀ j,  CleanK(
                        →   ∃ n j,  WriteStep(n) ∧ j ≤ n ∧ pc(tr(j)) = PlayerSubs ∧ L ≤ px(tr(j))
 inRange_of_frame    :  the same,  ∀ n j,  WriteStep(n) → j ≤ n → pc(tr(j)) = PlayerSubs → P = posP(tr(j))     →   P₀ ≤ P
 Run.inRange         :  poleFrameCheck,  Run,  Start(seq 0),  fracCheck,  keepCheck,  AtCtl(seq 0)   →   P₀ ≤ P₂(g)
-pole_frame_check (private) :  poleFrameCheck(sy, m₀) = true   (native_decide)
+pole_frame_check (private, until round 21) :  poleFrameCheck(sy, m₀) = true   (native_decide)
 ```
 
 `P₀ = 256·L` is `poleP`. `posP(m) = 256·px(m) + fraction`. `Run.inRange` takes the frame's start from `FrameKeep.Frames.start`, `CleanK` from `keep.clean` (`Frames.cleanAt`), and `PosAt` from `posKeep`. The theorems without the ROM use the axioms `propext`, `Classical.choice`, `Quot.sound` only.
@@ -114,7 +114,7 @@ So it would replace one condition by three. `tiles` stays.
 
 Only the left end of the range is used. The height decides the row, but no bound on the height comes out.
 
-**Files.** `Theorems/PoleFrame.lean`, `Run` in `Theorems/PoleJoin.lean`, private `Proof/PoleFrame.lean` (`pole_frame_check`).
+**Files.** `Theorems/PoleFrame.lean`, `Run` in `Theorems/PoleJoin.lean`, private `Proof/PoleFrame.lean` (`pole_frame_check`) until round 21; since round 22 the route uses `pole_check_u` of [the reads near the pole](f-6-17-3-PoleTileRead.md), and `Proof/PoleFrame.lean` is not generated.
 
 **To reproduce.**
 ```

@@ -78,3 +78,5 @@ Removed from the assumptions: the height at the side pipe's entry of a run whose
 `Proof/EntryHeight.lean` now also runs `checkB` natively. It built in 355 s in the full `prove.py` of round 21 (about 45 s before, with the small player's walk only). In a program `checkB` alone takes 324 s (the search 44 s, then the walk over the table). This is much longer than a few seconds.
 
 **Files.** `Theorems/EntryHeightBig.lean`, `Theorems/Route.lean`; the private check is in `Proof/EntryHeight.lean` (`genEntryHeight` in `Main.lean`). The program `entry-head-diag check 0` runs the search and the check.
+
+**Round 22.** The field `height₂` is gone: the frame that enters the side pipe starts with a small or a big player ([the size through the room](d-2-5-4-4-SizeKeep.md)).

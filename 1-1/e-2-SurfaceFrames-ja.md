@@ -44,7 +44,7 @@ After(a, Q, b)     : b の f は Q のもの ∧ (b の fd は Q のもの ∨ (
                      ∧ ( (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = FF)
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
-AfterP(a, Q, b)    : 0 < v(Q)  →  (v(b) = v(Q) → P(b) = P(Q))                          After がまだ求めるもの（Moves のフィールド after）: 位置
+AfterP(a, Q, b)    : 0 < v(Q)  →  (v(b) = v(Q) → P(b) = P(Q))                          After がまだ求めるもの: 位置。keep は定理 OnFrames.keepAt、stop は Moves.stop
                                   ∧ (v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)
 After.of           : AfterP(a, Q, b) ∧ CollideE(a, Q, b) ∧ (fd(b) = fd(Q) ∨ (v(b) = 0 ∧ f(b) = 0)) ∧ (0 < v(Q) → bits(b) ∈ {FF, noLeft} ∨ v(b) = 0)
                      ∧ P(Q) = P(a) + 16·v(Q)  →  After(a, Q, b)
@@ -70,11 +70,11 @@ AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ hChec
 
 Arrive(M, x, n₀)   : pc(trM(n₀)) = PlayerCtrlRoutine で M のフレームの中、n₀ より前の命令はそこにない
 
-Moves(a, M, x, n₀) : after    スクロールの処理に来るどの Q でも AfterP(a, Q, b)     （state はいまは OnFrames のフィールド state）
+Moves(a, M, x, n₀) : stop     スクロールの処理に来るどの Q でも 0 < v(Q) ∧ v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256     （AfterP.stop。state はいまは OnFrames のフィールド state）
 far(a)             : 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
 
 Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Arrive(M, x, n₀) ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ AreaOK(v, a) ∧ v ∈ {1, 2, 3}
-                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ Moves  →  MovesAt
+                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ keep ∧ Moves  →  MovesAt      keep は各 Q で AfterP.keep（OnFrames.keepAt）
 at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  スクロールの処理に来る Q があって hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ AfterK(a, Q, b)
 one_of_moves  : modelOK ∧ MovesAt ∧ ¬Masked  →  (Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)) ∨ Hit(inAt(M, x, n₀), a, b)
 at_subsM      : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  スクロールの処理に来る Q があって (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
@@ -95,9 +95,12 @@ one_of_frames : OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ AreaRun(v) ∧ Cl
 
 ```
 state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       （前は Moves.state で、T までの clean なフレームだけ）
-collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j − 1), Q, seq j)          速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）
-           CollideS(M, Q, b) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
-moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves はどの Q でも AfterP になった
+collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j − 1), Q, seq j, Calls)  Calls: Q からフレームの中で押し戻しか補正の入口に来る
+           CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
+                                                  速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
+moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves は AfterP.stop だけになった
+posW     : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  PosW(R)       位置を番地で書くのは押し戻しと補正の内側だけ。その外で添字かポインタで書く命令は位置を書かない
+clampR   : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  ClampR(R)     R が補正の入口で 0 < v(R) なら、補正先は P(R)
 vAfter   : 1 ≤ j < J, j < g、Q はスクロールの処理  →  seq j での vHard の 5 つのバイトは Q のもの
            vHard = y, mf, vy, dummy, st              （vfd、origin、DTHJ と A は定理 OnFrames.kAt。vf は定理 OnFrames.vfAt）
 faceJ    : 1 ≤ j < J, j < g, Q はスクロールの処理, v(seq j) = 0, f(seq j) = 0  →  fd(seq j) = fd(Q)
@@ -158,6 +161,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `vAfter` のうち縦の力 | 定理 `OnFrames.vfAt`（`FaceKeep.vf_end`）: 縦の力は変わらないか、フレームはジャンプ台への着地の値を持って地面の上で終わる。`vert_of` は `VStep` を出し、`vCheck` は地面の上で両方の値を追う。`vAfter` が求めるのは 5 つのバイト。新しく `guardE` の `FrameKeep.stateE`（2 バイト）、`numbersCheck` の中の確認 `vfCheck`（[下](#スクロールの処理からあと-縦の力)） |
 | `AfterR.fd`: `T` までの clean な状態からのフレームの終わりの向きは、スクロールの処理のもの | 定理 `FaceKeep.keepZ_end`（向きは変わらないか、フレームは速さ 0 とサブ速さ 0 で終わる）と、`Hit` だけの場合を持つ `OneFrame`（`hit_of_stop`）。新しく `faceJ`（`J` より前で、速さ 0 とサブ速さ 0 で終わるフレーム）、`guardE` の中の `FrameKeep.faceE`（2 バイト）、`numbersCheck` の中の確認 `zCheck`（[下](#スクロールの処理からあと-向きサブ速さ当たり判定のビット)） |
 | `AfterR.coll`: スクロールの処理で右へ動くフレームは、何もしないか、左をふさぐか、当たり | 当たり判定のビットは定理 `FaceKeep.bits_end`、速さは `CollideKeep.speed_end`。`Moves.after` はいまは `AfterP`: 位置。新しく `numbersCheck` の中の確認 `bCheck` |
+| `AfterP.keep`: スクロールの処理で右へ動き、その速さで終わるフレームは位置を保つ。`collide` の位置もそのフレームと、呼び出しのないフレームで | 定理 `OnFrames.keepAt`（`PositionKeep.keep_frame`）と `OnFrames.stillAt`（`PositionKeep.still_frame`）。`Moves` は `stop` だけ。`collide` はそのフレームの位置を求めない（新しい引数 `Calls`）。新しく 1 命令ずつのフィールド `posW`、`clampR`、`numbersCheck` の中の確認 `pCheck`（[位置を保つフレーム](e-2-10-3-8-PositionKeep-ja.md)） |
 | `collide` のサブ速さの部分（`CollideR.f`）: サブ速さは変わらない | 速さ 0 とサブ速さ 0 で終わるフレームのほかは定理 `FaceKeep.keepZ_end`。`collide` はいまは `CollideS`: 位置と、そう終わるフレームのサブ速さ |
 | `After.storedQ`: スクロールの処理での覚えている速さはそこでの `\|v\|` | 定理 `storedQ_of`: `FrameModel.stored_path` の歩きと `AfterKeep.subs_once`。新しく `numbersCheck` の中の確認 `storedOK` と、`TopSpeed.frictionCheck`（`SurfaceRun.Statement` のフィールド `fric`） |
 
@@ -400,7 +404,7 @@ faceE            = PlayerFacingDir, Player_X_MoveForce          （FrameKeep.fac
 finZ(B)          : B がまだそのバイトを追っている ∨ （B で速さとサブ速さが 0 と分かっている）
 keepZ_end        : ctrlCheck ∧ zCheck(v) ∧ StartK(M) ∧ (∀ n, CleanK_E(trM(n)) ∧ ¬CtlStore(trM(n))) ∧ AreaOK(v, M) ∧ Arrive(M, x, n₀)
                    →  ∀ k ≥ n₀, pc(trM(k)) = PlayerSubs  →  ∀ y ∈ zI,  y(frame(M, x)) = y(trM(k)) ∨ (v(frame(M, x)) = 0 ∧ f(frame(M, x)) = 0)
-CollideS.toR     : CollideS(M, Q, b) ∧ (f(b) = f(Q) ∨ (v(b) = 0 ∧ f(b) = 0))  →  CollideR(M, Q, b)
+CollideS.toR     : CollideS(M, Q, b, c) ∧ (f(b) = f(Q) ∨ (v(b) = 0 ∧ f(b) = 0)) ∧ (0 < v(Q) ∧ v(b) = v(Q) → P(b) = P(Q)) ∧ (¬c → P(b) = P(Q))  →  CollideR(M, Q, b)
 ```
 
 * **向き.** `After.fd` はいまは `fd(b) = fd(Q) ∨ (v(b) = 0 ∧ f(b) = 0)` で、上の定理です（`MovesAt.face`）。向きがスクロールの処理のものなら、フレームは前と同じく `Pre` です。フレームが速さ 0 で終わるなら、`After.coll` からそのフレームは `Hit` です（`hit_of_stop`）: `coll` の 1 つ目の場合は `v(Q) = 0` を出すので `P(b) = P(Q) = P(a)`、2 つ目の場合は起こらず、3 つ目は当たりです。`OneFrame` は `Pre` のない `Hit` を許し、`step_of_one` はそれに当たりを出します。なので `T` までの clean な状態からのフレームでは、向きはもう仮定ではありません。

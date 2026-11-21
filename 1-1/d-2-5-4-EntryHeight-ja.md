@@ -2,7 +2,7 @@
 
 # 横の土管の入口の高さ
 
-**主張.** 部屋のフレームが小さいプレイヤーで始まり、横の土管のルーチンで終わるなら、そのフレームは基準の入口の高さで終わります。ROM の 1 つの確認（部屋のフレームの歩き）で証明しました。そこで `Route.Run` は、入るフレームが小さいプレイヤーで始まる走りには、横の土管の入口の高さ（`Player_Y_Position`）を求めません。入るフレームがほかの大きさで始まる走りには、まだ求めます（新しいフィールド `height₂`）。`chg.entry₂` は 9 バイトでなく 8 バイトを求めます（1-1-d-2-5）。[画面のバッファ](d-2-5-5-EntryBuffer-ja.md) と合わせると 3 バイトです。
+**主張.** 部屋のフレームが小さいプレイヤーで始まり、横の土管のルーチンで終わるなら、そのフレームは基準の入口の高さで終わります。ROM の 1 つの確認（部屋のフレームの歩き）で証明しました。そこで `Route.Run` は、入るフレームが小さいプレイヤーで始まる走りには、横の土管の入口の高さ（`Player_Y_Position`）を求めません。ラウンド 21 で大きいプレイヤーでも証明しました（[EntryHeightBig](d-2-5-4-3-EntryHeightBig-ja.md)）。ラウンド 22 で、入るフレームがこの 2 つの大きさのどちらかで始まることを証明しました（[SizeKeep](d-2-5-4-4-SizeKeep-ja.md)）: フィールド `height₂` はなくなり、新しいフィールドはありません。`chg.entry₂` は 9 バイトでなく 8 バイトを求めます（1-1-d-2-5）。[画面のバッファ](d-2-5-5-EntryBuffer-ja.md) と合わせると 3 バイトです。
 
 `m[i]` は `m` の RAM のバイト `i` です。`frame(m, i)` は入力 `i` での `m` の 1 フレーム、`tr(j)` はその `j` 命令目の機械です。`seq(n)` と `inp(n)` は、走りのフレーム `n` が始まるときの機械とその入力です。`rt(m)`、`y(m)`、`size(m)` はルーチンのバイト、高さ、プレイヤーの大きさです。`e_s` は横の土管のルーチン、`r` は部屋の基準の機械（小さいプレイヤー）、`y_e` は基準の入口の高さです。`b₁` は部屋の最初の操作、`a₂` は横の土管の入口です。`RoomCond`、`SiteOK` は [部屋での画面のページ](d-2-4-ScreenPage-ja.md) のものです。`K_T` は [部屋のブロックの地図](c-7-12-RoomMap-ja.md) のビットです: 部屋のバイト、ブロックバッファの各バイトで地図が 0 のビット、画面のバイト。
 
@@ -18,16 +18,17 @@ height_frame    :  WalkOK(finY),  RoomCond(K_Y, m),  ∀ j, SiteOK(tr(j)),  rt(f
 height_of_rows  :  [b, a) での RoomMap.map_of_rows の仮定,  確認,  b ≤ k < a,
                    size(seq k) = size(r),   rt(frame(seq k, inp k)) = e_s           →   y(frame(seq k, inp k)) = y_e
 
-Run.height₂     :  size(seq(a₂ − 1)) = size(r)   ∨   size(seq(a₂ − 1)) = 0   ∨   y(seq a₂) = y_e    （フィールド。真ん中はラウンド 21 から）
+Run.size₁       :  size(seq b₁) = size(r)   ∨   size(seq b₁) = 0                       （定理、ラウンド 22、SizeKeep）
+Run.size₂       :  size(seq(a₂ − 1)) = size(r)   ∨   size(seq(a₂ − 1)) = 0              （定理、SizeKeep）
 Run.y₂          :  y(seq a₂) = y_e                                                    （定理）
 entryAt_of_y    :  m[y] = y_e  ∧  EntryAt(R₈, m)   →   EntryAt(R₉, m)
 ```
 
 `R₉` は `restIdxA` の 9 バイト、`R₈ := R₉ \ {y}` です（`restIdxY`）。`EntryAt` は [横の土管の入口のルーチン](d-2-5-2-EntryRoutine-ja.md) のものです。
 
-**`Run.y₂`.** `b₁ < a₂` です（`Run.b₁_lt_a₂`）。だからフレーム `a₂ − 1` は部屋のフレームで、横の土管のルーチンで終わります（`Run.rt₂`）。`size(seq(a₂ − 1)) = size(r)` なら `height_of_rows` が高さを出します。そうでなければ `height₂` が出します。
+**`Run.y₂`.** `b₁ < a₂` です（`Run.b₁_lt_a₂`）。だからフレーム `a₂ − 1` は部屋のフレームで、横の土管のルーチンで終わります（`Run.rt₂`）。そのフレームは `size(r)` か 0 で始まります（`Run.size₂`）。`size(seq(a₂ − 1)) = size(r)` なら `height_of_rows` が高さを出します。0 なら `EntryHeightBig.height_of_rowsB` が出します。
 
-Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`、`lowA`、`zoneY`、`preY`、`stepY`、`finY`、`walkY`、`mix64`、`keyY`、`normY`、`Opts`、`optsY`、`putY`、`routeY`、`runY`、`searchY`、`searchOf`、`cfgOf`、`walkCheckY`、`cov_top2`、`cov_top1`、`cov_topY`、`cov_lowA`、`cov_zoneY`、`cov_preY`、`s_stepY`、`LiveY`、`cover_liveY`、`live_stepY`、`frame_of_walkY`、`WalkOK`、`walkOK_of_check`、`frame_end`、`height_frame`、`sizeI`、`heightI`、`hpOf`、`aidsY`、`knownY`、`heightCheck`、`refsCheck`、`Facts`、`factsOf`、`height_of_rows`）、`Theorems/Route.lean`（`restIdxY`、`RoomChecks.height`、`Run.height₂`、`Run.y₂`、`entryAt_of_y`、`Run.chgK`）、非公開の `Proof/EntryHeight.lean`（`entry_height_walk`、`entry_height_refs`、`height_facts`）。公開のファイルにゲームのデータはありません。`height_frame` と `height_of_rows` が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
+Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`、`lowA`、`zoneY`、`preY`、`stepY`、`finY`、`walkY`、`mix64`、`keyY`、`normY`、`Opts`、`optsY`、`putY`、`routeY`、`runY`、`searchY`、`searchOf`、`cfgOf`、`walkCheckY`、`cov_top2`、`cov_top1`、`cov_topY`、`cov_lowA`、`cov_zoneY`、`cov_preY`、`s_stepY`、`LiveY`、`cover_liveY`、`live_stepY`、`frame_of_walkY`、`WalkOK`、`walkOK_of_check`、`frame_end`、`height_frame`、`sizeI`、`heightI`、`hpOf`、`aidsY`、`knownY`、`heightCheck`、`refsCheck`、`Facts`、`factsOf`、`height_of_rows`）、`Theorems/Route.lean`（`restIdxY`、`RoomChecks.height`、`Run.size₁`、`Run.size₂`、`Run.y₂`、`entryAt_of_y`、`Run.chgK`）、非公開の `Proof/EntryHeight.lean`（`entry_height_walk`、`entry_height_refs`、`height_facts`）。公開のファイルにゲームのデータはありません。`height_frame` と `height_of_rows` が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
 
 ## しくみ
 
@@ -78,7 +79,7 @@ Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`�
 | 部屋のムービーのフレームから自分の入力、小さい（400 走り） | 164,375 | 142 | 142 | 142 | 142 | 176 px | 142 |
 | 同じ、大きい | 161,042 | 151 | 151 | 0 | 151 | 176 px | 151 |
 
-大きいプレイヤーでは `height₂` の左側は偽で、右側が成り立ちます。
+大きいプレイヤーでは古いフィールド `height₂`（ラウンド 15）の左側は偽で、右側が成り立ちます。
 
 ## ほかのパートから使うもの
 
@@ -94,9 +95,11 @@ Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`�
 
 仮定からなくなったもの: 入るフレームが小さいプレイヤーで始まる走りでの、`entry₂` の高さ。加わったもの: `height₂`。前の仮定から出ます。
 
+ラウンド 22（[SizeKeep](d-2-5-4-4-SizeKeep-ja.md)）: なくなったもの `height₂`。加わったフィールドはなし。縦の土管の入口と最初の切り替えの出口が大きさのバイトのビット 1 から 7 を知り（`PipeChangeEnd.entryMasks`、`exitMasks`）、`chg.upCleanU` のガードがこのバイトを守ります。
+
 ## 仮定（Lean で証明していない）
 
-* `height₂`: 入るフレームは小さいプレイヤーか大きいプレイヤー（大きさのバイト 0）で始まる、または入口の高さは基準の入口のもの。ラウンド 21 から大きい場合も証明しました（[EntryHeightBig](d-2-5-4-3-EntryHeightBig-ja.md)）。仮定に残るのは、大きさのバイトのほかの値だけです。
+* ラウンド 22 から、このページのものはありません: 入るフレームの大きさは証明しました（[SizeKeep](d-2-5-4-4-SizeKeep-ja.md)）。ラウンド 21 まではフィールド `height₂` が、入るフレームでの大きさか高さを求めていました。
 * 部屋の各命令の `SiteOK`（`chg.roomSites`）。前と同じです。
 
 **ファイル.** `Theorems/EntryHeight.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/EntryHeight.lean`（`Main.lean` の `genEntryHeight`）。
@@ -115,3 +118,7 @@ Lean: `Theorems/EntryHeight.lean`（`HP`、`bitSet`、`top2`、`top1`、`topY`�
 ## ラウンド 21: 大きいプレイヤー
 
 [EntryHeightBig](d-2-5-4-3-EntryHeightBig-ja.md) は、大きいプレイヤー（大きさのバイト 0）で始まるフレームの高さを、新しい歩きで証明します。頭の確認の前で高さを分け、頭の読みで横の位置とページを分け、ブロックバッファのルーチンの `ADC #0` でページを残し、読みの場所がわかるところでは地図のバイトを読みます（各命令の `Solid`）。8,326,333 ステップに失敗はなく、192 px の終わりもありません。`Run.y₂` は大きいプレイヤーにこの歩きを使います。`height₂` には真ん中の選択肢 `size(seq(a₂ − 1)) = 0` が増えました。小さいプレイヤーの証明は、このページの歩きのままです。
+
+## ラウンド 22: 部屋を通る大きさ
+
+[SizeKeep](d-2-5-4-4-SizeKeep-ja.md) は、部屋のフレームがプレイヤーの大きさを保つことを証明します（大きさのバイトを基準の値と 0 にした部屋のフレームの歩き 2 つ、ネイティブでそれぞれ約 3 秒）。部屋の最初の操作で、最初の切り替えの段は大きさのバイトのビット 1 から 7 を知ります（縦の土管の入口と出口がマスクで持つ、`Run.size₁`）。だから入るフレームは基準の大きさか 0 で始まります（`Run.size₂`）。`Run.y₂` は自分のフィールドを使いません: `height₂` はなくなり、新しいフィールドはありません。

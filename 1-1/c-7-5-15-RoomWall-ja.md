@@ -2,7 +2,7 @@
 
 # 部屋で床のほかに立つフレーム
 
-[地下の部屋をつなぐ](c-5-RoomJoin-ja.md) のフィールド `stand_wall` は次のことを言います。`C + 51` より前で、床のほかに立つのは `hstep` に従わないフレームの終わりだけです。本物のフレームでは、そのように立つのは部屋の左の壁の列に着地するときです。同じフレームで横の判定が壁を見つけ、`ImpedePlayerMove` が速さを 0 にして 1 ピクセル右へ押します。このページは、1 フレームのこの部分を、移動の終わりからフレームの終わりまで機械の上で証明します。部分的な結果です。フィールド `stand_wall` は残ります。
+[地下の部屋をつなぐ](c-5-RoomJoin-ja.md) のフィールド `stand_wall` は（項目 1-1-c-7-5-16 より前は）次のことを言っていました。`C + 51` より前で、床のほかに立つのは `hstep` に従わないフレームの終わりだけです。本物のフレームでは、そのように立つのは部屋の左の壁の列に着地するときです。同じフレームで横の判定が壁を見つけ、`ImpedePlayerMove` が速さを 0 にして 1 ピクセル右へ押します。このページは、1 フレームのこの部分を、移動の終わりからフレームの終わりまで機械の上で証明します。[落下の最初の立ち](c-7-5-16-FirstStand-ja.md) がこれを道筋につなぎます。
 
 ## 主張
 
@@ -49,11 +49,9 @@ ROM の確認は非公開の `Proof/RoomWall.lean` にあります（`room_wall`
 
 ## 残るもの
 
-フィールド `stand_wall` は残ります。`C + 34` より前を `not_follow_of` から証明するには、まだ次が要ります。
+[落下の最初の立ち](c-7-5-16-FirstStand-ja.md) は `wall_frame` を本物の機械の上で使い（`InRoom.wall`、`Route.Run.roomWall`）、落下の最初の立ちについて `Q` での条件を証明します（`RoomRun.stand_first`）。フィールド `stand_wall` は、それより前に状態 0 で終わるフレームがあるときの立ちだけを求めるようになりました。ここでまだ証明していないこと:
 
-- `C + 34` より前で床のほかに立って終わるフレームでの `hq`。移動の終わりでの `wall_at` の条件（`x < 16` はフィールド `stand_P` と移動から。高さ 32〜206。縦のページ 1。ページ 0。状態。`vy ≥ 0`）と、`wall_frame` が求める本物の機械でのフレームの事実（部屋の条件、`SiteOK`、`Solid`、`Q` での `Good` とスタック、フレームの時間、フレームがプレイヤーのルーチンの中で終わること）です。`Route.Run.roomLand` が `InRoom.land` のために与えるのと同じものです。
-- `hQ`。空中で始まるフレームでは `InRoom.land`、立って始まるフレームでは `InRoom.floor` が与えます。
-- `stand_fast` は `C + 34` より前だけです。`C + 34` から `C + 50` のフレームでは速さを与えるものがありません。これらのフレームは `wall_turn` が（`st_ne` を通して）使います。
+- `stand_fast` は `C + 34` より前だけです。`C + 34` から `C + 50` のフレームでは速さを与えるものがありません。
 - `wall_frame` は `Q` の速さが 0 か負であることを求めます。速さが正だと、壁の列への着地で速さは残ります（`ImpedePlayerMove` は右向きの速さを残します）。`C + 34` より前で `Follow` のもとでは、速さは負です（上のとおり）。本物のフレームで、正の速さで壁の列に着地するものはありません。壁の列の中で終わるフレームが要るからです。
 
 **ファイル.** `Theorems/RoomWall.lean`（`retBG`、`cellsW`、`keysW`、`cutW`、`endOK`、`impCut0`、`impCut`、`stop1`、`goal1`、`check1`、`check2`、`speeds`、`family1`、`family2`、`cellsOKW`、`endOK_spec`、`wall_end`、`cutW_eq`、`at_cutW`、`cells_of_familyW`、`refCheckW`、`Checks`、`wall_at`、`hW`、`phW`、`finW`、`apartW`、`after_G`、`checkW`、`wall_frame`、`negCheck`、`neg_of_check`、`not_follow_of`）。非公開の `Proof/RoomWall.lean`（`room_wall`、`room_wall_after`、`room_wall_apart`、`room_wall_neg`）。プログラム `room-wall-family`、`room-wall-real`、`room-wall-check`。

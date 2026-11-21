@@ -41,6 +41,7 @@ All other bytes are free: Mario's position, speed and size, the score, the coins
 | `Square1SoundQueue` | bit 4 | one sound |
 | `SprDataOffset_Ctrl` | bit 0 | |
 | `PlayerStatus` | bit 0 | small or big Mario. Fire Mario does not meet `Entry` |
+| `PlayerSize` | bit 0 | small or big Mario (round 22, [the size through the room](d-2-5-4-4-SizeKeep.md)) |
 | `GamePauseStatus` | bits 0, 7 | |
 | `AreaMusicBuffer_Alt` | bit 2 | the underground song in the saved song |
 
@@ -65,7 +66,7 @@ So on the pipe's frames: no enemy stands on a block that is being bumped, the ne
 * `Song(m)`: the 12 bytes of the song (`MusicData` (2), the four offsets, `NoiseDataLoopbackOfs`, the note counters and buffers) have the values of one of the 1,607 rows. On a frame that ends a part of the song, `GroundMusicHeaderOfs` is in the row too.
 * `Shape(m)`: the first screen buffer is empty, or it holds one record of 4 bytes of the palette.
 
-`Exit(m)` is `ExitCond(m)` of [the side pipe's last frames](d-2-3-SideChangeEnd.md) with the 21 bytes of the exit (`OperMode`, `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `CurrentPlayer`, `JoypadOverride`, `GameTimerExpiredFlag`, `AreaMusicBuffer`, `EventMusicBuffer`, `AreaMusicQueue`, `EventMusicQueue`, `Square1SoundQueue`, `Square2SoundQueue`, `NoiseSoundQueue`, `WorldNumber`, `PrimaryHardMode`) and the 6 bytes `PauseSoundBuffer`, `PauseSoundQueue`, `Square1SoundBuffer`, `Square2SoundBuffer`, `NoiseSoundBuffer`, `VRAM_Buffer_AddrCtrl`, with the values of `T`, the bits of `PlayerStatus` (bits 1 to 7) and of `AreaMusicBuffer_Alt` (all but bit 2) as in `T`, and `Song(m) ∧ Shape(m)`. The walk of the pipe's frames gives all of these from `Entry`, but `Quiet`, `Song` and `Shape`.
+`Exit(m)` is `ExitCond(m)` of [the side pipe's last frames](d-2-3-SideChangeEnd.md) with the 21 bytes of the exit (`OperMode`, `OperMode_Task`, `GameEngineSubroutine`, `ScreenRoutineTask`, `DisableScreenFlag`, `AreaPointer`, `EntrancePage`, `AltEntranceControl`, `HalfwayPage`, `CurrentPlayer`, `JoypadOverride`, `GameTimerExpiredFlag`, `AreaMusicBuffer`, `EventMusicBuffer`, `AreaMusicQueue`, `EventMusicQueue`, `Square1SoundQueue`, `Square2SoundQueue`, `NoiseSoundQueue`, `WorldNumber`, `PrimaryHardMode`) and the 6 bytes `PauseSoundBuffer`, `PauseSoundQueue`, `Square1SoundBuffer`, `Square2SoundBuffer`, `NoiseSoundBuffer`, `VRAM_Buffer_AddrCtrl`, with the values of `T`, the bits of `PlayerStatus` and `PlayerSize` (bits 1 to 7) and of `AreaMusicBuffer_Alt` (all but bit 2) as in `T`, and `Song(m) ∧ Shape(m)`. The walk of the pipe's frames gives all of these from `Entry`, but `Quiet`, `Song` and `Shape`.
 
 `NoStart(m, i)` says: if `m` is in the game core with a routine other than the pipe's, the input `i` has no Start.
 

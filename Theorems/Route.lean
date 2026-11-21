@@ -10,6 +10,7 @@ import Theorems.RoomPair
 import Theorems.RoomBlocks
 import Theorems.RoomLand
 import Theorems.RoomFloor
+import Theorems.RoomWall
 import Theorems.PoleJoin
 import Theorems.CastleToLevel
 import Theorems.PipeChangeBound
@@ -36,6 +37,7 @@ import Theorems.UpClean
 import Theorems.AreaKeep
 import Theorems.EntryHeight
 import Theorems.EntryHeightBig
+import Theorems.SizeKeep
 import Theorems.EntryBuffer
 
 /-!
@@ -280,8 +282,9 @@ def restIdxR (sy : Syms) (nmS : Names) (m0 : Machine) : List Nat :=
 def restIdxA (sy : Syms) (nmS : Names) (m0 : Machine) : List Nat :=
   (restIdxR sy nmS m0).filter fun i => i != AreaKeep.areaI nmS
 
-/-- the 8 bytes of `restIdxA` without the player's height. The height comes from the room's entering frame when it starts with a small player (`EntryHeight`)
-or a big one (`EntryHeightBig`), `Run.y₂`; for another value of the size byte `Run.height₂` asks it. -/
+/-- the 8 bytes of `restIdxA` without the player's height. The height comes from the room's entering frame, which starts with a small player (`EntryHeight`)
+or a big one (`EntryHeightBig`): the rows of the first change know it at the room's first control and the room's frames keep it (`SizeKeep`, `Run.size₁`,
+`Run.size₂`), `Run.y₂`. -/
 def restIdxY (sy : Syms) (nmS : Names) (m0 : Machine) : List Nat :=
   (restIdxA sy nmS m0).filter fun i => i != EntryHeight.heightI sy
 
@@ -511,8 +514,10 @@ structure RoomChecks (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChan
   area : AreaKeep.Facts sy m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) nmS
   /-- the walks of the room's frame that follow the height (with the player's size of the reference known, and with a big player and the map's bytes on each
   instruction), the references' height, and the checks of `RoomBlocks`: with them a frame of the room that starts with a small or a big player and ends with the
-  side pipe's routine ends with the height of the reference entry (`EntryHeight`, `EntryHeightBig`, `Run.y₂`) -/
-  height : EntryHeightBig.Facts sy nm₁ d₁ nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0))
+  side pipe's routine ends with the height of the reference entry (`EntryHeight`, `EntryHeightBig`, `Run.y₂`). And the two walks of the room's frames with the
+  size byte at the reference's value and at 0, and the rows of the first change with bits 1 to 7 of the size: the room's first control has the size of a small or a
+  big player, and the room's frames keep it (`SizeKeep`, `Run.size₁`, `Run.size₂`) -/
+  height : SizeKeep.Facts sy nm₁ d₁ nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0))
   /-- the walk of the room's frame with the control of the screen's buffers known at its start, and the references agree on the other bytes that the entry asks:
   with them a frame of the room that starts with the control of the reference and ends with the side pipe's routine ends with the five bytes of the first screen
   buffer of a reference (`EntryBuffer`, `Run.buf₂`) -/
@@ -677,18 +682,11 @@ structure Run (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) (rN : RoomJoin.Nums
   clock : Frames q E ⟨pipe.E, z₁, room.C, room.E, z₂, Cs, Cs + pole.g, Cs + pole.c⟩
   /-- the two changes of area, on the real machines of `base`. At the side pipe's entry it asks the 3 bytes of `restIdxB`; the routine comes from `room`'s entering
   frame (`Run.rt₂`), the level's number from the vertical pipe's entry (`Run.area₂`), where the press of Start on the title and the frames from control give it
-  (`Run.area₁`, a theorem since round 15; it was a field), the height from the entering frame or from `height₂` (`Run.y₂`), the screen
+  (`Run.area₁`, a theorem since round 15; it was a field), the height from the entering frame (`Run.y₂`, with the size from the rows, `Run.size₁`), the screen
   buffer's five bytes from the entering frame or from `buffer₂` (`Run.buf₂`), and `Run.chgK` is the changes with the 11 bytes -/
   chg : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS base clock.kind pipe.E room.C room.E Cs (restIdxB sy nmS m0)
   /-- the search for the side pipe's entry (`Base.a₂`) looks at least one frame past the room's first control. With it the room has a frame (`Run.b₁_lt_a₂`) -/
   dR_pos : 1 ≤ base.dR
-  /-- the frame that enters the side pipe starts with the player's size of the reference (small) or with the size 0 (big), or the height at the entry is the
-  reference entry's. For a small player the height is proved (`EntryHeight.height_of_rows`), and since round 21 for a big one (`EntryHeightBig.height_of_rowsB`:
-  the walk splits the height and the position before the head's read, and reads the map's bytes); `Run.y₂`. Before, `entry₂` asked the height of every run, and
-  round 15 to 20 asked it here of every run that does not start small. It stays assumed for the other values of the size byte. -/
-  height₂ : (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (EntryHeight.sizeI sy) = (ScreenPage.refR m0).ram.get! (EntryHeight.sizeI sy) ∨
-    (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (EntryHeight.sizeI sy) = 0 ∨
-    (base.seq (base.a₂ sy nmS m0)).ram.get! (EntryHeight.heightI sy) = (SideTransition.entry m0).ram.get! (EntryHeight.heightI sy)
   /-- the frame that enters the side pipe starts with the control of the screen's buffers of the reference (0: this frame's screen update empties the first buffer),
   or the five bytes of the first screen buffer at the entry are those of a reference of the entry. With the control at 0 the bytes are proved
   (`EntryBuffer.buffer_of_rows`, `Run.buf₂`); before, `entry₂` asked them of every run. The control is not 0 when the frame before erased a coin. -/
@@ -1161,10 +1159,32 @@ theorem entryAt_of_area (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) {m : 
     rw [ha, hV v hv hi]
   · exact hb i hi (List.mem_filter.2 ⟨hiL, bne_iff_ne.2 e⟩)
 
+/-- **At the room's first control the player's size is the reference's (small) or 0 (big)**: the machine there is in the rows of the first change (`ChangesK.run₁`,
+`inRowsT`), whose states know bits 1 to 7 of the size (`SizeKeep.size_of_rows`, the check `RoomChecks.height.rowsS`). The vertical pipe's entry knows these bits
+(`PipeChangeEnd.entryMasks`; `Run.entry₁` from the press of Start on the title and the frames from control), and the exit's list has them. `hR`, `hB`, `hK` are checks
+on the ROM. -/
+theorem Run.size₁ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    (R.base.seq (R.base.b₁ sy)).ram.get! (EntryHeight.sizeI sy) = (ScreenPage.refR m0).ram.get! (EntryHeight.sizeI sy) ∨
+      (R.base.seq (R.base.b₁ sy)).ram.get! (EntryHeight.sizeI sy) = 0 :=
+  SizeKeep.size_of_rows hR.height.rowsS ((R.chg.run₁ (R.entry₁ hB hK)).inRowsT hR.pipe R.chg.ctlFirst₁) R.chg.ctl₁
+
+/-- **The frame that enters the side pipe starts with the player's size of the reference (small) or 0 (big)** (it was the field `height₂`, with a third case):
+the room's first control has it (`Run.size₁`), and the room's frames keep it: each of them starts in the room's condition and meets `SiteOK` on each instruction
+(`SizeKeep.size_run`, the walks of `RoomChecks.height`). The frame before `a₂` is a frame of the room (`Run.b₁_lt_a₂`). `hR`, `hB`, `hK` are checks on the ROM. -/
+theorem Run.size₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    (R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (EntryHeight.sizeI sy) = (ScreenPage.refR m0).ram.get! (EntryHeight.sizeI sy) ∨
+      (R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (EntryHeight.sizeI sy) = 0 := by
+  have hlt := R.b₁_lt_a₂ hR hB hK
+  have he := R.entry₁ hB hK
+  exact SizeKeep.size_run hR.height R.base.next (R.chg.roomAt hR he) (R.size₁ hR hB hK) (e := R.base.a₂ sy nmS m0 - 1)
+    (fun n h1 h2 => R.chg.roomSites n h1 (by omega)) (fun n h1 h2 => R.chg.roomStay n h1 (by omega)) _ (by omega) (Nat.le_refl _)
+
 /-- **The height at the side pipe's entry is the reference entry's** (it was a byte of `entry₂`, now the theorem). The frame before `a₂` is a frame of the room
-(`Run.b₁_lt_a₂`) and it ends with the side pipe's routine (`Run.rt₂`). If it starts with the reference's size, the walk of `EntryHeight` gives the height
-(`EntryHeight.height_of_rows`, on the room's condition with the map's bits of `RoomMap.cond_of_rows`); if it starts with the size 0 (big), the walk of
-`EntryHeightBig` (`EntryHeightBig.height_of_rowsB`, with the map's bytes on each instruction of `RoomBlocks.blocks_run_trace`); else `height₂` asks it. `hR`, `hB`,
+(`Run.b₁_lt_a₂`) and it ends with the side pipe's routine (`Run.rt₂`); it starts with the reference's size or with the size 0 (`Run.size₂`). With the reference's
+size the walk of `EntryHeight` gives the height (`EntryHeight.height_of_rows`, on the room's condition with the map's bits of `RoomMap.cond_of_rows`); with the size
+0 (big) the walk of `EntryHeightBig` (`EntryHeightBig.height_of_rowsB`, with the map's bytes on each instruction of `RoomBlocks.blocks_run_trace`). `hR`, `hB`,
 `hK` are checks on the ROM. -/
 theorem Run.y₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
@@ -1173,7 +1193,7 @@ theorem Run.y₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleS
   have he := R.entry₁ hB hK
   obtain ⟨k, hk⟩ : ∃ k, R.base.a₂ sy nmS m0 = k + 1 := ⟨R.base.a₂ sy nmS m0 - 1, by omega⟩
   have hrt := R.rt₂ hR hB hK
-  rcases R.height₂ with hs | hs | hy
+  rcases R.size₂ hR hB hK with hs | hs
   · rw [hk] at hrt hs ⊢
     rw [Nat.add_sub_cancel] at hs
     rw [R.base.next k] at hrt ⊢
@@ -1185,7 +1205,6 @@ theorem Run.y₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleS
     obtain ⟨v0, hrows⟩ := hR.height.rows
     exact EntryHeightBig.height_of_rowsB hR.map hR.mapStart hR.height.big hR.height.blocks hrows R.base.next ((R.chg.run₁ he).inRowsT hR.pipe R.chg.ctlFirst₁)
       R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (show R.base.b₁ sy ≤ k by omega) (show k < R.base.a₂ sy nmS m0 by omega) hs hrt
-  · exact hy
 
 /-- **The 9 bytes from the 8 and the height**: each reference of the entry that lists the height has the reference entry's value (`EntryHeight.refsCheck`) -/
 theorem entryAt_of_y (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) {m : Machine}
@@ -1640,6 +1659,56 @@ theorem Run.roomLand {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
   obtain ⟨htr, hfq⟩ := FrameModel.trace_inFrame hI hfj hIn htime k' (Nat.le_refl k')
   exact ⟨j + k', Nat.le_add_right _ _, hfq, by rw [htr]; exact hst'⟩
 
+/-- **A frame of `room` in the air before the entering frame whose end of the move meets `RoomJoin.WallQ` ends with the state not 0, or in the state 0 at the floor's
+height, or with the speed 0**, on the real machines: `RoomFall.land_frame` up to the end of the move (`Good`, the stack of the player's routine, the vertical bytes of
+`vstepR`), `Solid` there by `RoomBlocks.blocks_run_trace`, and `RoomWall.wall_frame` from there to the frame's end, which is in the player's routine (`roomStay`). `hWl`,
+`hcw`, `hap` are the checks of `RoomWall`. -/
+theorem Run.roomWall {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hF : RoomFall.FChecks sy nmS m0 rN.h) (hI : FrameModel.idleAt (FrameModel.Rom.of m0) (ScreenPage.placesR sy nmS m0).idle = true)
+    (hQ : RoomPair.QuadWalks sy nmS m0) (hP : RoomPair.Checks sy nmS m0 nm₁ d₁ rN.vStart)
+    (hW : RoomBlocks.BChecks sy nmS m0) (hRw : RoomBlocks.rowsCheckR sy nm₁ d₁ nmS m0 rN.vStart = true)
+    (hWl : RoomWall.Checks sy nmS m0) (hcw : RoomWall.checkW sy nmS m0 = true) (hap : RoomWall.apartW sy (ScreenPage.placesR sy nmS m0) = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
+    {n : Nat} (hC : R.room.C ≤ n) (hE : n + 1 < R.room.E) (hst0 : peek (R.room.fm n) sy.Player_State ≠ 0) {k : Nat}
+    (hAt : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k))
+    (hd : peek (R.room.fm n) sy.Player_State = 1 → peek (R.room.fm n) sy.DiffToHaltJump = 1)
+    (hp : peek (R.room.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (R.room.fm n) sy.A_B_Buttons &&& 0x80) :
+    ∃ j, k ≤ j ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).frame = (R.room.fm n).frame ∧
+      VertModel.vsOf sy (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j) =
+        RoomJoin.vstepR sy m0 (VertModel.vsOf sy (R.room.fm n)) (peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) ∧
+      (RoomJoin.WallQ sy (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j) →
+        peek (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) sy.Player_State ≠ 0 ∨
+        (peek (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) sy.Player_State = 0 ∧
+          peek (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) sy.Player_Y_Position = (Jump.groundY sy).toUInt8) ∨
+        peek (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) sy.Player_X_Speed = 0) := by
+  obtain ⟨hk0, hk1⟩ := R.roomIdx hC (show n < R.room.E by omega)
+  obtain ⟨_, hk2⟩ := R.roomIdx (n := n + 1) (by omega) hE
+  have hm := R.roomMany
+  have hlt := R.room.ix_lt (k := n + 1 - R.room.C) (by omega)
+  have h1 := (R.room.ix_at (k := n + 1 - R.room.C) (by omega) (by omega)).1
+  rw [show n + 1 + 1 - R.room.C = n + 1 - R.room.C + 1 by omega] at hk2
+  have hk : R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1 < R.base.a₂ sy nmS m0 := by omega
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have hcond := RoomMap.cond_of_rows hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1
+  have hsites := R.chg.roomSites _ hk0 hk1
+  have hstay := R.chg.roomStay (R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1) (by omega) hk
+  rw [R.base.next] at hstay
+  have hq := RoomPair.quad_run hQ hP hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1
+  have hst : peek (R.room.fm n) sy.Player_State = 1 ∨ peek (R.room.fm n) sy.Player_State = 2 := by
+    rcases hq.st with e | e | e
+    · exact absurd e hst0
+    · exact Or.inl e
+    · exact Or.inr e
+  have htime := fun j hj => late_of (hsites j) hj
+  obtain ⟨j, hkj, hqj, hfj, hg, hs, hv, _⟩ := RoomFall.land_frame (CtrlKeep.pauseI_lt sy m0) (RoomVert.okV_of_check hV.a) (fun B hB => RoomVert.finA_pc hB)
+    (RoomVert.okV_of_check hF.c) rfl hF.apart hV.air hI hcond hsites hAt htime hst hd hp hstay
+  refine ⟨j, hkj, hqj, hfj, hv, fun hw => ?_⟩
+  have hsolid := RoomBlocks.blocks_run_trace hW hRw hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1 j hfj
+  have hsp : (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Speed) ∈ RoomWall.speeds :=
+    RoomWall.speeds_of hw.v
+  exact RoomWall.wall_frame hWl hcw hap hM hcond hsites hI htime hfj hqj hg hs hsolid hw.high hw.page hw.x hw.y1 hw.y2 hw.st hw.vy hsp hstay
+
 /-- **Every frame of `room` before the entering frame that starts standing with no jump in its input at the player's routine ends as `RoomJoin.StandNext` allows**, on the
 real machines: `RoomStand.stand_room` on the frames of `base` in the room, as `Run.roomAir`. The frame starts in the room's condition (`RoomMap.cond_of_rows`), its instructions
 meet `SiteOK` (`roomSites`), and it ends in the player's routine (`roomStay`). `hV`, `hSt` are the checks of `RoomVert` and `RoomStand`. -/
@@ -1843,6 +1912,7 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hW : RoomBlocks.BChecks sy nmS m0) (hRw : RoomBlocks.rowsCheckR sy nm₁ d₁ nmS m0 rN.vStart = true)
     (hL : RoomLand.Checks sy nmS m0 rN.landX (RoomJoin.landY sy)) (hH : OpenVert.vertAirHOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hFl : RoomLand.Checks sy nmS m0 rN.landX (Jump.groundY sy).toUInt8) (hVS : VertStand.standOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hWl : RoomWall.Checks sy nmS m0) (hcw : RoomWall.checkW sy nmS m0 = true) (hap : RoomWall.apartW sy (ScreenPage.placesR sy nmS m0) = true)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     R.room.InRoom :=
   ⟨R.roomMany, R.roomKeep hT₁ hM hS hV.vert hB hK, R.roomMouthE hT₁ hM hS hF hEnd hRest hR hB hK, R.roomBump hT₁ hM hS hB hK,
@@ -1856,7 +1926,8 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     fun _ hC hE hst _ hAt hd hp => R.roomLand hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hW hRw hL hB hK hC hE hst hAt hd hp,
     fun n hC hE => R.roomKeepA hT₁ hM hS hV.vert hB hK n hC hE (RoomVert.I sy.Player_Y_HighPos) (by simp [RoomVert.vKeepA]),
     fun _ hC hE hst _ hAt hd hp hhi => R.roomHigh hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hH hB hK hC hE hst hAt hd hp hhi,
-    fun _ hC hE hst _ hAt hn hp hhi => R.roomFloor hT₁ hM hS hV.vert hV.stand hH hVS hV.idle hW hRw hFl hB hK hC hE hst hAt hn hp hhi⟩
+    fun _ hC hE hst _ hAt hn hp hhi => R.roomFloor hT₁ hM hS hV.vert hV.stand hH hVS hV.idle hW hRw hFl hB hK hC hE hst hAt hn hp hhi,
+    fun _ hC hE hst _ hAt hd hp => R.roomWall hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hW hRw hWl hcw hap hB hK hC hE hst hAt hd hp⟩
 
 /-- the frames after the timer's count: at least 33 -/
 theorem Run.hD (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hF : FlagRule.Checked fc (FlagRule.dataOf fc)) : 33 ≤ R.Df hF :=

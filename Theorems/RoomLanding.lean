@@ -8,7 +8,7 @@ variable {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} {b lim : N
 variable (r : RoomRun sy m N S b lim)
 
 /-- With no wall there is no stand strictly before the landing frame.
-Uses stand_wall and fall_first, and never land_at/floor_at_of. -/
+Uses stand_off_of (the field stand_wall and stand_first) and fall_first, and never land_at/floor_at_of. -/
 theorem no_stand_before_land (H : Checks sy m N) (hr : r.InRoom)
     (st : StartAt sy N (r.fe r.C)) (hw : NoWall sy m N r.fr r.C) :
     ∀ j, r.C < j → j < r.C+N.fall → (r.fr.vs j).st ≠ 0 := by
@@ -18,7 +18,7 @@ theorem no_stand_before_land (H : Checks sy m N) (hr : r.InRoom)
   obtain ⟨i, i1, i2, i3, i4⟩ := first_of (P := fun j => (r.fr.vs j).st = 0) (r.C + N.fall) ⟨j, h1, h2, h3⟩
   have h5 := r.fall_first H hr st (n := i) (by omega) i2 (fun k a b => i4 k a b)
   obtain ⟨i', rfl⟩ : ∃ i', i = i' + 1 := ⟨i - 1, by omega⟩
-  exact r.stand_wall i' (by omega) (by omega) i3 h5 (hw i' (by omega) (by omega))
+  exact r.stand_off_of H hr st i' (by omega) (by omega) (Or.inl (by omega)) i3 h5 (hw i' (by omega) (by omega))
 
 /-- The last prelanding vertical state belongs to the existing fall layer,
 without using the missing landing-state field. -/

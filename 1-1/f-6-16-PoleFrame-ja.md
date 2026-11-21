@@ -32,7 +32,7 @@ touch_right_of_left :  poleFrameCheck,  Touches,  StartK(fm g),  ∀ j,  CleanK(
                        →   ∃ n j,  WriteStep(n) ∧ j ≤ n ∧ pc(tr(j)) = PlayerSubs ∧ L ≤ px(tr(j))
 inRange_of_frame    :  同じ仮定,  ∀ n j,  WriteStep(n) → j ≤ n → pc(tr(j)) = PlayerSubs → P = posP(tr(j))     →   P₀ ≤ P
 Run.inRange         :  poleFrameCheck,  Run,  Start(seq 0),  fracCheck,  keepCheck,  AtCtl(seq 0)   →   P₀ ≤ P₂(g)
-pole_frame_check（非公開） :  poleFrameCheck(sy, m₀) = true（native_decide）
+pole_frame_check（非公開、21 回目まで） :  poleFrameCheck(sy, m₀) = true（native_decide）
 ```
 
 `P₀ = 256·L` は `poleP` です。`posP(m) = 256·px(m) + 端数` です。`Run.inRange` は、フレームの始まりを `FrameKeep.Frames.start` から、`CleanK` を `keep.clean`（`Frames.cleanAt`）から、`PosAt` を `posKeep` から取ります。ROM のない定理が使う公理は `propext`、`Classical.choice`、`Quot.sound` だけです。
@@ -114,7 +114,7 @@ pole_frame_check（非公開） :  poleFrameCheck(sy, m₀) = true（native_deci
 
 使うのは範囲の左端だけです。高さは読む行を決めますが、高さの範囲は出していません。
 
-**ファイル.** `Theorems/PoleFrame.lean`、`Theorems/PoleJoin.lean` の `Run`、非公開の `Proof/PoleFrame.lean`（`pole_frame_check`）。
+**ファイル.** `Theorems/PoleFrame.lean`、`Theorems/PoleJoin.lean` の `Run`、21 回目までは非公開の `Proof/PoleFrame.lean`（`pole_frame_check`）。22 回目からは[旗の近くの読み](f-6-17-3-PoleTileRead-ja.md)の `pole_check_u` を使い、`Proof/PoleFrame.lean` は作りません。
 
 **再現.**
 ```

@@ -44,7 +44,7 @@ After(a, Q, b)     : f of b is that of Q ∧ (fd of b is that of Q ∨ (v(b) = 0
                      ∧ ( (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = FF)
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
                        ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
-AfterP(a, Q, b)    : 0 < v(Q)  →  (v(b) = v(Q) → P(b) = P(Q))                          what After still asks (the field after of Moves): the position
+AfterP(a, Q, b)    : 0 < v(Q)  →  (v(b) = v(Q) → P(b) = P(Q))                          what After still asks: the position; keep is the theorem OnFrames.keepAt, stop is Moves.stop
                                   ∧ (v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)
 After.of           : AfterP(a, Q, b) ∧ CollideE(a, Q, b) ∧ (fd(b) = fd(Q) ∨ (v(b) = 0 ∧ f(b) = 0)) ∧ (0 < v(Q) → bits(b) ∈ {FF, noLeft} ∨ v(b) = 0)
                      ∧ P(Q) = P(a) + 16·v(Q)  →  After(a, Q, b)
@@ -70,11 +70,11 @@ AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ hChec
 
 Arrive(M, x, n₀)   : pc(trM(n₀)) = PlayerCtrlRoutine, in the frame of M, and no instruction before n₀ is there
 
-Moves(a, M, x, n₀) : after    AfterP(a, Q, b) at every Q at the scroll handler    (state is the field state of OnFrames now)
+Moves(a, M, x, n₀) : stop     at every Q at the scroll handler, 0 < v(Q) ∧ v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256    (AfterP.stop; state is the field state of OnFrames now)
 far(a)             : 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
 
 Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Arrive(M, x, n₀) ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ AreaOK(v, a) ∧ v ∈ {1, 2, 3}
-                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ Moves  →  MovesAt
+                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ keep ∧ Moves  →  MovesAt      keep is AfterP.keep at every Q (OnFrames.keepAt)
 at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  ∃ Q at the scroll handler, hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ AfterK(a, Q, b)
 one_of_moves  : modelOK ∧ MovesAt ∧ ¬Masked  →  (Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)) ∨ Hit(inAt(M, x, n₀), a, b)
 at_subsM      : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  ∃ Q at the scroll handler, (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
@@ -95,9 +95,12 @@ The fields that are assumed (`OnFrames`). All are in the field `frames` of `Run`
 
 ```
 state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       (it was Moves.state, on the clean frames up to T)
-collide  : 1 ≤ j < g, Q at the scroll handler  →  CollideS(seq (j − 1), Q, seq j)          the speed and, on most frames, the subspeed are theorems (OnFrames.collideAt)
-           CollideS(M, Q, b) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
-moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves is now AfterP at every Q
+collide  : 1 ≤ j < g, Q at the scroll handler  →  CollideS(seq (j − 1), Q, seq j, Calls)  Calls: from Q, in the frame, an instruction at the push's or the clamp's entry
+           CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
+                                                  the speed and, on most frames, the subspeed are theorems (OnFrames.collideAt); so is the position on a frame that keeps a speed to the right or makes no call (OnFrames.keepAt, OnFrames.stillAt)
+moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves is now AfterP.stop only
+posW     : 1 ≤ j < g, Q at the scroll handler, R an instruction from Q to the frame's end  →  PosW(R)       the position is stored by its address only inside the push and the clamp; outside them a store through an index or a pointer writes no byte of it
+clampR   : 1 ≤ j < g, Q at the scroll handler, R an instruction from Q to the frame's end  →  ClampR(R)     if R is the clamp's entry and 0 < v(R), the clamp's target is P(R)
 vAfter   : 1 ≤ j < J, j < g, Q at the scroll handler  →  at seq j the five bytes of vHard are those of Q
            vHard = y, mf, vy, dummy, st              (vfd, origin, DTHJ and A: the theorem OnFrames.kAt; vf: the theorem OnFrames.vfAt)
 faceJ    : 1 ≤ j < J, j < g, Q at the scroll handler, v(seq j) = 0, f(seq j) = 0  →  fd(seq j) = fd(Q)
@@ -158,6 +161,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | the vertical force's part of `vAfter` | theorem `OnFrames.vfAt` (`FaceKeep.vf_end`): the vertical force stays, or the frame ends on the ground with the value of a jumpspring's landing; `vert_of` gives `VStep`, and `vCheck` follows both values on the ground. `vAfter` asks five bytes. New: `FrameKeep.stateE` in `guardE` (two bytes), the check `vfCheck` in `numbersCheck` ([below](#after-the-scroll-handler-the-vertical-force)) |
 | `AfterR.fd`: the facing at the end of a frame from a clean state up to `T` is that of the scroll handler | theorem `FaceKeep.keepZ_end` (the facing stays, or the frame ends with the speed 0 and the subspeed 0), and `OneFrame` with `Hit` as a case of its own (`hit_of_stop`). New: `faceJ` (the frames before `J` that end with the speed 0 and the subspeed 0), `FrameKeep.faceE` in `guardE` (two bytes), the check `zCheck` in `numbersCheck` ([below](#after-the-scroll-handler-the-facing-the-subspeed-and-the-collision-bits)) |
 | `AfterR.coll`: a frame that moves right at the scroll handler leaves nothing, the block of Left, or a hit | the collision bits are the theorem `FaceKeep.bits_end`, the speed is `CollideKeep.speed_end`. `Moves.after` is now `AfterP`: the position. New: the check `bCheck` in `numbersCheck` |
+| `AfterP.keep`: a frame that moves right at the scroll handler and ends with that speed keeps the position; and `collide`'s position on that frame and on a frame that makes no call | the theorems `OnFrames.keepAt` (`PositionKeep.keep_frame`) and `OnFrames.stillAt` (`PositionKeep.still_frame`). `Moves` asks `stop` only; `collide` does not ask the position on these frames (new argument `Calls`). New: the fields `posW`, `clampR` on single instructions, the check `pCheck` in `numbersCheck` ([A frame that keeps a speed to the right](e-2-10-3-8-PositionKeep.md)) |
 | the subspeed's part of `collide` (`CollideR.f`): the subspeed stays | theorem `FaceKeep.keepZ_end` on every frame that does not end with the speed 0 and the subspeed 0. `collide` is now `CollideS`: the position, and the subspeed on the frames that end so |
 | `After.storedQ`: the stored speed at the scroll handler is `\|v\|` there | theorem `storedQ_of`: the walks of `FrameModel.stored_path` and `AfterKeep.subs_once`. New: the check `storedOK` in `numbersCheck`, and `TopSpeed.frictionCheck` (the field `fric` of `SurfaceRun.Statement`) |
 
@@ -400,7 +404,7 @@ faceE            = PlayerFacingDir, Player_X_MoveForce          (FrameKeep.faceE
 finZ(B)          : B still follows the byte ∨ (the speed and the subspeed are known to be 0 in B)
 keepZ_end        : ctrlCheck ∧ zCheck(v) ∧ StartK(M) ∧ (∀ n, CleanK_E(trM(n)) ∧ ¬CtlStore(trM(n))) ∧ AreaOK(v, M) ∧ Arrive(M, x, n₀)
                    →  ∀ k ≥ n₀, pc(trM(k)) = PlayerSubs  →  ∀ y ∈ zI,  y(frame(M, x)) = y(trM(k)) ∨ (v(frame(M, x)) = 0 ∧ f(frame(M, x)) = 0)
-CollideS.toR     : CollideS(M, Q, b) ∧ (f(b) = f(Q) ∨ (v(b) = 0 ∧ f(b) = 0))  →  CollideR(M, Q, b)
+CollideS.toR     : CollideS(M, Q, b, c) ∧ (f(b) = f(Q) ∨ (v(b) = 0 ∧ f(b) = 0)) ∧ (0 < v(Q) ∧ v(b) = v(Q) → P(b) = P(Q)) ∧ (¬c → P(b) = P(Q))  →  CollideR(M, Q, b)
 ```
 
 * **The facing.** `After.fd` is now `fd(b) = fd(Q) ∨ (v(b) = 0 ∧ f(b) = 0)`: the theorem above (`MovesAt.face`). When the facing is that of the scroll handler, the frame is `Pre` as before. When the frame ends with the speed 0, `After.coll` makes it a `Hit` (`hit_of_stop`): the first case of `coll` gives `v(Q) = 0`, so `P(b) = P(Q) = P(a)`; the second cannot be; the third is a hit. `OneFrame` allows a `Hit` with no `Pre`, and `step_of_one` gives a hit for it. So on a frame from a clean state up to `T` the facing is no assumption any more.

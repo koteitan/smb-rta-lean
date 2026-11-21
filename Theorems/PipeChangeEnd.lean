@@ -1342,8 +1342,10 @@ def exitNames : List (String × Nat × Nat) :=
    ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("Square1SoundQueue", 0, 1), ("Square2SoundQueue", 0, 1), ("NoiseSoundQueue", 0, 1),
    ("WorldNumber", 0, 1), ("PrimaryHardMode", 0, 1), ("AreaNumber", 0, 1)]
 
-/-- the bytes that the state at the exit knows by a mask of bits: Mario's status below the fire flower, the saved song but for the bit of the underground song. The room's condition asks these bits. -/
-def exitMasks : List (String × Nat × UInt8) := [("PlayerStatus", 0, 254), ("AreaMusicBuffer_Alt", 0, 251)]
+/-- the bytes that the state at the exit knows by a mask of bits: Mario's status below the fire flower, the saved song but for the bit of the underground song. The room's condition asks these bits.
+Round 22 added bits 1 to 7 of the player's size (last): the entry knows them (`entryMasks`), no frame of the pipe stores to the size, so the rows after the exit know
+them at the room's first control (`SizeKeep.rowsCheckS`, `Route.Run.size₁`): the player is small or big there. -/
+def exitMasks : List (String × Nat × UInt8) := [("PlayerStatus", 0, 254), ("AreaMusicBuffer_Alt", 0, 251), ("PlayerSize", 0, 254)]
 
 /-- the masks of the exit as RAM indices -/
 def exitBits (nx : Names) : List (Nat × UInt8) := exitMasks.map fun p => (adI nx p.1 + p.2.1, p.2.2)
@@ -1363,10 +1365,12 @@ frames from control give it (`EntryKeep`), and the walks of `AreaKeep` carry it 
 def entryNames : List (String × Nat × Nat) :=
   [("Left_Right_Buttons", 0, 1), ("GameEngineSubroutine", 0, 1), ("Enemy_Flag", 4, 3), ("Enemy_ID", 3, 4), ("Enemy_State", 4, 1), ("Fireball_State", 0, 2), ("Block_State", 0, 4), ("Misc_State", 0, 9), ("Misc_Y_Position", 7, 1), ("EnemyData", 0, 1), ("EnemyDataHigh", 0, 1), ("NoiseSoundBuffer", 0, 1), ("AreaMusicBuffer", 0, 1), ("AreaMusicQueue", 0, 1), ("EventMusicQueue", 0, 1), ("NoiseSoundQueue", 0, 1), ("Square1SoundQueue", 1, 1), ("FlagpoleFNum_YMFDummy", 0, 1), ("FlagpoleScore", 0, 1), ("FloateyNum_Control", 0, 7), ("FirebarSpinSpeed", 14, 2), ("VineFlagOffset", 0, 1), ("Block_RepFlag", 0, 2), ("SprDataOffset_Ctrl", 1, 1), ("MaximumRightSpeed", 18, 2), ("Cannon_PageLoc", 0, 6), ("Cannon_X_Position", 0, 6), ("Cannon_Y_Position", 0, 5), ("Misc_Collision_Flag", 10, 3), ("EnemyFrenzyBuffer", 0, 1), ("SecondaryHardMode", 0, 1), ("EnemyFrenzyQueue", 0, 1), ("FireballCounter", 0, 1), ("WarpZoneControl", 0, 1), ("EnemyObjectPageSel", 0, 1), ("ScreenRoutineTask", 0, 1), ("ScrollThirtyTwo", 1, 1), ("VerticalScroll", 0, 1), ("CloudTypeOverride", 0, 1), ("AreaType", 0, 1), ("JoypadOverride", 0, 1), ("OperMode", 0, 1), ("OperMode_Task", 0, 1), ("DisableScreenFlag", 0, 1), ("StarInvincibleTimer", 0, 1), ("WorldEndTimer", 0, 1), ("AreaNumber", 0, 1)]
 
-/-- the bytes that the state at the entry knows by a mask of bits: the objects' kinds and states as on a real entry, Mario's status below the fire flower, the pause bits other than the low bit and the top bit -/
+/-- the bytes that the state at the entry knows by a mask of bits: the objects' kinds and states as on a real entry, Mario's status below the fire flower, the pause bits other than the low bit and the top bit.
+Round 22 added bits 1 to 7 of the player's size (last; small or big): the press of Start on the title and the frames from control give them (`EntryKeep`; the change of
+size flips only bit 0), and the exit's list has them too (`exitMasks`). -/
 def entryMasks : List (String × Nat × UInt8) :=
   [("Enemy_ID", 0, 249), ("Enemy_ID", 1, 249), ("Enemy_ID", 2, 249), ("Enemy_State", 0, 254), ("Enemy_State", 1, 254), ("Enemy_State", 2, 254), ("Enemy_State", 3, 254),
-   ("SprDataOffset_Ctrl", 0, 254), ("PlayerStatus", 0, 254), ("GamePauseStatus", 0, 126), ("AreaMusicBuffer_Alt", 0, 251)]
+   ("SprDataOffset_Ctrl", 0, 254), ("PlayerStatus", 0, 254), ("GamePauseStatus", 0, 126), ("AreaMusicBuffer_Alt", 0, 251), ("PlayerSize", 0, 254)]
 
 /-- **The bytes that the entry no longer asks** (round 12): with each alone not known at the entry, and with all of them together, both walks of the pipe's frames
 (`zcheck`, `pcheck`) and `leftCheck` still pass (`entry-need`). The buttons up and down, the enemies' page, the screen's timer, the demo's timer, three bytes after the world's

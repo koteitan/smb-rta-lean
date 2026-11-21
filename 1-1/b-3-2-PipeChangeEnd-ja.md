@@ -41,6 +41,7 @@
 | `Square1SoundQueue` | ビット 4 | 1 つの音 |
 | `SprDataOffset_Ctrl` | ビット 0 | |
 | `PlayerStatus` | ビット 0 | 小さいマリオか大きいマリオ。ファイアマリオは `Entry` を満たしません |
+| `PlayerSize` | ビット 0 | 小さいマリオか大きいマリオ（22 回目、[部屋を通る大きさ](d-2-5-4-4-SizeKeep-ja.md)） |
 | `GamePauseStatus` | ビット 0、7 | |
 | `AreaMusicBuffer_Alt` | ビット 2 | 覚えている曲のうち地下の曲 |
 
@@ -65,7 +66,7 @@
 * `Song(m)`: 曲の 12 バイト（`MusicData`（2）、4 つの位置、`NoiseDataLoopbackOfs`、音符のカウンタとバッファ）は 1,607 行のどれかと同じ値です。曲の部分が終わるフレームでは `GroundMusicHeaderOfs` も行に入ります。
 * `Shape(m)`: 1 つ目の画面のバッファは空か、パレットの 4 バイトのレコードを 1 つだけ持ちます。
 
-`Exit(m)` は、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の `ExitCond(m)` に出口の 21 バイトと 6 バイト `PauseSoundBuffer`、`PauseSoundQueue`、`Square1SoundBuffer`、`Square2SoundBuffer`、`NoiseSoundBuffer`、`VRAM_Buffer_AddrCtrl` を `T` の値で入れたものと、`PlayerStatus`（ビット 1〜7）と `AreaMusicBuffer_Alt`（ビット 2 を除く全部）のビットが `T` と同じであることと、`Song(m) ∧ Shape(m)` です。出口の 21 バイトは `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`CurrentPlayer`、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`Square1SoundQueue`、`Square2SoundQueue`、`NoiseSoundQueue`、`WorldNumber`、`PrimaryHardMode` です。`Quiet`、`Song`、`Shape` のほかは、土管のフレームの歩みが `Entry` から出します。
+`Exit(m)` は、[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md)の `ExitCond(m)` に出口の 21 バイトと 6 バイト `PauseSoundBuffer`、`PauseSoundQueue`、`Square1SoundBuffer`、`Square2SoundBuffer`、`NoiseSoundBuffer`、`VRAM_Buffer_AddrCtrl` を `T` の値で入れたものと、`PlayerStatus` と `PlayerSize`（ビット 1〜7）と `AreaMusicBuffer_Alt`（ビット 2 を除く全部）のビットが `T` と同じであることと、`Song(m) ∧ Shape(m)` です。出口の 21 バイトは `OperMode`、`OperMode_Task`、`GameEngineSubroutine`、`ScreenRoutineTask`、`DisableScreenFlag`、`AreaPointer`、`EntrancePage`、`AltEntranceControl`、`HalfwayPage`、`CurrentPlayer`、`JoypadOverride`、`GameTimerExpiredFlag`、`AreaMusicBuffer`、`EventMusicBuffer`、`AreaMusicQueue`、`EventMusicQueue`、`Square1SoundQueue`、`Square2SoundQueue`、`NoiseSoundQueue`、`WorldNumber`、`PrimaryHardMode` です。`Quiet`、`Song`、`Shape` のほかは、土管のフレームの歩みが `Entry` から出します。
 
 `NoStart(m, i)` は、`m` がゲームコアで土管以外のルーチンなら入力 `i` に Start がないことです。
 
