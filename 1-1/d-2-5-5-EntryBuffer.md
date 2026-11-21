@@ -4,7 +4,7 @@
 
 **Claim.** A frame of the room that starts with the control of the screen's buffers at 0 and ends with the side pipe's routine ends with the first screen buffer of a reference of the entry: its offset and four of its bytes. This is proved, with one check on the ROM (a walk of the room's frame). So `Route.Run` no longer asks these five bytes at the side pipe's entry of a run whose entering frame starts with the control at 0. For a run whose entering frame starts with the control set it still asks them (the new field `buffer₂`). With [the height](d-2-5-4-EntryHeight.md), `chg.entry₂` asks 3 bytes, not 9 (1-1-d-2-5).
 
-The control is not 0 at a frame's start when the frame before erased a coin. That it is 0 at the start of the entering frame is not proved.
+The control is not 0 at a frame's start when the frame before erased a coin. Since round 23 the control is proved to be 0 or 6 at the start of every frame of the room ([The control of the screen's buffers through the room](d-2-5-5-1-BufferControl.md), `Run.ctl₂`). That it is not 6 at the start of the entering frame is not proved.
 
 The names are those of [The height at the side pipe's entry](d-2-5-4-EntryHeight.md). `c(m)` is the control of the screen's buffers (`VRAM_Buffer_AddrCtrl`). `L₅` is the five bytes: the offset of the first screen buffer (`VRAM_Buffer1_Offset`) and its bytes 0, 1, 2 and 7. `V` is the references of the entry, each a machine `v` and the list `X` of the bytes that it gives.
 
@@ -78,6 +78,10 @@ A program (`entry-height-check FM2 400 real`, about 3 min): the movie's entering
 
 In the 31 entries with stale bytes of the timer's record, these are bytes 1 and 2. The first reference does not give them. In every entry that comes after a frame that ends with the control set, at least 16 frames are between them.
 
+## Round 23: the control through the room
+
+[The control of the screen's buffers through the room](d-2-5-5-1-BufferControl.md) (1-1-d-2-5-5-1) proves that every frame of the room, from the first control to the entering frame, starts with the control at 0 or 6 (`Run.ctl₂`): the walk of this page from the control at 0 and at 6 ends with the control at 0 or 6, and the rows of the first change know it at 0 at the room's first control. So `buffer₂` excludes only the control at 6 at the start of the entering frame. Two designs of a walk that would follow the position over the coin's frame and the entering frame grew too large; the numbers are on that page. `buffer₂` is unchanged.
+
 ## Uses from other parts
 
 * Part c: `RoomMap.cond_of_rows`, `RoomMap.stepT`, `RoomMap.s_stepT`, and through `Run.rt₂` the field `room.enters`, `Run.roomEnter`, `SideEntryEnd`, `SideEntryRest`.
@@ -94,7 +98,7 @@ Removed from the assumptions: the five bytes of the screen's buffer of `entry₂
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: the entering frame starts with the control of the screen's buffers at 0, or the five bytes at the entry are those of a reference.
+* `buffer₂`: the entering frame starts with the control of the screen's buffers at 0, or the five bytes at the entry are those of a reference. Since round 23 the control there is proved to be 0 or 6 (`Run.ctl₂`), so this excludes only 6.
 * `chg.entry₂`: 3 bytes at the entry have the values of a reference: the area music's buffer, the event music's queue, the added note length. They wait for the game timer (see [The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 

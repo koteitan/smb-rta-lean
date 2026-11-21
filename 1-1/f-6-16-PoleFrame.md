@@ -114,7 +114,7 @@ So it would replace one condition by three. `tiles` stays.
 
 Only the left end of the range is used. The height decides the row, but no bound on the height comes out.
 
-**Files.** `Theorems/PoleFrame.lean`, `Run` in `Theorems/PoleJoin.lean`, private `Proof/PoleFrame.lean` (`pole_frame_check`) until round 21; since round 22 the route uses `pole_check_u` of [the reads near the pole](f-6-17-3-PoleTileRead.md), and `Proof/PoleFrame.lean` is not generated.
+**Files.** `Theorems/PoleFrame.lean`, `Run` in `Theorems/PoleJoin.lean`, private `Proof/PoleFrame.lean` (`pole_frame_check`) until round 21; since round 22 the route uses `pole_check_u` of [the reads near the pole](f-6-17-3-PoleTileRead.md) (since round 23 `pole_check_h` of [the height at the side check](f-6-17-4-PoleTileHeight.md)), and `Proof/PoleFrame.lean` is not generated.
 
 **To reproduce.**
 ```

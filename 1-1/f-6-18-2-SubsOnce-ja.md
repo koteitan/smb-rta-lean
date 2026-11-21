@@ -36,7 +36,7 @@ Run.inRange :  P₀ ≤ P₂(g)                                                 
 | 1 つ目、フレームの始まりから `Q` まで | 4,382 | 378 | 0 | 2 |
 | 2 つ目、`Q` からフレームの終わりまで | 709,326 | 46,413 | 0 | 0（もう一度 `Q` に来るものはない） |
 
-確認はネイティブで 2.7 秒です。`PoleFrame.poleFrameCheck` の一部で、22 回目からは `PoleTileRead.poleCheckU` の一部なので、非公開の `pole_check_u`（`native_decide`）がこれも確認します。
+確認はネイティブで 2.7 秒です。`PoleFrame.poleFrameCheck` の一部で、22 回目からは `PoleTileRead.poleCheckU`（23 回目からは `PoleTileHeight.poleCheckH`）の一部なので、非公開の `pole_check_h`（`native_decide`）がこれも確認します。
 
 本物の触り（`touch-move-check`）で: 移動の終わりに 2 回以上来る触るフレームはありません。これは定理を確かめるだけで、証明は使いません。
 
@@ -44,4 +44,4 @@ Run.inRange :  P₀ ≤ P₂(g)                                                 
 
 新しいものはありません。`subs_once` が求めるのは `StartK` と `CleanK_K` だけです。触るまでのどのフレームもこれを満たします（`FrameKeep.Frames.start`、`Frames.cleanAt`）。`Run.moved` はパート e の `OnFrames.touchMove` を、その条件ごと使います（`frames`、それと触るのが操作から `farN` フレームより後でないこと）。もっと後で触る場合は `SurfaceLate` の場合で、`Run.inRange` を使いません。
 
-**ファイル.** `Theorems/SubsOnce.lean`、`Theorems/PoleJoin.lean` の `Run.moved` と `Run.inRange`、`Theorems/PoleFrame.lean` の `PoleFrame.poleFrameCheck`、非公開の `Proof/PoleTiles.lean`（`pole_check_u`。21 回目までは `Proof/PoleFrame.lean` の `pole_frame_check`）。
+**ファイル.** `Theorems/SubsOnce.lean`、`Theorems/PoleJoin.lean` の `Run.moved` と `Run.inRange`、`Theorems/PoleFrame.lean` の `PoleFrame.poleFrameCheck`、非公開の `Proof/PoleTiles.lean`（`pole_check_h`、23 回目から。22 回目は `pole_check_u`。21 回目までは `Proof/PoleFrame.lean` の `pole_frame_check`）。

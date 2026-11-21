@@ -11,6 +11,7 @@ import Theorems.RoomBlocks
 import Theorems.RoomLand
 import Theorems.RoomFloor
 import Theorems.RoomWall
+import Theorems.RoomCorner
 import Theorems.PoleJoin
 import Theorems.CastleToLevel
 import Theorems.PipeChangeBound
@@ -39,6 +40,7 @@ import Theorems.EntryHeight
 import Theorems.EntryHeightBig
 import Theorems.SizeKeep
 import Theorems.EntryBuffer
+import Theorems.BufferControl
 
 /-!
 # The whole route: 1-2 does not start before frame 1748
@@ -689,7 +691,8 @@ structure Run (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) (rN : RoomJoin.Nums
   dR_pos : 1 ≤ base.dR
   /-- the frame that enters the side pipe starts with the control of the screen's buffers of the reference (0: this frame's screen update empties the first buffer),
   or the five bytes of the first screen buffer at the entry are those of a reference of the entry. With the control at 0 the bytes are proved
-  (`EntryBuffer.buffer_of_rows`, `Run.buf₂`); before, `entry₂` asked them of every run. The control is not 0 when the frame before erased a coin. -/
+  (`EntryBuffer.buffer_of_rows`, `Run.buf₂`); before, `entry₂` asked them of every run. The control is not 0 when the frame before erased a coin; since round 23
+  it is proved to be 0 or 6 (`Run.ctl₂`, `BufferControl`), so the field excludes only 6. -/
   buffer₂ : (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (EntryBuffer.ctlI nmS) = (ScreenPage.refR m0).ram.get! (EntryBuffer.ctlI nmS) ∨
     EntryAt (EntryBuffer.bufIdx nmS) (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (base.seq (base.a₂ sy nmS m0))
   /-- in the room, from its first control to the entry into the side pipe, a frame that ends paused is a `lag` frame. With the counts `chg.hb₁`, `chg.ha₂` it says that
@@ -1236,6 +1239,19 @@ theorem Run.buf₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : Titl
       R.chg.ctl₁ R.chg.roomSites R.chg.roomStay (show R.base.b₁ sy ≤ k by omega) (show k < R.base.a₂ sy nmS m0 by omega) hs hrt
   · exact hy
 
+/-- **The control of the screen's buffers at the start of the frame that enters the side pipe is 0 or 6** (round 23, `BufferControl`): every frame of the room
+from its first control starts with it at 0 or 6 (`BufferControl.ctl_of_rows`). With 0, `Run.buf₂` needs no `buffer₂`; 6 is the value after a frame that erased a
+coin, and `buffer₂` still excludes it. `hR`, `hB`, `hK`, `hC` are checks on the ROM. -/
+theorem Run.ctl₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (hC : BufferControl.Facts sy nm₁ d₁ nmS m0) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    (R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (EntryBuffer.ctlI nmS) = 0 ∨
+      (R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (EntryBuffer.ctlI nmS) = 6 := by
+  have hlt := R.b₁_lt_a₂ hR hB hK
+  have he := R.entry₁ hB hK
+  exact BufferControl.ctl_of_rows (b := R.base.b₁ sy) (a := R.base.a₂ sy nmS m0) hR.map hR.mapStart hC.keep hC.start R.base.next
+    ((R.chg.run₁ he).inRowsT hR.pipe R.chg.ctlFirst₁) R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _
+    (show R.base.b₁ sy ≤ R.base.a₂ sy nmS m0 - 1 by omega) (show R.base.a₂ sy nmS m0 - 1 ≤ R.base.a₂ sy nmS m0 by omega)
+
 /-- **The 8 bytes from the 3 and the screen buffer's five**: the references of the entry agree on the 3 bytes (`EntryBuffer.agreeCheck`), so the reference of the
 buffer's bytes also gives the others -/
 theorem entryAt_of_buf (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) {m : Machine}
@@ -1709,6 +1725,65 @@ theorem Run.roomWall {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement 
     RoomWall.speeds_of hw.v
   exact RoomWall.wall_frame hWl hcw hap hM hcond hsites hI htime hfj hqj hg hs hsolid hw.high hw.page hw.x hw.y1 hw.y2 hw.st hw.vy hsp hstay
 
+/-- **A frame of `room` before the entering frame that starts standing with no jump in its input comes to the end of its move once, and with the coordinate at the block's
+left side it ends `RoomJoin.CornerEnd`**, on the real machines: `RoomFloor.floor_frame` up to the end of the move (`Good`, the stack of the player's routine, the vertical
+bytes of the frame's start), the one `PlayerSubs` of the frame by `RoomVert.after_Q`, `Solid` there by `RoomBlocks.blocks_run_trace`, and `RoomCorner.corner_frame` from
+there to the frame's end, which is in the player's routine (`roomStay`). `hCo` are the checks of `RoomCorner`; `hcw`, `hap` those of `RoomWall`. -/
+theorem Run.roomCorner {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true) (hV : RoomVert.VChecks sy nmS m0 rN.h rN.rise)
+    (hSt : RoomStand.SChecks sy nmS m0) (hH : OpenVert.vertAirHOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hVS : VertStand.standOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hI : FrameModel.idleAt (FrameModel.Rom.of m0) (ScreenPage.placesR sy nmS m0).idle = true)
+    (hW : RoomBlocks.BChecks sy nmS m0) (hRw : RoomBlocks.rowsCheckR sy nm₁ d₁ nmS m0 rN.vStart = true)
+    {ylo : Nat} (hCo : RoomCorner.Checks sy nmS m0 rN.h ylo) (hcw : RoomWall.checkW sy nmS m0 = true) (hap : RoomWall.apartW sy (ScreenPage.placesR sy nmS m0) = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
+    {n : Nat} (hC : R.room.C ≤ n) (hE : n + 1 < R.room.E) (hst0 : peek (R.room.fm n) sy.Player_State = 0) {k : Nat}
+    (hAt : VertAir.AtV sy (FrameModel.Rom.of m0) (FrameModel.ctrlStack sy m0) (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k))
+    (hn : (FrameModel.readIn sy (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k)).jump = false)
+    (hp : peek (R.room.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (R.room.fm n) sy.A_B_Buttons &&& 0x80)
+    (hhi : peek (R.room.fm n) sy.Player_Y_HighPos = 1) :
+    ∃ j, k ≤ j ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).frame = (R.room.fm n).frame ∧
+      (∀ j', k ≤ j' → (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j').pc = sy.PlayerSubs →
+        (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j').frame = (R.room.fm n).frame → j' = j) ∧
+      (peek (R.room.fm n) sy.Player_Y_Position = (Jump.groundY sy).toUInt8 → peek (R.room.fm n) sy.Player_Y_Speed &&& 0x80 = 0 →
+        (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_PageLoc) = 0 →
+        (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Position) ∈ RoomJoin.xsC sy →
+        RoomJoin.CornerEnd sy (Jump.cornerY sy rN.h) ((PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Position))
+          ((PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Speed)) (PipeTransition.frame (R.room.fm n) (R.room.inAt n))) := by
+  obtain ⟨hk0, hk1⟩ := R.roomIdx hC (show n < R.room.E by omega)
+  obtain ⟨_, hk2⟩ := R.roomIdx (n := n + 1) (by omega) hE
+  have hm := R.roomMany
+  have hlt := R.room.ix_lt (k := n + 1 - R.room.C) (by omega)
+  have h1 := (R.room.ix_at (k := n + 1 - R.room.C) (by omega) (by omega)).1
+  rw [show n + 1 + 1 - R.room.C = n + 1 - R.room.C + 1 by omega] at hk2
+  have hk : R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1 < R.base.a₂ sy nmS m0 := by omega
+  have hin := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have hcond := RoomMap.cond_of_rows hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1
+  have hsites := R.chg.roomSites _ hk0 hk1
+  have hstay := R.chg.roomStay (R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1) (by omega) hk
+  rw [R.base.next] at hstay
+  have htime := fun j hj => late_of (hsites j) hj
+  obtain ⟨j, hkj, hqj, hfj, hg, hs, h5, _⟩ := RoomFloor.floor_frame (CtrlKeep.pauseI_lt sy m0) (RoomVert.okV_of_check hV.a) (fun B hB => RoomVert.finA_pc hB)
+    (RoomVert.okV_of_check hSt.c) rfl hSt.apart hH hVS hI hcond hsites hAt htime hst0 hn hp hhi hstay
+  have huniq := (RoomVert.after_Q (RoomVert.okV_of_check hV.b) RoomVert.cfgOfV_fin hV.apart hcond hsites).1
+  refine ⟨j, hkj, hqj, hfj, fun j' _ hj2 hj3 => ?_, fun hy hvy hpg hx => ?_⟩
+  · rcases Nat.lt_trichotomy j' j with e | e | e
+    · exact absurd hqj (huniq j' j e hj2 hfj)
+    · exact e
+    · exact absurd hj2 (huniq j j' e hqj hj3)
+  · have hsolid := RoomBlocks.blocks_run_trace hW hRw hM hS R.base.next hin R.chg.ctl₁ R.chg.roomSites R.chg.roomStay _ hk0 hk1 j hfj
+    have hhiQ : (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_Y_HighPos) = 1 :=
+      (h5 (FrameModel.I sy.Player_Y_HighPos) (by simp [VertStand.standKeep])).trans hhi
+    have hstQ : (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_State) = (0 : UInt8) :=
+      (h5 (FrameModel.I sy.Player_State) (by simp [VertStand.standKeep])).trans hst0
+    have hyQ : (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_Y_Position) ∈ [RoomWall.floorY sy] := by
+      rw [h5 (FrameModel.I sy.Player_Y_Position) (by simp [VertStand.standKeep])]
+      exact List.mem_singleton.2 hy
+    have hvQ : (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) j).ram.get! (FrameModel.I sy.Player_Y_Speed) &&& 0x80 = (0 : UInt8) &&& 0x80 := by
+      rw [h5 (FrameModel.I sy.Player_Y_Speed) (by simp [VertStand.standKeep])]
+      exact hvy
+    exact RoomCorner.corner_frame (c := ((0 : UInt8), (0 : UInt8), [RoomWall.floorY sy])) hCo hcw hap hM hcond hsites hI htime hfj hqj hg hs hsolid hhiQ hpg hx
+      List.mem_cons_self hstQ hvQ hyQ hstay
+
 /-- **Every frame of `room` before the entering frame that starts standing with no jump in its input at the player's routine ends as `RoomJoin.StandNext` allows**, on the
 real machines: `RoomStand.stand_room` on the frames of `base` in the room, as `Run.roomAir`. The frame starts in the room's condition (`RoomMap.cond_of_rows`), its instructions
 meet `SiteOK` (`roomSites`), and it ends in the player's routine (`roomStay`). `hV`, `hSt` are the checks of `RoomVert` and `RoomStand`. -/
@@ -1913,6 +1988,7 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     (hL : RoomLand.Checks sy nmS m0 rN.landX (RoomJoin.landY sy)) (hH : OpenVert.vertAirHOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hFl : RoomLand.Checks sy nmS m0 rN.landX (Jump.groundY sy).toUInt8) (hVS : VertStand.standOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hWl : RoomWall.Checks sy nmS m0) (hcw : RoomWall.checkW sy nmS m0 = true) (hap : RoomWall.apartW sy (ScreenPage.placesR sy nmS m0) = true)
+    {ylo : Nat} (hCo : RoomCorner.Checks sy nmS m0 rN.h ylo)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     R.room.InRoom :=
   ⟨R.roomMany, R.roomKeep hT₁ hM hS hV.vert hB hK, R.roomMouthE hT₁ hM hS hF hEnd hRest hR hB hK, R.roomBump hT₁ hM hS hB hK,
@@ -1927,7 +2003,8 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     fun n hC hE => R.roomKeepA hT₁ hM hS hV.vert hB hK n hC hE (RoomVert.I sy.Player_Y_HighPos) (by simp [RoomVert.vKeepA]),
     fun _ hC hE hst _ hAt hd hp hhi => R.roomHigh hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hH hB hK hC hE hst hAt hd hp hhi,
     fun _ hC hE hst _ hAt hn hp hhi => R.roomFloor hT₁ hM hS hV.vert hV.stand hH hVS hV.idle hW hRw hFl hB hK hC hE hst hAt hn hp hhi,
-    fun _ hC hE hst _ hAt hd hp => R.roomWall hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hW hRw hWl hcw hap hB hK hC hE hst hAt hd hp⟩
+    fun _ hC hE hst _ hAt hd hp => R.roomWall hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hW hRw hWl hcw hap hB hK hC hE hst hAt hd hp,
+    fun _ hC hE hst _ hAt hn hp hhi => R.roomCorner hT₁ hM hS hV.vert hV.stand hH hVS hV.idle hW hRw hCo hcw hap hB hK hC hE hst hAt hn hp hhi⟩
 
 /-- the frames after the timer's count: at least 33 -/
 theorem Run.hD (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) (hF : FlagRule.Checked fc (FlagRule.dataOf fc)) : 33 ≤ R.Df hF :=

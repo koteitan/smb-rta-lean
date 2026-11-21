@@ -100,7 +100,9 @@ collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j −
                                                   速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
 moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves は AfterP.stop だけになった
 posW     : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  PosW(R)       位置を番地で書くのは押し戻しと補正の内側だけ。その外で添字かポインタで書く命令は位置を書かない
-clampR   : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  ClampR(R)     R が補正の入口で 0 < v(R) なら、補正先は P(R)
+           （第 23 回: 絶対番地と添字で書き、基の番地からどの添字でも位置に届かない命令には求めない: PositionKeep.absFar）
+clampR   : 1 ≤ j < g、Q はスクロールの処理、0 < v(Q)、v(seq j) = v(Q)、R は Q からフレームの終わりまでの命令  →  ClampR(R)     R が補正の入口で 0 < v(R) なら、補正先は P(R)
+           （第 23 回: 右への速さを保つフレームだけで求める。keep_frame が使うのはそこだけ）
 vAfter   : 1 ≤ j < J, j < g、Q はスクロールの処理  →  seq j での vHard の 5 つのバイトは Q のもの
            vHard = y, mf, vy, dummy, st              （vfd、origin、DTHJ と A は定理 OnFrames.kAt。vf は定理 OnFrames.vfAt）
 faceJ    : 1 ≤ j < J, j < g, Q はスクロールの処理, v(seq j) = 0, f(seq j) = 0  →  fd(seq j) = fd(Q)
@@ -162,6 +164,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `AfterR.fd`: `T` までの clean な状態からのフレームの終わりの向きは、スクロールの処理のもの | 定理 `FaceKeep.keepZ_end`（向きは変わらないか、フレームは速さ 0 とサブ速さ 0 で終わる）と、`Hit` だけの場合を持つ `OneFrame`（`hit_of_stop`）。新しく `faceJ`（`J` より前で、速さ 0 とサブ速さ 0 で終わるフレーム）、`guardE` の中の `FrameKeep.faceE`（2 バイト）、`numbersCheck` の中の確認 `zCheck`（[下](#スクロールの処理からあと-向きサブ速さ当たり判定のビット)） |
 | `AfterR.coll`: スクロールの処理で右へ動くフレームは、何もしないか、左をふさぐか、当たり | 当たり判定のビットは定理 `FaceKeep.bits_end`、速さは `CollideKeep.speed_end`。`Moves.after` はいまは `AfterP`: 位置。新しく `numbersCheck` の中の確認 `bCheck` |
 | `AfterP.keep`: スクロールの処理で右へ動き、その速さで終わるフレームは位置を保つ。`collide` の位置もそのフレームと、呼び出しのないフレームで | 定理 `OnFrames.keepAt`（`PositionKeep.keep_frame`）と `OnFrames.stillAt`（`PositionKeep.still_frame`）。`Moves` は `stop` だけ。`collide` はそのフレームの位置を求めない（新しい引数 `Calls`）。新しく 1 命令ずつのフィールド `posW`、`clampR`、`numbersCheck` の中の確認 `pCheck`（[位置を保つフレーム](e-2-10-3-8-PositionKeep-ja.md)） |
+| すべてのフレームの `clampR`（第 23 回） | スクロールの処理で右へ動き、その速さで終わるフレームだけで求める。`PositionKeep.keep_frame` が使うのはそこだけ。フィールド `collide` は本物のフレームで偽（画面の左端より 1 px 左で始まるフレーム）: [フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md) |
 | `collide` のサブ速さの部分（`CollideR.f`）: サブ速さは変わらない | 速さ 0 とサブ速さ 0 で終わるフレームのほかは定理 `FaceKeep.keepZ_end`。`collide` はいまは `CollideS`: 位置と、そう終わるフレームのサブ速さ |
 | `After.storedQ`: スクロールの処理での覚えている速さはそこでの `\|v\|` | 定理 `storedQ_of`: `FrameModel.stored_path` の歩きと `AfterKeep.subs_once`。新しく `numbersCheck` の中の確認 `storedOK` と、`TopSpeed.frictionCheck`（`SurfaceRun.Statement` のフィールド `fric`） |
 

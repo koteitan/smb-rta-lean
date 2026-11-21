@@ -42,7 +42,9 @@ alone do not keep him off the floor after a jump: the landing that the walks giv
 `RoomWall.wall_frame`; the field `stand_wall` asks only the later stands, `RoomRun.stand_off_of`); with the field `wall` the first stand away from the
 floor is at frame `C + wallF` or later (`RoomRun.stand_late`), and from the landings of the first fall at these frames the vertical states with any input are a finite set
 with no state on the floor before `C + fall` (`anyCheck`, `RoomRun.fall_any`): the old field `fall_jump` (page `1-1/c-7-5-6-RoomJump.md`). That he stands at the end of
-the fall is proved too (`RoomRun.land_at_of`, `RoomRun.land_end_of`; once the field `land_at`).
+the fall is proved too (`RoomRun.land_at_of`, `RoomRun.land_end_of`; once the field `land_at`). With no wall, a frame from `hitF` on that ends on the floor is `LowAt`
+(`RoomRun.low_floor_of`, `low_floor_at`): at the block's left side the collision routine pushes him back (`InRoom.corner`: `RoomCorner.corner_frame`); the field `low_at`
+asks only a frame that ends off the floor at or past the corner (page `1-1/c-7-5-17-RoomCorner.md`).
 
 The case split, all by `cases` and `by_cases`:
 * over the block in one jump (no landing): impossible, `no_landing`;
@@ -54,6 +56,101 @@ The case split, all by `cases` and `by_cases`:
   takeoff (the search of `FastTakeoff`), `landed_short`;
 * then off the block by a fast jump, a slow jump or stepping off, `entry_ge`.
 -/
+
+
+namespace Smbrta.FrameModel
+open PipeTransition (frame)
+open PipeEntryRule (trace)
+
+
+/-- **`FrameModel.frame_readR` with the end of the move**: the frame is a `TopSpeed.Frame`, and its `P₂`, `v₂`, `f₂` are the position, the speed and its fraction at an
+instruction `n₀ + k` of the frame at `PlayerSubs`. The proof is that of `frame_readR`. -/
+theorem frame_readQ {sy : Syms} {m0 : Machine} {S : UInt8} {M : Machine} {i : UInt8} {n₀ : Nat} {idle : UInt16} (hOK : modelOK sy m0 S = true)
+    (hfr : TopSpeed.frictionCheck sy m0 = true)
+    (h : ReadR sy (Rom.of m0) S M i n₀) (hbef : ∀ a ∈ hBytes sy, peek (trace M i n₀) a = peek M a) (hT : InTime (Rom.of m0) idle M i n₀)
+    (hfar : 2048 ≤ posP sy M ∧ posP sy M + 2048 < 0x1000000) :
+    ∃ (f : TopSpeed.Frame (TopSpeed.top sy : Int) (amax sy m0)) (k : Nat), f.v = sbyte (peek M sy.Player_X_Speed) ∧
+      f.f = ((peek M sy.Player_X_MoveForce).toNat : Int) ∧ f.P = posP sy M ∧
+      f.v' = sbyte (peek (frame M i) sy.Player_X_Speed) ∧ f.f' = ((peek (frame M i) sy.Player_X_MoveForce).toNat : Int) ∧ f.P' = posP sy (frame M i) ∧
+      (trace M i (n₀ + k)).pc = sy.PlayerSubs ∧ (trace M i (n₀ + k)).frame = M.frame ∧ f.P₂ = posP sy (trace M i (n₀ + k)) ∧
+      f.v₂ = sbyte (peek (trace M i (n₀ + k)) sy.Player_X_Speed) ∧ f.f₂ = ((peek (trace M i (n₀ + k)) sy.Player_X_MoveForce).toNat : Int) := by
+  have hF := facts_of hOK
+  have hb := base_good hF.base
+  obtain ⟨k1, v₁, f₁, b1, A1, an, G1, S1, I1⟩ := frame_pathI hb hfr hF h.at_frame
+  obtain ⟨t, ht, hte⟩ := hF.anyT _ (caseOf_memF h.at_frame)
+  have e4 : t = (planOf sy m0 S (caseOf sy (trace M i n₀))).c4 := cutSame_eq hte
+  have htl := hF.tails t ht
+  rw [e4] at htl
+  obtain ⟨k2, b2, g2, p2, v2, ff2, d2, r2, m2, q2, I2⟩ := tail_spec htl hF.digits A1
+  obtain ⟨e0, e0f⟩ := trace_inFrame hT.loop hT.start (InFrameN.add' I1 rfl I2) hT.time (k1 + k2) (Nat.le_refl _)
+  rw [stepN_add] at e0
+  generalize hB : stepN k2 (stepN k1 (trace M i n₀)) = B at e0 v2 ff2 q2 p2
+  have hco := h.collide (n₀ + (k1 + k2)) (by omega) (by rw [e0]; exact p2)
+  rw [e0] at hco
+  have ev : peek (trace M i n₀) sy.Player_X_Speed = peek M sy.Player_X_Speed := hbef _ (by simp [hBytes])
+  have ef : peek (trace M i n₀) sy.Player_X_MoveForce = peek M sy.Player_X_MoveForce := hbef _ (by simp [hBytes])
+  have eP : posP sy (trace M i n₀) = posP sy M := posP_congr hbef
+  obtain ⟨g1, g2'⟩ := G1
+  have ePk : posP sy (stepN k1 (trace M i n₀)) = posP sy (trace M i n₀) := by
+    rw [posP_eq, posP_eq]
+    obtain ⟨s1, s2, s3⟩ := S1
+    show posOf ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_PageLoc)) ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_Position)) ((stepN k1 (trace M i n₀)).ram.get! (I sy.SprObject_X_MoveForce)) =
+      posOf ((trace M i n₀).ram.get! (I sy.Player_PageLoc)) ((trace M i n₀).ram.get! (I sy.Player_X_Position)) ((trace M i n₀).ram.get! (I sy.SprObject_X_MoveForce))
+    rw [s1, s2, s3]
+  have hv2 : B.ram.get! (I sy.Player_X_Speed) = (stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_Speed) := v2
+  have hf2 : B.ram.get! (I sy.Player_X_MoveForce) = (stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_MoveForce) := ff2
+  have hr1 := speed_int g1
+  have hmove : posP sy B = posP sy M + 16 * sbyte (B.ram.get! (I sy.Player_X_Speed)) := by
+    rw [hv2]
+    obtain ⟨a1, a2⟩ := posOf_range (peek B sy.Player_PageLoc) (peek B sy.Player_X_Position) (peek B sy.SprObject_X_MoveForce)
+    rw [← posP_eq] at a1 a2
+    have a3 := sbyte_range ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_Speed))
+    have a4 := hfar
+    rw [ePk, eP] at q2
+    omega
+  have hfr1 := ((stepN k1 (trace M i n₀)).ram.get! (I sy.Player_X_MoveForce)).toNat_lt
+  refine ⟨{ v := sbyte (peek M sy.Player_X_Speed), f := ((peek M sy.Player_X_MoveForce).toNat : Int), P := posP sy M,
+            v₁ := sbyte v₁, f₁ := (f₁.toNat : Int),
+            v₂ := sbyte (B.ram.get! (I sy.Player_X_Speed)), f₂ := ((B.ram.get! (I sy.Player_X_MoveForce)).toNat : Int), P₂ := posP sy B,
+            v' := sbyte (peek (frame M i) sy.Player_X_Speed), f' := ((peek (frame M i) sy.Player_X_MoveForce).toNat : Int), P' := posP sy (frame M i),
+            anim := ?_, friction := ?_, friction_gain := ?_, frac := ?_, move := hmove, impedeV := ?_, impedeF := ?_, impedeP := ?_ },
+          k1 + k2, rfl, rfl, rfl, rfl, rfl, rfl, by rw [e0]; exact p2, e0f, by rw [e0], by rw [e0]; rfl, by rw [e0]; rfl⟩
+  · rcases an with ⟨a1, a2⟩ | ⟨a1, a2⟩
+    · left
+      refine ⟨?_, ?_⟩
+      · rw [a1]
+        exact congrArg sbyte ev
+      · rw [a2]
+        exact congrArg (fun x : UInt8 => (x.toNat : Int)) ef
+    · right
+      rw [a1, a2]
+      exact ⟨rfl, rfl⟩
+  · intro _
+    rw [hv2]
+    exact hr1
+  · rw [hv2, hf2]
+    exact g2'
+  · rw [hf2]
+    omega
+  · rcases hco.v with e | e
+    · left
+      rw [e]
+      rfl
+    · right
+      rw [e]
+      rfl
+  · rw [hco.f]
+    rfl
+  · have e := hco.P
+    rcases e with e | e | ⟨e, e2⟩
+    · exact Or.inl e
+    · exact Or.inr (Or.inl e)
+    · refine Or.inr (Or.inr ⟨?_, e2⟩)
+      have hm := hmove
+      have e3 : sbyte (B.ram.get! (I sy.Player_X_Speed)) ≤ 0 := e2
+      omega
+
+end Smbrta.FrameModel
 
 namespace Smbrta.RoomJoin
 
@@ -352,6 +449,21 @@ structure WallQ (sy : Syms) (q : Machine) : Prop where
   vy : q.ram.get! (FrameModel.I sy.Player_Y_Speed) &&& 0x80 = 0
   v : q.ram.get! (FrameModel.I sy.Player_X_Speed) = 0 ∨ 129 ≤ (q.ram.get! (FrameModel.I sy.Player_X_Speed)).toNat
 
+/-- the horizontal coordinate from which his right side check is in the block's left column -/
+def cornerX (sy : Syms) : Nat := 16 * (sy.RoomBlockLeftByte.toNat / 16 + 1) - sy.SideAdderX.toNat
+
+/-- the coordinates of the checks: from `cornerX` on, five pixels -/
+def xsC (sy : Syms) : List UInt8 := (List.range 5).map fun k => (cornerX sy + k).toUInt8
+
+
+/-- **What a frame's end at the block's left side is**, from the coordinate `x` and the speed `v` at its end of the move: the height above the corner's `cy`, or the page
+0 and, with `v` from 0 to 127, the speed 0 and the coordinate `x − 1` (pushed back one pixel), with a negative `v` the speed `v` and the coordinate `x` -/
+def CornerEnd (sy : Syms) (cy : Nat) (x v : UInt8) (G : Machine) : Prop :=
+  (G.ram.get! (FrameModel.I sy.Player_Y_Position)).toNat < cy ∨
+    (G.ram.get! (FrameModel.I sy.Player_PageLoc) = 0 ∧
+      (if v < 0x80 then G.ram.get! (FrameModel.I sy.Player_X_Speed) = 0 ∧ G.ram.get! (FrameModel.I sy.Player_X_Position) = x - 1
+       else G.ram.get! (FrameModel.I sy.Player_X_Speed) = v ∧ G.ram.get! (FrameModel.I sy.Player_X_Position) = x))
+
 /-- what a real run in the room gives, apart from the frames' link to `hstep` -/
 structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   fr : Frames
@@ -380,8 +492,12 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   /-- before a stand in the fall he moves left fast, and he is near the wall -/
   stand_fast : ∀ n, C ≤ n → n + 1 < C + N.fall → (fr.vs (n + 1)).st = 0 → N.standV ≤ -V (fr.hs n)
   stand_P : ∀ n, C ≤ n → n + 1 < C + N.fall → (fr.vs (n + 1)).st = 0 → fr.P n ≤ N.standP
-  /-- what the collision routine gives with the feet at or below the corner -/
-  low_at : ∀ n, C + N.hitF ≤ n → n ≤ C + N.fall + 1 + N.rise → n ≤ t0 → cornerY sy N.h ≤ (fr.vs n).y.toNat → LowAt sy m N fr n
+  /-- with no wall, a frame with the feet at or below the corner that ends off the floor (a takeoff, or a frame of a jump) at or past the corner is not more than
+  `lowSlack` past it: what the collision routine gives there. Asked only there and only this part of `LowAt`: left of the corner it holds, with no wall the frames that
+  end on the floor are `LowAt` (`RoomCore.low_floor`, `RoomRun.low_floor_of`, `low_floor_at`), and the theorems use no other frame and no other part (`low_by`). The
+  whole `LowAt` is false there on measured frames of a big player: moving up at the corner with the height 151, moving right, he is not pushed back on that frame -/
+  low_at : NoWall sy m N fr C → ∀ n, C + N.hitF ≤ n → n ≤ C + N.fall + 1 + N.rise → n ≤ t0 → cornerY sy N.h ≤ (fr.vs n).y.toNat → ¬OnFloor sy (fr.vs n) →
+    cornerP sy ≤ fr.P n → fr.P n ≤ cornerP sy + N.lowSlack
   way : Way sy m N fr C t0 E
 
 /-- the frames as numbers: what the theorems below use. `RoomRun.toCore` makes them from real machines -/
@@ -390,6 +506,11 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m 
   not follow `hstep`. `RoomRun.stand_off_of` proves it from the field `stand_wall` and the first stand of the fall (`RoomRun.stand_first`) -/
   stand_off : ∀ n, C ≤ n → n + 1 < C + N.standF → (n + 1 < C + N.fall ∨ ∃ j, C < j ∧ j ≤ n ∧ (fr.vs j).st = 0) → (fr.vs (n + 1)).st = 0 →
     ¬OnFloor sy (fr.vs (n + 1)) → ¬Follow sy m fr n
+  /-- with no wall, a frame from `hitF` to the end of the low frames that ends on the floor, on the floor since the end of the fall, after a frame that is `LowAt`, is
+  `LowAt`. `RoomRun.low_floor_of` proves it: at its end of the move he is at or past the corner only at the block's left side, where the collision routine pushes him back
+  one pixel with the speed 0 or he moves left (`InRoom.corner`) -/
+  low_floor : NoWall sy m N fr C → ∀ n, C + N.hitF ≤ n + 1 → n + 1 ≤ C + N.fall + 1 + N.rise → n < t0 →
+    (∀ j, C + N.fall ≤ j → j ≤ n + 1 → OnFloor sy (fr.vs j)) → LowAt sy m N fr n → LowAt sy m N fr (n + 1)
   /-- a frame that starts in the air has an air input. Once a field of `RoomRun`; now `RoomRun.air_in_of` proves it: the input is read from the machine (`read_in`,
   `read_stop`), and at the player's routine the player's state is that of the frame's start (`InRoom.stR`) -/
   air_in : ∀ n, C ≤ n → n < C + N.standF → (fr.vs n).st ≠ 0 → AirIn (fr.inp (n + 1))
@@ -1015,6 +1136,19 @@ structure WallFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   small : N.standP + 256 < 4096
   ground : groundY sy < 256
 
+/-- **The numbers of the block's left side** (`RoomRun.low_floor_of`): the corner's position is that of the coordinate `cornerX` on the page 0, and five pixels more
+are on that page; the slack of a low frame is at least one pixel less one 256th, and at least one frame at the top speed less a pixel; with one frame at the top speed
+it is below five pixels; from a stop or from moving left one frame gains less than 17 of speed; the charge for the facing is not negative -/
+structure CornerFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
+  cx : cornerP sy = 256 * (cornerX sy : Int)
+  cx1 : 1 ≤ cornerX sy
+  cx5 : cornerX sy + 5 ≤ 256
+  slack1 : 255 ≤ N.lowSlack
+  slack2 : 16 * (top sy : Int) - 257 ≤ N.lowSlack
+  slack3 : N.lowSlack + 16 * (top sy : Int) < 1280
+  small : N.stopPhi + amax sy m < 17 * 256
+  c_nonneg : 0 ≤ Potential.c sy m
+
 /-- the checks of the earlier theorems -/
 structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   air : CFacts sy m
@@ -1056,6 +1190,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   floorRow : (groundY sy).toUInt8 &&& 0xF0 = (groundY sy).toUInt8
   /-- the first stand of the fall -/
   standW : WallFacts sy m N
+  /-- the block's left side -/
+  corner : CornerFacts sy m N
 
 /-! ## Lists of frames -/
 
@@ -2015,6 +2151,29 @@ theorem v_chain (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) :
       | other h2 _ => exact absurd hf0 h2
     · exact Or.inr ⟨T, h2, by omega, arc_step H ha (by omega) (r.varc T _ (by omega) (by omega) (by omega) ha (by omega))⟩
 
+/-- **With no wall, on the floor since the end of the fall, each frame from `hitF − 1` to the end of the low frames is `LowAt`**: before `hitF` he is left of the corner
+(`corner_late`), and then each frame by `low_floor` -/
+theorem low_floors (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) : ∀ d, r.C + N.hitF - 1 + d ≤ r.C + N.fall + 1 + N.rise → r.C + N.hitF - 1 + d ≤ r.t0 →
+    (∀ j, r.C + N.fall ≤ j → j ≤ r.C + N.hitF - 1 + d → OnFloor sy (r.fr.vs j)) → LowAt sy m N r.fr (r.C + N.hitF - 1 + d)
+  | 0, _, h3, _ => by
+    have hg := H.nums.hit_ge
+    have hl := H.nums.low_nonneg
+    have h := corner_late r H (n := r.C + N.hitF - 1 + 0) (by omega) (by omega) h3
+    exact ⟨by omega, Or.inr (Or.inl h)⟩
+  | d + 1, h2, h3, hall => by
+    have hg := H.nums.hit_ge
+    have ih := low_floors H hw d (by omega) (by omega) (fun j a b => hall j a (by omega))
+    have e : r.C + N.hitF - 1 + (d + 1) = r.C + N.hitF - 1 + d + 1 := by omega
+    rw [e] at hall h2 h3 ⊢
+    exact r.low_floor hw (r.C + N.hitF - 1 + d) (by omega) h2 (by omega) hall ih
+
+/-- `low_floors` at a frame -/
+theorem low_floor_at (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) {n : Nat} (h1 : r.C + N.hitF - 1 ≤ n) (h2 : n ≤ r.C + N.fall + 1 + N.rise) (h3 : n ≤ r.t0)
+    (hall : ∀ j, r.C + N.fall ≤ j → j ≤ n → OnFloor sy (r.fr.vs j)) : LowAt sy m N r.fr n := by
+  have e : r.C + N.hitF - 1 + (n - (r.C + N.hitF - 1)) = n := by omega
+  have h := low_floors r H hw (n - (r.C + N.hitF - 1)) (by omega) (by omega) (fun j a b => hall j a (by omega))
+  rwa [e] at h
+
 /-- **`low_by`**: through the low frames of the earliest jump he is not far past the corner. With no wall, the heights and the collision
 routine; with a wall hit, the potential from the wall -/
 theorem low_by (H : Checks sy m N) (hE : r.t0 < r.E) {n : Nat} (h1 : r.C ≤ n) (h2 : n ≤ r.C + N.fall + 1 + N.rise) (h3 : n ≤ r.t0) :
@@ -2025,14 +2184,16 @@ theorem low_by (H : Checks sy m N) (hE : r.t0 < r.E) {n : Nat} (h1 : r.C ≤ n) 
   · have := corner_late r H h1 hn h3
     omega
   by_cases hw : NoWall sy m N r.fr r.C
-  · refine (r.low_at n (by omega) h2 h3 ?_).1
-    rcases v_chain r H hw (n - (r.C + N.fall)) (by omega) (by have := hN.hit_ge; omega) (by have := hN.hit_ge; omega) with hf | ⟨T, h4, h5, ha⟩
-    · have hf := hf _ (Nat.le_refl _)
-      rw [show r.C + N.fall + (n - (r.C + N.fall)) = n by have := hN.hit_ge; omega] at hf
-      rw [hf.2]
-      exact hN.corner_le
-    · rw [show r.C + N.fall + (n - (r.C + N.fall)) = n by have := hN.hit_ge; omega] at h5 ha
-      exact (arc_facts H ha (by omega)).1
+  · have hg := hN.hit_ge
+    rcases v_chain r H hw (n - (r.C + N.fall)) (by omega) (by omega) (by omega) with hf | ⟨T, h4, h5, ha⟩
+    · refine (low_floor_at r H hw (n := n) (by omega) h2 h3 (fun j hj1 hj2 => ?_)).1
+      have h := hf (j - (r.C + N.fall)) (by omega)
+      rwa [show r.C + N.fall + (j - (r.C + N.fall)) = j by omega] at h
+    · rw [show r.C + N.fall + (n - (r.C + N.fall)) = n by omega] at h5 ha
+      have hfa := arc_facts H ha (by omega)
+      by_cases hp : r.fr.P n < cornerP sy
+      · omega
+      · exact r.low_at hw n (by omega) h2 h3 hfa.1 (fun hfl => hfa.2.2 hfl.1) (by omega)
   · have hg := hN.hit_run
     have hmin : min n (r.C + N.runF + 1) ≤ r.t0 := by omega
     obtain ⟨a, ha⟩ := anchor_of_wall r H hw (w := min n (r.C + N.runF + 1)) (by omega) (by omega) hmin
@@ -2477,10 +2638,7 @@ theorem floor_low (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.
   have hT := a.T1_lt
   have hl := hN.last_le
   have hg := hN.hit_ge
-  have h3 := floor_all r H hE hw a hearly (n := n) (by omega) h2
-  refine r.low_at n h1 (by omega) (by omega) ?_
-  rw [h3.2]
-  exact hN.corner_le
+  exact low_floor_at r H hw (n := n) (by omega) (by omega) (by omega) (fun j hj1 hj2 => floor_all r H hE hw a hearly hj1 (by omega))
 
 /-- **`early`**, with no wall: a fast takeoff by the last frame searched has the frames of `FastTakeoff` -/
 theorem early_of (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C)
@@ -3833,6 +3991,22 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
         (peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_State = 0 ∧
           peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_Y_Position = (groundY sy).toUInt8) ∨
         peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_X_Speed = 0)
+  /-- a frame of the room before the entering frame that starts standing with the vertical page 1, and comes to the player's routine at `k` in the state `VertAir.AtV`
+  with no jump in the input that the model reads there, comes to the end of its move `j`, and to no other `PlayerSubs`. If it starts at the floor's height with the
+  vertical speed not negative, and at `j` the page is 0 and the coordinate one of `xsC` (his right side check in the block's left column), it ends `CornerEnd`: pushed back
+  one pixel with the speed 0, or moving left as at `j` (`Route.Run.roomCorner`: `RoomFloor.floor_frame` up to the end of the move, `RoomVert.after_Q` for the one
+  `PlayerSubs`, `RoomCorner.corner_frame` from there) -/
+  corner : ∀ n, r.C ≤ n → n + 1 < r.E → peek (r.fm n) sy.Player_State = 0 → ∀ k,
+    VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) k) →
+    (FrameModel.readIn sy (PipeEntryRule.trace (r.fm n) (r.inAt n) k)).jump = false →
+    peek (r.fm n) sy.PreviousA_B_Buttons &&& 0x80 = peek (r.fm n) sy.A_B_Buttons &&& 0x80 → peek (r.fm n) sy.Player_Y_HighPos = 1 →
+    ∃ j, k ≤ j ∧ (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerSubs ∧ (PipeEntryRule.trace (r.fm n) (r.inAt n) j).frame = (r.fm n).frame ∧
+      (∀ j', k ≤ j' → (PipeEntryRule.trace (r.fm n) (r.inAt n) j').pc = sy.PlayerSubs → (PipeEntryRule.trace (r.fm n) (r.inAt n) j').frame = (r.fm n).frame → j' = j) ∧
+      (peek (r.fm n) sy.Player_Y_Position = (groundY sy).toUInt8 → peek (r.fm n) sy.Player_Y_Speed &&& 0x80 = 0 →
+        (PipeEntryRule.trace (r.fm n) (r.inAt n) j).ram.get! (FrameModel.I sy.Player_PageLoc) = 0 →
+        (PipeEntryRule.trace (r.fm n) (r.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Position) ∈ xsC sy →
+        CornerEnd sy (cornerY sy N.h) ((PipeEntryRule.trace (r.fm n) (r.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Position))
+          ((PipeEntryRule.trace (r.fm n) (r.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Speed)) (PipeTransition.frame (r.fm n) (r.inAt n)))
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `P(E)` is read at the frame's end (`read_PE`), and the walks of the room's frames put the position
 there (`InRoom.mouthE`) -/
@@ -5047,6 +5221,249 @@ theorem floor_run (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r
     obtain ⟨_, g2, g3⟩ := r.stay_of H hr st (n := r.C + N.fall + d) (by omega) (by omega) hf0 hj ih1 (by rw [ih2]; rfl)
     exact ⟨g3, g2⟩
 
+theorem sub_one_ne (x : UInt8) : x - 1 ≠ x := by
+  intro h
+  have e := congrArg UInt8.toNat h
+  rw [UInt8.toNat_sub] at e
+  have e1 : UInt8.toNat 1 = 1 := rfl
+  have := x.toNat_lt
+  omega
+
+theorem sub_one_toNat (x : UInt8) (h : 1 ≤ x.toNat) : (x - 1).toNat = x.toNat - 1 := by
+  rw [UInt8.toNat_sub_of_le]
+  · rfl
+  · show (1 : UInt8).toNat ≤ x.toNat
+    exact h
+
+theorem sbyte_neg {v : UInt8} (h : ¬ v < 0x80) : sbyte v < 0 := by
+  unfold sbyte
+  rw [if_neg h]
+  have := v.toNat_lt
+  omega
+
+/-- the charge for the facing is not negative when `c` is not -/
+theorem w_nonneg {sy : Syms} {m : Machine} (s : HS) (hc : 0 ≤ Potential.c sy m) : 0 ≤ Potential.w sy m s := by
+  unfold Potential.w
+  split
+  · split <;> omega
+  · split <;> omega
+
+/-- **At or past the corner and less than five pixels past it: the page 0 and a coordinate of `xsC`** -/
+theorem corner_window {sy : Syms} {m : Machine} {N : Nums} (hF : CornerFacts sy m N) {pg x f : UInt8} (h1 : cornerP sy ≤ FrameModel.posOf pg x f)
+    (h2 : FrameModel.posOf pg x f < cornerP sy + 1280) : pg = 0 ∧ x ∈ xsC sy := by
+  have e := hF.cx
+  have c5 := hF.cx5
+  unfold FrameModel.posOf at h1 h2
+  have hf := f.toNat_lt
+  have hx := x.toNat_lt
+  have hp : pg.toNat = 0 := by omega
+  refine ⟨UInt8.toNat_inj.mp (by rw [hp]; rfl), ?_⟩
+  exact List.mem_map.2 ⟨x.toNat - cornerX sy, List.mem_range.2 (by omega), by rw [show cornerX sy + (x.toNat - cornerX sy) = x.toNat by omega]; simp⟩
+
+/-- **`low_floor`**: with no wall, a frame from `hitF` to the end of the low frames that ends on the floor, on the floor since the end of the fall, after a frame that is
+`LowAt`, is `LowAt`. It starts on the floor with the vertical page 1 and the vertical speed 0 (`floor_run`), with no jump (a takeoff ends in the air), so `InRoom.corner`
+gives its one end of the move `jq`. If he is left of the corner at `jq`, he ends at most one pixel more right (`Collide`), or as at `jq`. If not, `jq` is at most five pixels
+past the corner (`move_top`, the slack): the page 0 and a coordinate of `xsC`, and the frame ends `CornerEnd`. A frame that follows the model keeps the coordinate after
+`jq`, so it is not pushed back: it moves left. A frame that does not is `Stop` (`clean`), and its end of the move is that of `FrameModel.frame_readQ` (the one `PlayerSubs`):
+pushed back one pixel from `P + 16·v₂`, where `v₂` is at most the top speed, and at most 16 after a frame that is stopped or moves left; or moving left -/
+theorem low_floor_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) (hw : NoWall sy m N r.fr r.C) {n : Nat}
+    (h1 : r.C + N.hitF ≤ n + 1) (h2 : n + 1 ≤ r.C + N.fall + 1 + N.rise) (h3 : n < r.t0)
+    (hall : ∀ j, r.C + N.fall ≤ j → j ≤ n + 1 → OnFloor sy (r.fr.vs j)) (hlow : LowAt sy m N r.fr n) : LowAt sy m N r.fr (n + 1) := by
+  have hN := H.nums
+  have hF := H.corner
+  have hvf := hN.vf.1
+  have hg := hN.hit_ge
+  have hl0 := hN.low_nonneg
+  have hfar := r.t0_far H hr st
+  have hE := r.t0_le_E H hr
+  have hC : r.C ≤ n := by omega
+  have hfl0 := hall n (by omega) (by omega)
+  have hfl1 := hall (n + 1) (by omega) (Nat.le_refl _)
+  have hfr := r.floor_run H hr st hw (n - (r.C + N.fall)) (by omega) (fun e he => hall _ (by omega) (by omega))
+  rw [show r.C + N.fall + (n - (r.C + N.fall)) = n by omega] at hfr
+  have hj : (r.fr.inp (n + 1)).jump = false := by
+    cases hj : (r.fr.inp (n + 1)).jump with
+    | false => rfl
+    | true =>
+      exfalso
+      obtain ⟨abs, e⟩ := r.vjump_of H hr (n := n) hC h3 (by omega) hj
+      obtain ⟨x, hx, hxs⟩ := offCheck_spec H.off abs
+      have hy : (r.fr.vs n).y = (groundY sy).toUInt8 := by
+        rw [← hfl0.2]
+        exact (UInt8.ofNat_toNat).symm
+      have h6 : OnArc sy m N r.fr n (n + 1) := by
+        refine ⟨by omega, x, x, hx, ?_, by rw [e, hy, hxs]⟩
+        rw [show n + 1 - (n + 1) = 0 by omega]
+        exact .refl _
+      exact (arc_facts H h6 (by omega)).2.2 hfl1.1
+  have hv0 : r.fr.vs n = VertModel.vsOf sy (r.fm n) := r.vs_fm hr hC (by omega) (by omega)
+  have hst' : peek (r.fm n) sy.Player_State = 0 := by
+    have e : (VertModel.vsOf sy (r.fm n)).st = peek (r.fm n) sy.Player_State := rfl
+    rw [← e, ← hv0]
+    exact hfl0.1
+  have hy' : peek (r.fm n) sy.Player_Y_Position = (groundY sy).toUInt8 := by
+    have e : (VertModel.vsOf sy (r.fm n)).y = peek (r.fm n) sy.Player_Y_Position := rfl
+    rw [← e, ← hv0, ← hfl0.2]
+    exact (UInt8.ofNat_toNat).symm
+  have hvy' : peek (r.fm n) sy.Player_Y_Speed &&& 0x80 = 0 := by
+    have e : (VertModel.vsOf sy (r.fm n)).vy = peek (r.fm n) sy.Player_Y_Speed := rfl
+    rw [← e, ← hv0, hfr.2]
+    rfl
+  obtain ⟨jq, hkj, hq, _, huniq, himp⟩ := hr.corner n hC (by omega) hst' (r.arr n) (r.atV_of H hr hC h3) (r.jump_read hC h3 hj)
+    (hr.pair n hC (by omega)).2 hfr.1
+  have hnx := r.next hC (r.ups_lt hr hC (by omega))
+  have p0 : r.fr.P n = posP sy (r.fm n) := r.P_fm hr hC (by omega) (by omega)
+  have p1 : r.fr.P (n + 1) = posP sy (PipeTransition.frame (r.fm n) (r.inAt n)) := by
+    rw [r.P_fe (n := n + 1) (by omega) (by omega), hnx]
+  have hv1 : (r.fr.hs (n + 1)).v = peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_X_Speed := by
+    rw [r.hs_fe (n := n + 1) (by omega) (by omega), hnx]
+    rfl
+  have hy1 : ¬ ((PipeTransition.frame (r.fm n) (r.inAt n)).ram.get! (FrameModel.I sy.Player_Y_Position)).toNat < cornerY sy N.h := by
+    have e : (r.fr.vs (n + 1)).y = peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_Y_Position := by
+      rw [r.vs_fe (n := n + 1) (by omega) (by omega), hnx]
+      rfl
+    have h5 := hfl1.2
+    rw [e] at h5
+    have h6 := hN.corner_le
+    show ¬ (peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_Y_Position).toNat < cornerY sy N.h
+    omega
+  have hmt := r.move_top_of H hr st n hC h3
+  have hl1 := hlow.1
+  have h3' := hF.slack3
+  rcases r.clean n hC h3 with hc | ⟨hs, hc⟩
+  · -- the frame follows the model: nothing writes the horizontal bytes after the end of the move
+    have hf := r.follow_of_clean H hr st hC h3 (r.cleanR_of H hr hC h3 hc)
+    have hafter := hc.after jq hkj hq
+    have hPF : posP sy (PipeTransition.frame (r.fm n) (r.inAt n)) = posP sy (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) := FrameModel.posP_congr hafter
+    have hXF := hafter sy.Player_X_Position (by simp [FrameModel.hBytes])
+    have hVF := hafter sy.Player_X_Speed (by simp [FrameModel.hBytes])
+    by_cases hlt : r.fr.P (n + 1) < cornerP sy
+    · exact ⟨by omega, Or.inr (Or.inl hlt)⟩
+    · obtain ⟨hpg, hx⟩ := corner_window hF (pg := peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_PageLoc)
+        (x := peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_X_Position) (f := peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.SprObject_X_MoveForce)
+        (by rw [← FrameModel.posP_eq, ← hPF, ← p1]; omega) (by rw [← FrameModel.posP_eq, ← hPF, ← p1]; omega)
+      have hce := himp hy' hvy' hpg hx
+      unfold CornerEnd at hce
+      rcases hce with hce | ⟨_, hce⟩
+      · exact absurd hce hy1
+      · split at hce
+        · exfalso
+          obtain ⟨_, hx1⟩ := hce
+          exact sub_one_ne _ (hx1.symm.trans hXF)
+        · rename_i hneg
+          have hsb : sbyte (r.fr.hs (n + 1)).v < 0 := by
+            rw [hv1, hVF]
+            exact sbyte_neg hneg
+          refine ⟨?_, Or.inr (Or.inr hsb)⟩
+          rw [hf.2.2]
+          omega
+  · -- the frame does not follow the model: it is `Stop`, and a `TopSpeed.Frame` whose end of the move is `jq`
+    have hd : inD sy (r.fr.hs n) = true := by
+      have h := r.inD_of H hr st (n - r.C) (by omega)
+      rwa [show r.C + (n - r.C) = n by omega] at h
+    have hR := r.readR_of H hr hC h3 hd hc
+    obtain ⟨idle, hT⟩ := r.inTime_of H hr
+    obtain ⟨f, kB, e1, e2, e3, _, _, _, hpcB, hfB, eP2, ev2, _⟩ := FrameModel.frame_readQ H.model H.fric hR (r.before_of H hr hC h3 hR.at_frame.pc)
+      (hT n hC h3 hR.at_frame.pc) (r.far_of H hr st hC h3)
+    have hjB : r.arr n + kB = jq := huniq _ (Nat.le_add_right _ _) hpcB hfB
+    have hco : FrameModel.Collide sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n + kB)) (PipeTransition.frame (r.fm n) (r.inAt n)) :=
+      hc.collide (r.arr n + kB) (Nat.le_add_right _ _) hpcB
+    rw [hjB] at eP2 ev2 hco
+    refine ⟨?_, Or.inl hs⟩
+    have hmove := f.move
+    have hfr2 := f.friction
+    have hgain := f.friction_gain
+    have hfrac := f.frac
+    have han := f.anim
+    have hdd := hd
+    rw [r.hs_fm hr hC (by omega) (by omega)] at hdd
+    simp only [inD, TopSpeed.inSpeed, Bool.and_eq_true, decide_eq_true_eq] at hdd
+    have hva : (sbyte (peek (r.fm n) sy.Player_X_Speed)).natAbs ≤ top sy := hdd.1.1.1
+    have hv1' : -(top sy : Int) ≤ f.v₁ ∧ f.v₁ ≤ (top sy : Int) := by
+      rcases han with ⟨a, _⟩ | ⟨a, _⟩
+      · rw [a, e1]
+        omega
+      · rw [a]
+        omega
+    have hv2 := hfr2 hv1'
+    have hcoP := hco.P
+    rw [p1]
+    have hP2 : posP sy (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) = r.fr.P n + 16 * f.v₂ := by rw [← eP2, hmove, e3, p0]
+    by_cases hq' : posP sy (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) < cornerP sy
+    · have := hF.slack1
+      rcases hcoP with e | e | ⟨e, _⟩ <;> omega
+    · obtain ⟨hpg, hx⟩ := corner_window hF (pg := peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_PageLoc)
+        (x := peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_X_Position) (f := peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.SprObject_X_MoveForce)
+        (by rw [← FrameModel.posP_eq]; omega) (by rw [← FrameModel.posP_eq]; omega)
+      have hce := himp hy' hvy' hpg hx
+      unfold CornerEnd at hce
+      have ePF := FrameModel.posP_eq sy (PipeTransition.frame (r.fm n) (r.inAt n))
+      have ePQ := FrameModel.posP_eq sy (PipeEntryRule.trace (r.fm n) (r.inAt n) jq)
+      unfold FrameModel.posOf at ePF ePQ
+      have mF := (peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.SprObject_X_MoveForce).toNat_lt
+      have mQ := (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.SprObject_X_MoveForce).toNat_lt
+      have hpgQ : (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_PageLoc).toNat = 0 := by rw [hpg]; rfl
+      have hxq : 1 ≤ (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_X_Position).toNat := by
+        have := hF.cx
+        have := hF.cx1
+        omega
+      rcases hce with hce | ⟨hpgF, hce⟩
+      · exact absurd hce hy1
+      · have hpgF' : (peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_PageLoc).toNat = 0 := by
+          show ((PipeTransition.frame (r.fm n) (r.inAt n)).ram.get! (FrameModel.I sy.Player_PageLoc)).toNat = 0
+          rw [hpgF]
+          rfl
+        split at hce
+        · -- pushed back one pixel with the speed 0
+          obtain ⟨_, hxF⟩ := hce
+          have hxF' : (peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_X_Position).toNat =
+              (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_X_Position).toNat - 1 := by
+            show ((PipeTransition.frame (r.fm n) (r.inAt n)).ram.get! (FrameModel.I sy.Player_X_Position)).toNat = _
+            rw [hxF]
+            exact sub_one_toNat _ hxq
+          have hPF : posP sy (PipeTransition.frame (r.fm n) (r.inAt n)) = posP sy (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) - 256 := by
+            rcases hcoP with e | e | ⟨e, _⟩ <;> omega
+          rw [hPF, hP2]
+          by_cases hn0 : r.fr.P n < cornerP sy
+          · have := hF.slack2
+            omega
+          · have hsmall := hF.small
+            have hsn := hN.stop_nonneg
+            have eV : V (r.fr.hs n) = 256 * f.v + f.f := by
+              rw [e1, e2, r.hs_fm hr hC (by omega) (by omega)]
+              rfl
+            have hff := (r.fr.hs n).f.toNat_lt
+            have hV : 256 * f.v₂ ≤ N.stopPhi + amax sy m := by
+              rcases hlow.2 with hS | hL | hL
+              · obtain ⟨_, hphi, _⟩ := hS
+                have hw0 := w_nonneg (sy := sy) (m := m) (r.fr.hs n) hF.c_nonneg
+                unfold phi at hphi
+                rcases han with ⟨a, b'⟩ | ⟨a, b'⟩ <;> omega
+              · exact absurd hL hn0
+              · have hfe : f.f = ((r.fr.hs n).f.toNat : Int) := by
+                  rw [e2, r.hs_fm hr hC (by omega) (by omega)]
+                  rfl
+                have hve : f.v = sbyte (r.fr.hs n).v := by
+                  rw [e1, r.hs_fm hr hC (by omega) (by omega)]
+                  rfl
+                rcases han with ⟨a, b'⟩ | ⟨a, b'⟩ <;> omega
+            omega
+        · -- moving left, as at `jq`
+          rename_i hneg
+          obtain ⟨_, hxF⟩ := hce
+          have hxF' : (peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_X_Position).toNat =
+              (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) sy.Player_X_Position).toNat := by
+            show ((PipeTransition.frame (r.fm n) (r.inAt n)).ram.get! (FrameModel.I sy.Player_X_Position)).toNat = _
+            rw [hxF]
+            rfl
+          have hPF : posP sy (PipeTransition.frame (r.fm n) (r.inAt n)) = posP sy (PipeEntryRule.trace (r.fm n) (r.inAt n) jq) := by
+            rcases hcoP with e | e | ⟨e, _⟩ <;> omega
+          have hsb : f.v₂ < 0 := by
+            rw [ev2]
+            exact sbyte_neg hneg
+          rw [hPF, hP2]
+          omega
+
 /-- **`vfloor`**: with no wall, a frame after the fall that starts on the floor, when he has stood on the floor since the end of the fall, is `VFrame`. With a jump in its
 input it takes off (`takeoff_of`); with none it stays on the floor (`stay_of`, with the vertical page and the vertical speed of `floor_run`), with a ground input
 (`gnd_in_of`). Once a field of `RoomRun` -/
@@ -5093,6 +5510,7 @@ def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : 
     vfloor := fun hw _ h1 h2 _ hall => r.vfloor_of H hr st hw h1 h2 hall
     varc := fun _ _ hC ht hE ha hk => r.varc_of H hr hC ht hE ha hk
     stand_row := r.stand_row_of H hr, stand_off := r.stand_off_of H hr st
+    low_floor := fun hw _ h1 h2 h3 hall hl => r.low_floor_of H hr st hw h1 h2 h3 hall hl
     air_in := r.air_in_of H hr st, fall_long := r.fall_long_of H hr st, vfall := r.vfall_of H hr st, floor_at := r.floor_at_of H hr st
     start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
     frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr }

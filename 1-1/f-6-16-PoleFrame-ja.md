@@ -114,7 +114,7 @@ pole_frame_check（非公開、21 回目まで） :  poleFrameCheck(sy, m₀) = 
 
 使うのは範囲の左端だけです。高さは読む行を決めますが、高さの範囲は出していません。
 
-**ファイル.** `Theorems/PoleFrame.lean`、`Theorems/PoleJoin.lean` の `Run`、21 回目までは非公開の `Proof/PoleFrame.lean`（`pole_frame_check`）。22 回目からは[旗の近くの読み](f-6-17-3-PoleTileRead-ja.md)の `pole_check_u` を使い、`Proof/PoleFrame.lean` は作りません。
+**ファイル.** `Theorems/PoleFrame.lean`、`Theorems/PoleJoin.lean` の `Run`、21 回目までは非公開の `Proof/PoleFrame.lean`（`pole_frame_check`）。22 回目からは[旗の近くの読み](f-6-17-3-PoleTileRead-ja.md)の `pole_check_u`（23 回目からは[横の判定の高さ](f-6-17-4-PoleTileHeight-ja.md)の `pole_check_h`）を使い、`Proof/PoleFrame.lean` は作りません。
 
 **再現.**
 ```
