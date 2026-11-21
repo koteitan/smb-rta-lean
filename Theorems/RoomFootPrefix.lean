@@ -117,7 +117,7 @@ theorem Run.roomFootMap {es₁ : List Machine}
     (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true)
     (hW : RoomBlocks.BChecks sy nmS m0)
     (hRw : RoomBlocks.rowsCheckR sy nm₁ d₁ nmS m0 rN.vStart = true)
-    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
     {k n fuel : Nat} {c : FrameModel.Cut} {ret : UInt16} {sp index : UInt8}
     (hk0 : R.base.b₁ sy ≤ k) (hk1 : k < R.base.a₂ sy nmS m0)
@@ -153,7 +153,7 @@ theorem Run.roomFootMap {es₁ : List Machine}
       (ScreenPage.placesR sy nmS m0).idle →
       (PipeEntryRule.trace (R.base.seq k) (R.base.inp k) j).fdot ≤ dotsPerFrame-64 := by
     intro j hj
-    apply Nat.le_trans ((R.chg.roomSites k hk0 hk1 j).late hj)
+    apply Nat.le_trans (R.chg.roomLate k hk0 hk1 j hj)
     change dotsPerFrame-6000 ≤ dotsPerFrame-64
     decide
   have eq := FrameModel.trace_inFrame loop hf ifr time np (Nat.le_refl _)
@@ -167,7 +167,7 @@ theorem Run.roomFootMap {es₁ : List Machine}
   have xr : (PipeEntryRule.trace (R.base.seq k) (R.base.inp k) (n+np)).x = 0 := by
     rw [eq.1]; exact x
   obtain ⟨nr,nt,hnr,hnt,prout,arout,frout⟩ :=
-    R.roomCollisionMap hT₁ hM hS hW hRw hB hK hk0 hk1 hc gr pr xr eq.2 loop
+    R.roomCollisionMap hT₁ hM hS hW hRw hR hB hK hk0 hk1 hc gr pr xr eq.2 loop
       (by rw [eq.1,ad]; exact hl) (by rw [eq.1,ad]; exact hr) (by rw [eq.1,ad]; exact nc)
   refine ⟨np,nr,nt,hnp,hnr,hnt,pr,?_,?_,?_,frout⟩
   · rw [eq.1]; exact hy

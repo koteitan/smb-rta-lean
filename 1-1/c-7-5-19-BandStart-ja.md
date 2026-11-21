@@ -44,7 +44,7 @@ NumFacts（ROM の数、room_nums の中で native_decide）:
 
 ## 残っていること
 
-- 1 つ前のフレームも角かその先にある、136 から 151 ピクセルのフレームの `low_at`。その高さでのブロックの左側の当たり判定が要ります。移動の終わりでの大きさのバイト（`SizeKeep` の歩きはフレームの始めと終わりでしか与えない）、コインか空のセル、そこでの `RoomCorner` の歩きです。
+- 1 つ前のフレームも角かその先にある、136 から 151 ピクセルのフレームの `low_at`。ラウンド 27 からは `C + 40` より後で、`C + 40` からのすべてのフレームが角かその先にあるときだけです（[低いフレームごとの上限](c-7-5-20-LowBound-ja.md)）。その高さでのブロックの左側の当たり判定が要ります。移動の終わりでの大きさのバイト（`SizeKeep` の歩きはフレームの始めと終わりでしか与えない）、コインか空のセル、そこでの `RoomCorner` の歩きです。
 
 **ファイル。** `Theorems/RoomJoin.lean`: `RoomFields.low_at` を狭め、新しい `NumFacts.low_top`、`hit_J`、`hit_F`、`hit_late` は `16·top − 1` で、`low_by` の結論、`stop_short`。非公開: `room_nums`（`Proof/RoomJoin.lean`）の `low_top`。プログラム `room-approach-check`（上の数）。
 

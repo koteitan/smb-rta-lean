@@ -24,6 +24,12 @@ Here it follows from five things of the frame (`edge_step_of`, `edge_frame`):
 
 The walks' guards protect the followed byte (`AfterKeep.guardH`); `FrameKeep.guardE` protects both bytes (`FrameKeep.edgeE`), so `CleanK` of `guardE` gives
 `CleanK` of the walks' guards. The checks on the ROM are `qCheck` and `rCheck`. No game data. Page: `1-1/e-2-10-3-13-EdgeStep.md`.
+
+Round 27: the same walks follow a third byte, the platforms' force on the scroll (`platI`), which the scroll's amount `X` adds to the byte the move stores. The
+scroll handler stores 0 to it at its end, and `rCheck` also asks that the middle walk knows it as 0 at the instruction after the call (`atR`); so `keep_r` gives it 0
+there and at the frame's end. The only other store to it in the ROM comes after a store to his position by its address in the platforms' routine, where the second
+walk stops (`cutPos`, excluded by the field `posW`). So at each scroll handler it is 0 (`SurfaceFrames.OnFrames.platQ`), and the field `near` asks `NearX`, with the
+byte the move stores in place of `X` (`near_of_x`). Page: `1-1/e-2-10-3-14-PlatformForce.md`.
 -/
 
 namespace Smbrta.EdgeStep
@@ -38,6 +44,21 @@ def pixel16 (sy : Syms) (m : Machine) : Nat := (peek m sy.Player_PageLoc).toNat 
 2 px is at most his pixel. A condition on one state. -/
 def Near (sy : Syms) (P : Places) (Q : Machine) : Prop :=
   Allows P Q → left16 P Q + (amountOf P Q).toNat + 2 ≤ pixel16 sy Q
+
+/-- **NearX(Q)** (round 27): `Near` with the scroll's amount `X` replaced by the byte the move stores (`Places.xs`), as `X` is on the frames above ground: there the
+platforms' force on the scroll (`Places.plat`) is 0 at the scroll handler (`SurfaceFrames.OnFrames.platQ`). A condition on one state. -/
+def NearX (sy : Syms) (P : Places) (Q : Machine) : Prop :=
+  Allows P Q → left16 P Q + (Q.ram.get! P.xs).toNat + 2 ≤ pixel16 sy Q
+
+/-- **`NearX` gives `Near`** when the platforms' force on the scroll is 0: then `X` is the byte the move stores -/
+theorem near_of_x {P : Places} {Q : Machine} (h : NearX sy P Q) (hp : Q.ram.get! P.plat = 0) : Near sy P Q := by
+  intro ha
+  have e : amountOf P Q = Q.ram.get! P.xs := by
+    unfold amountOf
+    rw [hp]
+    exact UInt8.add_zero _
+  rw [e]
+  exact h ha
 
 theorem posP_ge (m : Machine) : 256 * (pixel16 sy m : Int) ≤ posP sy m := by
   show 256 * (((peek m sy.Player_PageLoc).toNat * 256 + (peek m sy.Player_X_Position).toNat : Nat) : Int) ≤
@@ -361,9 +382,15 @@ def cutPos (sy : Syms) (m0 : Machine) (pc : UInt16) : Bool :=
 
 open AfterKeep (walkQ1 tableBut rkOn guardH)
 
-/-- **The edge's two bytes**, as indices of RAM: the screen's left edge, its pixel and its page (`ScreenClamp.places`: the operands of the clamp's two loads) -/
+/-- **The platforms' force on the scroll** (round 27), as an index of RAM: the byte that the scroll handler adds to the byte the move stores (`Platform_X_Scroll`) -/
+def platI (sy : Syms) : Nat := (sy.Platform_X_Scroll &&& 0x7FF).toNat
+
+/-- **The edge's two bytes**, as indices of RAM: the screen's left edge, its pixel and its page (`ScreenClamp.places`: the operands of the clamp's two loads); round 27:
+and the platforms' force on the scroll (`platI`) -/
 def eI (sy : Syms) (m0 : Machine) : List Nat :=
-  [((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat, ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat]
+  [((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat, ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat, platI sy]
+
+theorem platI_mem {m0 : Machine} : platI sy ∈ eI sy m0 := List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
 
 /-- **The first walk with the byte `b` followed**, from the states at the cut `cuts` to the scroll handler: its table (the search is no part of the proof) -/
 def qbCfg (sy : Syms) (m0 : Machine) (v : UInt8) (b : Nat) (cuts : List AS) : FrameKeep.CfgK :=
@@ -419,8 +446,10 @@ def q2CfgR (sy : Syms) (m0 : Machine) (b : Nat) (starts : List AS) : FrameKeep.C
   let q := FrameKeep.tableOfKW key P.X
   { E, ops := (aRows E).toArray, S, G, W := [], t := q.1, kl := q.1.map PipeWrites.knownOf, idx := q.2.1, cut := q.2.2, key, fin := fun B => B.rk && !B.spent }
 
-/-- what the middle walk asks after the scroll handler's call: the second walk succeeds for each byte -/
-def atR (sy : Syms) (m0 : Machine) (C2 : List FrameKeep.CfgK) (B : AS) : Bool := C2.all fun C => walkKP C (FrameKeep.ctlI sy) (cutPos sy m0) (rPc sy) FrameKeep.fuelK (rkOn B)
+/-- what the middle walk asks after the scroll handler's call: it knows the platforms' force on the scroll as 0 (round 27), and the second walk succeeds for each
+byte -/
+def atR (sy : Syms) (m0 : Machine) (C2 : List FrameKeep.CfgK) (B : AS) : Bool :=
+  knownIs B (platI sy, 0) && C2.all fun C => walkKP C (FrameKeep.ctlI sy) (cutPos sy m0) (rPc sy) FrameKeep.fuelK (rkOn B)
 
 /-- what the first walk asks at the scroll handler: the middle walk succeeds -/
 def atS (sy : Syms) (m0 : Machine) (Cs : FrameKeep.CfgK) (C2 : List FrameKeep.CfgK) (B : AS) : Bool :=
@@ -432,7 +461,8 @@ def cfgPR (sy : Syms) (m0 : Machine) (v : UInt8) (q : CtrlKeep.Table) (C1 Cs : F
     after := fun B => walkQ1 C1 (FrameKeep.ctlI sy) sy.PlayerSubs (atS sy m0 Cs C2) FrameKeep.fuelK (CtrlKeep.toA (CtrlKeep.watchA sy m0 v) (CtrlKeep.valA sy v) B) }
 
 /-- **The check of the edge after the scroll handler**: the walk of the pause bit up to the cut; from there the first walk of `AfterKeep` to the scroll handler; from
-there the middle walk to the instruction after the call; from there, for each byte of `eI`, the second walk to the frame's end -/
+there the middle walk to the instruction after the call, where it knows the platforms' force on the scroll as 0; from there, for each byte of `eI`, the second walk to
+the frame's end -/
 def rCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
   let q := CtrlKeep.cutTable sy m0 true
   let cuts := CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q)
@@ -477,7 +507,7 @@ theorem edgeOf_eq {m m' : Machine} (hp : m.prg = m0.prg) (hk : m.prgMask = m0.pr
   unfold SurfaceRead.edgeOf
   rw [SurfaceRead.places_congr hp hk, SurfaceRead.places_congr hp' hk']
   have e1 := h _ (List.mem_cons_self (a := (((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat)))
-  have e2 := h _ (List.mem_cons_of_mem _ (List.mem_singleton.2 rfl))
+  have e2 := h _ (List.mem_cons_of_mem _ List.mem_cons_self)
   show (((m.ram.get! ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat).toNat * 256 + (m.ram.get! ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat).toNat) * 256 + 255 : Int) =
     ((m'.ram.get! ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat).toNat * 256 + (m'.ram.get! ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat).toNat) * 256 + 255
   rw [e1, e2]
@@ -576,8 +606,8 @@ theorem keep_q (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheck s
 
 /-- **A frame in control keeps the edge's two bytes from the instruction after the scroll handler's call to its end.** The conditions of `keep_q`. Then the frame
 comes to the scroll handler at `kq`, the first time after `n₀`, in the frame; and if from `kq` on no instruction of the frame is a store to his position by its address
-outside the push and the clamp (the field `posW`), then at any instruction `n > kq` of the frame at the instruction after the call (`rPc`) the two bytes are those of
-the frame's end. `hc`, `hr` are the checks on the ROM. -/
+outside the push and the clamp (the field `posW`), then at any instruction `n > kq` of the frame at the instruction after the call (`rPc`) the bytes of `eI` are those
+of the frame's end, and the platforms' force on the scroll is 0 there (round 27). `hc`, `hr` are the checks on the ROM. -/
 theorem keep_r (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : rCheck sy m0 v = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
     (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hH : ∀ x ∈ eI sy m0, ∀ j, FrameKeep.CleanK (guardH sy m0 x) (FrameKeep.spotOf sy m0).store (trace m i j))
@@ -585,7 +615,8 @@ theorem keep_r (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : rCheck s
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
     ∃ kq, n₀ < kq ∧ (trace m i kq).pc = sy.PlayerSubs ∧ (trace m i kq).frame = m.frame ∧ (∀ j, n₀ < j → j < kq → (trace m i j).pc ≠ sy.PlayerSubs) ∧
       ((∀ j, kq ≤ j → (trace m i j).frame = m.frame → cutPos sy m0 (trace m i j).pc = false) →
-        ∀ n, kq < n → (trace m i n).pc = rPc sy → ∀ x ∈ eI sy m0, (frame m i).ram.get! x = (trace m i n).ram.get! x) := by
+        ∀ n, kq < n → (trace m i n).pc = rPc sy →
+          (∀ x ∈ eI sy m0, (frame m i).ram.get! x = (trace m i n).ram.get! x) ∧ (trace m i n).ram.get! (platI sy) = 0) := by
   simp only [rCheck, Bool.and_eq_true, bne_iff_ne, ne_eq] at hr
   obtain ⟨⟨⟨⟨⟨⟨_, _⟩, hne3⟩, hp1⟩, hp2⟩, hp3⟩, hp4⟩ := hr
   have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_of_F (hcl n)
@@ -613,22 +644,29 @@ theorem keep_r (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : rCheck s
     have hw1 : walkQ1 (qsCfg sy m0 v Ps) (FrameKeep.ctlI sy) (rPc sy) (atR sy m0 ((eI sy m0).map fun b => q2CfgR sy m0 b Ps.stops.toList)) FrameKeep.fuelK Bq = true := hatq
     obtain ⟨k₁, hk1, hq1, hf1, hd1, hb1, B₁, hat1, hs1⟩ :=
       AfterKeep.q1_run (C := qsCfg sy m0 v Ps) hp3 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw1 hsq hfq hdq hcl hx'
-    intro n hn hrp x hxI
-    have hmem : q2CfgR sy m0 x Ps.stops.toList ∈ (eI sy m0).map fun b => q2CfgR sy m0 b Ps.stops.toList := List.mem_map.2 ⟨x, hxI, rfl⟩
-    have hw2 := List.all_eq_true.1 hat1 _ hmem
-    have ht2 := List.all_eq_true.1 hp4 _ hmem
-    have hs2 : Sim (q2CfgR sy m0 x Ps.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) (rkOn B₁) (trace m i k₁) := AfterKeep.sim_rkOn hs1
-    obtain ⟨⟨B₂, hfin, hs₂⟩, hnoQ⟩ := endKP (C := q2CfgR sy m0 x Ps.stops.toList) ht2 rfl rfl hne3 hw2 hs2 hf1 hd1 (hH x hxI) hx'
-      (fun j hj hfj => hp j (by omega) hfj)
+    intro n hn hrp
+    simp only [atR, Bool.and_eq_true] at hat1
+    obtain ⟨hpl, hat2⟩ := hat1
+    have hend : ∀ x ∈ eI sy m0, (∃ B₂, (q2CfgR sy m0 x Ps.stops.toList).fin B₂ = true ∧
+        Sim (q2CfgR sy m0 x Ps.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) B₂ (frame m i)) ∧
+        ∀ d, 1 ≤ d → (trace m i (k₁ + d)).pc ≠ rPc sy := by
+      intro x hxI
+      have hmem : q2CfgR sy m0 x Ps.stops.toList ∈ (eI sy m0).map fun b => q2CfgR sy m0 b Ps.stops.toList := List.mem_map.2 ⟨x, hxI, rfl⟩
+      have hw2 := List.all_eq_true.1 hat2 _ hmem
+      have ht2 := List.all_eq_true.1 hp4 _ hmem
+      have hs2 : Sim (q2CfgR sy m0 x Ps.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) (rkOn B₁) (trace m i k₁) := AfterKeep.sim_rkOn hs1
+      exact endKP (C := q2CfgR sy m0 x Ps.stops.toList) ht2 rfl rfl hne3 hw2 hs2 hf1 hd1 (hH x hxI) hx' (fun j hj hfj => hp j (by omega) hfj)
     have hnn : n = k₁ := by
       rcases Nat.lt_trichotomy n k₁ with h | h | h
       · exact absurd hrp (hb1 n hn h)
       · exact h
       · exfalso
-        have := hnoQ (n - k₁) (by omega)
+        have := (hend (platI sy) platI_mem).2 (n - k₁) (by omega)
         rw [show k₁ + (n - k₁) = n by omega] at this
         exact this hrp
     subst hnn
+    refine ⟨fun x hxI => ?_, TaintRun.sim_known hs1 hpl⟩
+    obtain ⟨B₂, hfin, hs₂⟩ := (hend x hxI).1
     change (B₂.rk && !B₂.spent) = true at hfin
     simp only [Bool.and_eq_true, Bool.not_eq_true'] at hfin
     have e := hs₂.rkv hfin.1

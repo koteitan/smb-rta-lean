@@ -10,6 +10,8 @@
 
 **第 26 回.** フィールド `edge` は定理になりました（`OnFrames.edgeAt`、[フレームの端の進み](e-2-10-3-13-EdgeStep-ja.md)）。端の 2 つのバイトをフレームの中で追う歩き、スクロールの規則、`collide`、`posW`、そしてスクロールの処理での 1 つの状態の新しいフィールド `near`（そこでスクロールが許されるとき left16(Q) + X(Q) + 2 ≤ pixel16(Q)）から出ます。`numbersCheck` は確認を 3 つ多く持ち（`EdgeStep.qCheck`、`EdgeStep.rCheck`、`ScrollRule.check`）、`FrameKeep.guardE` は端の 2 つのバイトを守ります（`FrameKeep.edgeE`）。
 
+**第 27 回.** スクロールの量 `X` は、動きの書くバイトと、スクロールへの足場の力の和です。数えるフレームのスクロールの処理では、足場の力は 0 です（`OnFrames.platQ`、[スクロールへの足場の力](e-2-10-3-14-PlatformForce-ja.md)）: `EdgeStep` の歩きがこれを 3 つ目のバイトとして追い、操作の始め（`Start.plat`、`numbersCheck`）とスクロールの処理の呼び出しのあと（`rCheck`）で 0 で、`posW` が足場の書き込みを除きます。だからフィールド `near` は `NearX` を求めます（`X` のかわりに動きの書くバイト）。`FrameKeep.guardE` はこのバイトも守ります。新しいフィールドはありません。`near` のかわりのプレイヤーのルーチンでの条件は、フレームの端の進みに足りることを証明しましたが、`surface-frames-check` の書き換えた状態で偽なので、使っていません（[プレイヤーのルーチンでの彼の場所](e-2-10-3-15-PlaceKeep-ja.md)）。
+
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
 ## 1 フレームの形
@@ -106,8 +108,8 @@ state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       �
 collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j − 1), Q, seq j, Calls)  Calls: Q からフレームの中で押し戻しか補正の入口に来る
            CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ base(M) + 256 ∧ v(Q) ≤ 0))
                                                   速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
-near     : 1 ≤ j < g → arrAt ≤ k → pc(Q) = PlayerSubs → Near(Q)、Q = trace(fm j, pad j, k)        （第 26 回。第 24 回のフィールド edge のかわり:
-           Near(Q) := Allows(Q) → left16(Q) + X(Q) + 2 ≤ pixel16(Q)）
+near     : 1 ≤ j < g → arrAt ≤ k → pc(Q) = PlayerSubs → NearX(Q)、Q = trace(fm j, pad j, k)       （第 26 回は Near。第 24 回のフィールド edge のかわり。
+           NearX(Q) := Allows(Q) → left16(Q) + xs(Q) + 2 ≤ pixel16(Q)      第 27 回: xs = 動きの書くバイト。X = xs + 足場の力で、そこでは力は 0（OnFrames.platQ））
 moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves は AfterP.stop だけになった
 posW     : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  PosW(R)       位置を番地で書くのは押し戻しと補正の内側だけ。その外で添字かポインタで書く命令は位置を書かない
            （第 23 回: 絶対番地と添字で書き、基の番地からどの添字でも位置に届かない命令には求めない: PositionKeep.absFar）
@@ -177,6 +179,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | すべてのフレームの `clampR`（第 23 回） | スクロールの処理で右へ動き、その速さで終わるフレームだけで求める。`PositionKeep.keep_frame` が使うのはそこだけ。フィールド `collide` は本物のフレームで偽（画面の左端より 1 px 左で始まるフレーム）: [フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md) |
 | `collide` の 3 番目の場合 P(b) ≤ P(M) + 256（本物のフレームで偽、第 23 回） | 第 24 回: 画面の左端を入れた P(b) ≤ base(M) + 256。新しい: フィールド `edge`（1 フレーム）と `edge₀`（操作の始めの状態） |
 | `edge`: 1 ≤ j < g → edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))（第 24 回） | 第 26 回: `EdgeStep` の歩き、スクロールの規則、`collide`、`posW` からの定理 `OnFrames.edgeAt`。新しいフィールドはスクロールの処理での `near`。`guardE` は端の 2 つのバイトを守る（[フレームの端の進み](e-2-10-3-13-EdgeStep-ja.md)） |
+| `near` を `Near` で: スクロールの量 `X`（第 26 回） | 第 27 回: `NearX`。`X` のかわりに動きの書くバイト: スクロールの処理では、スクロールへの足場の力は 0（定理 `OnFrames.platQ`。3 つ目のバイトを追う `EdgeStep` の歩き、`Start.plat`、`numbersCheck` から）。`guardE` は足場の力も守る。新しいフィールドはない（[スクロールへの足場の力](e-2-10-3-14-PlatformForce-ja.md)） |
 | `edge₀`: 操作の始めに edge(seq 0) ≤ P(seq 0)（第 24 回） | 第 25 回: 横の土管からの切り替えの行（`Start.edgeX`、`Start.edgeP`）と `numbersCheck`（`Numbers.edgeB`）からの定理 `edge_zero`。`AreaRun.edge₀` の中（[操作の始めに画面の左端は彼の後ろ](e-2-10-3-11-EdgeStart-ja.md)）。`Surface.base₁` は 1 ≤ g のときに求める。新しいフィールドはない |
 | `collide` のサブ速さの部分（`CollideR.f`）: サブ速さは変わらない | 速さ 0 とサブ速さ 0 で終わるフレームのほかは定理 `FaceKeep.keepZ_end`。`collide` はいまは `CollideS`: 位置と、そう終わるフレームのサブ速さ |
 | `After.storedQ`: スクロールの処理での覚えている速さはそこでの `\|v\|` | 定理 `storedQ_of`: `FrameModel.stored_path` の歩きと `AfterKeep.subs_once`。新しく `numbersCheck` の中の確認 `storedOK` と、`TopSpeed.frictionCheck`（`SurfaceRun.Statement` のフィールド `fric`） |

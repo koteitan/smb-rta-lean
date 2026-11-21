@@ -212,7 +212,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
     - 🚨 1-1-c-7-5 The fall and the height of the feet (`stand_wall`, `low_at`, `read_stop`)
-      <details><summary>19 lines of proved parts (the parent's own assumptions remain)</summary>
+      <details><summary>20 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-5-1 A jump's first 8 frames follow `vstep` (the air part of `vframes`: two walks of the room's frames)
       - ✅ 1-1-c-7-5-2 The halt value and A of the frame before (`halt`, `prevA` gone: two walks of the room and the rows of the change)
@@ -233,6 +233,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-c-7-5-17 On the floor the block's left side pushes him back (`low_floor_of`; `low_at` only off the floor past the corner)
       - ✅ 1-1-c-7-5-18 The vertical page through a jump (`low_jump_of`; `low_at` only at the heights 136 to 151 px)
       - ✅ 1-1-c-7-5-19 A frame above 152 px after a frame left of the corner (`move_top`; `low_at` only after a frame at or past the corner)
+      - ✅ 1-1-c-7-5-20 A bound for each low frame (`lowB`; `low_at` only when every frame from C + 40 is at or past the corner)
 
       </details>
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
@@ -255,10 +256,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       </details>
     - 🚨 1-1-c-7-13 Standing during the fall (`facing`, `stand_fast`, `stand_P`)
     - 🚨 1-1-c-7-14 No run jumps from the wall and clears the block with no landing (`way`)
-      <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
+      <details><summary>3 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-14-1 A big player at the block's corner (`Approach.low` true for a big player too; his fast and later slow takeoffs proved)
       - ✅ 1-1-c-7-14-2 A big player's slow takeoff on C + 35 (`Approach.slowBig` gone: a table after the landing and a search from the room's first frame)
+      - ✅ 1-1-c-7-14-3 The low frames of the first jump (`low_jump`; `Approach.low` only at or past the corner, off those frames)
 
       </details>
     - ✅ 1-1-c-7-15 The first machine is the change's (`roomCtl` removed: by definition)
@@ -278,7 +280,12 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-d-2-3 The last 122 frames (under the condition at the exit, no Start on the game core's frames)
   - 🚨 1-1-d-2-4 The screen stays on the first page, the entry has the long timer
     - ✅ 1-1-d-2-4-1 `Room` at the first control in the room: from the change's rows of the time (`chg.roomRest` removed)
-    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (`chg.roomSites`; round 26: measured what the room's walk knows of each part, none split off yet)
+    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (round 27: six fields; left: `roomLate`, `roomRead`, `roomErase`, `roomXbit`, `roomReads` through the screen pointer, `roomOff₆`)
+      <details><summary>1 lines of proved parts (the parent's own assumptions remain)</summary>
+
+      - ✅ 1-1-d-2-4-2-1 The parts of `SiteOK`: the offset from control 0 and the reads but the screen pointer's proved (`SiteParts`; `roomSites` gone)
+
+      </details>
     - ✅ 1-1-d-2-4-3 Each frame up to the entry starts in the player's routine (from the definition of `a₂`)
   - 🚨 1-1-d-2-5 The 3 bytes at the entry (`chg.entry₂`; from 16). The rest are 3 music bytes that need the timer
     <details><summary>13 lines of proved parts (the parent's own assumptions remain)</summary>
@@ -374,8 +381,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `fr` gone; `fr` is the definition `frOf`)
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
-      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.near`)
-        <details><summary>12 lines of proved parts (the parent's own assumptions remain)</summary>
+      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.near` (`NearX`))
+        <details><summary>14 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; `spareV` is a part of `keep.cleanE`)
         - ✅ 1-1-e-2-10-3-2 The subspeed on the other frames (a walk that follows it)
@@ -389,6 +396,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - ✅ 1-1-e-2-10-3-11 The screen's left edge at control (`edge₀` is gone)
         - ✅ 1-1-e-2-10-3-12 The scroll's rule (used by the route since round 26)
         - ✅ 1-1-e-2-10-3-13 The edge's step of a frame (`edge` is gone; new `near`)
+        - ✅ 1-1-e-2-10-3-14 The platforms' force on the scroll (`near` asks `NearX`)
+        - ✅ 1-1-e-2-10-3-15 His place at the player's routine (not used by the route yet)
 
         </details>
         - 🚨 1-1-e-2-10-3-10 The push's bound from the screen's left edge (`collide` fixed in round 24 after it was found false, assumed; `edge₀` is a theorem since round 25 and `OnFrames.edge` since round 26)
@@ -425,7 +434,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
     - 🚨 1-1-f-6-17 The pole's tiles: stores and reads (`bufAll`, `keepB`, `tilesCol`; `tiles`, `tilesRead`, `ySide`, `tilesFar`, `yKeep` gone)
-      <details><summary>7 lines of proved parts (the parent's own assumptions remain)</summary>
+      <details><summary>8 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-f-6-17-1 `TileRead` at an actual load from a frame-start tile condition (`PoleTiles`; the write checks and the read range remain)
       - ✅ 1-1-f-6-17-2 `TileRead` from the map at control (`PoleTileWalk`; `tiles` gone; new fields `bufAll`, `tilesRead`)
@@ -434,6 +443,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-f-6-17-5 The reads far from the pole are in the block buffers (`PoleTileFar`; `tilesFar` gone; new field `tilesCol`)
       - ✅ 1-1-f-6-17-6 The height kept inside the collision routine (`PoleTileKeep`; `yKeep` gone; new field `keepB`)
       - ✅ 1-1-f-6-17-7 The stores that `keepB` and `bufAll` still speak of (`PoleKeepFar`; the same condition per instruction)
+      - ✅ 1-1-f-6-17-8 The area parser against the screen's left edge (`PoleParser`; the invariant at control and the first half of a frame)
 
       </details>
     - 🚨 1-1-f-6-18 The edge store does not bring him into the range (`edge`); `P₂(g)` is the position at the end of the move (`moved` removed: 1-1-f-6-18-2)

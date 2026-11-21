@@ -1385,13 +1385,15 @@ def stateE (sy : Syms) : List Nat := [(sy.Player_State &&& 0x7FF).toNat, (sy.Ver
 def romWE (m0 : Machine) (a : UInt16) : UInt16 := (romByte m0 a).toUInt16 ||| ((romByte m0 (a + 1)).toUInt16 <<< 8)
 
 /-- **The screen's left edge, its pixel and its page** (round 26), which no frame of a run writes through an index or a pointer: the operands of the two loads of the
-clamp at the screen's edge, found from the scroll handler's call as `ScreenClamp.places` finds them (`EdgeStep.eI`; the walks of `EdgeStep` follow them) -/
+clamp at the screen's edge, found from the scroll handler's call as `ScreenClamp.places` finds them (`EdgeStep.eI`; the walks of `EdgeStep` follow them). Round 27:
+and the platforms' force on the scroll (`Platform_X_Scroll`), which the walks of `EdgeStep` follow too (it is 0 at the scroll handler: `SurfaceFrames.OnFrames.platQ`) -/
 def edgeE (sy : Syms) (m0 : Machine) : List Nat :=
   let entry := PipeEntryRule.findOp m0 (romWE m0 (sy.PlayerSubs + 1)) 0xB9 256
   let pg := PipeEntryRule.findOp m0 (entry + 1) 0xB9 32
-  [(romWE m0 (entry + 1) &&& 0x7FF).toNat, (romWE m0 (pg + 1) &&& 0x7FF).toNat]
+  [(romWE m0 (entry + 1) &&& 0x7FF).toNat, (romWE m0 (pg + 1) &&& 0x7FF).toNat, (sy.Platform_X_Scroll &&& 0x7FF).toNat]
 
-/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the screen's left edge (`edgeE`, round 26), the player's
+/-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the screen's left edge and the platforms' force on the
+scroll (`edgeE`, rounds 26 and 27), the player's
 state and the vertical force (`stateE`), the facing and the subspeed (`faceE`), the bytes of `spareE`, the collision bits (`collE`), the speed (`speedE`) and three
 vertical bytes (`vertE`) protected too. The walks of this file use `guardK` or `guardF`, and `CleanK` of `guardE` gives both (`cleanK_of_E`, `cleanK_sub`); the walk of
 `PhaseFrame` uses `guardE` with two more bytes. -/

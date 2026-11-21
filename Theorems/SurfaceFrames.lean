@@ -343,6 +343,8 @@ structure Start (sy : Syms) (B : Box) (m : Machine) : Prop where
   /-- round 25: the two bytes of the screen's left edge (`SurfaceRead.edgeOf`), at the clamp's operands found in the program of `B.m` (`ScreenClamp.places`) -/
   edgeX : peek m (ScreenClamp.places sy B.m).edgeX = peek B.m (ScreenClamp.places sy B.m).edgeX
   edgeP : peek m (ScreenClamp.places sy B.m).edgeP = peek B.m (ScreenClamp.places sy B.m).edgeP
+  /-- round 27: the platforms' force on the scroll (`EdgeStep.platI`) -/
+  plat : peek m sy.Platform_X_Scroll = peek B.m sy.Platform_X_Scroll
 
 /-! ## The numbers -/
 
@@ -395,7 +397,8 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     VertKeep.kCheck sy m0 (peek c sy.AreaType) && FaceKeep.zCheck sy m0 (peek c sy.AreaType) && FaceKeep.bCheck sy m0 (peek c sy.AreaType) &&
     FaceKeep.vfCheck sy m0 (peek c sy.AreaType) (FaceKeep.vfC sy m0 (peek c sy.AreaType)) && PositionKeep.pCheck sy m0 (peek c sy.AreaType) &&
     decide (c.prg = m0.prg) && decide (c.prgMask = m0.prgMask) && decide (SurfaceRead.edgeOf sy c ≤ posP sy c) &&
-    EdgeStep.qCheck sy m0 (peek c sy.AreaType) && EdgeStep.rCheck sy m0 (peek c sy.AreaType) && ScrollRule.check sy m0
+    EdgeStep.qCheck sy m0 (peek c sy.AreaType) && EdgeStep.rCheck sy m0 (peek c sy.AreaType) && ScrollRule.check sy m0 &&
+    peek c sy.Platform_X_Scroll == 0 && (ScrollRule.places sy m0).plat == EdgeStep.platI sy
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -456,13 +459,17 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   edgeR : EdgeStep.rCheck sy m0 (peek B.m sy.AreaType) = true
   /-- round 26: the check of the scroll's rule (`ScrollRule.scroll_edge`) -/
   scroll : ScrollRule.check sy m0 = true
+  /-- round 27: on `B.m` the platforms' force on the scroll is 0 -/
+  platB : peek B.m sy.Platform_X_Scroll = 0
+  /-- round 27: the byte that the scroll handler adds to the byte the move stores is `EdgeStep.platI` -/
+  platP : (ScrollRule.places sy m0).plat = EdgeStep.platI sy
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, PrevKeep.prevOKB, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩, h25⟩,
-    h26⟩, h27⟩, h28⟩, h29⟩, h30⟩, h31⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩, h25⟩,
+    h26⟩, h27⟩, h28⟩, h29⟩, h30⟩, h31⟩, h32⟩, h33⟩ := h
   exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, h25,
-    h26, h27, h28, h29, h30, h31⟩
+    h26, h27, h28, h29, h30, h31, h32, h33⟩
 
 /-- **At control the screen's left edge is behind him** (round 25; the old field `edge₀` of `OnFrames`): a machine with the state of `B.m` (`Start`: with the two bytes of
 the edge) that starts a frame in control (so it has the program of `m0`, which `B.m` has too) has the edge of `B.m`, and on `B.m` the edge is behind him (`numbersCheck`) -/
@@ -1150,9 +1157,11 @@ structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat
   /-- round 26: each counted frame before the touch, at the scroll handler: when the scroll is allowed there (`ScrollRule.Allows`), the screen's left edge plus the
   scroll's amount plus 2 px is at most his pixel (`EdgeStep.Near`, one state). With the walks of `EdgeStep` (the edge's two bytes are kept up to the scroll handler and
   from the instruction after its call to the frame's end), the scroll's rule (`ScrollRule.scroll_edge`) and `collide`, it gives the old field `edge` of round 24
-  (`OnFrames.edgeAt`): at the frame's end the edge is at most the larger of the base at the end of the frame before and the position at its end. -/
+  (`OnFrames.edgeAt`): at the frame's end the edge is at most the larger of the base at the end of the frame before and the position at its end. Round 27: the
+  scroll's amount `X` is the byte the move stores plus the platforms' force on the scroll, and the force is 0 there (`OnFrames.platQ`, by the same walks); so the field
+  asks `EdgeStep.NearX`, with the byte the move stores in place of `X`. -/
   near : ∀ j, 1 ≤ j → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
-    EdgeStep.Near sy (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k)
+    EdgeStep.NearX sy (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k)
   /-- each counted frame before the touch, from the scroll handler to its end, at each instruction: a store of a byte of the position by its address is inside the
   push or the clamp at the screen's edge, and outside them a store through an index or a pointer writes no byte of the position (`PositionKeep.PosW`). With
   `clampR` this gives the position on a frame that keeps a speed to the right (`PositionKeep.keep_frame`: the field `AfterP.keep` and a part of `collide`) -/
@@ -1211,6 +1220,9 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   eq : EdgeStep.qCheck sy m0 v = true
   er : EdgeStep.rCheck sy m0 v = true
   sr : ScrollRule.check sy m0 = true
+  /-- round 27: at control the platforms' force on the scroll is 0 (a theorem: `Start` and `numbersCheck`), and it is the byte that the scroll handler adds -/
+  plat₀ : (seq 0).ram.get! (EdgeStep.platI sy) = 0
+  platP : (ScrollRule.places sy m0).plat = EdgeStep.platI sy
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
 routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
@@ -1392,7 +1404,9 @@ theorem OnFrames.areaRun {J' : Nat} (Nm : Numbers sy m0 B J') (O : OnFrames sy m
     have e0 : seq 0 = K.all 0 := by rw [K.at_ix 0 (Nat.zero_le _), K.ix0]
     rw [e0] at st ⊢
     exact edge_zero Nm st hs0
-  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk, Nm.zk, Nm.bk, Nm.vfk, Nm.pk, he0, Nm.edgeQ, Nm.edgeR, Nm.scroll⟩
+  have hp0 : (seq 0).ram.get! (EdgeStep.platI sy) = 0 := st.plat.trans Nm.platB
+  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk, Nm.zk, Nm.bk, Nm.vfk, Nm.pk, he0, Nm.edgeQ, Nm.edgeR, Nm.scroll,
+    hp0, Nm.platP⟩
 
 /-- **A counted frame before the touch that moves right at the scroll handler and keeps that speed to its end keeps the position from there**
 (`PositionKeep.keep_frame` on the frames of `K`, with `posW` and `clampR`): the field `AfterP.keep` and a part of `collide` -/
@@ -1549,14 +1563,23 @@ theorem OnFrames.edgeLag (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames s
   rw [K.at_ix (j - 1) (by omega)]
   exact e
 
-/-- **The old field `edge`, a theorem (round 26)**: each counted frame before the touch moves the screen's left edge only behind him: at its end the edge is at most
-the larger of the base at the end of the frame before and the position at its end. The frame comes to the scroll handler `Q` (the walk of `EdgeStep.keep_r`); there
-the machine is `Good` and has the edge's two bytes of the frame's start (`EdgeStep.keep_q`), which are those of the end of the frame before (`OnFrames.edgeLag`). The
-scroll's rule (`EdgeStep.edge_frame`) gives the instruction `R` after the call; from there to the frame's end the two bytes are kept (`EdgeStep.keep_r`, with `posW`).
-`collide` gives P(Q) − 256 ≤ P (`OnFrames.collideAt`), and `near` is the condition at `Q`. -/
-theorem OnFrames.edgeAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+/-- **The counted frame `j` at its scroll handler and after it** (round 27: the first part of the old proof of `edgeAt`, now also used by `platEnd`). The frame comes to
+the scroll handler at `kq` (the walk of `EdgeStep.keep_r`); there the machine is `Good` and has the bytes of `EdgeStep.eI` of the frame's start (`EdgeStep.keep_q`), which
+are those of the end of the frame before (`OnFrames.edgeLag`): the edge's two bytes and the platforms' force on the scroll. The scroll's rule (`EdgeStep.edge_frame`)
+gives the instruction `R` after the call, `n` instructions later; from there to the frame's end the bytes of `eI` are kept (`EdgeStep.keep_r`, with `posW`), and at `R`
+the platforms' force is 0 (the check of `EdgeStep.rCheck`), so it is 0 at the frame's end. -/
+theorem OnFrames.scrollAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
     {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
-    SurfaceRead.edgeOf sy (seq j) ≤ max (SurfaceRead.baseOf sy (seq (j - 1))) (posP sy (seq j)) := by
+    ∃ kq n, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ kq ∧ (PipeEntryRule.trace (K.fm j) (K.pad j) kq).pc = sy.PlayerSubs ∧
+      SurfaceRead.edgeOf sy (PipeEntryRule.trace (K.fm j) (K.pad j) kq) = SurfaceRead.edgeOf sy (seq (j - 1)) ∧
+      SurfaceRead.edgeOf sy (seq j) = SurfaceRead.edgeOf sy (FrameModel.stepN n (PipeEntryRule.trace (K.fm j) (K.pad j) kq)) ∧
+      (PipeEntryRule.trace (K.fm j) (K.pad j) kq).ram.get! (EdgeStep.platI sy) = (seq (j - 1)).ram.get! (EdgeStep.platI sy) ∧
+      (seq j).ram.get! (EdgeStep.platI sy) = 0 ∧
+      ∀ M b : Machine, SurfaceRead.edgeOf sy (PipeEntryRule.trace (K.fm j) (K.pad j) kq) = SurfaceRead.edgeOf sy M →
+        EdgeStep.Near sy (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) →
+        posP sy (PipeEntryRule.trace (K.fm j) (K.pad j) kq) - 256 ≤ posP sy b →
+        SurfaceRead.edgeOf sy b = SurfaceRead.edgeOf sy (FrameModel.stepN n (PipeEntryRule.trace (K.fm j) (K.pad j) kq)) →
+        SurfaceRead.edgeOf sy b ≤ max (SurfaceRead.baseOf sy M) (posP sy b) := by
   have a1 := K.order (j - 1) (by omega)
   have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
   have a3 := K.order j h3
@@ -1619,10 +1642,51 @@ theorem OnFrames.edgeAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy
   have e2 : SurfaceRead.edgeOf sy (seq j) = SurfaceRead.edgeOf sy (FrameModel.stepN n (PipeEntryRule.trace (K.fm j) (K.pad j) kq)) := by
     refine EdgeStep.edgeOf_eq hpe.1 hpe.2 gR.prg gR.mask fun x hx => ?_
     rw [K.ends j h1 (by omega), ← eq.1]
-    exact eR x hx
-  have c := O.collideAt hck hst Ar h1 h3 kq (Nat.le_of_lt hkq) hqq
+    exact eR.1 x hx
+  have ep : (seq j).ram.get! (EdgeStep.platI sy) = 0 := by
+    rw [K.ends j h1 (by omega)]
+    exact (eR.1 _ EdgeStep.platI_mem).trans eR.2
+  exact ⟨kq, n, Nat.le_of_lt hkq, hqq, eQ, e2, (HQ _ EdgeStep.platI_mem).2.trans (O.edgeLag hck hst Ar h1 (by omega) _ EdgeStep.platI_mem), ep, H⟩
+
+/-- **The platforms' force on the scroll is 0 at the end of each counted frame before the touch** (round 27): `OnFrames.scrollAt` -/
+theorem OnFrames.platEnd (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) : (seq j).ram.get! (EdgeStep.platI sy) = 0 := by
+  obtain ⟨_, _, _, _, _, _, _, hp, _⟩ := O.scrollAt hck hst Ar h1 h3
+  exact hp
+
+/-- **and at the end of the frame before each counted frame before the touch**: at control it is 0 (`AreaRun.plat₀`), else `OnFrames.platEnd` -/
+theorem OnFrames.platPrev (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) : (seq (j - 1)).ram.get! (EdgeStep.platI sy) = 0 := by
+  rcases Nat.eq_or_lt_of_le h1 with e | e
+  · subst e
+    exact Ar.plat₀
+  · exact O.platEnd hck hst Ar (j := j - 1) (by omega) (by omega)
+
+/-- **The platforms' force on the scroll is 0 at the scroll handler of each counted frame before the touch** (round 27): the frame comes to the scroll handler at `kq`
+with the force of the end of the frame before (`OnFrames.scrollAt`), which is 0 (`OnFrames.platPrev`). So there the scroll's amount `X` is the byte the move stores. -/
+theorem OnFrames.platQ (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
+    ∃ kq, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ kq ∧ (PipeEntryRule.trace (K.fm j) (K.pad j) kq).pc = sy.PlayerSubs ∧
+      (PipeEntryRule.trace (K.fm j) (K.pad j) kq).ram.get! (ScrollRule.places sy m0).plat = 0 := by
+  obtain ⟨kq, _, hk, hqq, _, _, hpq, _, _⟩ := O.scrollAt hck hst Ar h1 h3
+  refine ⟨kq, hk, hqq, ?_⟩
+  rw [Ar.platP, hpq]
+  exact O.platPrev hck hst Ar h1 h3
+
+/-- **The old field `edge`, a theorem (round 26)**: each counted frame before the touch moves the screen's left edge only behind him: at its end the edge is at most
+the larger of the base at the end of the frame before and the position at its end. `OnFrames.scrollAt` gives the scroll handler `Q`, with the edge of the end of the
+frame before, the instruction `R` after the call, with the edge of the frame's end, and the scroll's rule between them. `collide` gives P(Q) − 256 ≤ P
+(`OnFrames.collideAt`), and `near` is the condition at `Q` (round 27: `EdgeStep.NearX`, which gives `EdgeStep.Near` as the platforms' force is 0 there). -/
+theorem OnFrames.edgeAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
+    SurfaceRead.edgeOf sy (seq j) ≤ max (SurfaceRead.baseOf sy (seq (j - 1))) (posP sy (seq j)) := by
+  obtain ⟨kq, n, hk, hqq, eQ, e2, hpq, _, H⟩ := O.scrollAt hck hst Ar h1 h3
+  have hp0 : (PipeEntryRule.trace (K.fm j) (K.pad j) kq).ram.get! (ScrollRule.places sy m0).plat = 0 := by
+    rw [Ar.platP, hpq]
+    exact O.platPrev hck hst Ar h1 h3
+  have c := O.collideAt hck hst Ar h1 h3 kq hk hqq
   rw [← K.ends j h1 (by omega)] at c
-  exact H _ _ eQ (O.near j h1 h3 kq (Nat.le_of_lt hkq) hqq) (EdgeStep.collideE_lower c) e2
+  exact H _ _ eQ (EdgeStep.near_of_x (O.near j h1 h3 kq hk hqq) hp0) (EdgeStep.collideE_lower c) e2
 
 /-- the state at the player's routine of the counted frame `j`, from a clean state: `Moves.toAt` with the frame's start in control (`hst`), `K.cleanAt`, `OnFrames.arrive`
 and `OnFrames.lagKeep` -/
@@ -2466,7 +2530,7 @@ def startBytes (sy : Syms) : List UInt16 :=
    sy.JumpOrigin_Y_Position, sy.Player_State, sy.A_B_Buttons, sy.AreaType, sy.SwimmingFlag, sy.PlayerChangeSizeFlag, sy.PreviousA_B_Buttons]
 
 /-- the two bytes of the screen's left edge, at the clamp's operands found in the program of `c` (round 25) -/
-def edgeBytes (sy : Syms) (c : Machine) : List UInt16 := [(ScreenClamp.places sy c).edgeX, (ScreenClamp.places sy c).edgeP]
+def edgeBytes (sy : Syms) (c : Machine) : List UInt16 := [(ScreenClamp.places sy c).edgeX, (ScreenClamp.places sy c).edgeP, sy.Platform_X_Scroll]
 
 /-- a state of a row: it says whether it has control, and if it has, it knows the bytes of `Start`, with the values of the machine `c` -/
 def rowStart (sy : Syms) (c : Machine) (S : AS) : Bool :=
@@ -2502,7 +2566,7 @@ theorem start_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs :
     cases h1
   · obtain ⟨h1, h2⟩ := h1
     simp only [edgeBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, beq_iff_eq] at h2
-    obtain ⟨⟨kx, ex⟩, ⟨kp, ep⟩⟩ := h2
+    obtain ⟨⟨kx, ex⟩, ⟨kp, ep⟩, ⟨kl, el⟩⟩ := h2
     simp only [startBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, beq_iff_eq] at h1
     obtain ⟨⟨k1, e1⟩, ⟨k2, e2⟩, ⟨k3, e3⟩, ⟨k4, e4⟩, ⟨k5, e5⟩, ⟨k6, e6⟩, ⟨k7, e7⟩, ⟨k8, e8⟩, ⟨k9, e9⟩, ⟨k10, e10⟩, ⟨k11, e11⟩, ⟨k12, e12⟩, ⟨k13, e13⟩, ⟨k14, e14⟩, ⟨k15, e15⟩, ⟨k16, e16⟩, ⟨k17, e17⟩, ⟨k18, e18⟩, ⟨k19, e19⟩,
       ⟨k20, e20⟩, ⟨k21, e21⟩, ⟨k22, e22⟩, ⟨k23, e23⟩⟩ := h1
@@ -2529,7 +2593,7 @@ theorem start_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs :
     have g21 := (peek_of_known hs k21).trans e21
     have g22 := (peek_of_known hs k22).trans e22
     have g23 := (peek_of_known hs k23).trans e23
-    refine ⟨?_, ?_, g9, g10, ?_, g20, g21, g22, g19, g23, (peek_of_known hs kx).trans ex, (peek_of_known hs kp).trans ep⟩
+    refine ⟨?_, ?_, g9, g10, ?_, g20, g21, g22, g19, g23, (peek_of_known hs kx).trans ex, (peek_of_known hs kp).trans ep, (peek_of_known hs kl).trans el⟩
     · have e5 : (peek m sy.RunningSpeed == 0) = (peek c.m sy.RunningSpeed == 0) := by rw [g5]
       simp only [startHS, PState.read, g1, g2, g3, g4, e5]
       congr
@@ -2627,11 +2691,11 @@ def collideSB (sy : Syms) (M Q b : Machine) (calls : Bool) : Bool :=
 def edgeB (sy : Syms) (M b : Machine) : Bool :=
   decide (SurfaceRead.edgeOf sy b ≤ max (SurfaceRead.baseOf sy M) (posP sy b))
 
-/-- the field `near` at the scroll handler `Q` (`EdgeStep.Near`), as a check (round 26) -/
+/-- the field `near` at the scroll handler `Q` (`EdgeStep.NearX`, round 27; round 26: `EdgeStep.Near`), as a check -/
 def nearB (sy : Syms) (m0 Q : Machine) : Bool :=
   let P := ScrollRule.places sy m0
   !(Q.ram.get! P.lockB == 0 && decide (P.thr1 ≤ Q.ram.get! P.pfs) && Q.ram.get! P.sideB == 0 && ScrollRule.xOK (ScrollRule.amountOf P Q)) ||
-    decide (ScrollRule.left16 P Q + (ScrollRule.amountOf P Q).toNat + 2 ≤ EdgeStep.pixel16 sy Q)
+    decide (ScrollRule.left16 P Q + (Q.ram.get! P.xs).toNat + 2 ≤ EdgeStep.pixel16 sy Q)
 
 /-- what `FaceKeep.keepZ_end` proves, as a check: the facing and the subspeed at the frame's end are those at the scroll handler, or the frame ends with the speed 0
 and the subspeed 0 -/

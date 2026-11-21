@@ -10,7 +10,7 @@
 
 ```
 spareE           :=  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}
-Prot_E           :=  edgeE  ∪  stateE  ∪  faceE  ∪  spareE  ∪  collE  ∪  speedE  ∪  vertE  ∪  Prot_F    （guardE、69 バイト。26 回目に edgeE = 画面の左端のピクセルとページ（1-1-e-2-10-3-13）。15 回目に stateE = {Player_State, VerticalForce} と faceE = {PlayerFacingDir, Player_X_MoveForce} を加えた。13 回目に collE = {Player_CollisionBits}、14 回目に speedE = {Player_X_Speed} と vertE = {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump} を加えた。パート e の `spareC`、`spareV`、`vAfter` の 4 つのバイトは `keep.cleanE` から）
+Prot_E           :=  edgeE  ∪  stateE  ∪  faceE  ∪  spareE  ∪  collE  ∪  speedE  ∪  vertE  ∪  Prot_F    （guardE、70 バイト。26 回目に edgeE = 画面の左端のピクセルとページ（1-1-e-2-10-3-13）。27 回目にスクロールへの足場の力を加えた（1-1-e-2-10-3-14）。15 回目に stateE = {Player_State, VerticalForce} と faceE = {PlayerFacingDir, Player_X_MoveForce} を加えた。13 回目に collE = {Player_CollisionBits}、14 回目に speedE = {Player_X_Speed} と vertE = {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump} を加えた。パート e の `spareC`、`spareV`、`vAfter` の 4 つのバイトは `keep.cleanE` から）
 CleanK_E(m)      :=  Prot_K の代わりに Prot_E の CleanK(m)
 keep.cleanE      :  n < ix g  →  ∀ k,  CleanK_E(tr_n(k))                               （フィールド。前は cleanF で Prot_F）
 

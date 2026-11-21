@@ -47,7 +47,8 @@ the fall is proved too (`RoomRun.land_at_of`, `RoomRun.land_end_of`; once the fi
 (`RoomRun.low_floor_of`, `low_floor_at`): at the block's left side the collision routine pushes him back (`InRoom.corner`: `RoomCorner.corner_frame`; page
 `1-1/c-7-5-17-RoomCorner.md`). So is a frame of a jump from the floor that ends at `cornerY + 16` or below (`RoomRun.low_jump_of`, `RoomCore.low_jump`, `arc_down`): the
 vertical page stays 1 through the takeoff and the rising frames, and they end `CornerEnd` there (`InRoom.highJ`, `InRoom.highA`; page `1-1/c-7-5-18-RoomHigh.md`). The
-field `low_at` asks only a frame that ends off the floor at or past the corner above `cornerY + 16`.
+field `low_at` asks only a frame after `runF` that ends off the floor at or past the corner above `cornerY + 16`, when every frame from `runF` on is at or past the
+corner: `low_by` gives each frame its own bound `lowB`, one frame at the top speed per frame after `hitF − 1` or after `runF` (page `1-1/c-7-5-20-LowBound.md`).
 
 The case split, all by `cases` and `by_cases`:
 * over the block in one jump (no landing): impossible, `no_landing`;
@@ -57,7 +58,7 @@ The case split, all by `cases` and `by_cases`:
   and never touches the floor is in it;
 * with no such stop and no wall hit, onto the block: a takeoff after the last one searched (top speed), or a slow takeoff (air speed cap), or a fast
   takeoff (the search of `FastTakeoff`), `landed_short`. A big player's last low frame may be past the corner (`Approach.low`: a coin above the block's left
-  column takes the side check on that frame); then a fast takeoff is the search with one low air frame less (`fast_short`, `roomB`), a slow one after the first
+  column takes the side check on that frame; asked only at or past the corner and off the frames that `low_jump` proves, page `1-1/c-7-14-3-ApproachJump.md`); then a fast takeoff is the search with one low air frame less (`fast_short`, `roomB`), a slow one after the first
   frame after the fall is the bound from the frame before with the landing one frame later (`slowBigOk`, page `1-1/c-7-14-1-BigApproach.md`), and a slow
   one on that frame is the search of `LandDist` from the room's first frame with the table of the frames after the landing (`Checks.slowLand`, page
   `1-1/c-7-14-2-LandDist.md`);
@@ -425,8 +426,12 @@ structure Approach (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 : Na
   air : ∀ n, T1 ≤ n → n < L → isAir (fr.inp (n + 1)) = true
   /-- the low frames are `LowAt`. For a big player (`sz = 0`) the last low frame may be only not far past the corner: there the upper point of his side check can be at a
   coin above the block's left column, the routine takes the coin and leaves the side check, and that frame does not push him back. Until round 25 `LowAt` was asked on
-  every low frame, which is false on measured runs of a big player -/
-  low : ∀ n, T1 + 1 ≤ n → n ≤ T1 + 1 + u.low → LowAt sy m N fr n ∨ (sz = 0 ∧ n = T1 + 1 + u.low ∧ fr.P n ≤ cornerP sy + N.lowSlack)
+  every low frame, which is false on measured runs of a big player. Since round 27 (page `1-1/c-7-14-3-ApproachJump.md`) asked only on a frame at or past the corner
+  (left of it the frame is `LowAt`), after a takeoff after `C + fall + lastG`, after `C + fall + 1 + rise`, or after a frame of the jump that ends above `cornerY + 16`:
+  the other low frames end at `cornerY + 16` or below on the jump from the floor since the end of the fall, and `RoomCore.low_jump` makes them `LowAt` (`landed_short`) -/
+  low : ∀ n, T1 + 1 ≤ n → n ≤ T1 + 1 + u.low → cornerP sy ≤ fr.P n →
+    (C + N.fall + N.lastG < T1 ∨ C + N.fall + 1 + N.rise < n ∨ ∃ j, T1 < j ∧ j ≤ n ∧ (fr.vs j).y.toNat < cornerY sy N.h + 16) →
+    LowAt sy m N fr n ∨ (sz = 0 ∧ n = T1 + 1 + u.low ∧ fr.P n ≤ cornerP sy + N.lowSlack)
 
 /-- over the block in one jump, or onto it and off it. Only a run with no wall hit and no stop needs its takeoff from the floor. `sz` is the player's size byte at
 first control (0: big), for `Approach` -/
@@ -523,9 +528,12 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) where
   `low_floor_at`), so are the frames of a jump from the floor while every frame of it ends at `cornerY + 16` or below (`RoomCore.low_jump`, `RoomRun.low_jump_of`; on the
   jump the height does not grow, `arc_down`), and the theorems use no other frame and no other part (`low_by`). The whole `LowAt` is false there on measured frames of a big player: moving up at the corner with the height
   151, moving right, he is not pushed back on that frame. Since round 26 (page `1-1/c-7-5-19-BandStart.md`) asked only when the frame before also ends at or past the
-  corner, and only `16·top − 1` past it: from a frame left of the corner one frame moves at most the top speed (`move_top`), and `low_by` asks no more -/
-  low_at : NoWall sy m N fr C → ∀ n, C + N.hitF ≤ n → n ≤ C + N.fall + 1 + N.rise → n ≤ t0 → cornerY sy N.h ≤ (fr.vs n).y.toNat → ¬OnFloor sy (fr.vs n) →
-    cornerP sy ≤ fr.P n → (fr.vs n).y.toNat < cornerY sy N.h + 16 → cornerP sy ≤ fr.P (n - 1) → fr.P n ≤ cornerP sy + 16 * (top sy : Int) - 1
+  corner. Since round 27 (page `1-1/c-7-5-20-LowBound.md`) asked only after `runF`, when every frame from `runF` to the frame before ends at or past the corner, and only
+  one frame at the top speed past the corner for each frame after `runF` (`lowB`): up to `runF` the bound of `low_by` is one frame at the top speed for each frame after
+  `hitF − 1` (`corner_late`, `move_top`), and after a frame left of the corner from `runF` on `move_top` gives it -/
+  low_at : NoWall sy m N fr C → ∀ n, C + N.runF + 1 ≤ n → n ≤ C + N.fall + 1 + N.rise → n ≤ t0 → cornerY sy N.h ≤ (fr.vs n).y.toNat → ¬OnFloor sy (fr.vs n) →
+    cornerP sy ≤ fr.P n → (fr.vs n).y.toNat < cornerY sy N.h + 16 → (∀ k, C + N.runF ≤ k → k < n → cornerP sy ≤ fr.P k) →
+    fr.P n ≤ cornerP sy - 1 + 16 * (top sy : Int) * ((n - (C + N.runF) : Nat) : Int)
   way : Way sy m N fr C t0 E sz
 
 /-- the frames as numbers: what the theorems below use. `RoomRun.toCore` makes them from real machines -/
@@ -1066,6 +1074,12 @@ frame up to frame `fall − 1` -/
 def anyCheck (sy : Syms) (m : Machine) (N : Nums) : Bool :=
   ajRun sy m N (offTable sy m) N.fall 0 N.vStart {} []
 
+/-- **The bound of `low_by` at frame `C + j`** (since round 27, page `1-1/c-7-5-20-LowBound.md`): up to `runF`, one frame at the top speed for each frame after
+`hitF − 1`, where he is left of the corner (`corner_late`); after `runF`, one frame at the top speed for each frame after `runF`. Past the corner by
+`16·top·(j − (hitF − 1)) − 1` or `16·top·(j − runF) − 1` -/
+def lowB (sy : Syms) (N : Nums) (j : Nat) : Int :=
+  cornerP sy - 1 + 16 * (top sy : Int) * ((if j ≤ N.runF then j - (N.hitF - 1) else j - N.runF : Nat) : Int)
+
 /-- the numbers fit together -/
 structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   air_pos : 1 ≤ sy.AirFastSpeed.toNat
@@ -1082,13 +1096,15 @@ structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   fast_pairs : N.fast.all (fun q => decide (N.rise ≤ q.1)) = true
   /-- the slack of a low frame is less than one frame at the top speed (`low_by` bounds the low frames by `16·top − 1` past the corner) -/
   low_top : N.lowSlack ≤ 16 * (top sy : Int) - 1
-  /-- a stop with `RunningSpeed` 0 while his feet are low: at most one frame at the top speed past the corner (`low_by`) -/
-  hit_J : cornerP sy + (16 * (top sy : Int) - 1) + dbound sy m N.stopPhi (N.goalF - N.hitF) < goalP sy
-  /-- a stop with any `RunningSpeed` while his feet are low -/
-  hit_F : cornerP sy + (16 * (top sy : Int) - 1) + fastDist sy m N.stopPhi (N.goalF - (N.runF + 1)) < goalP sy
+  /-- a stop with `RunningSpeed` 0 while his feet are low, on each frame from `hitF` to `runF`: the bound `lowB` of that frame (`low_by`) and the potential from it -/
+  hit_J : (List.range (N.runF + 1)).all (fun j => decide (j < N.hitF) ||
+      decide (lowB sy N j + dbound sy m N.stopPhi (N.goalF - j) < goalP sy)) = true
+  /-- a stop with any `RunningSpeed` while his feet are low, on each frame after `runF` to the end of the low frames -/
+  hit_F : (List.range (N.fall + 2 + N.rise)).all (fun j => decide (j ≤ N.runF) ||
+      decide (lowB sy N j + fastDist sy m N.stopPhi (N.goalF - j) < goalP sy)) = true
   /-- a stop later: at most the top speed after the low frames, and not far past the corner -/
   hit_late : (List.range (N.goalF + 1)).all (fun j => decide (j ≤ N.fall + 1 + N.rise) ||
-      decide (min (cornerP sy + (16 * (top sy : Int) - 1) + 16 * (top sy : Int) * ((j - (N.fall + 1 + N.rise) : Nat) : Int))
+      decide (min (lowB sy N (N.fall + 1 + N.rise) + 16 * (top sy : Int) * ((j - (N.fall + 1 + N.rise) : Nat) : Int))
         (cornerP sy + N.stopSlack) + fastDist sy m N.stopPhi (N.goalF - j) < goalP sy)) = true
   /-- a takeoff after the last one searched: the top speed from the end of the low frames -/
   late : cornerP sy + N.lowSlack + 16 * (top sy : Int) * ((N.goalF - (N.fall + N.lastG + 2 + N.rise) : Nat) : Int) < goalP sy
@@ -2286,20 +2302,59 @@ theorem low_floor_at (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) {n : Nat}
   have h := low_floors r H hw (n - (r.C + N.hitF - 1)) (by omega) (by omega) (fun j a b => hall j a (by omega))
   rwa [e] at h
 
-/-- **`low_by`**: through the low frames of the earliest jump he is not far past the corner: at most one frame at the top speed. With no wall, the
-heights and the collision routine, and on a frame that ends from `cornerY` to `cornerY + 15` the frame before: left of the corner, one frame at the top speed
-(`move_top`), else the field `low_at`; with a wall hit, the potential from the wall -/
+/-- **`low_by`**: through the low frames of the earliest jump he is not far past the corner: the bound `lowB` of the frame. Up to `runF`, from `hitF − 1`, where he
+is left of the corner (`corner_late`), one frame at the top speed per frame (`move_top`). After `runF`, from a frame left of the corner from `runF` on, the same (`move_top`);
+if there is none: with no wall, the heights and the collision routine (`LowAt`: at most `lowSlack ≤ 16·top − 1` past the corner), and on a frame that ends from `cornerY` to
+`cornerY + 15` the field `low_at`; with a wall hit, the potential from the wall -/
 theorem low_by (H : Checks sy m N) (hE : r.t0 < r.E) {n : Nat} (h1 : r.C ≤ n) (h2 : n ≤ r.C + N.fall + 1 + N.rise) (h3 : n ≤ r.t0) :
-    r.fr.P n ≤ cornerP sy + 16 * (top sy : Int) - 1 := by
+    r.fr.P n ≤ lowB sy N (n - r.C) := by
   have hN := H.nums
   have hlt := hN.low_top
   have hl := hN.low_nonneg
+  have hg := hN.hit_ge
+  have hhr := hN.hit_run
+  have ht16 : (0 : Int) ≤ 16 * (top sy : Int) := by omega
+  -- from a frame `k` left of the corner: one frame at the top speed per frame
+  have chain : ∀ k, r.C ≤ k → k ≤ n → r.fr.P k < cornerP sy → r.fr.P n ≤ cornerP sy - 1 + 16 * (top sy : Int) * ((n - k : Nat) : Int) := by
+    intro k hk1 hk2 hk3
+    have h7 := reach_le (P := r.fr.P) (u := k) (B := cornerP sy - 1) (μ := 16 * (top sy : Int)) (w := r.t0) (by omega) ht16
+      (fun j h8 h9 => Or.inl (r.move_top j (by omega) h9)) (n - k) (by omega)
+    rwa [show k + (n - k) = n by omega] at h7
   by_cases hn : n < r.C + N.hitF
-  · have := corner_late r H h1 hn h3
+  · have h0 := corner_late r H h1 hn h3
+    have h5 : (0 : Int) ≤ 16 * (top sy : Int) * ((if n - r.C ≤ N.runF then n - r.C - (N.hitF - 1) else n - r.C - N.runF : Nat) : Int) :=
+      Int.mul_nonneg ht16 (by omega)
+    unfold lowB
     omega
+  by_cases hr : n ≤ r.C + N.runF
+  · -- from `hitF − 1`, where he is left of the corner
+    have h0 := corner_late r H (n := r.C + N.hitF - 1) (by omega) (by omega) (by omega)
+    have h7 := chain (r.C + N.hitF - 1) (by omega) (by omega) h0
+    unfold lowB
+    rw [if_pos (by omega), show n - r.C - (N.hitF - 1) = n - (r.C + N.hitF - 1) by omega]
+    exact h7
+  -- after `runF`: the bound is at least one frame at the top speed past the corner
+  have hB : ∀ d, 1 ≤ d → d = n - (r.C + N.runF) → cornerP sy + 16 * (top sy : Int) - 1 ≤ lowB sy N (n - r.C) := by
+    intro d hd1 hd2
+    unfold lowB
+    rw [if_neg (by omega), show n - r.C - N.runF = d by omega]
+    have : 16 * (top sy : Int) * 1 ≤ 16 * (top sy : Int) * (d : Int) := Int.mul_le_mul_of_nonneg_left (by omega) ht16
+    omega
+  have hB1 := hB (n - (r.C + N.runF)) (by omega) rfl
+  by_cases hk : ∃ k, r.C + N.runF ≤ k ∧ k < n ∧ r.fr.P k < cornerP sy
+  · obtain ⟨k, hk1, hk2, hk3⟩ := hk
+    have h7 := chain k (by omega) (by omega) hk3
+    have h8 : 16 * (top sy : Int) * ((n - k : Nat) : Int) ≤ 16 * (top sy : Int) * ((n - r.C - N.runF : Nat) : Int) :=
+      Int.mul_le_mul_of_nonneg_left (by omega) ht16
+    unfold lowB
+    rw [if_neg (by omega)]
+    omega
+  have hall : ∀ k, r.C + N.runF ≤ k → k < n → cornerP sy ≤ r.fr.P k := fun k a b => by
+    by_cases h : r.fr.P k < cornerP sy
+    · exact absurd ⟨k, a, b, h⟩ hk
+    · omega
   by_cases hw : NoWall sy m N r.fr r.C
-  · have hg := hN.hit_ge
-    rcases v_chain r H hw (n - (r.C + N.fall)) (by omega) (by omega) (by omega) with hf | ⟨T, h4, h5, ha⟩
+  · rcases v_chain r H hw (n - (r.C + N.fall)) (by omega) (by omega) (by omega) with hf | ⟨T, h4, h5, ha⟩
     · have hlf := (low_floor_at r H hw (n := n) (by omega) h2 h3 (fun j hj1 hj2 => by
         have h := hf (j - (r.C + N.fall)) (by omega)
         rwa [show r.C + N.fall + (j - (r.C + N.fall)) = j by omega] at h)).1
@@ -2309,12 +2364,11 @@ theorem low_by (H : Checks sy m N) (hE : r.t0 < r.E) {n : Nat} (h1 : r.C ≤ n) 
       by_cases hp : r.fr.P n < cornerP sy
       · omega
       · by_cases hy : (r.fr.vs n).y.toNat < cornerY sy N.h + 16
-        · by_cases hp1 : r.fr.P (n - 1) < cornerP sy
-          · -- the frame before is left of the corner: one frame at the top speed
-            have h6 := r.move_top (n - 1) (by omega) (by omega)
-            rw [show n - 1 + 1 = n by omega] at h6
-            omega
-          · exact r.low_at hw n (by omega) h2 h3 hfa.1 (fun hfl => hfa.2.2 hfl.1) (by omega) hy (by omega)
+        · -- every frame from `runF` on is at or past the corner: the field
+          have h6 := r.low_at hw n (by omega) h2 h3 hfa.1 (fun hfl => hfa.2.2 hfl.1) (by omega) hy hall
+          unfold lowB
+          rw [if_neg (by omega), show n - r.C - N.runF = n - (r.C + N.runF) by omega]
+          exact h6
         · -- the frame ends at `cornerY + 16` or below, and so does every frame of the jump before it (`arc_down`): `low_jump` from the takeoff
           rcases v_chain2 r H hw (n - (r.C + N.fall)) (by omega) (by omega) (by omega) with hf | ⟨T, g1, g2, hfl, harc⟩
           · have := hf (n - (r.C + N.fall)) (Nat.le_refl _)
@@ -2344,13 +2398,12 @@ theorem low_by (H : Checks sy m N) (hE : r.t0 < r.E) {n : Nat} (h1 : r.C ≤ n) 
     have h5 := dbound_mono H.air.pot (min n (r.C + N.runF + 1) - (r.C + N.wallF)) k N.stopPhi hN.stop_nonneg
     rw [← hk] at h5
     have h6 := hN.wall_low
-    have ht : (0 : Int) ≤ 16 * (top sy : Int) := by omega
     have h7 := reach_le (P := r.fr.P) (u := min n (r.C + N.runF + 1)) (B := r.fr.P (min n (r.C + N.runF + 1))) (μ := 16 * (top sy : Int))
-      (w := r.t0) (Int.le_refl _) ht (fun j h8 h9 => Or.inl (r.move_top j (by omega) h9)) (n - min n (r.C + N.runF + 1)) (by omega)
+      (w := r.t0) (Int.le_refl _) ht16 (fun j h8 h9 => Or.inl (r.move_top j (by omega) h9)) (n - min n (r.C + N.runF + 1)) (by omega)
     rw [show min n (r.C + N.runF + 1) + (n - min n (r.C + N.runF + 1)) = n by omega] at h7
     have h8 : 16 * (top sy : Int) * ((n - min n (r.C + N.runF + 1) : Nat) : Int) ≤
         16 * (top sy : Int) * ((N.fall + 1 + N.rise - (N.runF + 1) : Nat) : Int) :=
-      Int.mul_le_mul_of_nonneg_left (by omega) ht
+      Int.mul_le_mul_of_nonneg_left (by omega) ht16
     omega
 
 /-! ### `RunningSpeed` by `runF` -/
@@ -2533,22 +2586,28 @@ theorem stop_short (H : Checks sy m N) (hE : r.t0 < r.E) {h : Nat} (h1 : r.C + N
     · have hJ : J sy m (r.fr.hs h') N.stopPhi := ⟨h5.1, h5.2.1, fun hne => absurd hz hne⟩
       have h8 := dist_le F _ _ _ hJ hin
       rw [length_seg] at h8
-      obtain ⟨k, hk⟩ : ∃ k, N.goalF - N.hitF = (r.t0 - h') + k := ⟨N.goalF - N.hitF - (r.t0 - h'), by omega⟩
+      obtain ⟨k, hk⟩ : ∃ k, N.goalF - (h' - r.C) = (r.t0 - h') + k := ⟨N.goalF - (h' - r.C) - (r.t0 - h'), by omega⟩
       have h9 := dbound_mono F (r.t0 - h') k N.stopPhi hn.stop_nonneg
       rw [← hk] at h9
       have h10 := hn.hit_J
+      simp only [List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at h10
       have h11 := low_by r H hE (n := h') (by omega) (by omega) h4
-      omega
+      rcases h10 (h' - r.C) (List.mem_range.2 (by omega)) with h10 | h10
+      · omega
+      · omega
     · exact run_short r H h5 h3 hrun h4 hz ht hin h7
   · have h8 := fast_dist_le F _ _ _ h5.1 h5.2.1 hin
     rw [length_seg] at h8
     by_cases hlow : h' ≤ r.C + N.fall + 1 + N.rise
-    · obtain ⟨k, hk⟩ : ∃ k, N.goalF - (N.runF + 1) = (r.t0 - h') + k := ⟨N.goalF - (N.runF + 1) - (r.t0 - h'), by omega⟩
+    · obtain ⟨k, hk⟩ : ∃ k, N.goalF - (h' - r.C) = (r.t0 - h') + k := ⟨N.goalF - (h' - r.C) - (r.t0 - h'), by omega⟩
       have h9 := fastDist_mono F.gf_nonneg (r.t0 - h') k N.stopPhi hn.stop_nonneg
       rw [← hk] at h9
       have h10 := hn.hit_F
+      simp only [List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at h10
       have h11 := low_by r H hE (n := h') (by omega) hlow h4
-      omega
+      rcases h10 (h' - r.C) (List.mem_range.2 (by omega)) with h10 | h10
+      · omega
+      · omega
     · -- later: at most the top speed after the low frames, and not far past the corner
       let j := h' - r.C
       have h9 := hn.hit_late
@@ -2560,8 +2619,10 @@ theorem stop_short (H : Checks sy m N) (hE : r.t0 < r.E) {h : Nat} (h1 : r.C + N
         rw [← hk] at h11
         have h12 := h5.2.2
         let u0 := r.C + N.fall + 1 + N.rise
-        have h13 := reach_le (P := r.fr.P) (u := u0) (B := cornerP sy + 16 * (top sy : Int) - 1) (μ := 16 * (top sy : Int)) (w := r.t0)
-          (low_by r H hE (n := u0) (by omega) (by omega) (by omega)) (by omega)
+        have h12' := low_by r H hE (n := u0) (by omega) (by omega) (by omega)
+        rw [show u0 - r.C = N.fall + 1 + N.rise by omega] at h12'
+        have h13 := reach_le (P := r.fr.P) (u := u0) (B := lowB sy N (N.fall + 1 + N.rise)) (μ := 16 * (top sy : Int)) (w := r.t0)
+          h12' (by omega)
           (fun n h14 h15 => Or.inl (r.move_top n (by omega) h15)) (h' - u0) (by omega)
         rw [show u0 + (h' - u0) = h' by omega] at h13
         have h14 : ((j - (N.fall + 1 + N.rise) : Nat) : Int) = ((h' - u0 : Nat) : Int) := by
@@ -3418,15 +3479,16 @@ theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r
     follow_of r hs h1 h3 h2
   have hhr := hn.hit_rise
   have hhg := hn.hit_ge
-  -- a low frame is not far past the corner
-  have hlowP : ∀ n, a.T1 + 1 ≤ n → n ≤ a.T1 + 1 + a.u.low → r.fr.P n ≤ cornerP sy + N.lowSlack := fun n h1 h2 => by
-    rcases a.low n h1 h2 with h | ⟨_, _, h⟩
-    · exact h.1
-    · exact h
   -- a takeoff after the last one searched: the top speed
   by_cases hlate : r.C + N.fall + N.lastG < a.T1
   · let u0 := a.T1 + 1 + N.rise
-    have hu0 := hlowP u0 (by omega) (by omega)
+    -- a low frame is not far past the corner
+    have hu0 : r.fr.P u0 ≤ cornerP sy + N.lowSlack := by
+      by_cases hp : r.fr.P u0 < cornerP sy
+      · omega
+      · rcases a.low u0 (by omega) (by omega) (by omega) (Or.inl hlate) with h | ⟨_, _, h⟩
+        · exact h.1
+        · exact h
     have h1 := reach_le (P := r.fr.P) (u := u0) (B := cornerP sy + N.lowSlack) (μ := 16 * (top sy : Int)) (w := r.t0) hu0
       (by omega) (fun n h3 h4 => Or.inl (r.move_top n (by omega) h4)) (r.t0 - u0) (by omega)
     rw [show u0 + (r.t0 - u0) = r.t0 by omega] at h1
@@ -3438,11 +3500,37 @@ theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r
   have hearly : a.T1 ≤ r.C + N.fall + N.lastG := by omega
   let s := a.T1 + 1 + a.u.low
   have hsL : s ≤ a.L := by omega
+  -- the low frames: by C + fall + 1 + rise, while the jump ends at `cornerY + 16` or below, `LowAt` by `low_jump` from the takeoff; else the field
+  have alow : ∀ n, a.T1 + 1 ≤ n → n ≤ s → LowAt sy m N r.fr n ∨ (sz = 0 ∧ n = s ∧ r.fr.P n ≤ cornerP sy + N.lowSlack) := fun n h1 h2 => by
+    by_cases hp : r.fr.P n < cornerP sy
+    · exact Or.inl ⟨by omega, Or.inr (Or.inl hp)⟩
+    by_cases hc : n ≤ r.C + N.fall + 1 + N.rise ∧ ∀ j, a.T1 < j → j ≤ n → cornerY sy N.h + 16 ≤ (r.fr.vs j).y.toNat
+    · left
+      have hT : LowAt sy m N r.fr a.T1 := by
+        by_cases hTe : a.T1 < r.C + N.hitF
+        · have := corner_late r H (n := a.T1) (by omega) hTe (by omega)
+          exact ⟨by omega, Or.inr (Or.inl this)⟩
+        · exact floor_low r H (Nat.le_of_lt hE) hw a hearly (by omega) (Nat.le_refl _)
+      have harc : ∀ j, a.T1 < j → j ≤ n → OnArc sy m N r.fr a.T1 j := fun j g1 g2 => by
+        have h := arc_from r H (Nat.le_of_lt hE) hw a hearly (j - (a.T1 + 1)) (by omega)
+        rwa [show a.T1 + 1 + (j - (a.T1 + 1)) = j by omega] at h
+      exact r.low_jump hw a.T1 n hT1 (by omega) hc.1 (by omega) (fun j g1 g2 => floor_all r H (Nat.le_of_lt hE) hw a hearly g1 g2) harc hc.2 hT
+    · have hd : r.C + N.fall + N.lastG < a.T1 ∨ r.C + N.fall + 1 + N.rise < n ∨ ∃ j, a.T1 < j ∧ j ≤ n ∧ (r.fr.vs j).y.toNat < cornerY sy N.h + 16 := by
+        by_cases h3 : n ≤ r.C + N.fall + 1 + N.rise
+        · right; right
+          by_cases h4 : ∃ j, a.T1 < j ∧ j ≤ n ∧ (r.fr.vs j).y.toNat < cornerY sy N.h + 16
+          · exact h4
+          · exact absurd ⟨h3, fun j g1 g2 => by
+              by_cases h5 : (r.fr.vs j).y.toNat < cornerY sy N.h + 16
+              · exact absurd ⟨j, g1, g2, h5⟩ h4
+              · omega⟩ hc
+        · right; left; omega
+      exact a.low n h1 h2 (by omega) hd
   -- every low frame before the last is `LowAt`
   have hlowlt : ∀ n, r.C + N.hitF ≤ n → n < s → LowAt sy m N r.fr n := fun n h1 h2 => by
     by_cases h3 : n ≤ a.T1
     · exact floor_low r H (Nat.le_of_lt hE) hw a hearly h1 h3
-    · rcases a.low n (by omega) (by omega) with h4 | ⟨_, h4, _⟩
+    · rcases alow n (by omega) (by omega) with h4 | ⟨_, h4, _⟩
       · exact h4
       · omega
   by_cases hLs : LowAt sy m N r.fr s
@@ -3499,7 +3587,7 @@ theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r
       exact fast_short r H hE hw hs a ht hf hearly (L' := N.rise) (Nat.le_refl _) H.roomOk (fun n h1 h2 => hleft n h1 (by omega))
   · -- the last low frame is not `LowAt`: a big player past the corner there
     have hsz : sz = 0 := by
-      rcases a.low s (by omega) (Nat.le_refl _) with h | ⟨h, _, _⟩
+      rcases alow s (by omega) (Nat.le_refl _) with h | ⟨h, _, _⟩
       · exact absurd h hLs
       · exact h
     have hr1 := H.roomBig.1

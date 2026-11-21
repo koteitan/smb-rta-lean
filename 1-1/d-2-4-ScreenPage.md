@@ -165,6 +165,8 @@ What this says:
 
 So no part can be split off by the walks as they are. Every theorem that uses the room's walks takes `SiteOK` on every instruction as one hypothesis, and so does `RoomMap.cond_of_rows`, which gives the room's condition; a proved part needs the walks' theorems in a form with the parts apart. `chg.roomSites` stays as it is.
 
+**Round 27.** The parts are now conditions of their own, and two of them are proved on most instructions by a walk that checks them at every state ([The parts of `SiteOK`](d-2-4-2-1-SiteParts.md), item 1-1-d-2-4-2-1): `off` on every frame that starts with the control at 0, and `reads` through every pointer but the screen update's. The field `chg.roomSites` is gone; the route asks the other parts as six fields.
+
 ## Assumptions (not proved in Lean)
 
 * **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5. The route now asks 11 of them: five music bytes follow from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).
@@ -186,7 +188,7 @@ So no part can be split off by the walks as they are. Every theorem that uses th
 a₂         := first(n ≥ b₁, n ≤ b₁ + dR : rt(seq n) ≠ rt(r))     (Changes.a₂; b₁ + dR if none)
 entry₂     : EntryRestM(seq a₂)                      (11 bytes; EntryRest(seq a₂) is ChangesK.entryRest₂)
 Room(seq b₁)                                           (Changes.roomAt: the rows of the time of the first change, chg.time₁, Changes.ctlFirst₁)
-roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
+roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))          (Run.roomSites; from round 27 a theorem from six fields: SiteParts)
 roomOrder  : b₁ ≤ a₂                                   (theorem, from the definition of a₂)
 roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)        (theorem, from the definition of a₂)
 ```

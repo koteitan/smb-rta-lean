@@ -165,6 +165,8 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 
 だから今の歩きのままでは、どの部分も切り出せません。部屋の歩きを使う定理はどれも、各命令の `SiteOK` を 1 つの仮定として受け取ります。部屋の条件を与える `RoomMap.cond_of_rows` も同じです。部分を証明するには、歩きの定理を部分ごとに分けた形にすることが要ります。`chg.roomSites` はそのままです。
 
+**ラウンド 27.** 部分はそれぞれの条件になり、そのうち 2 つは、すべての状態で確かめる歩きでほとんどの命令で証明しました（[`SiteOK` の部分](d-2-4-2-1-SiteParts-ja.md)、項目 1-1-d-2-4-2-1）。`off` は制御 0 で始まるすべてのフレームで、`reads` は画面の更新のポインタ以外のすべてのポインタ越しで。フィールド `chg.roomSites` はなくなり、ルートはほかの部分を 6 つのフィールドとして求めます。
+
 ## 前提（Lean では証明していない）
 
 * **`EntryRest(seq(e))`.** 入るフレームの終わりで `R` の 16 バイトが `Entry2` の参照の値であること（(4) を見てください）。急ぎの音楽が鳴ると成り立ちません（[急ぎの音楽が鳴る走り](0-6-4-HurryMusic-ja.md)）。項目 1-1-d-2-5 です。 道筋はいまそのうち 11 バイトを求めます。音楽の 5 バイトは部屋のフレームから出ます（[部屋のフレームを通る音楽のバイト](d-2-5-1-RoomMusic-ja.md)）。
@@ -186,7 +188,7 @@ Lean: `Theorems/ScreenPage.lean`（`readStep`、`writeStep`、`s_readStep`、`s_
 a₂         := first(n ≥ b₁, n ≤ b₁ + dR : rt(seq n) ≠ rt(r))     （Changes.a₂。なければ b₁ + dR）
 entry₂     : EntryRestM(seq a₂)                      （11 バイト。EntryRest(seq a₂) は ChangesK.entryRest₂）
 Room(seq b₁)                                           （Changes.roomAt。1 つ目の切り替えの時間の段、chg.time₁、Changes.ctlFirst₁ から）
-roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))
+roomSites  : ∀ n ∈ [b₁, a₂),  ∀ j,  SiteOK(tr_n(j))          （Run.roomSites。ラウンド 27 から 6 つのフィールドからの定理: SiteParts）
 roomOrder  : b₁ ≤ a₂                                   （定理。a₂ の定義から）
 roomStay   : ∀ n ∈ [b₁, a₂),  rt(seq n) = rt(r)        （定理。a₂ の定義から）
 ```
