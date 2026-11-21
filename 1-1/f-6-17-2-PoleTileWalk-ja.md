@@ -29,7 +29,7 @@
 
 これで歩きは前と同じように閉じます。移動の終わりで旗の範囲の左にいれば、ルーチンのバイトは旗のものになりません。だから触るには範囲にいる必要があります（`inRange_of_frameP`。`PoleJoin.Run.inRange` が使います）。
 
-触るフレームの始まりの `ColMap` は、操作の始まりから来ます。`FrameKeep` の、操作中の 1 フレーム全部の歩きを、途中の各状態で確認 `okSK`（その一歩は `B` を書かないか、添字かポインタでの書き込み）を加えてもう一度走らせます（`walkKS`、`keepCheckOfS`、ネイティブで約 5 秒）。だから、`ColMap` で始まり、各命令が `CleanK` と `BufAt` を満たす操作中のフレームは、`ColMap` で終わります（`frame_colMap`）。操作の始まりから触るフレームまでのフレームは操作中に始まります（`FrameKeep.Frames.all_start`）。だから、どのフレームも地図を保ちます（`frames_colMap`）。定理 `PoleJoin.Run.tilesStart` は、操作の始まりの地図と `bufAll` から、触るフレームの始まりの `ColMap` を出します。地形のルーチンは、これらのフレームのどれかで旗の列を旗のタイルで描きます。タイルは旗の列に入るので、`BufAt` はそれを許します。
+触るフレームの始まりの `ColMap` は、操作の始まりから来ます。`FrameKeep` の、操作中の 1 フレーム全部の歩きを、途中の各状態で確認 `okSK`（その一歩は `B` を書かないか、添字かポインタでの書き込み）を加えてもう一度走らせます（`walkKS`、`keepCheckOfS`、ネイティブで約 5 秒）。だから、`ColMap` で始まり、各命令が `CleanK` と `BufAt` を満たす操作中のフレームは、`ColMap` で終わります（`frame_colMap`）。操作の始まりから触るフレームまでのフレームは操作中に始まります（`FrameKeep.Frames.all_start`）。だから、どのフレームも地図を保ちます（`frames_colMap`）。定理 `PoleJoin.Run.tilesStart` は、操作の始まりの地図と `bufAll` から、触るフレームの始まりの `ColMap` を出します。（第 25 回: 同じ歩きを、さらに二つのバイトを守り見張って走らせます（`PoleTileKeep.keepCheckOfY`）。`Run.tilesStart` は、地図と二つのバイトを出す `PoleTileKeep.frames_keepY` を使います: [当たり判定のルーチンの中で高さを守る](f-6-17-6-PoleTileKeep-ja.md)。）地形のルーチンは、これらのフレームのどれかで旗の列を旗のタイルで描きます。タイルは旗の列に入るので、`BufAt` はそれを許します。
 
 操作の始まりの地図も証明しました（`PoleTileCtl.colMap₀`）。土管から出る切り替えの段（`SideChangeSound`）は、操作の始まりの機械を覆います。この段の、操作できる各状態では、`B` の全部のバイトがわかっていて、旗の列の外に旗のタイルはありません（`mapCheckK`、ネイティブで約 20 秒。二組の段にそういう状態が 2 つずつ）。だから操作の始まりの機械は `ColMap` を満たします（`PoleTileCtl.EndRunQ.colMap`。`Route.Run.atCtl₀` と同じ形）。
 

@@ -55,7 +55,10 @@ The case split, all by `cases` and `by_cases`:
 * with no such stop, after a wall hit before `hitF`: short of the goal, whatever he does, `wall_short`. It looks at no jump, so a run that stands on the wall
   and never touches the floor is in it;
 * with no such stop and no wall hit, onto the block: a takeoff after the last one searched (top speed), or a slow takeoff (air speed cap), or a fast
-  takeoff (the search of `FastTakeoff`), `landed_short`;
+  takeoff (the search of `FastTakeoff`), `landed_short`. A big player's last low frame may be past the corner (`Approach.low`: a coin above the block's left
+  column takes the side check on that frame); then a fast takeoff is the search with one low air frame less (`fast_short`, `roomB`), a slow one after the first
+  frame after the fall is the bound from the frame before with the landing one frame later (`slowBigOk`), and a slow one on that frame is the field
+  `Approach.slowBig` (page `1-1/c-7-14-1-BigApproach.md`);
 * then off the block by a fast jump, a slow jump or stepping off, `entry_ge`.
 -/
 
@@ -236,6 +239,15 @@ structure Nums where
 /-- the room of `FastTakeoff`, with these numbers -/
 def room (sy : Syms) (N : Nums) : Room := bonusRoom sy N.fall N.lastG N.rise (N.goalF - N.fall)
 
+/-- the same with one low air frame less: a big player may pass the corner on the last low frame (`Approach.low`) -/
+def roomB (sy : Syms) (N : Nums) : Room := bonusRoom sy N.fall N.lastG (N.rise - 1) (N.goalF - N.fall)
+
+/-- the slow pairs with one more air frame from the frame before the last low frame and the landing one frame later: short of the goal. A big player's slow takeoff
+after the first frame after the fall (`landed_short`) -/
+def slowBigOk (sy : Syms) (m : Machine) (N : Nums) : Bool :=
+  N.slow.all fun q => decide (cornerP sy - 1 + 16 * ((sy.AirFastSpeed.toNat : Int) - 1) * ((q.2 + 1 - q.1 : Nat) : Int) +
+    capDist sy m (N.goalF - (N.fall + 2 + q.2)) < goalP sy)
+
 /-! ## The frames of a run -/
 
 /-- position, horizontal state and input by frame: `inp (n + 1)` is the input of frame `n + 1`, and `hs (n + 1)`, `P (n + 1)` are
@@ -387,8 +399,9 @@ structure Early (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C T1 : Nat) 
   jump_in : JmpIn (fr.inp (T1 + 1))
   air_in : ∀ n, T1 + 1 ≤ n → n < T1 + 1 + N.rise → AirIn (fr.inp (n + 1))
 
-/-- with no wall hit, no stop from `hitF` on, and a landing on the block before `t0`: the last takeoff from the floor and its landing -/
-structure Approach (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 : Nat) : Type where
+/-- with no wall hit, no stop from `hitF` on, and a landing on the block before `t0`: the last takeoff from the floor and its landing. `sz` is the player's size byte at
+first control (0: big) -/
+structure Approach (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 : Nat) (sz : UInt8) : Type where
   /-- the takeoff frame is `T1 + 1`. A takeoff needs the floor, so it comes after the fall -/
   T1 : Nat
   T1_ge : C + N.fall ≤ T1
@@ -408,13 +421,21 @@ structure Approach (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 : Na
   reach : Cert.Reach (arcSucc sy m N.h) x (L - (T1 + 1)) u
   window : falling u.s = true ∧ standY sy N.h ≤ u.s.y.toNat ∧ u.s.y.toNat < standY sy N.h + sy.LandDepth.toNat
   air : ∀ n, T1 ≤ n → n < L → isAir (fr.inp (n + 1)) = true
-  low : ∀ n, T1 + 1 ≤ n → n ≤ T1 + 1 + u.low → LowAt sy m N fr n
+  /-- the low frames are `LowAt`. For a big player (`sz = 0`) the last low frame may be only not far past the corner: there the upper point of his side check can be at a
+  coin above the block's left column, the routine takes the coin and leaves the side check, and that frame does not push him back. Until round 25 `LowAt` was asked on
+  every low frame, which is false on measured runs of a big player -/
+  low : ∀ n, T1 + 1 ≤ n → n ≤ T1 + 1 + u.low → LowAt sy m N fr n ∨ (sz = 0 ∧ n = T1 + 1 + u.low ∧ fr.P n ≤ cornerP sy + N.lowSlack)
+  /-- a big player whose last low frame is not `LowAt`, after a slow takeoff on the first frame after the fall (`T1 = C + fall`), gets past the block's right end
+  only after `C + goalF`. Not derived: the slow takeoff's bound (`landed_short`) has 65/256 px to spare at `C + goalF`, and one more frame at the air speed past the
+  corner is 384/256 px. A later slow takeoff is proved (`slowBigOk`: the frame later pays for that frame), and so is a fast takeoff (`fast_short` with `roomB`) -/
+  slowBig : sz = 0 → x.fast = false → ¬LowAt sy m N fr (T1 + 1 + u.low) → T1 = C + N.fall → C + N.goalF < t0
 
-/-- over the block in one jump, or onto it and off it. Only a run with no wall hit and no stop needs its takeoff from the floor -/
-inductive Way (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 E : Nat) : Type where
-  | over (o : Over sy m N fr C t0) : Way sy m N fr C t0 E
-  | onto (a : NoWall sy m N fr C → (∀ n, C + N.hitF ≤ n → n ≤ t0 → ¬Stop sy m N fr n) → Approach sy m N fr C t0)
-      (off : Off sy m N fr C t0 E) : Way sy m N fr C t0 E
+/-- over the block in one jump, or onto it and off it. Only a run with no wall hit and no stop needs its takeoff from the floor. `sz` is the player's size byte at
+first control (0: big), for `Approach` -/
+inductive Way (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 E : Nat) (sz : UInt8) : Type where
+  | over (o : Over sy m N fr C t0) : Way sy m N fr C t0 E sz
+  | onto (a : NoWall sy m N fr C → (∀ n, C + N.hitF ≤ n → n ≤ t0 → ¬Stop sy m N fr n) → Approach sy m N fr C t0 sz)
+      (off : Off sy m N fr C t0 E) : Way sy m N fr C t0 E sz
 
 /-- frame `n` is in a jump from the floor with the takeoff frame `T + 1` -/
 def OnArc (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (T n : Nat) : Prop :=
@@ -471,8 +492,8 @@ height's byte at most what it was -/
 def arcDown (sy : Syms) (m : Machine) (N : Nums) : Bool :=
   (VertAir.arcSet sy m N.h N.rise).all fun u => decide (N.rise ≤ u.k) || [true, false].all fun a => decide ((vstep sy m u.s a 0).y.toNat ≤ u.s.y.toNat)
 
-/-- what a real run in the room gives, apart from the frames' link to `hstep` -/
-structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
+/-- what a real run in the room gives, apart from the frames' link to `hstep`. `sz` is the player's size byte at first control (`RoomRun` sets it from the machine) -/
+structure RoomFields (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) where
   fr : Frames
   /-- first control -/
   C : Nat
@@ -506,10 +527,10 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) where
   151, moving right, he is not pushed back on that frame -/
   low_at : NoWall sy m N fr C → ∀ n, C + N.hitF ≤ n → n ≤ C + N.fall + 1 + N.rise → n ≤ t0 → cornerY sy N.h ≤ (fr.vs n).y.toNat → ¬OnFloor sy (fr.vs n) →
     cornerP sy ≤ fr.P n → (fr.vs n).y.toNat < cornerY sy N.h + 16 → fr.P n ≤ cornerP sy + N.lowSlack
-  way : Way sy m N fr C t0 E
+  way : Way sy m N fr C t0 E sz
 
 /-- the frames as numbers: what the theorems below use. `RoomRun.toCore` makes them from real machines -/
-structure RoomCore (sy : Syms) (m : Machine) (N : Nums) extends RoomFields sy m N where
+structure RoomCore (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) extends RoomFields sy m N sz where
   /-- he stands away from the floor before `standF`, before the end of the fall or after an earlier frame that ends in the state 0, only at the end of a frame that does
   not follow `hstep`. `RoomRun.stand_off_of` proves it from the field `stand_wall` and the first stand of the fall (`RoomRun.stand_first`) -/
   stand_off : ∀ n, C ≤ n → n + 1 < C + N.standF → (n + 1 < C + N.fall ∨ ∃ j, C < j ∧ j ≤ n ∧ (fr.vs j).st = 0) → (fr.vs (n + 1)).st = 0 →
@@ -619,8 +640,10 @@ abbrev inpAt (sy : Syms) (m : Machine) (S : FrameKeep.RealRun) (b lim C n : Nat)
 /-- what a real run in the room gives, on real machines. The machines are those of the real run `S`: the room's frame `n` ends at `endAt … n` (`RoomRun.fe`), the end of
 the `(n − C)`-th frame from frame `b` on that ends not paused, and the room's frame `n + 1` is the real frame from `startAt … n` (`RoomRun.fm`) with its input (`RoomRun.inAt`,
 `RoomRun.pad`). So the machine at first control is `S.seq b` (`RoomRun.fe_C`). These are definitions; that the room's frame `n + 1` is the real frame of the machine where
-it begins is `RoomRun.next`, that it ends not paused is `RoomRun.up`. The frames that end paused in between are not frames of the room. -/
-structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (b lim : Nat) extends RoomFields sy m N where
+it begins is `RoomRun.next`, that it ends not paused is `RoomRun.up`. The frames that end paused in between are not frames of the room. The size byte of `RoomFields` is
+that of `S.seq b`, the machine at first control -/
+structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (b lim : Nat) extends
+    RoomFields sy m N ((S.seq b).ram.get! (FrameModel.I sy.PlayerSize)) where
   /-- the state and the position at the end of each frame up to `t0` are those of the machine -/
   read_hs : ∀ n, C ≤ n → n ≤ t0 → fr.hs n = FrameModel.readHS sy (endAt sy m S b lim C n)
   read_P : ∀ n, C ≤ n → n ≤ t0 → fr.P n = posP sy (endAt sy m S b lim C n)
@@ -1168,6 +1191,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   air : CFacts sy m
   normI : normIdem = true
   roomOk : roomCheck sy m (room sy N) = true
+  /-- the search with one low air frame less, for a big player's fast takeoff (`fast_short`), and the slow pairs for a big player's later slow takeoff -/
+  roomBig : 1 ≤ N.rise ∧ roomCheck sy m (roomB sy N) = true ∧ slowBigOk sy m N = true
   window : arcCheck sy m (groundY sy) N.h (windowOk sy N.h N.slow N.fast) = true
   drop : arcCheck sy m (standY sy N.h) N.h (dropOk sy N.aboveS N.aboveF N.airS) = true
   walk : walkOk sy m N.h N.walk = true
@@ -1732,7 +1757,7 @@ theorem arc_step_all {fr : Frames} {T n : Nat} (h : OnArc sy m N fr T n) (hg : (
 
 namespace RoomCore
 
-variable (r : RoomCore sy m N)
+variable {sz : UInt8} (r : RoomCore sy m N sz)
 
 theorem inD_start (H : Checks sy m N) : inD sy (r.fr.hs r.C) = true := by
   have h := H.roomOk
@@ -2681,7 +2706,7 @@ theorem pair_bound (hA : 1 ≤ sy.AirFastSpeed.toNat) {q1 q2 S0 L0 s L t G : Nat
 /-! ### The floor up to the takeoff -/
 
 /-- **The landing on the block comes after the low frames of the jump**: on them he is rising (`arc_facts`), and a landing needs a fall -/
-theorem land_late (H : Checks sy m N) (a : Approach sy m N r.fr r.C r.t0) : a.T1 + 1 + N.rise < a.L := by
+theorem land_late (H : Checks sy m N) (a : Approach sy m N r.fr r.C r.t0 sz) : a.T1 + 1 + N.rise < a.L := by
   by_cases h : a.T1 + 1 + N.rise < a.L
   · exact h
   · exfalso
@@ -2694,7 +2719,7 @@ theorem land_late (H : Checks sy m N) (a : Approach sy m N r.fr r.C r.t0) : a.T1
 
 /-- **`floor_low`**, with no wall: up to a takeoff by the last frame searched he has stayed on the floor. An earlier jump would still be in its
 low frames -/
-theorem floor_all (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C) (a : Approach sy m N r.fr r.C r.t0)
+theorem floor_all (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C) (a : Approach sy m N r.fr r.C r.t0 sz)
     (hearly : a.T1 ≤ r.C + N.fall + N.lastG) {n : Nat} (h1 : r.C + N.fall ≤ n) (h2 : n ≤ a.T1) : OnFloor sy (r.fr.vs n) := by
   have hN := H.nums
   have hl := hN.last_le
@@ -2718,7 +2743,7 @@ theorem floor_all (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.
     exact (arc_facts H h7 (by omega)).2.2 a.T1_floor.1
 
 /-- the frames of the jump's low frames -/
-theorem arc_from (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C) (a : Approach sy m N r.fr r.C r.t0)
+theorem arc_from (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C) (a : Approach sy m N r.fr r.C r.t0 sz)
     (hearly : a.T1 ≤ r.C + N.fall + N.lastG) : ∀ e, e ≤ N.rise → OnArc sy m N r.fr a.T1 (a.T1 + 1 + e)
   | 0, _ => by
     refine ⟨by omega, a.x, a.x, a.x_mem, ?_, a.x_vs⟩
@@ -2733,7 +2758,7 @@ theorem arc_from (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.f
     exact arc_step H h2 (by omega) (r.varc a.T1 _ (by omega) (by omega) (by omega) h2 (by omega))
 
 /-- **`floor_low`**: the frames from `hitF` to a takeoff by the last frame searched are low -/
-theorem floor_low (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C) (a : Approach sy m N r.fr r.C r.t0) (hearly : a.T1 ≤ r.C + N.fall + N.lastG)
+theorem floor_low (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C) (a : Approach sy m N r.fr r.C r.t0 sz) (hearly : a.T1 ≤ r.C + N.fall + N.lastG)
     {n : Nat} (h1 : r.C + N.hitF ≤ n) (h2 : n ≤ a.T1) : LowAt sy m N r.fr n := by
   have hN := H.nums
   have hT := a.T1_lt
@@ -2743,7 +2768,7 @@ theorem floor_low (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.
 
 /-- **`early`**, with no wall: a fast takeoff by the last frame searched has the frames of `FastTakeoff` -/
 theorem early_of (H : Checks sy m N) (hE : r.t0 ≤ r.E) (hw : NoWall sy m N r.fr r.C)
-    (a : Approach sy m N r.fr r.C r.t0) (hearly : a.T1 ≤ r.C + N.fall + N.lastG) : Early sy m N r.fr r.C a.T1 := by
+    (a : Approach sy m N r.fr r.C r.t0 sz) (hearly : a.T1 ≤ r.C + N.fall + N.lastG) : Early sy m N r.fr r.C a.T1 := by
   have hN := H.nums
   have hT := a.T1_ge
   have hTl := a.T1_lt
@@ -3259,9 +3284,99 @@ theorem wall_short (H : Checks sy m N) (hs : ∀ n, r.C + N.hitF ≤ n → n ≤
     · exact wall_right r H hge hb.P_le hb.J' (by omega) hfol (by omega) (by omega) hfd ht
     · exact wall_turn r H hge (by omega) hb.P_le hb.J' hfol (by omega) hfd ht
 
-/-- with no stop from `hitF` on, a landing on the block is short of the goal in time: the case split on the takeoff -/
+/-- **A fast takeoff** of `landed_short`, with the search of `FastTakeoff` for `L'` low air frames after the jump frame (`hc`): with no stop from `hitF` on, every frame
+up to `T1 + 1 + L'` left of the corner is impossible for a run that is past the goal by `C + goalF`. `L'` is `rise` (`room`), or `rise − 1` (`roomB`) when the last low
+frame of a big player may be past the corner -/
+theorem fast_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r.fr r.C) (hs : ∀ n, r.C + N.hitF ≤ n → n ≤ r.t0 → ¬Stop sy m N r.fr n)
+    (a : Approach sy m N r.fr r.C r.t0 sz) (ht : r.t0 ≤ r.C + N.goalF) (hf : a.x.fast = true) (hearly : a.T1 ≤ r.C + N.fall + N.lastG)
+    {L' : Nat} (hL : L' ≤ N.rise) (hc : roomCheck sy m (bonusRoom sy N.fall N.lastG L' (N.goalF - N.fall)) = true)
+    (hleft : ∀ n, r.C ≤ n → n ≤ a.T1 + 1 + L' → r.fr.P n < cornerP sy) : False := by
+  have hn := H.nums
+  have hpast := r.past
+  have hT1 := a.T1_ge
+  have hT2 := a.T1_lt
+  have hhr := hn.hit_rise
+  have hhg := hn.hit_ge
+  have hll := land_late r H a
+  have hLt := a.L_le
+  have hfol : ∀ j, r.C + N.hitF ≤ j + 1 → r.C ≤ j → j < r.t0 → Follow sy m r.fr j := fun j h1 h2 h3 =>
+    follow_of r hs h1 h3 h2
+  have hth : sy.AirFastSpeed.toNat ≤ (sbyte (r.fr.hs a.T1).v).natAbs := by
+    have h1 := a.x_ab
+    rw [hf] at h1
+    have h2 : sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
+    rcases r.ab_of a.T1 (by omega) (by omega) with h3 | ⟨h3, h4⟩
+    · omega
+    · -- a stop right after the takeoff: before `hitF`, so the stored speed is below the threshold
+      by_cases h5 : a.T1 + 1 < r.C + N.hitF
+      · have := h4 h5
+        omega
+      · exact absurd h3 (hs (a.T1 + 1) (by omega) (by omega))
+  have E := early_of r H (Nat.le_of_lt hE) hw a hearly
+  have hF : ∀ j, r.C ≤ j → j < r.t0 → Follow sy m r.fr j := fun j h1 h2 => by
+    by_cases h3 : j + 1 < r.C + N.hitF
+    · exact E.follow j h1 h3
+    · exact hfol j (by omega) h1 h2
+  let R := bonusRoom sy N.fall N.lastG L' (N.goalF - N.fall)
+  have hg0 : a.T1 - (r.C + N.fall) ≤ N.lastG := by omega
+  let fa := seg r.fr.inp r.C N.fall
+  let g := seg r.fr.inp (r.C + N.fall) (a.T1 - (r.C + N.fall))
+  let k := seg r.fr.inp (a.T1 + 1) L'
+  have hTk : Takeoff R fa g (r.fr.inp (a.T1 + 1)) k :=
+    { fall_in := mem_seg (P := AirIn) fun j h1 h2 => E.fall_in j h1 h2
+      fall_len := length_seg _ _ _
+      gnd_in := mem_seg (P := GndIn) fun j h1 h2 => E.gnd_in j h1 (by omega)
+      jump_in := E.jump_in
+      air_in := mem_seg (P := AirIn) fun j h1 h2 => E.air_in j h1 (by omega)
+      air_len := length_seg _ _ _ }
+  have hs0 : R.s0 = (room sy N).s0 := rfl
+  have hgo1 : go sy m (R.s0, r.fr.P r.C) fa = (r.fr.hs (r.C + N.fall), r.fr.P (r.C + N.fall)) := by
+    have h1 := go_seg (fr := r.fr) (sy := sy) (m := m) r.C N.fall (fun j h2 h3 => hF j h2 (by omega))
+    rw [r.start, ← hs0] at h1
+    exact h1
+  have hgo2 : go sy m (R.s0, r.fr.P r.C) (fa ++ g) = (r.fr.hs a.T1, r.fr.P a.T1) := by
+    rw [FastTakeoff.go_append, hgo1]
+    have h1 := go_seg (fr := r.fr) (sy := sy) (m := m) (r.C + N.fall) (a.T1 - (r.C + N.fall))
+      (fun j h2 h3 => hF j (by omega) (by omega))
+    rw [show r.C + N.fall + (a.T1 - (r.C + N.fall)) = a.T1 by omega] at h1
+    exact h1
+  have hlow0 : Low sy m R.cp (go sy m (R.s0, r.fr.P r.C) fa) (g ++ r.fr.inp (a.T1 + 1) :: k) := by
+    rw [hgo1]
+    have h1 : g ++ r.fr.inp (a.T1 + 1) :: k = seg r.fr.inp (r.C + N.fall) (a.T1 - (r.C + N.fall) + (1 + L')) := by
+      rw [seg_add, show r.C + N.fall + (a.T1 - (r.C + N.fall)) = a.T1 by omega, Nat.add_comm 1 L']
+      simp only [g, k, seg]
+    rw [h1]
+    exact low_seg _ _ (fun j h2 h3 => hF j (by omega) (by omega)) (fun j h2 h3 => hleft (j + 1) (by omega) (by omega))
+  have hp0 : R.P0 ≤ r.fr.P r.C := r.startP0
+  have hp1 : r.fr.P r.C ≤ R.P1 := r.startP1
+  have FT : TFacts sy m := ⟨H.air.pot, H.normI⟩
+  by_cases hv : (sy.AirFastSpeed.toNat : Int) ≤ sbyte (r.fr.hs a.T1).v
+  · -- moving right: he does not stay left of the corner
+    refine FastTakeoff.no_right_takeoff FT hc hp0 hp1 hTk (by rw [length_seg]; exact hg0) ?_ hlow0
+    rw [hgo2]
+    exact hv
+  · -- moving left: he is too far back
+    have hv2 : sbyte (r.fr.hs a.T1).v ≤ -(sy.AirFastSpeed.toNat : Int) := by omega
+    have hlowg : Low sy m R.cp (go sy m (R.s0, r.fr.P r.C) fa) g := (FastTakeoff.low_append g _ _ hlow0).1
+    obtain ⟨es, _, h2, h3⟩ := FastTakeoff.layer_of FT hc hp0 hp1 hTk.fall_in hTk.fall_len hTk.gnd_in
+      (by rw [length_seg]; exact hg0) (by rw [hgo2]; exact hth) hlowg
+    rw [hgo2] at h3
+    have hrest : ∀ j, a.T1 ≤ j → j < a.T1 + (r.t0 - a.T1) → Follow sy m r.fr j := fun j h4 h5 =>
+      hF j (by omega) (by omega)
+    have h5 := left_spec_le H.air.pot h2 h3 hv2 (rest := seg r.fr.inp a.T1 (r.t0 - a.T1)) (inputs_seg _ _ hrest)
+      (by
+        rw [length_seg, length_seg]
+        show r.t0 - a.T1 ≤ N.goalF - N.fall - (a.T1 - (r.C + N.fall))
+        omega)
+    rw [go_seg a.T1 (r.t0 - a.T1) hrest, show a.T1 + (r.t0 - a.T1) = r.t0 by omega] at h5
+    have h7 : r.fr.P r.t0 < goalP sy := h5
+    omega
+
+/-- with no stop from `hitF` on, a landing on the block is short of the goal in time: the case split on the takeoff. When the last low frame is not `LowAt` (a big player
+past the corner there, `Approach.low`), a fast takeoff is the search with one low frame less (`roomB`), a slow one after the first frame after the fall is the bound
+from the frame before the last low frame (`slowBigOk`), and a slow one on that frame is `Approach.slowBig` (`Checks.roomBig`) -/
 theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r.fr r.C) (hs : ∀ n, r.C + N.hitF ≤ n → n ≤ r.t0 → ¬Stop sy m N r.fr n)
-    (a : Approach sy m N r.fr r.C r.t0) (ht : r.t0 ≤ r.C + N.goalF) : False := by
+    (a : Approach sy m N r.fr r.C r.t0 sz) (ht : r.t0 ≤ r.C + N.goalF) : False := by
   have hn := H.nums
   have hpast := r.past
   have hT1 := a.T1_ge
@@ -3289,10 +3404,15 @@ theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r
     follow_of r hs h1 h3 h2
   have hhr := hn.hit_rise
   have hhg := hn.hit_ge
+  -- a low frame is not far past the corner
+  have hlowP : ∀ n, a.T1 + 1 ≤ n → n ≤ a.T1 + 1 + a.u.low → r.fr.P n ≤ cornerP sy + N.lowSlack := fun n h1 h2 => by
+    rcases a.low n h1 h2 with h | ⟨_, _, h⟩
+    · exact h.1
+    · exact h
   -- a takeoff after the last one searched: the top speed
   by_cases hlate : r.C + N.fall + N.lastG < a.T1
   · let u0 := a.T1 + 1 + N.rise
-    have hu0 := (a.low u0 (by omega) (by omega)).1
+    have hu0 := hlowP u0 (by omega) (by omega)
     have h1 := reach_le (P := r.fr.P) (u := u0) (B := cornerP sy + N.lowSlack) (μ := 16 * (top sy : Int)) (w := r.t0) hu0
       (by omega) (fun n h3 h4 => Or.inl (r.move_top n (by omega) h4)) (r.t0 - u0) (by omega)
     rw [show u0 + (r.t0 - u0) = r.t0 by omega] at h1
@@ -3302,127 +3422,127 @@ theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r
       Int.mul_le_mul_of_nonneg_left (by omega) (by omega)
     omega
   have hearly : a.T1 ≤ r.C + N.fall + N.lastG := by omega
-  -- every low frame is left of the corner
   let s := a.T1 + 1 + a.u.low
   have hsL : s ≤ a.L := by omega
-  have hlowall : ∀ n, r.C + N.hitF ≤ n → n ≤ s → LowAt sy m N r.fr n := fun n h1 h2 => by
+  -- every low frame before the last is `LowAt`
+  have hlowlt : ∀ n, r.C + N.hitF ≤ n → n < s → LowAt sy m N r.fr n := fun n h1 h2 => by
     by_cases h3 : n ≤ a.T1
     · exact floor_low r H (Nat.le_of_lt hE) hw a hearly h1 h3
-    · exact a.low n (by omega) h2
-  have hleft : ∀ n, r.C ≤ n → n ≤ s → r.fr.P n < cornerP sy := fun n h1 h2 =>
-    left_at r H hs (w := s) (by omega) hlowall h1 h2
-  cases hf : a.x.fast with
-  | false =>
-    -- a slow takeoff: the air speed cap from the last low frame
-    rw [hf] at hq
-    simp only [Bool.false_eq_true, if_false] at hq
-    -- below the threshold from the takeoff, or from the stop right after it
-    obtain ⟨u, hu1, hu2, hc0⟩ : ∃ u, a.T1 ≤ u ∧ u ≤ a.T1 + 1 ∧ capped sy (r.fr.hs u) = true := by
-      rcases r.ab_of a.T1 (by omega) (by omega) with h2 | ⟨h2, _⟩
-      · have h1 := a.x_ab
-        rw [hf] at h1
-        have h3 : ¬sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
-        refine ⟨a.T1, Nat.le_refl _, by omega, ?_⟩
-        simp only [capped, decide_eq_true_eq]
-        omega
-      · exact ⟨a.T1 + 1, by omega, Nat.le_refl _, capped_of_stop r H h2⟩
-    have hcap := capped_along r H (u := u) (w := a.L) (by omega) hLt hc0 (fun n h1 h2 => Or.inl (a.air n (by omega) h2))
-      (s - u) (by omega)
-    rw [show u + (s - u) = s by omega] at hcap
-    have hD := inD_at r H (n := s) (by omega) (by omega)
-    have hF : ∀ j, s ≤ j → j < s + (r.t0 - s) → Follow sy m r.fr j := fun j h1 h2 =>
-      hfol j (by omega) (by omega) (by omega)
-    have h1 := hdist_seg s (r.t0 - s) hF
-    rw [show s + (r.t0 - s) = r.t0 by omega] at h1
-    have hsplit : seg r.fr.inp s (r.t0 - s) = seg r.fr.inp s (a.L - s) ++ seg r.fr.inp a.L (r.t0 - a.L) := by
-      rw [show r.t0 - s = (a.L - s) + (r.t0 - a.L) by omega, seg_add, show s + (a.L - s) = a.L by omega]
-    rw [hsplit] at h1
-    have h2 := landing_bound H.air (r.fr.hs s) hD hcap (seg r.fr.inp s (a.L - s)) (seg r.fr.inp a.L (r.t0 - a.L))
-      (mem_seg (P := fun i => i ∈ inputs ∧ isAir i = true) fun j h3 h4 =>
-        ⟨(hF j h3 (by omega)).1, a.air j (by omega) (by omega)⟩)
-      (mem_seg (P := fun i => i ∈ inputs) fun j h3 h4 => (hF j (by omega) (by omega)).1)
-    rw [length_seg, length_seg] at h2
-    have hp := hn.slow_pairs
-    simp only [List.all_eq_true, Bool.and_eq_true, decide_eq_true_eq] at hp
-    obtain ⟨⟨⟨_, hq3⟩, hq4⟩, hq5⟩ := hp q hq
-    have h3 := pair_bound (sy := sy) (m := m) hA (q1 := q.1) (q2 := q.2) (S0 := r.C + N.fall + 1 + q.1)
-      (L0 := r.C + N.fall + 1 + q.2) (s := s) (L := a.L) (t := r.t0) (G := r.C + N.goalF) (by omega) hq4 (by omega) (by omega)
-      hsL hLt ht
-    rw [show r.C + N.goalF - (r.C + N.fall + 1 + q.2) = N.goalF - (N.fall + 1 + q.2) by omega] at h3
-    have h4 := hleft s (by omega) (Nat.le_refl s)
-    omega
-  | true =>
-    -- a fast takeoff: the speed is at the threshold, and the search of `FastTakeoff`
-    have hth : sy.AirFastSpeed.toNat ≤ (sbyte (r.fr.hs a.T1).v).natAbs := by
-      have h1 := a.x_ab
-      rw [hf] at h1
-      have h2 : sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
-      rcases r.ab_of a.T1 (by omega) (by omega) with h3 | ⟨h3, h4⟩
+    · rcases a.low n (by omega) (by omega) with h4 | ⟨_, h4, _⟩
+      · exact h4
       · omega
-      · -- a stop right after the takeoff: before `hitF`, so the stored speed is below the threshold
-        by_cases h5 : a.T1 + 1 < r.C + N.hitF
-        · have := h4 h5
+  by_cases hLs : LowAt sy m N r.fr s
+  · -- every low frame is left of the corner
+    have hlowall : ∀ n, r.C + N.hitF ≤ n → n ≤ s → LowAt sy m N r.fr n := fun n h1 h2 => by
+      by_cases h3 : n < s
+      · exact hlowlt n h1 h3
+      · rw [show n = s by omega]
+        exact hLs
+    have hleft : ∀ n, r.C ≤ n → n ≤ s → r.fr.P n < cornerP sy := fun n h1 h2 =>
+      left_at r H hs (w := s) (by omega) hlowall h1 h2
+    cases hf : a.x.fast with
+    | false =>
+      -- a slow takeoff: the air speed cap from the last low frame
+      rw [hf] at hq
+      simp only [Bool.false_eq_true, if_false] at hq
+      -- below the threshold from the takeoff, or from the stop right after it
+      obtain ⟨u, hu1, hu2, hc0⟩ : ∃ u, a.T1 ≤ u ∧ u ≤ a.T1 + 1 ∧ capped sy (r.fr.hs u) = true := by
+        rcases r.ab_of a.T1 (by omega) (by omega) with h2 | ⟨h2, _⟩
+        · have h1 := a.x_ab
+          rw [hf] at h1
+          have h3 : ¬sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
+          refine ⟨a.T1, Nat.le_refl _, by omega, ?_⟩
+          simp only [capped, decide_eq_true_eq]
           omega
-        · exact absurd h3 (hs (a.T1 + 1) (by omega) (by omega))
-    have E := early_of r H (Nat.le_of_lt hE) hw a hearly
-    have hF : ∀ j, r.C ≤ j → j < r.t0 → Follow sy m r.fr j := fun j h1 h2 => by
-      by_cases h3 : j + 1 < r.C + N.hitF
-      · exact E.follow j h1 h3
-      · exact hfol j (by omega) h1 h2
-    let R := room sy N
-    have hg0 : a.T1 - (r.C + N.fall) ≤ N.lastG := by omega
-    let fa := seg r.fr.inp r.C N.fall
-    let g := seg r.fr.inp (r.C + N.fall) (a.T1 - (r.C + N.fall))
-    let k := seg r.fr.inp (a.T1 + 1) N.rise
-    have hTk : Takeoff R fa g (r.fr.inp (a.T1 + 1)) k :=
-      { fall_in := mem_seg (P := AirIn) fun j h1 h2 => E.fall_in j h1 h2
-        fall_len := length_seg _ _ _
-        gnd_in := mem_seg (P := GndIn) fun j h1 h2 => E.gnd_in j h1 (by omega)
-        jump_in := E.jump_in
-        air_in := mem_seg (P := AirIn) fun j h1 h2 => E.air_in j h1 h2
-        air_len := length_seg _ _ _ }
-    have hgo1 : go sy m (R.s0, r.fr.P r.C) fa = (r.fr.hs (r.C + N.fall), r.fr.P (r.C + N.fall)) := by
-      have h1 := go_seg (fr := r.fr) (sy := sy) (m := m) r.C N.fall (fun j h2 h3 => hF j h2 (by omega))
-      rw [r.start] at h1
-      exact h1
-    have hgo2 : go sy m (R.s0, r.fr.P r.C) (fa ++ g) = (r.fr.hs a.T1, r.fr.P a.T1) := by
-      rw [FastTakeoff.go_append, hgo1]
-      have h1 := go_seg (fr := r.fr) (sy := sy) (m := m) (r.C + N.fall) (a.T1 - (r.C + N.fall))
-        (fun j h2 h3 => hF j (by omega) (by omega))
-      rw [show r.C + N.fall + (a.T1 - (r.C + N.fall)) = a.T1 by omega] at h1
-      exact h1
-    have hlow0 : Low sy m R.cp (go sy m (R.s0, r.fr.P r.C) fa) (g ++ r.fr.inp (a.T1 + 1) :: k) := by
-      rw [hgo1]
-      have h1 : g ++ r.fr.inp (a.T1 + 1) :: k = seg r.fr.inp (r.C + N.fall) (a.T1 - (r.C + N.fall) + (1 + N.rise)) := by
-        rw [seg_add, show r.C + N.fall + (a.T1 - (r.C + N.fall)) = a.T1 by omega, Nat.add_comm 1 N.rise]
-        simp only [g, k, seg]
-      rw [h1]
-      exact low_seg _ _ (fun j h2 h3 => hF j (by omega) (by omega)) (fun j h2 h3 => hleft (j + 1) (by omega) (by omega))
-    have hp0 := r.startP0
-    have hp1 := r.startP1
-    have FT : TFacts sy m := ⟨H.air.pot, H.normI⟩
-    by_cases hv : (sy.AirFastSpeed.toNat : Int) ≤ sbyte (r.fr.hs a.T1).v
-    · -- moving right: he does not stay left of the corner
-      refine FastTakeoff.no_right_takeoff FT H.roomOk hp0 hp1 hTk (by rw [length_seg]; exact hg0) ?_ hlow0
-      rw [hgo2]
-      exact hv
-    · -- moving left: he is too far back
-      have hv2 : sbyte (r.fr.hs a.T1).v ≤ -(sy.AirFastSpeed.toNat : Int) := by omega
-      have hlowg : Low sy m R.cp (go sy m (R.s0, r.fr.P r.C) fa) g := (FastTakeoff.low_append g _ _ hlow0).1
-      obtain ⟨es, _, h2, h3⟩ := FastTakeoff.layer_of FT H.roomOk hp0 hp1 hTk.fall_in hTk.fall_len hTk.gnd_in
-        (by rw [length_seg]; exact hg0) (by rw [hgo2]; exact hth) hlowg
-      rw [hgo2] at h3
-      have hrest : ∀ j, a.T1 ≤ j → j < a.T1 + (r.t0 - a.T1) → Follow sy m r.fr j := fun j h4 h5 =>
-        hF j (by omega) (by omega)
-      have h5 := left_spec_le H.air.pot h2 h3 hv2 (rest := seg r.fr.inp a.T1 (r.t0 - a.T1)) (inputs_seg _ _ hrest)
-        (by
-          rw [length_seg, length_seg]
-          show r.t0 - a.T1 ≤ N.goalF - N.fall - (a.T1 - (r.C + N.fall))
-          omega)
-      rw [go_seg a.T1 (r.t0 - a.T1) hrest, show a.T1 + (r.t0 - a.T1) = r.t0 by omega] at h5
-      have h6 : (room sy N).goal = goalP sy := rfl
-      simp only [h6] at h5
+        · exact ⟨a.T1 + 1, by omega, Nat.le_refl _, capped_of_stop r H h2⟩
+      have hcap := capped_along r H (u := u) (w := a.L) (by omega) hLt hc0 (fun n h1 h2 => Or.inl (a.air n (by omega) h2))
+        (s - u) (by omega)
+      rw [show u + (s - u) = s by omega] at hcap
+      have hD := inD_at r H (n := s) (by omega) (by omega)
+      have hF : ∀ j, s ≤ j → j < s + (r.t0 - s) → Follow sy m r.fr j := fun j h1 h2 =>
+        hfol j (by omega) (by omega) (by omega)
+      have h1 := hdist_seg s (r.t0 - s) hF
+      rw [show s + (r.t0 - s) = r.t0 by omega] at h1
+      have hsplit : seg r.fr.inp s (r.t0 - s) = seg r.fr.inp s (a.L - s) ++ seg r.fr.inp a.L (r.t0 - a.L) := by
+        rw [show r.t0 - s = (a.L - s) + (r.t0 - a.L) by omega, seg_add, show s + (a.L - s) = a.L by omega]
+      rw [hsplit] at h1
+      have h2 := landing_bound H.air (r.fr.hs s) hD hcap (seg r.fr.inp s (a.L - s)) (seg r.fr.inp a.L (r.t0 - a.L))
+        (mem_seg (P := fun i => i ∈ inputs ∧ isAir i = true) fun j h3 h4 =>
+          ⟨(hF j h3 (by omega)).1, a.air j (by omega) (by omega)⟩)
+        (mem_seg (P := fun i => i ∈ inputs) fun j h3 h4 => (hF j (by omega) (by omega)).1)
+      rw [length_seg, length_seg] at h2
+      have hp := hn.slow_pairs
+      simp only [List.all_eq_true, Bool.and_eq_true, decide_eq_true_eq] at hp
+      obtain ⟨⟨⟨_, hq3⟩, hq4⟩, hq5⟩ := hp q hq
+      have h3 := pair_bound (sy := sy) (m := m) hA (q1 := q.1) (q2 := q.2) (S0 := r.C + N.fall + 1 + q.1)
+        (L0 := r.C + N.fall + 1 + q.2) (s := s) (L := a.L) (t := r.t0) (G := r.C + N.goalF) (by omega) hq4 (by omega) (by omega)
+        hsL hLt ht
+      rw [show r.C + N.goalF - (r.C + N.fall + 1 + q.2) = N.goalF - (N.fall + 1 + q.2) by omega] at h3
+      have h4 := hleft s (by omega) (Nat.le_refl s)
       omega
+    | true =>
+      -- a fast takeoff: the search of `FastTakeoff` with `rise` low air frames
+      exact fast_short r H hE hw hs a ht hf hearly (L' := N.rise) (Nat.le_refl _) H.roomOk (fun n h1 h2 => hleft n h1 (by omega))
+  · -- the last low frame is not `LowAt`: a big player past the corner there
+    have hsz : sz = 0 := by
+      rcases a.low s (by omega) (Nat.le_refl _) with h | ⟨h, _, _⟩
+      · exact absurd h hLs
+      · exact h
+    have hr1 := H.roomBig.1
+    have hleft1 : ∀ n, r.C ≤ n → n ≤ s - 1 → r.fr.P n < cornerP sy := fun n h1 h2 =>
+      left_at r H hs (w := s - 1) (by omega) (fun j h3 h4 => hlowlt j h3 (by omega)) h1 h2
+    cases hf : a.x.fast with
+    | false =>
+      by_cases hT0 : a.T1 = r.C + N.fall
+      · have := a.slowBig hsz hf hLs hT0
+        omega
+      · -- a later slow takeoff: the air speed cap from the frame before the last low frame, one frame more in the air, the landing one frame later
+        rw [hf] at hq
+        simp only [Bool.false_eq_true, if_false] at hq
+        have hp := hn.slow_pairs
+        simp only [List.all_eq_true, Bool.and_eq_true, decide_eq_true_eq] at hp
+        obtain ⟨⟨⟨_, hq3⟩, hq4⟩, hq5⟩ := hp q hq
+        let s' := s - 1
+        have hs'1 : a.T1 + 1 ≤ s' := by omega
+        obtain ⟨u, hu1, hu2, hc0⟩ : ∃ u, a.T1 ≤ u ∧ u ≤ a.T1 + 1 ∧ capped sy (r.fr.hs u) = true := by
+          rcases r.ab_of a.T1 (by omega) (by omega) with h2 | ⟨h2, _⟩
+          · have h1 := a.x_ab
+            rw [hf] at h1
+            have h3 : ¬sy.AirFastSpeed.toNat ≤ r.fr.ab a.T1 := by simpa using h1.symm
+            refine ⟨a.T1, Nat.le_refl _, by omega, ?_⟩
+            simp only [capped, decide_eq_true_eq]
+            omega
+          · exact ⟨a.T1 + 1, by omega, Nat.le_refl _, capped_of_stop r H h2⟩
+        have hcap := capped_along r H (u := u) (w := a.L) (by omega) hLt hc0 (fun n h1 h2 => Or.inl (a.air n (by omega) h2))
+          (s' - u) (by omega)
+        rw [show u + (s' - u) = s' by omega] at hcap
+        have hD := inD_at r H (n := s') (by omega) (by omega)
+        have hF : ∀ j, s' ≤ j → j < s' + (r.t0 - s') → Follow sy m r.fr j := fun j h1 h2 =>
+          hfol j (by omega) (by omega) (by omega)
+        have h1 := hdist_seg s' (r.t0 - s') hF
+        rw [show s' + (r.t0 - s') = r.t0 by omega] at h1
+        have hsplit : seg r.fr.inp s' (r.t0 - s') = seg r.fr.inp s' (a.L - s') ++ seg r.fr.inp a.L (r.t0 - a.L) := by
+          rw [show r.t0 - s' = (a.L - s') + (r.t0 - a.L) by omega, seg_add, show s' + (a.L - s') = a.L by omega]
+        rw [hsplit] at h1
+        have h2 := landing_bound H.air (r.fr.hs s') hD hcap (seg r.fr.inp s' (a.L - s')) (seg r.fr.inp a.L (r.t0 - a.L))
+          (mem_seg (P := fun i => i ∈ inputs ∧ isAir i = true) fun j h3 h4 =>
+            ⟨(hF j h3 (by omega)).1, a.air j (by omega) (by omega)⟩)
+          (mem_seg (P := fun i => i ∈ inputs) fun j h3 h4 => (hF j (by omega) (by omega)).1)
+        rw [length_seg, length_seg] at h2
+        have h3 := pair_bound (sy := sy) (m := m) hA (q1 := q.1) (q2 := q.2 + 1) (S0 := r.C + N.fall + 1 + q.1)
+          (L0 := r.C + N.fall + 2 + q.2) (s := s') (L := a.L) (t := r.t0) (G := r.C + N.goalF) (by omega) (by omega) (by omega) (by omega)
+          (by omega) hLt ht
+        rw [show r.C + N.goalF - (r.C + N.fall + 2 + q.2) = N.goalF - (N.fall + 2 + q.2) by omega] at h3
+        have hB := H.roomBig.2.2
+        simp only [slowBigOk, List.all_eq_true, decide_eq_true_eq] at hB
+        have h5 := hB q hq
+        have h4 := hleft1 s' (by omega) (Nat.le_refl _)
+        omega
+    | true =>
+      -- the frames before the last low frame are left of the corner, and a fast jump has at least `rise` low air frames
+      have hq' : N.rise ≤ a.u.low := by omega
+      have hleft := hleft1
+      exact fast_short r H hE hw hs a ht hf hearly (L' := N.rise - 1) (by omega) H.roomBig.2.1 (fun n h1 h2 => hleft n h1 (by omega))
 
 /-- **The entry is not before `t0`**: on the entry frame he is at the mouth (`mouth`), past the goal, and before `t0` he is not past the goal. The way off the block puts the
 entry after first control. So the frames that the proof asks to be `VFrame` are before the entry. -/
@@ -5785,7 +5905,7 @@ theorem floor_at_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe
     exact ⟨rfl, hy⟩
 
 /-- the frames as numbers -/
-def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : RoomCore sy m N :=
+def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : RoomCore sy m N ((S.seq b).ram.get! (FrameModel.I sy.PlayerSize)) :=
   { r.toRoomFields with
     vfloor := fun hw _ h1 h2 _ hall => r.vfloor_of H hr st hw h1 h2 hall
     varc := fun _ _ hC ht hE ha hk => r.varc_of H hr hC ht hE ha hk

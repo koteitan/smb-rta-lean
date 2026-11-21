@@ -2,7 +2,7 @@
 
 # 制御 6 で口より左から始まるフレームは入らない
 
-**主張.** 部屋のフレームが、画面のバッファの制御 6、ページ 0、位置 16 から 180 px で始まるなら、そのフレームは横の土管に入りません。証明しました。ROM の確認は 1 つです（部屋のフレームの歩き 7 つ、ネイティブで約 3 分）。それと [SideFrame](c-7-16-SideFrame-ja.md) の 1 フレーム全体の歩き（`side_frame_check`、前に証明済み）を使います。そこでフィールド `buffer₂` が求めることは減りました。入るフレームの前のフレームがコインを消したなら（そのとき制御は 6）、そのフレームはページ 0 の 16 から 180 px で終わる、ということだけです。本物の走りでは、コインのフレームは 52 から 173 px で終わります。いつもそうなることは証明していません。
+**主張.** 部屋のフレームが、画面のバッファの制御 6、ページ 0、位置 16 から 180 px で始まるなら、そのフレームは横の土管に入りません。証明しました。ROM の確認は 1 つです（部屋のフレームの歩き 7 つ、表は 1 つ、ラウンド 25 からネイティブで約 1.5 分）。それと [SideFrame](c-7-16-SideFrame-ja.md) の 1 フレーム全体の歩き（`side_frame_check`、前に証明済み）を使います。そこでフィールド `buffer₂` が求めることは減りました。入るフレームの前のフレームがコインを消したなら（そのとき制御は 6）、そのフレームはページ 0 の 16 から 180 px で終わる、ということだけです。本物の走りでは、コインのフレームは 52 から 173 px で終わります。いつもそうなることは証明していません。
 
 名前は [部屋を通る画面のバッファの制御](d-2-5-5-1-BufferControl-ja.md) のものです。`x(m)` と `page(m)` はプレイヤーのページ上の位置とページです（`Player_X_Position`、`Player_PageLoc`）。`Q` は動きの終わり（`PlayerSubs`）、`xLo = 195 px` は口の左端です。`r₆(a)` は部屋の基準の機械で、`c = 6`、`page = 0`、`x` を区間 `a` の値にしたものです。`K_G(a) := K_B ∪ { page のすべてのビット } ∪ { a の分かっているビット }` です。
 
@@ -25,7 +25,7 @@ Run.buffer₂    :  c(seq(a₂ − 1)) ≠ 6   ∨   (page(seq(a₂ − 1)) = 0 
 
 `no_enter`: `SideFrame.entry_right_of_left` によると、入るフレームは、横の土管のルーチンを書く前に、`xLo` 以上の位置で `Q` に来ます。`subs_left` によると、このフレームは `xLo` より左でしか `Q` に来ません。`Run.coin₂` は `k = a₂ − 1` をとります。部屋の入るフレーム（`room.enters`）はこのフレームです（`Run.rt₂` と同じ）。`Run.buf₂` は `buffer₂` の真ん中の場合に `Run.coin₂` を使います。
 
-Lean: `Theorems/BufferCoin.lean`（`bitP`、`MP`、`zoneM`、`preZ`、`walkG`、`posLeft`、`keyG`、`normG`、`optsG`、探索、`walkCheckG`、`rangePieces`、`rangeCover`、`mpOf`、`ref6x`、`knownG`、`walkA`、`cov_bitP`、`cov_zoneM`、`cov_preZ`、`LiveG`、`InTab`、`cover_liveG`、`live_stepG`、`subs_of_walkG`、`WalkOKG`、`walkOKG_of_check`、`left_of_posLeft`、`subs_left`、`coinCheck`、`cond_piece`、`no_enter`、`FactsB`）、`Theorems/Route.lean`（`RoomChecks.buffer`、`Run.buffer₂`、`Run.coin₂`、`Run.buf₂`）、非公開の `Proof/BufferCoin.lean`（`buffer_coin_check`。`Main.lean` の `genBufferCoin`）。`FactsB` は `BufferControl` からここへ移り、フィールド `coin` と `side` が増えました。公開ファイルにゲームのデータはありません。
+Lean: `Theorems/BufferCoin.lean`（`bitP`、`MP`、`zoneM`、`preZ`、`walkG`、`posLeft`、`keyG`、`normG`、`optsG`、探索、`walkCheckG`、`rangePieces`、`rangeCover`、`mpOf`、`ref6x`、`knownG`、`startG`、`walkAll`、`searchOfG2`、`cfgOfG2`、`walkCheckG2`、`walkOKG_of_check2`、`cov_bitP`、`cov_zoneM`、`cov_preZ`、`LiveG`、`InTab`、`cover_liveG`、`live_stepG`、`subs_of_walkG`、`WalkOKG`、`walkOKG_of_check`、`left_of_posLeft`、`subs_left`、`coinCheck`、`cond_piece`、`no_enter`、`FactsB`）、`Theorems/Route.lean`（`RoomChecks.buffer`、`Run.buffer₂`、`Run.coin₂`、`Run.buf₂`）、非公開の `Proof/BufferCoin.lean`（`buffer_coin_check`。`Main.lean` の `genBufferCoin`）。`FactsB` は `BufferControl` からここへ移り、フィールド `coin` と `side` が増えました。公開ファイルにゲームのデータはありません。
 
 ## しくみ
 
@@ -45,6 +45,8 @@ Lean: `Theorems/BufferCoin.lean`（`bitP`、`MP`、`zoneM`、`preZ`、`walkG`、
 **なぜ歩きを `Q` で止めるか.** 最初の設計では、衝突のルーチン全体で位置を分かったままにしました。最初の区間が終わる前に 19 GB を超えました。分かった位置がほかのバイト（足すバイト、スクロールの量、当たりの箱）に広がり、状態を分けたままにするからです。この設計は、動きから `Q` までだけ位置を追います。
 
 **大きさ.** 区間ごとに約 120 万から 133 万ステップ、失敗 0、状態 16.3 万から 19.7 万、`Q` の状態 91 から 2,170 個、すべてページ 0 で `xLo` より左です。プログラムでは、探索はそれぞれ約 8 から 9 秒、最大 735 MB。7 区間すべての確認はネイティブで 185 秒です。数秒より長いです。
+
+**ラウンド 25: 表を 1 つに.** 7 つの歩きは、今は 1 つの探索と 1 つの表を共有します（`startG`、`walkAll`、`searchOfG2`、`cfgOfG2`、`walkCheckG2`、`walkOKG_of_check2`。`walkA` はなくなりました）。すべての区間の 14 の始めの状態からの探索: 2,002,560 歩、363,068 状態、失敗 0、18.8 秒。確認 `coinCheck` はネイティブで 87 秒（表 7 つでは 185 秒）。変わったのは `coinCheck` の中身（表 1 つ）で、`no_enter` の主張は同じです。
 
 ## 測ったこと（定理ではない）
 
@@ -77,7 +79,7 @@ Lean: `Theorems/BufferCoin.lean`（`bitP`、`MP`、`zoneM`、`preZ`、`walkG`、
 
 ## 仮定（Lean で証明していない）
 
-* `buffer₂`: 入るフレームの前のフレームがコインを消したなら、そのフレームはページ 0 の 16 から 180 px で終わった（そうでなければ入口の 5 バイトは基準のもの）。これをなくすには、制御 6 で終わるフレームがそこで終わることを示します。そのコインは口より 3 列以上左にあるので、衝突のルーチンがコインを読むときの位置が要ります。
+* `buffer₂`: 入るフレームの前のフレームがコインを消したなら、そのフレームはページ 0 の 16 から 180 px で終わった（そうでなければ入口の 5 バイトは基準のもの）。これをなくすには、制御 6 で終わるフレームがそこで終わることを示します。そのコインは口より 3 列以上左にあるので、衝突のルーチンがコインを読むときの位置が要ります。ラウンド 25（[BufferEnd](d-2-5-5-3-BufferEnd-ja.md)、1-1-d-2-5-5-3）: 制御 6 で終わるフレームは 16 から 180 px で終わる（`Run.end₂`）ので、`buffer₂` が求めるのはそこでのページ 0 だけになりました。
 * 部屋の各命令の `SiteOK`（`chg.roomSites`）、前と同じ。
 
 **ファイル.** `Theorems/BufferCoin.lean`、`Theorems/Route.lean`、`Theorems/BufferControl.lean`（`ref_of_ne6` を加えた）。非公開の確認は `Proof/BufferCoin.lean`（`Main.lean` の `genBufferCoin`）。

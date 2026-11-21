@@ -14,7 +14,7 @@ base(m) = max(P(m), edge(m))        (SurfaceRead.baseOf)
 
 collide (CollideS.P), third case :  P(Q) ≤ P(b) ≤ base(M) + 256  ∧  v(Q) ≤ 0          (round 23: P(b) ≤ P(M) + 256)
 edge   (new, each frame 1 ≤ j < g) :  edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))
-edge₀  (new, at control)           :  edge(seq 0) ≤ P(seq 0)
+edge₀  (new, at control)           :  edge(seq 0) ≤ P(seq 0)          (round 25: a theorem, 1-1-e-2-10-3-11)
 TopSpeed.Frame with wide            :  impedeP's third case P′ ≤ B + 256 ∧ v₂ ≤ 0,  B = base(seq (j − 1))
 ```
 
@@ -26,7 +26,7 @@ On the false frame of round 23 (`edgeJump`, frame 190): P(b) = 730096, edge(M) =
 
 **What is proved with it.** max(P, B) grows by at most the old bound in each frame (`TopSpeed.Frame.posB`, `Frame.advB`), and the bases follow each other (`TopSpeed.ChainB`, from `edge`; `Surface.links`). So the chain after the first hit moves max(P, B) by at most `reach` (`SurfaceRun.chainB_reach`, `hit_boundB`), and the first `N + E` frames move it by at most `16·top` a frame (`PoleJoin.early_leB`). The edge stays behind a position he had (`OnFrames.edge_behind`), so the first hit and the frame after it are bounded by the model's positions (`Surface.hit`, `Surface.base`). The position's range uses the base too (`OnFrames.readAllB`). The route's numbers do not change: no table, no `farN`, no count of part e changed, and the margin at frame 233 is still 16.
 
-**`edge₀` from the rows (measured, not wired).** A native check on the private machine (a scratch file, removed after the run) shows that the rows of the change out of the side pipe ([1-1-d-2-3](d-2-3-SideChangeEnd.md)) know the two bytes of the edge at every state with control, with the values of the machine at control, and that there edge ≤ P. The route takes its state at control from the rows with the sound's tables ([1-1-d-3-4-2](d-3-4-2-SideChangeSound.md), [1-1-d-3-4-3](d-3-4-3-SidePause.md)), other parts' files and checks, so `edge₀` stays a field.
+**`edge₀` from the rows (measured, not wired).** A native check on the private machine (a scratch file, removed after the run) shows that the rows of the change out of the side pipe ([1-1-d-2-3](d-2-3-SideChangeEnd.md)) know the two bytes of the edge at every state with control, with the values of the machine at control, and that there edge ≤ P. The route takes its state at control from the rows with the sound's tables ([1-1-d-3-4-2](d-3-4-2-SideChangeSound.md), [1-1-d-3-4-3](d-3-4-3-SidePause.md)), other parts' files and checks, so `edge₀` stayed a field in round 24. Round 25 wired it: `edge₀` is the theorem `SurfaceFrames.edge_zero` ([1-1-e-2-10-3-11](e-2-10-3-11-EdgeStart.md)).
 
 **Measured (round 24, `edge-real FM2 256`, exit 0; the checks of the new fields on every frame, clean or not).**
 
@@ -40,7 +40,7 @@ On the false frame of round 23 (`edgeJump`, frame 190): P(b) = 730096, edge(M) =
 
 At control (the movie's frame 852) edge − P = −14081 (pixel 2616, left edge 2560). On the frames after one that starts below the edge, P(b) − P(a) ≤ 496. Both new bounds are reached exactly (256 and 0). `collide-real FM2 200` (exit 0) checks `CollideS` at every arrival at the scroll handler and `edge` on every frame of its runs: 0 failures. `surface-frames-check FM2 200` checks the new move of `TopSpeed.Frame` on every frame in control (`impedeP`) and `Moves` with `edge` on the clean frames.
 
-**Not proved.** The fields `collide`, `edge` and `edge₀` are assumptions. That one push at most follows the clamp, and that the screen does not scroll when he moves left or not at all, are read from the code and measured.
+**Not proved.** The fields `collide` and `edge` are assumptions (`edge₀` is a theorem since round 25). That one push at most follows the clamp, and that the screen does not scroll when he moves left or not at all, are read from the code and measured.
 
 **Notation.** At a machine m, left(m) is the screen's left edge and pixel(m) the player's whole pixel, both with their pages (256 per page). They are read at the two operands of the clamp at the screen's edge (`ScreenClamp.places`). M is the machine at a frame's start, Q the machine at the scroll handler, b the machine at the frame's end. P is the position in 1/256 px (`posP`), v the speed.
 

@@ -169,6 +169,29 @@ def walkCheckG (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : 
     C.t.all (fun D => D.pc != M.subs || posLeft M D) && (startsR r K).all (fun A => A.pc != M.subs) &&
     C.t.all (walkG S M C ScreenPage.fuelS) && (startsR r K).all (walkG S M C ScreenPage.fuelS)
 
+/-- the search from the start states of several references with their known bits, into one table (round 25: one search for all pieces) -/
+def searchOfG2 (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (rs : List (Machine × List (Nat × UInt8))) : SearchS :=
+  let ops := (aRows E).toArray
+  searchG S M Z O fin E ops ((rs.flatMap fun p => startsR p.1 p.2).foldl (routeY S.P O) {})
+
+/-- the configuration from the one table -/
+def cfgOfG2 (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (rs : List (Machine × List (Nat × UInt8))) : CfgS :=
+  let X := searchOfG2 S M Z O fin E rs
+  let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2 || q.2.pc == M.subs
+  let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
+      (acc.1.push e.2, acc.2.1.insert e.1 (acc.1.size :: acc.2.1.getD e.1 []), acc.2.2.set! e.2.pc.toNat 1))
+    (#[], ({} : Std.HashMap Nat (List Nat)), ByteArray.mk (Array.replicate 65536 0))
+  let at0 := (Z.regs ++ Z.ends ++ Z.cutAY ++ Z.cutX ++ [Z.colEnd] ++ O.normAt).foldl (fun b a => b.set! a.toNat 1) (ByteArray.mk (Array.replicate 65536 0))
+  { E, ops := (aRows E).toArray, P := S.P, fin, t := q.1, key := O.key, idx := q.2.1, cut := q.2.2, norm := O.norm, normAt := at0 }
+
+/-- **The check of the walks from several references with one table** -/
+def walkCheckG2 (S : HP) (M : MP) (Z : Aids) (O : Opts) (fin : AS → Bool) (E : Env) (rs : List (Machine × List (Nat × UInt8))) : Bool :=
+  let C := cfgOfG2 S M Z O fin E rs
+  ScreenPage.placesOK E S.P && E.pad.v == 0 && E.pad.k == 0 &&
+    decide (S.yI < 2048) && decide (S.tileI < 2048) && decide (M.tI < 2048) && decide (M.xI < 2048) && decide (M.pI < 2048) &&
+    C.t.all (fun D => D.pc != M.subs || posLeft M D) && C.t.all (walkG S M C ScreenPage.fuelS) &&
+    rs.all fun p => ScreenPage.maskOK p.1 p.2 && (startsR p.1 p.2).all (fun A => A.pc != M.subs) && (startsR p.1 p.2).all (walkG S M C ScreenPage.fuelS)
+
 /-! ## The pieces cover the machine -/
 
 section
@@ -392,6 +415,31 @@ theorem walkOKG_of_check {S : HP} {M : MP} {Z : Aids} {O : Opts} {fin : AS → B
     simp only [bne_iff_ne, ne_eq] at this
     exact this hq
 
+/-- what the check of several references says, for each of them -/
+theorem walkOKG_of_check2 {S : HP} {M : MP} {Z : Aids} {O : Opts} {fin : AS → Bool} {E : Env} {rs : List (Machine × List (Nat × UInt8))}
+    (h : walkCheckG2 S M Z O fin E rs = true) {r : Machine} {K : List (Nat × UInt8)} (hr : (r, K) ∈ rs) :
+    WalkOKG S M E r K (cfgOfG2 S M Z O fin E rs) := by
+  simp only [walkCheckG2, Bool.and_eq_true, List.all_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩ := h
+  have hp : E.pad = AB.top := by
+    show E.pad = ⟨0, 0⟩
+    cases hq : E.pad
+    rw [hq] at h2 h2'
+    simp only at h2 h2'
+    rw [h2, h2']
+  obtain ⟨⟨k1, k2⟩, k3⟩ := h11 (r, K) hr
+  refine ⟨ScreenPage.placesOK_spec h1, hp, ScreenPage.maskOK_spec k1, rfl, rfl, rfl, h4, h5, h6, h7, h8, ?_, ?_, h10, k3⟩
+  · intro D hD hq
+    have := Array.all_eq_true_iff_forall_mem.1 h9 D hD
+    simp only [Bool.or_eq_true, bne_iff_ne, ne_eq] at this
+    rcases this with h | h
+    · exact absurd hq h
+    · exact h
+  · intro A hA hq
+    have := k2 A hA
+    simp only [bne_iff_ne, ne_eq] at this
+    exact this hq
+
 /-- the position of a machine of a state that `posLeft` accepts is left of the mouth -/
 theorem left_of_posLeft {E : Env} {F : Nat × UInt8} {M : MP} {D : AS} {m : Machine} (hs : Sim E F D m) (hx : M.xI < 2048) (hp : M.pI < 2048)
     (h : posLeft M D = true) : 256 * (m.ram.get! M.pI).toNat + (m.ram.get! M.xI).toNat < M.left := by
@@ -469,18 +517,22 @@ def ref6x (nm : Names) (M : MP) (r : Machine) (a : AB) : Machine := { r with ram
 /-- the known bits for the piece `a`: those of the buffer's walk (the room's and the control), the page and the piece's bits of the position -/
 def knownG (sy : Syms) (nm : Names) (m0 : Machine) (M : MP) (a : AB) : List (Nat × UInt8) := EntryBuffer.knownB sy nm m0 ++ [(M.pI, 0xFF), (M.xI, a.k)]
 
-/-- the walk for the piece `a` -/
-abbrev walkA (sy : Syms) (nm : Names) (m0 : Machine) (a : AB) : Bool :=
-  walkCheckG (EntryBuffer.hpB sy nm m0) (mpOf sy m0) (aidsOf sy nm m0) (optsG (aidsOf sy nm m0) (envR sy nm m0) (EntryBuffer.ctlI nm) (mpOf sy m0)) (fun _ => true)
-    (envR sy nm m0) (ref6x nm (mpOf sy m0) (refR m0) a) (knownG sy nm m0 (mpOf sy m0) a)
+/-- the reference and the known bits for the piece `a` -/
+def startG (sy : Syms) (nm : Names) (m0 : Machine) (a : AB) : Machine × List (Nat × UInt8) :=
+  (ref6x nm (mpOf sy m0) (refR m0) a, knownG sy nm m0 (mpOf sy m0) a)
+
+/-- the walks for the pieces `as`, with one table (round 25; until round 24 one walk and one table for each piece) -/
+abbrev walkAll (sy : Syms) (nm : Names) (m0 : Machine) (as : List AB) : Bool :=
+  walkCheckG2 (EntryBuffer.hpB sy nm m0) (mpOf sy m0) (aidsOf sy nm m0) (optsG (aidsOf sy nm m0) (envR sy nm m0) (EntryBuffer.ctlI nm) (mpOf sy m0)) (fun _ => true)
+    (envR sy nm m0) (as.map (startG sy nm m0))
 
 /-- **The check on the ROM**: the pieces of `[16, 181)` cover it, the room's known bits list neither the position, nor the page, nor the control, these are three
-different bytes, and the walk passes for each piece -/
+different bytes, and the walks of all pieces pass with one table (`walkAll`; round 25: one search for all pieces, about half the time of seven) -/
 def coinCheck (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
   let M := mpOf sy m0
   let c := EntryBuffer.ctlI nm
   rangeCover 16 181 && (RoomMap.knownT sy nm m0).all (fun p => p.1 != M.xI && p.1 != M.pI && p.1 != c) &&
-    M.xI != M.pI && M.xI != c && M.pI != c && decide (c < 2048) && (rangePieces 16 181).all (walkA sy nm m0)
+    M.xI != M.pI && M.xI != c && M.pI != c && decide (c < 2048) && walkAll sy nm m0 (rangePieces 16 181)
 
 /-! ## On real frames -/
 
@@ -549,7 +601,7 @@ theorem no_enter (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy 
   have hmem := SideFrame.memB_iff.1 hma
   rw [← hxdef] at hmem
   -- the walk for the piece
-  have hw := walkOKG_of_check (hW a' ha')
+  have hw := walkOKG_of_check2 hW (r := ref6x nmS (mpOf sy m0) (refR m0) a') (K := knownG sy nmS m0 (mpOf sy m0) a') (List.mem_map.2 ⟨a', ha', rfl⟩)
   have hsz : (refR m0).ram.size = 2048 := by
     have := hw.mask.szR
     simp only [ref6x, PipeTransitionAll.ba_size_set] at this

@@ -158,8 +158,8 @@ structure Surface (sy : Syms) (m0 : Machine) (PA : Int) (T J g : Nat) (fr : Nat 
   base : h ≤ T → (fr (h + 1)).B ≤ (fr h).P' ∨ ∃ s, s < h ∧ (fr (h + 1)).B ≤ PA + hdist sy m0 (startHS sy m0) (w.take s)
   /-- the bases of the frames follow each other (`TopSpeed.ChainB`) -/
   links : ∀ t, 1 ≤ t → t < g → (fr (t + 1)).B ≤ max (max (fr t).P (fr t).B) (fr (t + 1)).P
-  /-- the base of the first frame is the position at control -/
-  base₁ : (fr 1).B ≤ PA
+  /-- the base of the first frame is the position at control (round 25: asked when there is a frame before the touch) -/
+  base₁ : 1 ≤ g → (fr 1).B ≤ PA
 
 /-- No hit before `J`. `surface_of_frames` proves it from the box (`SurfaceFrames.quiet_upto`); the arguments stay for the callers. -/
 theorem first_of_surface {PA : Int} {m : Machine} {dx dy T J g : Nat} {fr : Nat → Frame (top sy) (amax sy m0) true} {w : List HIn} {h : Nat}
@@ -339,6 +339,9 @@ structure Start (sy : Syms) (B : Box) (m : Machine) : Prop where
   /-- A and B, and A and B of the frame before -/
   ab : peek m sy.A_B_Buttons = peek B.m sy.A_B_Buttons
   prev : peek m sy.PreviousA_B_Buttons = peek B.m sy.PreviousA_B_Buttons
+  /-- round 25: the two bytes of the screen's left edge (`SurfaceRead.edgeOf`), at the clamp's operands found in the program of `B.m` (`ScreenClamp.places`) -/
+  edgeX : peek m (ScreenClamp.places sy B.m).edgeX = peek B.m (ScreenClamp.places sy B.m).edgeX
+  edgeP : peek m (ScreenClamp.places sy B.m).edgeP = peek B.m (ScreenClamp.places sy B.m).edgeP
 
 /-! ## The numbers -/
 
@@ -389,7 +392,8 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     PrevKeep.prevCheck sy m0 (peek c sy.AreaType) && PrevKeep.prevOKB sy c && AfterKeep.hCheck sy m0 (peek c sy.AreaType) &&
     FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) && CollKeep.collCheckAll sy m0 (peek c sy.AreaType) && CollideKeep.vCheck sy m0 (peek c sy.AreaType) &&
     VertKeep.kCheck sy m0 (peek c sy.AreaType) && FaceKeep.zCheck sy m0 (peek c sy.AreaType) && FaceKeep.bCheck sy m0 (peek c sy.AreaType) &&
-    FaceKeep.vfCheck sy m0 (peek c sy.AreaType) (FaceKeep.vfC sy m0 (peek c sy.AreaType)) && PositionKeep.pCheck sy m0 (peek c sy.AreaType)
+    FaceKeep.vfCheck sy m0 (peek c sy.AreaType) (FaceKeep.vfC sy m0 (peek c sy.AreaType)) && PositionKeep.pCheck sy m0 (peek c sy.AreaType) &&
+    decide (c.prg = m0.prg) && decide (c.prgMask = m0.prgMask) && decide (SurfaceRead.edgeOf sy c ≤ posP sy c)
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -439,11 +443,30 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   /-- the checks of `PositionKeep.keep_frame` (the walk of the position's writers from the scroll handler to the frame's end, the push, the clamp), with the area's
   type of `B.m` -/
   pk : PositionKeep.pCheck sy m0 (peek B.m sy.AreaType) = true
+  /-- round 25: `B.m` has the program of `m0` -/
+  prgB : B.m.prg = m0.prg
+  maskB : B.m.prgMask = m0.prgMask
+  /-- round 25: on `B.m` the screen's left edge is behind him -/
+  edgeB : SurfaceRead.edgeOf sy B.m ≤ posP sy B.m
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, PrevKeep.prevOKB, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩, h25⟩ := h
-  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, h25⟩
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩, h25⟩,
+    h26⟩, h27⟩, h28⟩ := h
+  exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, h25,
+    h26, h27, h28⟩
+
+/-- **At control the screen's left edge is behind him** (round 25; the old field `edge₀` of `OnFrames`): a machine with the state of `B.m` (`Start`: with the two bytes of
+the edge) that starts a frame in control (so it has the program of `m0`, which `B.m` has too) has the edge of `B.m`, and on `B.m` the edge is behind him (`numbersCheck`) -/
+theorem edge_zero {B : Box} {J : Nat} {m : Machine} (Nm : Numbers sy m0 B J) (st : Start sy B m) (h0 : FrameKeep.StartK sy m0 m) :
+    SurfaceRead.edgeOf sy m ≤ posP sy m := by
+  have hp : m.prg = B.m.prg := h0.prg.trans Nm.prgB.symm
+  have hk : m.prgMask = B.m.prgMask := h0.mask.trans Nm.maskB.symm
+  have e : ScreenClamp.places sy m = ScreenClamp.places sy B.m := SurfaceRead.places_congr hp hk
+  have h := Nm.edgeB
+  unfold SurfaceRead.edgeOf at h ⊢
+  rw [e, st.edgeX, st.edgeP, st.P]
+  exact h
 
 theorem absB_natAbs (v : UInt8) : (absB v).toNat = (sbyte v).natAbs := by
   have h1 := v.toNat_lt
@@ -1120,8 +1143,6 @@ structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat
   the base at the end of the frame before (`SurfaceRead.baseOf`: the position or the edge) and the position at its end. The edge moves only when the screen scrolls,
   and the screen scrolls only while he is right of its middle. -/
   edge : ∀ j, 1 ≤ j → j < g → SurfaceRead.edgeOf sy (seq j) ≤ max (SurfaceRead.baseOf sy (seq (j - 1))) (posP sy (seq j))
-  /-- round 24: at control the screen's left edge is behind him: `edgeOf (seq 0) ≤ posP (seq 0)` -/
-  edge₀ : SurfaceRead.edgeOf sy (seq 0) ≤ posP sy (seq 0)
   /-- each counted frame before the touch, from the scroll handler to its end, at each instruction: a store of a byte of the position by its address is inside the
   push or the clamp at the screen's edge, and outside them a store through an index or a pointer writes no byte of the position (`PositionKeep.PosW`). With
   `clampR` this gives the position on a frame that keeps a speed to the right (`PositionKeep.keep_frame`: the field `AfterP.keep` and a part of `collide`) -/
@@ -1174,6 +1195,8 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   vfk : FaceKeep.vfCheck sy m0 v (FaceKeep.vfC sy m0 v) = true
   /-- the checks of `PositionKeep.keep_frame`: the walk of the position's writers from the scroll handler to the frame's end, the push, the clamp -/
   pk : PositionKeep.pCheck sy m0 v = true
+  /-- at control the screen's left edge is behind him (a theorem: `edge_zero`; the old field `edge₀` of `OnFrames`, round 25) -/
+  edge₀ : 0 < g → SurfaceRead.edgeOf sy (seq 0) ≤ posP sy (seq 0)
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
 routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
@@ -1346,7 +1369,16 @@ theorem OnFrames.areaRun {J' : Nat} (Nm : Numbers sy m0 B J') (O : OnFrames sy m
     unfold CollKeep.CollOK
     rw [st.bits, Nm.bits]
     rfl
-  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk, Nm.zk, Nm.bk, Nm.vfk, Nm.pk⟩
+  have he0 : 0 < g → SurfaceRead.edgeOf sy (seq 0) ≤ posP sy (seq 0) := by
+    intro hg
+    have h1 := K.order 0 hg
+    rw [K.ix0] at h1
+    have h2 := K.ix_mono 1 g hg (Nat.le_refl g)
+    have hs0 : FrameKeep.StartK sy m0 (K.all 0) := hst 0 (by simp only [Nat.zero_add] at h1; omega)
+    have e0 : seq 0 = K.all 0 := by rw [K.at_ix 0 (Nat.zero_le _), K.ix0]
+    rw [e0] at st ⊢
+    exact edge_zero Nm st hs0
+  exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk, Nm.zk, Nm.bk, Nm.vfk, Nm.pk, he0⟩
 
 /-- **A counted frame before the touch that moves right at the scroll handler and keeps that speed to its end keeps the position from there**
 (`PositionKeep.keep_frame` on the frames of `K`, with `posW` and `clampR`): the field `AfterP.keep` and a part of `collide` -/
@@ -1766,9 +1798,9 @@ theorem OnFrames.readAllB (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMo
   intro d
   induction d with
   | zero =>
-    intro _
+    intro hg0
     refine ⟨inSpeed_of (by have e : sbyte (peek (seq 0) sy.Player_X_Speed) = 0 := hv0; rw [e]; omega), fun _ => ?_⟩
-    have e0 := O.edge₀
+    have e0 := Ar.edge₀ hg0
     have hb0 : SurfaceRead.baseOf sy (seq 0) = posP sy (seq 0) := by unfold SurfaceRead.baseOf; omega
     rw [hb0, hP0]
     simp
@@ -1810,11 +1842,12 @@ theorem OnFrames.readAllB (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMo
     omega
 
 /-- **The screen's left edge stays behind a position he had** (round 24): at the end of each counted frame before the touch the edge is at most his position at the end
-of that frame or of one before it (`edge`, `edge₀`) -/
-theorem OnFrames.edge_behind (O : OnFrames sy m0 B T J g seq K) : ∀ t, t < g → ∃ s, s ≤ t ∧ SurfaceRead.edgeOf sy (seq t) ≤ posP sy (seq s)
-  | 0, _ => ⟨0, Nat.le_refl 0, O.edge₀⟩
+of that frame or of one before it (`edge`, and at control `AreaRun.edge₀`: round 25) -/
+theorem OnFrames.edge_behind (O : OnFrames sy m0 B T J g seq K) {v : UInt8} (Ar : AreaRun sy m0 K v) :
+    ∀ t, t < g → ∃ s, s ≤ t ∧ SurfaceRead.edgeOf sy (seq t) ≤ posP sy (seq s)
+  | 0, h => ⟨0, Nat.le_refl 0, Ar.edge₀ h⟩
   | t + 1, h => by
-    obtain ⟨s, hs, e⟩ := OnFrames.edge_behind O t (by omega)
+    obtain ⟨s, hs, e⟩ := OnFrames.edge_behind O Ar t (by omega)
     have hed := O.edge (t + 1) (by omega) h
     rw [show t + 1 - 1 = t by omega] at hed
     have hb : SurfaceRead.baseOf sy (seq t) = max (posP sy (seq t)) (SurfaceRead.edgeOf sy (seq t)) := rfl
@@ -2247,7 +2280,7 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
     rcases h3 with h3 | h3
     · exact Or.inl (by omega)
     · right
-      obtain ⟨s, hs, es⟩ := O.edge_behind (h - 1) (by omega)
+      obtain ⟨s, hs, es⟩ := O.edge_behind Ar (h - 1) (by omega)
       have ps := hposs s hs hT
       rw [hbo] at h3
       by_cases hc : SurfaceRead.edgeOf sy (seq (h - 1)) ≤ posP sy (seq (h - 1))
@@ -2262,7 +2295,7 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
     intro hT
     obtain ⟨h1, h2, _⟩ := H2 hT
     rw [frOf_B, Rd.P' h h1 h2, show h + 1 - 1 = h by omega]
-    obtain ⟨s, hs, es⟩ := O.edge_behind h h2
+    obtain ⟨s, hs, es⟩ := O.edge_behind Ar h h2
     rw [hbo]
     by_cases hc : SurfaceRead.edgeOf sy (seq h) ≤ posP sy (seq h)
     · exact Or.inl (by omega)
@@ -2282,9 +2315,10 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
     rw [hbo (seq t)]
     omega
   · -- `base₁`
+    intro hg1
     rw [frOf_B]
     show SurfaceRead.baseOf sy (seq 0) ≤ posP sy B.m
-    have e := O.edge₀
+    have e := Ar.edge₀ hg1
     have p := st.P
     rw [hbo]
     omega
@@ -2319,9 +2353,13 @@ def startBytes (sy : Syms) : List UInt16 :=
    sy.Player_XSpeedAbsolute, sy.Player_CollisionBits, sy.Player_Y_Position, sy.Player_Y_MoveForce, sy.Player_Y_Speed, sy.Player_YMF_Dummy, sy.VerticalForce, sy.VerticalForceDown,
    sy.JumpOrigin_Y_Position, sy.Player_State, sy.A_B_Buttons, sy.AreaType, sy.SwimmingFlag, sy.PlayerChangeSizeFlag, sy.PreviousA_B_Buttons]
 
+/-- the two bytes of the screen's left edge, at the clamp's operands found in the program of `c` (round 25) -/
+def edgeBytes (sy : Syms) (c : Machine) : List UInt16 := [(ScreenClamp.places sy c).edgeX, (ScreenClamp.places sy c).edgeP]
+
 /-- a state of a row: it says whether it has control, and if it has, it knows the bytes of `Start`, with the values of the machine `c` -/
 def rowStart (sy : Syms) (c : Machine) (S : AS) : Bool :=
-  (ctlBytes sy).all (knowsAd S) && (!controllable sy (mOf S) || (startBytes sy).all fun a => knowsAd S a && peek (mOf S) a == peek c a)
+  (ctlBytes sy).all (knowsAd S) && (!controllable sy (mOf S) || ((startBytes sy).all fun a => knowsAd S a && peek (mOf S) a == peek c a) &&
+    (edgeBytes sy c).all fun a => knowsAd S a && peek (mOf S) a == peek c a)
 
 /-- every state of the rows -/
 def rowsStart (sy : Syms) (c : Machine) (l : List Row) : Bool := l.all fun r => r.R.all (rowStart sy c)
@@ -2350,7 +2388,10 @@ theorem start_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs :
   · have := controllable_of_known hs hk h
     rw [this] at h1
     cases h1
-  · simp only [startBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, beq_iff_eq] at h1
+  · obtain ⟨h1, h2⟩ := h1
+    simp only [edgeBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, beq_iff_eq] at h2
+    obtain ⟨⟨kx, ex⟩, ⟨kp, ep⟩⟩ := h2
+    simp only [startBytes, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, beq_iff_eq] at h1
     obtain ⟨⟨k1, e1⟩, ⟨k2, e2⟩, ⟨k3, e3⟩, ⟨k4, e4⟩, ⟨k5, e5⟩, ⟨k6, e6⟩, ⟨k7, e7⟩, ⟨k8, e8⟩, ⟨k9, e9⟩, ⟨k10, e10⟩, ⟨k11, e11⟩, ⟨k12, e12⟩, ⟨k13, e13⟩, ⟨k14, e14⟩, ⟨k15, e15⟩, ⟨k16, e16⟩, ⟨k17, e17⟩, ⟨k18, e18⟩, ⟨k19, e19⟩,
       ⟨k20, e20⟩, ⟨k21, e21⟩, ⟨k22, e22⟩, ⟨k23, e23⟩⟩ := h1
     have g1 := (peek_of_known hs k1).trans e1
@@ -2376,7 +2417,7 @@ theorem start_of_state {E : Env} {F : Nat × UInt8} {S : AS} {m : Machine} (hs :
     have g21 := (peek_of_known hs k21).trans e21
     have g22 := (peek_of_known hs k22).trans e22
     have g23 := (peek_of_known hs k23).trans e23
-    refine ⟨?_, ?_, g9, g10, ?_, g20, g21, g22, g19, g23⟩
+    refine ⟨?_, ?_, g9, g10, ?_, g20, g21, g22, g19, g23, (peek_of_known hs kx).trans ex, (peek_of_known hs kp).trans ep⟩
     · have e5 : (peek m sy.RunningSpeed == 0) = (peek c.m sy.RunningSpeed == 0) := by rw [g5]
       simp only [startHS, PState.read, g1, g2, g3, g4, e5]
       congr

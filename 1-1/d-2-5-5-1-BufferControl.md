@@ -97,7 +97,7 @@ One would prove `Cls(m) := c(m) = 0 ∨ (c(m) = 6 ∧ x(m) < 176)` on every fram
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: by `Run.ctl₂` and `Run.coin₂` it excludes only the control at 6 at the start of the entering frame, with the start not on page 0 at 16 to 180 px.
+* `buffer₂`: by `Run.ctl₂` and `Run.coin₂` it excludes only the control at 6 at the start of the entering frame, with the start not on page 0 at 16 to 180 px. Round 25 ([BufferEnd](d-2-5-5-3-BufferEnd.md), 1-1-d-2-5-5-3): a frame that ends with the control at 6 ends at 16 to 180 px (`Run.end₂`), so `buffer₂` now asks only page 0 there.
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/BufferControl.lean`, `Theorems/Route.lean`; the private checks are in `Proof/BufferControl.lean` (`genBufferControl` in `Main.lean`).

@@ -42,6 +42,19 @@ def baseOf (sy : Syms) (m : Machine) : Int := max (posP sy m) (edgeOf sy m)
 
 theorem le_baseOf (m : Machine) : posP sy m ≤ baseOf sy m := Int.le_max_left _ _
 
+/-- the search of an opcode reads only the program (round 25) -/
+theorem findOp_congr {m m' : Machine} (hp : m.prg = m'.prg) (hk : m.prgMask = m'.prgMask) (op : UInt8) :
+    ∀ (n : Nat) (a : UInt16), PipeEntryRule.findOp m a op n = PipeEntryRule.findOp m' a op n
+  | 0, _ => rfl
+  | n + 1, a => by
+    have e : romByte m a = romByte m' a := by unfold romByte; rw [hp, hk]
+    simp only [PipeEntryRule.findOp, e, findOp_congr hp hk op n (a + 1)]
+
+/-- **The clamp's operands depend only on the program** (round 25): two machines with the same program have the same `ScreenClamp.places` -/
+theorem places_congr {m m' : Machine} (hp : m.prg = m'.prg) (hk : m.prgMask = m'.prgMask) : ScreenClamp.places sy m = ScreenClamp.places sy m' := by
+  unfold ScreenClamp.places
+  simp only [FrameModel.Rom.of, hp, hk, findOp_congr hp hk]
+
 /-- **What the collision routine and the rest of the frame do**, from the scroll handler `Q` to the frame's end `b`; `B₀` is the base of the frame: `baseOf` of the machine
 where the frame starts. The speed stays or becomes 0, the subspeed stays, and the position stays, goes 1 px back, or, when he moves left or not at all, goes right but not
 past 1 px right of the base: the push of a block on his left, and the screen's left edge, where the clamp puts him on the edge's pixel (round 24: the bound was 1 px right of

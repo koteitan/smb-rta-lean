@@ -6,6 +6,8 @@
 
 **第 24 回.** フィールド `collide` は、画面の左端より 1 px 左で始まる本物のフレームで偽でした（[フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md)）。その 3 番目の場合はいま P(b) ≤ base(M) + 256 を求めます。base(M) = max(P(M), edge(M)) で、edge(M) = 256·left(M) + 255 は端のピクセルの最後の位置です。`Hit`、`MaskStop`、`After` も同じことを言います。操作からのフレームは `wide` つきの `TopSpeed.Frame` で、その基点 B は base(seq (j − 1)) です（`frOf_B`）。新しいフィールドは 2 つです: 各フレームの `edge` と操作の始めの `edge₀`。これらで max(P, B) は 1 フレームに前と同じ上限しか増えません（`TopSpeed.Frame.posB`、`Frame.advB`、`SurfaceRun.chainB_reach`、`SurfaceRun.hit_boundB`）。だからルートの数は変わりません。`Surface` には新しい部分が 3 つあり、すべて証明済みです: `base`、`links`、`base₁`。その `hit` はいま、当たりより前のあるフレームでのモデルの位置を使います（`OnFrames.edge_behind`）。
 
+**第 25 回.** フィールド `edge₀` は定理になりました（`edge_zero`、[操作の始めに画面の左端は彼の後ろ](e-2-10-3-11-EdgeStart-ja.md)）。`Start` は画面の左端の 2 つのバイトを持ち、それは横の土管からの切り替えの行から来ます。`numbersCheck` は、操作の始めの機械 `B.m` で端 ≤ P であることと、`B.m` が `m0` のプログラムを持つことを確かめます。`AreaRun` はそれを `edge₀ : 0 < g → edge(seq 0) ≤ P(seq 0)` として持ち、`Surface.base₁` は 1 ≤ g のときに求めます。
+
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
 ## 1 フレームの形
@@ -103,7 +105,6 @@ collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j −
            CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ base(M) + 256 ∧ v(Q) ≤ 0))
                                                   速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
 edge     : 1 ≤ j < g  →  edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))        （第 24 回: 画面は彼が画面の中央より右にいるときだけ進む）
-edge₀    : edge(seq 0) ≤ P(seq 0)                                               （第 24 回: 操作の始めに端は彼の後ろ）
 moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves は AfterP.stop だけになった
 posW     : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  PosW(R)       位置を番地で書くのは押し戻しと補正の内側だけ。その外で添字かポインタで書く命令は位置を書かない
            （第 23 回: 絶対番地と添字で書き、基の番地からどの添字でも位置に届かない命令には求めない: PositionKeep.absFar）
@@ -172,6 +173,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `AfterP.keep`: スクロールの処理で右へ動き、その速さで終わるフレームは位置を保つ。`collide` の位置もそのフレームと、呼び出しのないフレームで | 定理 `OnFrames.keepAt`（`PositionKeep.keep_frame`）と `OnFrames.stillAt`（`PositionKeep.still_frame`）。`Moves` は `stop` だけ。`collide` はそのフレームの位置を求めない（新しい引数 `Calls`）。新しく 1 命令ずつのフィールド `posW`、`clampR`、`numbersCheck` の中の確認 `pCheck`（[位置を保つフレーム](e-2-10-3-8-PositionKeep-ja.md)） |
 | すべてのフレームの `clampR`（第 23 回） | スクロールの処理で右へ動き、その速さで終わるフレームだけで求める。`PositionKeep.keep_frame` が使うのはそこだけ。フィールド `collide` は本物のフレームで偽（画面の左端より 1 px 左で始まるフレーム）: [フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md) |
 | `collide` の 3 番目の場合 P(b) ≤ P(M) + 256（本物のフレームで偽、第 23 回） | 第 24 回: 画面の左端を入れた P(b) ≤ base(M) + 256。新しい: フィールド `edge`（1 フレーム）と `edge₀`（操作の始めの状態） |
+| `edge₀`: 操作の始めに edge(seq 0) ≤ P(seq 0)（第 24 回） | 第 25 回: 横の土管からの切り替えの行（`Start.edgeX`、`Start.edgeP`）と `numbersCheck`（`Numbers.edgeB`）からの定理 `edge_zero`。`AreaRun.edge₀` の中（[操作の始めに画面の左端は彼の後ろ](e-2-10-3-11-EdgeStart-ja.md)）。`Surface.base₁` は 1 ≤ g のときに求める。新しいフィールドはない |
 | `collide` のサブ速さの部分（`CollideR.f`）: サブ速さは変わらない | 速さ 0 とサブ速さ 0 で終わるフレームのほかは定理 `FaceKeep.keepZ_end`。`collide` はいまは `CollideS`: 位置と、そう終わるフレームのサブ速さ |
 | `After.storedQ`: スクロールの処理での覚えている速さはそこでの `\|v\|` | 定理 `storedQ_of`: `FrameModel.stored_path` の歩きと `AfterKeep.subs_once`。新しく `numbersCheck` の中の確認 `storedOK` と、`TopSpeed.frictionCheck`（`SurfaceRun.Statement` のフィールド `fric`） |
 

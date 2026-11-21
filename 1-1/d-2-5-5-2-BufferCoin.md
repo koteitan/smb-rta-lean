@@ -2,7 +2,7 @@
 
 # A frame that starts with the control at 6 left of the mouth does not enter
 
-**Claim.** A frame of the room that starts with the control of the screen's buffers at 6, on page 0, with the position from 16 to 180 px, does not enter the side pipe. This is proved, with one check on the ROM (seven walks of the room's frame, about 3 min natively) and the walk of one whole frame of [SideFrame](c-7-16-SideFrame.md) (`side_frame_check`, proved before). So the field `buffer₂` now asks less: if the frame before the entering frame erased a coin (the control is then 6), it ended on page 0 at 16 to 180 px. On real runs coin frames end at 52 to 173 px. That they always do is not proved.
+**Claim.** A frame of the room that starts with the control of the screen's buffers at 6, on page 0, with the position from 16 to 180 px, does not enter the side pipe. This is proved, with one check on the ROM (seven walks of the room's frame with one table, about 1.5 min natively since round 25) and the walk of one whole frame of [SideFrame](c-7-16-SideFrame.md) (`side_frame_check`, proved before). So the field `buffer₂` now asks less: if the frame before the entering frame erased a coin (the control is then 6), it ended on page 0 at 16 to 180 px. On real runs coin frames end at 52 to 173 px. That they always do is not proved.
 
 The names are those of [The control of the screen's buffers through the room](d-2-5-5-1-BufferControl.md). `x(m)` and `page(m)` are the player's position on the page and the page (`Player_X_Position`, `Player_PageLoc`). `Q` is the end of the move (`PlayerSubs`), `xLo = 195 px` the mouth's left end. `r₆(a)` is the room's reference machine with `c = 6`, `page = 0` and `x` the value of the piece `a`. `K_G(a) := K_B ∪ { every bit of page } ∪ { the known bits of a }`.
 
@@ -25,7 +25,7 @@ Run.buffer₂    :  c(seq(a₂ − 1)) ≠ 6   ∨   (page(seq(a₂ − 1)) = 0 
 
 `no_enter`: `SideFrame.entry_right_of_left` says that a frame that enters comes to `Q`, before the write of the side pipe's routine, at a position at or right of `xLo`. `subs_left` says that this frame comes to `Q` only left of `xLo`. `Run.coin₂` takes `k = a₂ − 1`: the room's entering frame (`room.enters`) is this frame, as in `Run.rt₂`. `Run.buf₂` uses `Run.coin₂` for the middle case of `buffer₂`.
 
-Lean: `Theorems/BufferCoin.lean` (`bitP`, `MP`, `zoneM`, `preZ`, `walkG`, `posLeft`, `keyG`, `normG`, `optsG`, the search, `walkCheckG`, `rangePieces`, `rangeCover`, `mpOf`, `ref6x`, `knownG`, `walkA`, `cov_bitP`, `cov_zoneM`, `cov_preZ`, `LiveG`, `InTab`, `cover_liveG`, `live_stepG`, `subs_of_walkG`, `WalkOKG`, `walkOKG_of_check`, `left_of_posLeft`, `subs_left`, `coinCheck`, `cond_piece`, `no_enter`, `FactsB`), `Theorems/Route.lean` (`RoomChecks.buffer`, `Run.buffer₂`, `Run.coin₂`, `Run.buf₂`), the private `Proof/BufferCoin.lean` (`buffer_coin_check`; `genBufferCoin` in `Main.lean`). `FactsB` moved here from `BufferControl` and has two more fields: `coin` and `side`. There is no game data in the public files.
+Lean: `Theorems/BufferCoin.lean` (`bitP`, `MP`, `zoneM`, `preZ`, `walkG`, `posLeft`, `keyG`, `normG`, `optsG`, the search, `walkCheckG`, `rangePieces`, `rangeCover`, `mpOf`, `ref6x`, `knownG`, `startG`, `walkAll`, `searchOfG2`, `cfgOfG2`, `walkCheckG2`, `walkOKG_of_check2`, `cov_bitP`, `cov_zoneM`, `cov_preZ`, `LiveG`, `InTab`, `cover_liveG`, `live_stepG`, `subs_of_walkG`, `WalkOKG`, `walkOKG_of_check`, `left_of_posLeft`, `subs_left`, `coinCheck`, `cond_piece`, `no_enter`, `FactsB`), `Theorems/Route.lean` (`RoomChecks.buffer`, `Run.buffer₂`, `Run.coin₂`, `Run.buf₂`), the private `Proof/BufferCoin.lean` (`buffer_coin_check`; `genBufferCoin` in `Main.lean`). `FactsB` moved here from `BufferControl` and has two more fields: `coin` and `side`. There is no game data in the public files.
 
 ## How it works
 
@@ -45,6 +45,8 @@ So the position after the add is known. At `Q` every state must be one of the ta
 **Why the walk stops at `Q`.** A first design kept the position known through the whole collision routine: it passed 19 GB before the first piece ended, because the known position spreads to other bytes (the added byte, the scroll amount, the bounding box) and keeps the states apart. This design follows the known position only from the move to `Q`.
 
 **Size.** For each piece about 1.2 to 1.33 million steps, 0 failures, 163,000 to 197,000 states, 91 to 2,170 states at `Q`, all on page 0 left of `xLo`. In a program: each search about 8 to 9 s, at most 735 MB; the check of all seven pieces 185 s natively. This is more than a few seconds.
+
+**Round 25: one table.** The seven walks now share one search and one table (`startG`, `walkAll`, `searchOfG2`, `cfgOfG2`, `walkCheckG2`, `walkOKG_of_check2`; `walkA` is gone). The search from the 14 start states of all pieces: 2,002,560 steps, 363,068 states, 0 failures, 18.8 s; the check `coinCheck` 87 s natively (185 s with seven tables). The statement of `coinCheck` changed (one table), not that of `no_enter`.
 
 ## Measured, not a theorem
 
@@ -77,7 +79,7 @@ No entering frame starts with the control at 6 (the first case of `buffer₂` ho
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: if the frame before the entering frame erased a coin, it ended on page 0 at 16 to 180 px (else the five bytes at the entry are those of a reference). To remove it one would prove that a frame that ends with the control at 6 ends there: its coin is at least three columns left of the mouth, so it needs the position at the collision routine's read of the coin.
+* `buffer₂`: if the frame before the entering frame erased a coin, it ended on page 0 at 16 to 180 px (else the five bytes at the entry are those of a reference). To remove it one would prove that a frame that ends with the control at 6 ends there: its coin is at least three columns left of the mouth, so it needs the position at the collision routine's read of the coin. Round 25 ([BufferEnd](d-2-5-5-3-BufferEnd.md), 1-1-d-2-5-5-3): a frame that ends with the control at 6 ends at 16 to 180 px (`Run.end₂`), so `buffer₂` now asks only page 0 there.
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/BufferCoin.lean`, `Theorems/Route.lean`, `Theorems/BufferControl.lean` (`ref_of_ne6` added); the private check is in `Proof/BufferCoin.lean` (`genBufferCoin` in `Main.lean`).

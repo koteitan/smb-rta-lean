@@ -41,6 +41,7 @@ import Theorems.EntryHeightBig
 import Theorems.SizeKeep
 import Theorems.EntryBuffer
 import Theorems.BufferCoin
+import Theorems.BufferEnd
 import Theorems.RoomHigh
 
 /-!
@@ -525,8 +526,9 @@ structure RoomChecks (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeChan
   with them a frame of the room that starts with the control of the reference and ends with the side pipe's routine ends with the five bytes of the first screen
   buffer of a reference (`EntryBuffer`, `Run.buf₂`). And the room's walks with the control at 0 and at 6, and the rows of the first change with the control: every
   frame of the room starts with the control at 0 or 6 (`BufferControl`, `Run.ctl₂`). And the walks of `BufferCoin` and the walk of one whole frame of `SideFrame`:
-  a frame of the room that starts with the control at 6, on page 0, at 16 to 180 px does not enter (`BufferCoin.no_enter`, `Run.coin₂`; round 24) -/
-  buffer : BufferCoin.FactsB sy nm₁ d₁ nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (restIdxB sy nmS m0)
+  a frame of the room that starts with the control at 6, on page 0, at 16 to 180 px does not enter (`BufferCoin.no_enter`, `Run.coin₂`; round 24). And the two
+  walks of `BufferEnd`: a frame of the room that ends with the control at 6 ends with the position from 16 to 180 px (`BufferEnd.end_of_rows`, `Run.end₂`; round 25) -/
+  buffer : BufferEnd.FactsE sy nm₁ d₁ nmS m0 (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (restIdxB sy nmS m0)
 
 section
 variable {sy : Syms} {m0 : Machine} {nm₁ : Names} {d₁ : PipeChangeEnd.Data} {nm₂ nx₂ nmS : Names} {B : Base} {kind : Nat → Kind} {e₁ c₂ e₂ c₃ : Nat} {L : List Nat}
@@ -693,15 +695,14 @@ structure Run (sy : Syms) (m0 : Machine) (N : Nat) (D : Int) (rN : RoomJoin.Nums
   /-- the search for the side pipe's entry (`Base.a₂`) looks at least one frame past the room's first control. With it the room has a frame (`Run.b₁_lt_a₂`) -/
   dR_pos : 1 ≤ base.dR
   /-- the frame that enters the side pipe does not start with the control of the screen's buffers at 6 (6 is the value after a frame that erased a coin: this
-  frame's screen update would draw the second buffer and leave the first), or it starts on page 0 with the position from 16 to 180 px, or the five bytes of the first
+  frame's screen update would draw the second buffer and leave the first), or it starts on page 0, or the five bytes of the first
   screen buffer at the entry are those of a reference of the entry. The control there is 0 or 6 (`Run.ctl₂`, `BufferControl`), and with 0, the reference's value,
   the bytes are proved (`EntryBuffer.buffer_of_rows`, `Run.buf₂`); a frame that starts with 6 on page 0 at 16 to 180 px does not enter (`Run.coin₂`, `BufferCoin`).
-  So the field asks only: if the frame before the entering frame erased a coin, it ended on page 0 at 16 to 180 px. Until round 23 the field asked the control at the
-  reference's value. -/
+  A frame of the room that ends with the control at 6 ends with the position from 16 to 180 px (`Run.end₂`, `BufferEnd`; round 25). So the field asks only: if the
+  frame before the entering frame erased a coin, it ended on page 0. Until round 23 the field asked the control at the reference's value; in round 24 it asked page 0
+  and the position from 16 to 180 px. -/
   buffer₂ : (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (EntryBuffer.ctlI nmS) ≠ 6 ∨
-    ((base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (sy.Player_PageLoc &&& 0x7FF).toNat = 0 ∧
-      16 ≤ ((base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat ∧
-      ((base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat < 181) ∨
+    (base.seq (base.a₂ sy nmS m0 - 1)).ram.get! (sy.Player_PageLoc &&& 0x7FF).toNat = 0 ∨
     EntryAt (EntryBuffer.bufIdx nmS) (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (base.seq (base.a₂ sy nmS m0))
   /-- in the room, from its first control to the entry into the side pipe, a frame that ends paused is a `lag` frame. With the counts `chg.hb₁`, `chg.ha₂` it says that
   `room.E − room.C` frames of the room end not paused (`Run.roomMany`), so that `room`'s frames, the frames that end not paused, are frames of the room -/
@@ -1269,18 +1270,41 @@ theorem Run.coin₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : Tit
   exact BufferCoin.no_enter hR.map hR.mapStart hR.mapStartF hR.buffer.coin hR.buffer.side R.base.next ((R.chg.run₁ he).inRowsT hR.pipe R.chg.ctlFirst₁)
     R.chg.ctl₁ R.chg.roomSites R.chg.roomStay h1 h2 hen h6 hp hx1 hx2
 
+/-- **The frame that enters the side pipe starts with the position from 16 to 180 px if it starts with the control at 6** (round 25, `BufferEnd`): the frame `a₂ − 1`
+of `base` starts the room (`b₁`), where the control is the reference's 0 (`BufferControl.start_ctl`), or it starts after a frame of the room, and a frame of the
+room that ends with the control at 6 ends with the position from 16 to 180 px (`BufferEnd.end_of_rows`). `hR`, `hB`, `hK` are checks on the ROM. -/
+theorem Run.end₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
+    (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
+    (h6 : (R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (EntryBuffer.ctlI nmS) = 6) :
+    16 ≤ ((R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat ∧
+      ((R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (sy.Player_X_Position &&& 0x7FF).toNat).toNat < 181 := by
+  have hlt := R.b₁_lt_a₂ hR hB hK
+  have he := R.entry₁ hB hK
+  have hin := (R.chg.run₁ he).inRowsT hR.pipe R.chg.ctlFirst₁
+  rcases Nat.lt_or_ge (R.base.b₁ sy) (R.base.a₂ sy nmS m0 - 1) with h | h
+  · obtain ⟨n, hn⟩ : ∃ n, R.base.a₂ sy nmS m0 - 1 = n + 1 := ⟨R.base.a₂ sy nmS m0 - 2, by omega⟩
+    rw [hn] at h6 ⊢
+    exact BufferEnd.end_of_rows hR.map hR.mapStart hR.buffer.ctl.keep hR.buffer.ctl.start hR.buffer.ends R.base.next hin R.chg.ctl₁ R.chg.roomSites
+      R.chg.roomStay (show R.base.b₁ sy ≤ n by omega) (show n < R.base.a₂ sy nmS m0 by omega) h6
+  · have e : R.base.a₂ sy nmS m0 - 1 = R.base.b₁ sy := by omega
+    rw [e] at h6
+    have h0 : (R.base.seq (R.base.b₁ sy)).ram.get! (EntryBuffer.ctlI nmS) = 0 :=
+      (BufferControl.start_ctl hR.buffer.ctl.start hin R.chg.ctl₁).trans (BufferControl.keep_parts hR.buffer.ctl.keep).2.1
+    rw [h0] at h6
+    exact absurd h6 (by decide)
+
 /-- **The five bytes of the first screen buffer at the side pipe's entry are those of a reference** (they were bytes of `entry₂`, now the theorem). The frame before
 `a₂` is a frame of the room (`Run.b₁_lt_a₂`) and it ends with the side pipe's routine (`Run.rt₂`). It starts with the control of the screen's buffers at 0 or 6
-(`Run.ctl₂`); if not at 6, it is at the reference's value 0, and the walk of `EntryBuffer` gives the bytes (`EntryBuffer.buffer_of_rows`); at 6 on page 0 at 16 to
-180 px it does not enter (`Run.coin₂`); else `buffer₂` asks the bytes. `hR`, `hB`, `hK` are checks on the ROM. -/
+(`Run.ctl₂`); if not at 6, it is at the reference's value 0, and the walk of `EntryBuffer` gives the bytes (`EntryBuffer.buffer_of_rows`); at 6 the position is from 16
+to 180 px (`Run.end₂`), and on page 0 it does not enter (`Run.coin₂`); else `buffer₂` asks the bytes. `hR`, `hB`, `hK` are checks on the ROM. -/
 theorem Run.buf₂ (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc)
     (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     EntryAt (EntryBuffer.bufIdx nmS) (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (R.base.seq (R.base.a₂ sy nmS m0)) := by
   have hb : (R.base.seq (R.base.a₂ sy nmS m0 - 1)).ram.get! (EntryBuffer.ctlI nmS) ≠ 6 ∨
       EntryAt (EntryBuffer.bufIdx nmS) (SideChangeEnd.refs2 nm₂ nx₂ (SideTransition.entry m0)) (R.base.seq (R.base.a₂ sy nmS m0)) := by
-    rcases R.buffer₂ with h6 | ⟨hp, hx1, hx2⟩ | hy
+    rcases R.buffer₂ with h6 | hp | hy
     · exact Or.inl h6
-    · exact Or.inl fun h6 => R.coin₂ hR hB hK h6 hp hx1 hx2
+    · exact Or.inl fun h6 => R.coin₂ hR hB hK h6 hp (R.end₂ hR hB hK h6).1 (R.end₂ hR hB hK h6).2
     · exact Or.inr hy
   rcases hb with h6 | hy
   · have hs := BufferControl.ref_of_ne6 hR.buffer.ctl.keep (R.ctl₂ hR hB hK) h6

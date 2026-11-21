@@ -97,7 +97,7 @@ Lean: `Theorems/BufferControl.lean`（`finK`、`ref6`、`walkK`、`keepCheck`、
 
 ## 仮定（Lean で証明していない）
 
-* `buffer₂`: `Run.ctl₂` と `Run.coin₂` により、入るフレームの始めの制御 6 で、始めがページ 0 の 16 から 180 px でないものだけを除きます。
+* `buffer₂`: `Run.ctl₂` と `Run.coin₂` により、入るフレームの始めの制御 6 で、始めがページ 0 の 16 から 180 px でないものだけを除きます。ラウンド 25（[BufferEnd](d-2-5-5-3-BufferEnd-ja.md)、1-1-d-2-5-5-3）: 制御 6 で終わるフレームは 16 から 180 px で終わる（`Run.end₂`）ので、`buffer₂` が求めるのはそこでのページ 0 だけになりました。
 * 部屋の各命令で `SiteOK`（`chg.roomSites`）。前と同じです。
 
 **ファイル.** `Theorems/BufferControl.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/BufferControl.lean`（`Main.lean` の `genBufferControl`）。

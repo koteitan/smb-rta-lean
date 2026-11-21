@@ -4,7 +4,7 @@
 
 [地下の部屋をつなぐ](c-5-RoomJoin-ja.md) のフィールド `low_at` は、壁に触らないとき、`C + 37` から `C + 43` までで足が低く、角かその先で床のほかで終わるフレームをすべて求めていました。そのフレームは角から `S_low` より先に出ません。これらのフレームは、床から跳ぶフレームと、そのジャンプの最初のフレームです。ブロックの左側の歩き（[床の上でのブロックの左側](c-7-5-17-RoomCorner-ja.md)）は、移動の終わりで縦のページ（`Player_Y_HighPos`）を必要とします。上昇するフレームのあとでは、縦のページを追っていませんでした。このページは、跳ぶフレームと上昇するフレームを通して縦のページを追い、高さ 152（`cornerY + 16`）かそれより下で終わるジャンプのフレームを証明します。フィールドは、152 より上（136 から 151 ピクセル）で終わるフレームだけを求めるようになりました。
 
-**偽（測定、大きなプレイヤー）。** `Approach.low`（フィールド `way` の中）は、大きなプレイヤーの測った 2 つの走りで偽です（下）。狭めていません。それを使う `landed_short` が、そこで `LowAt` 全体を必要とするからです。
+**偽（測定、大きなプレイヤー）。** `Approach.low`（フィールド `way` の中）は、大きなプレイヤーの測った 2 つの走りで偽です（下）。狭めていません。それを使う `landed_short` が、そこで `LowAt` 全体を必要とするからです。25 回目に直しました: [かたまりの角での大きなプレイヤー](c-7-14-1-BigApproach-ja.md)。
 
 ## 主張
 
@@ -67,7 +67,7 @@ InRoom.highA（空中のフレーム）:
 ## 残ること
 
 - 152 より上（136 から 151 ピクセル）で終わるフレームについてのフィールド `low_at`。大きさがわからないとブロックの左側の歩きはそこを通らず、測ったフレームでは大きなプレイヤーはそこで押し戻されません。
-- `Approach.low`: 大きなプレイヤーの測った走りで偽です。角での大きなプレイヤーのフレームについて、`landed_short` には別の議論が要ります。
+- `Approach.low`: 大きなプレイヤーの測った走りで偽です。角での大きなプレイヤーのフレームについて、`landed_short` には別の議論が要ります（25 回目に、新しいフィールド `Approach.slowBig` とともにしました: [かたまりの角での大きなプレイヤー](c-7-14-1-BigApproach-ja.md)）。
 - `stand_wall`: 手をつけていません。
 
 **ファイル。** `Theorems/RoomHigh.lean`（新しい: `vTagsJH`、`goalVJH`、`caseOKJH`、`jumpHOK`、`vert_jumpH`、`jump_frameH`、`jump_roomH`、`air_roomH`、`offCheck`、`arcCheckH`、`Checks`、`off_spec`、`arc_specH`）、`Theorems/RoomVert.lean`（`vKeepH`。`mayWriteV` は `vKeepH` について。`apartH`、`keepVH_step`、`after_QP`）、`Theorems/RoomJoin.lean`（`InRoom.highJ`、`InRoom.highA`、`RoomCore.low_jump`、`low_step`、`varc_at`、`high_next`、`low_jump_of`、`v_chain2`、`arcDown`、`Checks.down`、`arc_down`。`low_by` とフィールド `low_at`）、`Theorems/Route.lean`（`mem_ysUp`、`Run.roomHighJ`、`Run.roomHighA`。`Run.inRoom` は `RoomHigh` の確認を取る）。非公開の `Proof/RoomHigh.lean`（`room_high`）と、`room_checks` の `down`（`Proof/RoomJoin.lean`）。プログラム `room-high-probe`、`room-approach-check`。

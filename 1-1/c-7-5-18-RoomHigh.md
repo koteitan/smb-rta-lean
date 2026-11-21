@@ -4,7 +4,7 @@
 
 The field `low_at` of [Joining the bonus room](c-5-RoomJoin.md) asked, with no wall hit, every frame from `C + 37` to `C + 43` that ends off the floor at or past the corner with the feet low: such a frame is not more than `S_low` past the corner. These frames are the takeoff and the first frames of a jump from the floor. The walk of the block's left side ([The block's left side, on the floor](c-7-5-17-RoomCorner.md)) needs the vertical page (`Player_Y_HighPos`) at the end of the move, and the vertical page was not followed after a rising frame. This page follows it through the takeoff and the rising frames, and proves the frames of a jump that end at the height 152 (`cornerY + 16`) or below. The field now asks only the frames that end above 152, from 136 to 151 px.
 
-**False, measured (a big player).** `Approach.low` (inside the field `way`) is false on 2 measured runs of a big player (below). It is not narrowed: its user `landed_short` needs all of `LowAt` there.
+**False, measured (a big player).** `Approach.low` (inside the field `way`) is false on 2 measured runs of a big player (below). It is not narrowed: its user `landed_short` needs all of `LowAt` there. Round 25 fixed it: [A big player at the block's corner](c-7-14-1-BigApproach.md).
 
 ## Statements
 
@@ -67,7 +67,7 @@ The walk of the block's left side passes for the state 1 moving up only from the
 ## What remains
 
 - The field `low_at` for a frame that ends above 152 (from 136 to 151 px): the walk of the block's left side does not pass there with the size not known, and a big player is not pushed back there on measured frames.
-- `Approach.low`: false on measured runs of a big player; `landed_short` would need another argument for the frames of a big player at the corner.
+- `Approach.low`: false on measured runs of a big player; `landed_short` would need another argument for the frames of a big player at the corner (done in round 25, with the new field `Approach.slowBig`: [A big player at the block's corner](c-7-14-1-BigApproach.md)).
 - `stand_wall`: not touched.
 
 **Files.** `Theorems/RoomHigh.lean` (new: `vTagsJH`, `goalVJH`, `caseOKJH`, `jumpHOK`, `vert_jumpH`, `jump_frameH`, `jump_roomH`, `air_roomH`, `offCheck`, `arcCheckH`, `Checks`, `off_spec`, `arc_specH`), `Theorems/RoomVert.lean` (`vKeepH`; `mayWriteV` over `vKeepH`; `apartH`, `keepVH_step`, `after_QP`), `Theorems/RoomJoin.lean` (`InRoom.highJ`, `InRoom.highA`, `RoomCore.low_jump`, `low_step`, `varc_at`, `high_next`, `low_jump_of`, `v_chain2`, `arcDown`, `Checks.down`, `arc_down`; `low_by` and the field `low_at`), `Theorems/Route.lean` (`mem_ysUp`, `Run.roomHighJ`, `Run.roomHighA`; `Run.inRoom` takes the checks of `RoomHigh`). Private `Proof/RoomHigh.lean` (`room_high`), and `down` in `room_checks` (`Proof/RoomJoin.lean`). Programs `room-high-probe`, `room-approach-check`.
