@@ -2,7 +2,7 @@
 
 # The control of the screen's buffers through the room
 
-**Claim.** Every frame of the room, from the room's first control to the frame that enters the side pipe, starts with the control of the screen's buffers at 0 or at 6. This is proved, with two checks on the ROM: two walks of the room's frame (about 8 s together natively) and one check of the rows of the first change (about 30 s natively). The field `buffer₂` stays. It now excludes only one value: the control at 6 at the start of the entering frame, which is the value after a frame that erased a coin. That this does not happen is not proved.
+**Claim.** Every frame of the room, from the room's first control to the frame that enters the side pipe, starts with the control of the screen's buffers at 0 or at 6. This is proved, with two checks on the ROM: two walks of the room's frame (about 8 s together natively) and one check of the rows of the first change (about 30 s natively). The field `buffer₂` stays. With this page it excludes only one value: the control at 6 at the start of the entering frame, which is the value after a frame that erased a coin. Round 24 narrowed it further: a frame that starts with the control at 6 on page 0 at 16 to 180 px does not enter ([BufferCoin](d-2-5-5-2-BufferCoin.md)), so `buffer₂` asks only that a coin frame just before the entry ends there.
 
 The names are those of [The screen's buffer at the side pipe's entry](d-2-5-5-EntryBuffer.md). `c(m)` is the control of the screen's buffers (`VRAM_Buffer_AddrCtrl`) in the machine `m`. `r` is the room's reference machine, and `c(r) = 0`. `r₆` is `r` with `c = 6`. `K_T` is the list of the bits that the room's condition knows (the map's bits), and `K_B := K_T ∪ { every bit of c }`. `seq(n)` is the machine when frame `n` of the run begins, `trₙ(j)` the machine `j` instructions into frame `n`. `b₁` is the room's first control and `a₂` the side pipe's entry.
 
@@ -24,12 +24,13 @@ start_ctl      :  startCheckC,   InRowsT(m),   m has control                    
 ctl_of_rows    :  the conditions of RoomMap.map_of_rows on [b, a),   keepCheck,   startCheckC     →   ∀ n ∈ [b, a],  c(seq n) ∈ {0, 6}
 
 Run.ctl₂       :  c(seq(a₂ − 1)) = 0   ∨   c(seq(a₂ − 1)) = 6                          (theorem, new)
-Run.buffer₂    :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                        (field, unchanged)
+Run.buffer₂    :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                        (field in round 23)
+Run.buffer₂    :  c(seq(a₂ − 1)) ≠ 6   ∨   (page = 0  ∧  16 ≤ x < 181 at seq(a₂ − 1))   ∨   EntryAt(L₅, seq a₂)     (field, narrowed in round 24)
 ```
 
-`Run.ctl₂` takes `b = b₁` and `a = a₂`. The machine at `b₁` is in the rows of the first change (`ChangesK.run₁`, `inRowsT`) and has control (`ChangesBase.ctl₁`); each frame from `b₁` before `a₂` meets `SiteOK` (`chg.roomSites`) and starts in the player's routine (`ChangesBase.roomStay`); `b₁ < a₂` (`Run.b₁_lt_a₂`), so `b₁ ≤ a₂ − 1 ≤ a₂`. The checks `keepCheck` and `startCheckC` come as one more argument (`BufferControl.Facts`), not as a field of `RoomChecks`.
+`Run.ctl₂` takes `b = b₁` and `a = a₂`. The machine at `b₁` is in the rows of the first change (`ChangesK.run₁`, `inRowsT`) and has control (`ChangesBase.ctl₁`); each frame from `b₁` before `a₂` meets `SiteOK` (`chg.roomSites`) and starts in the player's routine (`ChangesBase.roomStay`); `b₁ < a₂` (`Run.b₁_lt_a₂`), so `b₁ ≤ a₂ − 1 ≤ a₂`. Since round 24 the checks `keepCheck` and `startCheckC` are in `RoomChecks.buffer` (its field `ctl`, `BufferCoin.FactsB`), and `Run.ctl₂` has no argument for them; `Run.buf₂` uses `Run.ctl₂` (`ref_of_ne6`: a control of 0 or 6 that is not 6 is the reference's).
 
-Lean: `Theorems/BufferControl.lean` (`finK`, `ref6`, `walkK`, `keepCheck`, `keep_frame`, `cond0`, `cond6`, `keep_parts`, `ctl_step`, `ctl_run`, `startCheckC`, `and_ff`, `start_ctl`, `Facts`, `ctl_of_rows`), `Theorems/Route.lean` (`Run.ctl₂`), the private `Proof/BufferControl.lean` (`buffer_control_keep`, `buffer_control_start`, `buffer_control_facts`; `genBufferControl` in `Main.lean`). There is no game data in the public files.
+Lean: `Theorems/BufferControl.lean` (`finK`, `ref6`, `walkK`, `keepCheck`, `keep_frame`, `cond0`, `cond6`, `keep_parts`, `ctl_step`, `ctl_run`, `startCheckC`, `and_ff`, `start_ctl`, `Facts`, `ctl_of_rows`, `ref_of_ne6`), `Theorems/Route.lean` (`Run.ctl₂`), the private `Proof/BufferControl.lean` (`buffer_control_keep`, `buffer_control_start`, `buffer_control_facts`; `genBufferControl` in `Main.lean`). There is no game data in the public files.
 
 ## How it works
 
@@ -70,7 +71,11 @@ Walks (`buffer-ctl-check FM2 0 walk`): from the control at 0, 172,182 steps, 0 f
 | `off` | the screen buffer's offset at most 46 at its uses; the bound is 64 | a bound on the records that one frame writes |
 | `xbit` | the position's low bits at the side pipe's read are 3 or 4 | the position at the entry |
 
-## What would remove `buffer₂` (not done)
+## Round 24
+
+[BufferCoin](d-2-5-5-2-BufferCoin.md) (1-1-d-2-5-5-2) proves the half of the plan below for the entering frame: a frame that starts with the control at 6, on page 0, at 16 to 180 px, comes to the end of the move only left of the mouth, so it does not enter. Its walk splits the position, the added byte and the carry only at the move's add, and forgets the position at the scroll handler. `buffer₂` now asks only the other half on one state: a coin frame just before the entry ends on page 0 at 16 to 180 px.
+
+## What would remove `buffer₂` (round 23's plan)
 
 One would prove `Cls(m) := c(m) = 0 ∨ (c(m) = 6 ∧ x(m) < 176)` on every frame of the room, where `x` is the position on the page and 176 px is the left end of the column right of the nearest coins: a frame that ends with `c = 6` ends left of 176 px, and a frame that starts left of 176 px does not enter (the mouth's left end is 195 px). The measured margins are wide (173 px against 193 px). But the abstract machine adds bytes with all their bits known or none, so the walk must split the position into its values where the collision routine adds it to an offset, and where the move adds the speed. Two designs were tried in programs (no part of the proof):
 
@@ -87,12 +92,12 @@ One would prove `Cls(m) := c(m) = 0 ∨ (c(m) = 6 ∧ x(m) < 176)` on every fram
 
 ## What changed in the route
 
-* Fields: none removed, none added.
-* New theorem `Run.ctl₂` (with the checks as the argument `BufferControl.Facts`); `route_1_1` does not use it.
+* Fields: none removed, none added in round 23.
+* New theorem `Run.ctl₂`. Since round 24 `Run.buf₂` uses it, its checks are in `RoomChecks.buffer`, and `buffer₂` excludes only the control at 6 outside page 0 at 16 to 180 px.
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`, as before; by `Run.ctl₂` it excludes only the control at 6 at the start of the entering frame.
+* `buffer₂`: by `Run.ctl₂` and `Run.coin₂` it excludes only the control at 6 at the start of the entering frame, with the start not on page 0 at 16 to 180 px.
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 
 **Files.** `Theorems/BufferControl.lean`, `Theorems/Route.lean`; the private checks are in `Proof/BufferControl.lean` (`genBufferControl` in `Main.lean`).

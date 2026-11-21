@@ -184,6 +184,15 @@ theorem ctl_of_rows (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT 
   have h0 : (seq b).ram.get! (ctlI nmS) = 0 := (start_ctl hs hin hctl).trans (keep_parts hK).2.1
   exact ctl_run hF hc hK next hin hctl sites stay (Or.inl h0)
 
+/-- **Not 6 is the reference's value**: on a frame of the room the control is 0 or 6 (`ctl_of_rows`), and the reference's is 0 (`keepCheck`); so a control that is
+not 6 is the reference's -/
+theorem ref_of_ne6 (hK : keepCheck sy nmS m0 = true) {m : Machine} (h06 : m.ram.get! (ctlI nmS) = 0 ∨ m.ram.get! (ctlI nmS) = 6)
+    (hne : m.ram.get! (ctlI nmS) ≠ 6) : m.ram.get! (ctlI nmS) = (refR m0).ram.get! (ctlI nmS) := by
+  rw [(keep_parts hK).2.1]
+  rcases h06 with h | h
+  · exact h
+  · exact absurd h hne
+
 end
 
 end Smbrta.BufferControl

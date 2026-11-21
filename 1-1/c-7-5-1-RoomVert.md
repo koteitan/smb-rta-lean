@@ -16,6 +16,8 @@ before_R :  RoomCond(M),  SiteOK on each instruction
 after_Q  :  RoomCond(M),  SiteOK on each instruction
             →  pc(tr(j)) = Q  for at most one j of the frame,
                and  pc(tr(j)) = Q,  rising(tr(j)),  rt(end) = rt_room  →  V(end) = V(tr(j))
+after_QP :  after_Q, and the vertical page too: the walk keeps the bytes of vKeepH = V and the vertical page
+            (added in 1-1-c-7-5-18, [The vertical page through a jump](c-7-5-18-RoomHigh.md))
 vert_air :  vertAirOK,  AtV(R),  st(R) ∈ {1, 2},  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
             →  ∃ k ≤ 728,  pc(stepN(k, R)) = Q  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), 0)  ∧  InFrameN(R, k)
 bridge_of:  bridgeOK,  u ∈ arcSet(h, 8)  →  st(u) ∈ {1, 2}  ∧  ∀ a,  vstepV(u, a, 0) = vstep_m0(u, a, 0)

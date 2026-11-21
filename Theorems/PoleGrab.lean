@@ -150,41 +150,41 @@ def maskCheck (sy : Syms) (m : Machine) : Bool :=
 
 Frames are numbered: `fr t` is frame `t`. The rules, on frames: -/
 
-variable {top amax : Int}
+variable {top amax : Int} {wd : Bool}
 
 /-- consecutive frames -/
-def Next (f g : Frame top amax) : Prop := g.v = f.v' ∧ g.f = f.f' ∧ g.P = f.P'
+def Next (f g : Frame top amax wd) : Prop := g.v = f.v' ∧ g.f = f.f' ∧ g.P = f.P'
 
 /-- beside the block, below its top: moving right or stopped, speed 0 and 1 px back; moving left,
 nothing -/
-def Side (f : Frame top amax) : Prop :=
+def Side (f : Frame top amax wd) : Prop :=
   (0 ≤ f.v₂ ∧ f.v' = 0 ∧ f.P' = f.P₂ - 256) ∨ (f.v₂ < 0 ∧ f.v' = f.v₂ ∧ f.P' = f.P₂)
 
 /-- falling with the feet inside the block: speed 0; moving right, 1 px back; otherwise 1 px either
 way, by the moving direction -/
-def InBlock (f : Frame top amax) : Prop :=
+def InBlock (f : Frame top amax wd) : Prop :=
   f.v' = 0 ∧ ((1 ≤ f.v₂ ∧ f.P' = f.P₂ - 256) ∨ (f.v₂ ≤ 0 ∧ (f.P' = f.P₂ - 256 ∨ f.P' = f.P₂ + 256)))
 
 /-- a push to the right blocks the Left button on the next frame: from speed 0 he does not start moving left
 (`maskCheck`) -/
-def MaskL (f g : Frame top amax) : Prop := f.P' = f.P₂ + 256 → 0 ≤ g.v₂
+def MaskL (f g : Frame top amax wd) : Prop := f.P' = f.P₂ + 256 → 0 ≤ g.v₂
 
 /-- no speed to the right before the frame, beyond a fraction -/
-def Low (f : Frame top amax) : Prop := f.v ≤ 0 ∧ 0 ≤ f.f ∧ f.f ≤ 255
+def Low (f : Frame top amax wd) : Prop := f.v ≤ 0 ∧ 0 ≤ f.f ∧ f.f ≤ 255
 
-theorem speed_le_two (hA : amax ≤ 512) {f : Frame top amax} (h : Low f) : f.v₂ ≤ 2 := by
+theorem speed_le_two (hA : amax ≤ 512) {f : Frame top amax wd} (h : Low f) : f.v₂ ≤ 2 := by
   obtain ⟨h1, h2, h3⟩ := h
   have hg := f.friction_gain
   have hf := f.frac
   rcases f.anim with ⟨h4, h5⟩ | ⟨h4, h5⟩ <;> rw [h4, h5] at hg <;> omega
 
-theorem low_of_side {f g : Frame top amax} (hs : Side f) (hn : Next f g) : Low g := by
+theorem low_of_side {f g : Frame top amax wd} (hs : Side f) (hn : Next f g) : Low g := by
   obtain ⟨h1, h2, _⟩ := hn
   have hf := f.frac
   have hi := f.impedeF
   rcases hs with ⟨_, h3, _⟩ | ⟨h3, h4, _⟩ <;> refine ⟨by omega, by omega, by omega⟩
 
-theorem low_of_inBlock {f g : Frame top amax} (hb : InBlock f) (hn : Next f g) : Low g := by
+theorem low_of_inBlock {f g : Frame top amax wd} (hb : InBlock f) (hn : Next f g) : Low g := by
   obtain ⟨h1, h2, _⟩ := hn
   have hf := f.frac
   have hi := f.impedeF
@@ -192,20 +192,20 @@ theorem low_of_inBlock {f g : Frame top amax} (hb : InBlock f) (hn : Next f g) :
   exact ⟨by omega, by omega, by omega⟩
 
 /-- a frame at the side of the block moves him at least 1/16 px back -/
-theorem side_step (hA : amax ≤ 512) {f : Frame top amax} (hl : Low f) (hs : Side f) :
+theorem side_step (hA : amax ≤ 512) {f : Frame top amax wd} (hl : Low f) (hs : Side f) :
     f.P' ≤ f.P - 16 := by
   have h2 := speed_le_two hA hl
   have hm := f.move
   rcases hs with ⟨_, _, h⟩ | ⟨h1, _, h⟩ <;> omega
 
 /-- a frame with the feet inside moves him at most 1 px forward -/
-theorem inBlock_step (hA : amax ≤ 512) {f : Frame top amax} (hl : Low f) (hb : InBlock f) :
+theorem inBlock_step (hA : amax ≤ 512) {f : Frame top amax wd} (hl : Low f) (hb : InBlock f) :
     f.P' ≤ f.P + 256 := by
   have h2 := speed_le_two hA hl
   have hm := f.move
   rcases hb.2 with ⟨_, h⟩ | ⟨h1, h | h⟩ <;> omega
 
-theorem inside_le (hA : amax ≤ 512) (fr : Nat → Frame top amax) (e : Nat) (he : InBlock (fr e)) :
+theorem inside_le (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (e : Nat) (he : InBlock (fr e)) :
     ∀ n, (∀ j, j ≤ n → Next (fr (e + j)) (fr (e + j + 1))) → (∀ j, j < n → InBlock (fr (e + j + 1))) →
       Low (fr (e + n + 1)) ∧ (fr (e + n + 1)).P ≤ (fr e).P' + 256 * (n : Int)
   | 0, hn, _ => by
@@ -226,7 +226,7 @@ theorem inside_le (hA : amax ≤ 512) (fr : Nat → Frame top amax) (e : Nat) (h
     omega
 
 /-- the frame he moves over the block moves him back -/
-theorem entry_back {Pf : Int} {f : Frame top amax} (h1 : f.P < Pf) (h2 : Pf ≤ f.P₂) (hb : InBlock f) :
+theorem entry_back {Pf : Int} {f : Frame top amax wd} (h1 : f.P < Pf) (h2 : Pf ≤ f.P₂) (hb : InBlock f) :
     f.P' = f.P₂ - 256 := by
   have hm := f.move
   rcases hb.2 with ⟨_, h⟩ | ⟨h3, _⟩
@@ -234,7 +234,7 @@ theorem entry_back {Pf : Int} {f : Frame top amax} (h1 : f.P < Pf) (h2 : Pf ≤ 
   · omega
 
 /-- landing `n + 2` frames after moving over the block: `x(L) ≤ x(e) + k − 3 + 1/8` -/
-theorem landing_far (hA : amax ≤ 512) (fr : Nat → Frame top amax) (e n : Nat) {Pf : Int}
+theorem landing_far (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (e n : Nat) {Pf : Int}
     (h1 : (fr e).P < Pf) (h2 : Pf ≤ (fr e).P₂) (he : InBlock (fr e))
     (hn : ∀ j, j ≤ n + 1 → Next (fr (e + j)) (fr (e + j + 1)))
     (hb : ∀ j, j ≤ n → InBlock (fr (e + j + 1)))
@@ -265,7 +265,7 @@ theorem landing_far (hA : amax ≤ 512) (fr : Nat → Frame top amax) (e n : Nat
     · exact absurd h hr
 
 /-- landing on the frame after moving over the block -/
-theorem landing_one (hA : amax ≤ 512) {Pf : Int} {f g : Frame top amax} (h1 : f.P < Pf) (h2 : Pf ≤ f.P₂)
+theorem landing_one (hA : amax ≤ 512) {Pf : Int} {f g : Frame top amax wd} (h1 : f.P < Pf) (h2 : Pf ≤ f.P₂)
     (hb : InBlock f) (hn : Next f g) (hs : Side g) : g.P' ≤ f.P₂ - 256 := by
   have h3 := entry_back h1 h2 hb
   have h4 := side_step hA (low_of_inBlock hb hn) hs
@@ -273,7 +273,7 @@ theorem landing_one (hA : amax ≤ 512) {Pf : Int} {f g : Frame top amax} (h1 : 
   omega
 
 /-- landing on the frame that moves him past the side of the block -/
-theorem landing_zero {Pf : Int} {f : Frame top amax} (h1 : f.P < Pf) (h2 : Pf ≤ f.P₂) (hs : Side f) :
+theorem landing_zero {Pf : Int} {f : Frame top amax wd} (h1 : f.P < Pf) (h2 : Pf ≤ f.P₂) (hs : Side f) :
     f.P' ≤ f.P₂ - 256 := by
   have hm := f.move
   rcases hs with ⟨_, _, h⟩ | ⟨h3, _, _⟩
@@ -281,7 +281,7 @@ theorem landing_zero {Pf : Int} {f : Frame top amax} (h1 : f.P < Pf) (h2 : Pf �
   · omega
 
 /-- without Left or Right after moving over the block, every frame moves him back -/
-theorem landing_left (hA : amax ≤ 512) (fr : Nat → Frame top amax) (e : Nat) {Pf : Int}
+theorem landing_left (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (e : Nat) {Pf : Int}
     (h1 : (fr e).P < Pf) (h2 : Pf ≤ (fr e).P₂) (he : InBlock (fr e)) :
     ∀ n, (∀ j, j ≤ n → Next (fr (e + j)) (fr (e + j + 1))) →
       (∀ j, j < n → InBlock (fr (e + j + 1)) ∧ (fr (e + j + 1)).P' = (fr (e + j + 1)).P₂ - 256) →
@@ -303,7 +303,7 @@ theorem landing_left (hA : amax ≤ 512) (fr : Nat → Frame top amax) (e : Nat)
     omega
 
 /-- on the ground and in the hop, every frame beside the block moves him back -/
-theorem hop_le (hA : amax ≤ 512) (fr : Nat → Frame top amax) (L : Nat) (hL : Low (fr (L + 1)))
+theorem hop_le (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (L : Nat) (hL : Low (fr (L + 1)))
     (h0 : Next (fr L) (fr (L + 1))) :
     ∀ m, (∀ j, j < m → Next (fr (L + j + 1)) (fr (L + j + 2))) → (∀ j, j < m → Side (fr (L + j + 1))) →
       Low (fr (L + m + 1)) ∧ (fr (L + m + 1)).P ≤ (fr L).P' - 16 * (m : Int)
@@ -322,7 +322,7 @@ theorem hop_le (hA : amax ≤ 512) (fr : Nat → Frame top amax) (L : Nat) (hL :
     omega
 
 /-- the frame after the hop moves him at most 1/8 px -/
-theorem grab_le (hA : amax ≤ 512) {g : Frame top amax} (hl : Low g) : g.P₂ ≤ g.P + 32 := by
+theorem grab_le (hA : amax ≤ 512) {g : Frame top amax wd} (hl : Low g) : g.P₂ ≤ g.P + 32 := by
   have h := speed_le_two hA hl
   have hm := g.move
   omega
@@ -331,7 +331,7 @@ theorem grab_le (hA : amax ≤ 512) {g : Frame top amax} (hl : Low g) : g.P₂ �
 at the grab he is short of `P₀`. `Pf` is where his feet get over the block: `e` moves him past it, `L = e + n + 2`
 lands, `g = L + m + 1` would grab. `B` bounds `P` at frame `t`, and `P` moves at most `16·top` per frame before
 it. -/
-theorem no_grab_far (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax)
+theorem no_grab_far (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd)
     (Pf P₀ B : Int) (e n m t : Nat)
     (h1 : (fr e).P < Pf) (h2 : Pf ≤ (fr e).P₂) (hve : (fr e).v₂ ≤ top) (he : InBlock (fr e))
     (hn : ∀ j, j ≤ n + 1 → Next (fr (e + j)) (fr (e + j + 1)))
@@ -364,7 +364,7 @@ theorem no_grab_far (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame t
 
 /-- when the landing leaves him 1 px behind where he moved over the block (`k ≤ 1`, or no Left or Right), any
 hop of at least one frame leaves him short of `P₀` -/
-theorem no_grab_near (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Pf P₀ : Int) (e L m : Nat)
+theorem no_grab_near (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Pf P₀ : Int) (e L m : Nat)
     (h1 : (fr e).P < Pf) (hve : (fr e).v₂ ≤ top) (hfar : Pf + 16 * top ≤ P₀ + 224)
     (hland : (fr L).P' ≤ (fr e).P₂ - 256) (hl : Low (fr (L + 1))) (hn2 : Next (fr L) (fr (L + 1)))
     (hn3 : ∀ j, j < m → Next (fr (L + j + 1)) (fr (L + j + 2)))

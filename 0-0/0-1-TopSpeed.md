@@ -41,7 +41,22 @@ the vertical speed and whether Mario is in the air.
 
 `Frame` describes one frame by these five facts; `Frame.bound` and `chain_bound` follow by
 arithmetic. The only way to be pushed right (`ImpedePlayerMove`) needs `v ≤ 0`, so that frame
-moves at most 256 < 16·v_top. The third case of `impedeP` is the push and the screen's left edge: `P′ ≤ P + 256 ∧ v₂ ≤ 0`.
+moves at most 256 < 16·v_top. The third case of `impedeP` is the push and the screen's left edge: `P′ ≤ B + 256 ∧ v₂ ≤ 0`.
+
+**The base `B` (round 24).** `Frame` has a parameter `wide` (`false` when not written) and a field `B`, the base of the third case.
+Without `wide`, `B = P` (`baseP`; `B := P` is the default, so a frame built as before has `P′ ≤ P + 256`), and `Frame.bound`,
+`Frame.adv_le`, `chain_bound` are as before. The frames above ground (part e of 1-1) are frames with `wide`: there `B` is the larger of
+`P` and the screen's left edge, because the clamp at the edge puts him on the edge's pixel and a push of 1 px can follow
+(`P′ ≤ P + 256` was false on a real frame: [1-1-e-2-10-3-10](../1-1/e-2-10-3-10-ScreenEdge.md)). For any frame:
+
+```
+Frame.speed : |v| ≤ v_top  →  |v′| ≤ v_top
+Frame.posB  : |v| ≤ v_top  →  P′ ≤ max(P, B) + 16·v_top
+Frame.advB  : |v| ≤ v_top ∧ max(V, 0) ≤ w  →  P′ ≤ max(P, B) + adv(w)
+ChainB(f :: g :: rest) : B(g) ≤ max(max(P(f), B(f)), P(g)) ∧ ChainB(g :: rest)
+```
+
+So along frames whose bases follow each other (`ChainB`), max(P, B) grows by at most `adv` a frame (`SurfaceRun.chainB_reach`).
 
 ## Assumptions (not proved in Lean)
 

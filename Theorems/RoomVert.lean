@@ -11,8 +11,8 @@ of every store) show where:
 * `walkA`: from the frame's start to the player's routine no step writes these bytes, nor the jump's halt value and A and B of the frame before, nor the horizontal bytes; the
   frame comes to the player's routine at most once, and not at its end (`finR`): so it comes there before its end (`before_R`, `hbytes_at_R`). At the frame's end a state
   that came there knows the pause byte's low bit 0, the others know it 1 (`finA`): so a frame that ends paused does not come there, and keeps these bytes (`end_R`, `paused_R`).
-* `walkB`: when the frame comes to the scroll handler in the air (the state 1 or 2) and rising (the vertical speed negative), no step from there to the frame's end writes these bytes
-  (`after_Q`).
+* `walkB`: when the frame comes to the scroll handler in the air (the state 1 or 2) and rising (the vertical speed negative), no step from there to the frame's end writes these bytes,
+  nor the vertical page (`after_Q`, `after_QP`).
 Each walk carries one bit (`AS.spent`, which nothing reads when the counter is not followed): in `walkA` it says that the frame has come to the player's routine, in `walkB` that it
 came to the scroll handler in the air and rising. The bit is set by splitting the state at that place (`Ph.zone`).
 
@@ -237,6 +237,9 @@ def vKeepA (sy : Syms) : List Nat :=
   vKeep sy ++ ([I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump, I sy.PlayerChangeSizeFlag, I sy.Player_CollisionBits, I sy.Player_Y_HighPos] ++
     (FrameModel.hBytes sy).map I)
 
+/-- the bytes of `vKeep`, and the vertical page: what the walk from the scroll handler keeps (`after_QP`) -/
+def vKeepH (sy : Syms) : List Nat := vKeep sy ++ [I sy.Player_Y_HighPos]
+
 /-! ## Bits of a byte -/
 /-- the byte, with the bit `b` known to be `v` -/
 def withBit (x : AB) (b : UInt8) (v : Bool) : AB := if v then x.or (AB.known b) else x.and (AB.known (~~~b))
@@ -388,9 +391,10 @@ def piecesQ (sy : Syms) (A : AS) : List AS :=
 
 /-- the step of `A` may write a byte of `vKeep`: not the erase of a coin, which writes in the block buffers -/
 def mayWriteV (sy : Syms) (E : Env) (P : Places) (A : AS) : Bool :=
-  !(A.pc == P.erase && !A.nmi) && !StepWrites.keepOK E (fun i => (vKeep sy).contains i) A
+  !(A.pc == P.erase && !A.nmi) && !StepWrites.keepOK E (fun i => (vKeepH sy).contains i) A
 
-/-- the bit says that the frame came to the scroll handler `Q` in the air and rising, and that no step has written the bytes of `vKeep` since. A step that may write them
+/-- the bit says that the frame came to the scroll handler `Q` in the air and rising, and that no step has written the bytes of `vKeepH` (those of `vKeep` and the vertical
+page) since. A step that may write them
 drops the bit and marks the state `[1]`; such a state must end the frame out of the player's routine (`finB`). The other states at `Q` are marked `[2]`. The walk asks that
 the frame comes to `Q` once. -/
 def phB (sy : Syms) (E : Env) (P : Places) : Ph where
@@ -925,6 +929,9 @@ def Rising (sy : Syms) (m : Machine) : Prop :=
 def apartB (sy : Syms) (P : Places) : Bool :=
   (vKeep sy).all (fun x => decide (x < P.bufLo) || decide (P.bufLo + P.bufN ≤ x)) && I sy.Player_State != I sy.Player_Y_Speed
 
+/-- the vertical page is out of the block buffers -/
+def apartH (sy : Syms) (P : Places) : Bool := decide (I sy.Player_Y_HighPos < P.bufLo) || decide (P.bufLo + P.bufN ≤ I sy.Player_Y_HighPos)
+
 /-- **The erase of a coin writes only in the block buffers** -/
 theorem erase_keep {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {m : Machine} (hO : PlacesOK E P) (hs : Sim E F A m) (hn : A.nmi = false)
     (hpc : A.pc = P.erase) (hh : SiteOK P m) {x : Nat} (hx : x < P.bufLo ∨ P.bufLo + P.bufN ≤ x) : (go step m).2.ram.get! x = m.ram.get! x := by
@@ -1117,7 +1124,27 @@ theorem keepV_step {sy : Syms} {E : Env} {F : Nat × UInt8} {P : Places} {A : AS
   | false =>
     rw [hc] at h1
     simp only [Bool.not_false, Bool.true_and, Bool.not_eq_false'] at h1
-    exact StepWrites.keep_step hs h1 x (List.contains_iff_mem.2 hx)
+    exact StepWrites.keep_step hs h1 x (List.contains_iff_mem.2 (List.mem_append_left _ hx))
+
+/-- a piece with the bit, that meets `ok`, keeps the bytes of `vKeepH` over its step: `keepV_step`, and the vertical page -/
+theorem keepVH_step {sy : Syms} {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {y : Machine} (hO : PlacesOK E P) (hap : apartB sy P = true)
+    (hapH : apartH sy P = true) (hs : Sim E F A y) (hh : SiteOK P y) (hok : (phB sy E P).ok A = true) (hb : A.spent = true) :
+    ∀ x ∈ vKeepH sy, (go step y).2.ram.get! x = y.ram.get! x := by
+  intro x hx
+  rcases List.mem_append.1 hx with hx | hx
+  · exact keepV_step hO hap hs hh hok hb x hx
+  · rw [List.mem_singleton.1 hx]
+    have h1 : mayWriteV sy E P A = false := by simpa [phB, hb] using hok
+    unfold mayWriteV at h1
+    cases hc : (A.pc == P.erase && !A.nmi) with
+    | true =>
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at hc
+      simp only [apartH, Bool.or_eq_true, decide_eq_true_eq] at hapH
+      exact erase_keep hO hs hc.2 hc.1 hh hapH
+    | false =>
+      rw [hc] at h1
+      simp only [Bool.not_false, Bool.true_and, Bool.not_eq_false'] at h1
+      exact StepWrites.keep_step hs h1 _ (List.contains_iff_mem.2 (List.mem_append_right _ (List.mem_singleton.2 rfl)))
 
 /-- **The frame from the scroll handler.** The frame comes to the scroll handler at most once. If it comes there in the air and rising, and ends in the player's routine, no
 step from there to its end writes the bytes of `vKeep`. The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
@@ -1156,6 +1183,125 @@ theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat 
       rw [trace_succ hf hs'.halted]
       have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
       exact keepV_step h.places hap hs₂ (hk j) hok hb x hx
+    change A₁ ∈ (if A'.pc == sy.PlayerSubs && !A'.spent && A'.log.isEmpty then piecesQ sy A'
+      else if A'.spent && mayWriteV sy E P A' then [{ A' with spent := false, log := [1] }] else [A']) at hA₁
+    split at hA₁
+    · rename_i hc
+      simp only [Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true', List.isEmpty_iff] at hc
+      obtain ⟨⟨hq, hsp⟩, hlg⟩ := hc
+      rcases piecesQ_class hap2 (hsz A' _ hs') hA₁ hs₁ with ⟨c1, c2, c3⟩ | ⟨c1, c2, c3⟩
+      · rw [c1, c2, hlg]
+        refine ⟨fun _ _ _ => Or.inl rfl, fun _ => ⟨rfl, j, by omega, by rw [hpc, hq], keep c1⟩, fun h => by simp at h, Or.inl rfl⟩
+      · rw [c1, c2, hsp]
+        refine ⟨fun _ _ _ => Or.inr (by simp), fun h => by simp at h, fun _ => ⟨j, by omega, by rw [hpc, hq], c3⟩, Or.inr (Or.inr rfl)⟩
+    · rename_i hc
+      split at hA₁
+      · obtain rfl := List.mem_singleton.1 hA₁
+        exact ⟨fun _ _ _ => Or.inr (by simp), fun h => by simp at h, fun h => by simp at h, Or.inr (Or.inl rfl)⟩
+      · obtain rfl := List.mem_singleton.1 hA₁
+        refine ⟨fun j₀ hj₀ hq₀ => ?_, fun hb => ?_, fun hl => ?_, p4⟩
+        · rcases Nat.lt_or_ge j₀ j with hlt | hge
+          · exact p1 j₀ hlt hq₀
+          · rw [show j₀ = j by omega, hpc] at hq₀
+            simp only [hq₀, beq_self_eq_true, Bool.true_and, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_iff, not_and] at hc
+            cases hsp : A₁.spent with
+            | true => exact Or.inl rfl
+            | false => exact Or.inr (hc hsp)
+        · obtain ⟨l1, j₀, a1, a2, a3⟩ := p2 hb
+          exact ⟨l1, j₀, by omega, a2, fun x hx => by rw [keep hb x hx]; exact a3 x hx⟩
+        · obtain ⟨j₀, a1, a2, a3⟩ := p3 hl
+          exact ⟨j₀, by omega, a2, a3⟩
+  have h0 : Φ 0 S.spent S.log := by
+    refine ⟨fun _ h => absurd h (Nat.not_lt_zero _), fun hb => ?_, fun hl => ?_, Or.inl s2⟩
+    · rw [s1] at hb
+      cases hb
+    · rw [s2] at hl
+      cases hl
+  obtain ⟨hall, J, hJ1, hJ2, hJ3, B, hB1, hB2, hB3⟩ := frame_of_walkV (Z := phB sy E P) Φ hO h.table h.ops (by show 2 ≤ (2 : UInt8).toNat; decide)
+    (by rw [h.env]; exact h.pad) hz hw hs hk' h0 hstep
+  have uniq : ∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs := by
+    intro j j' hlt hq hj' hq'
+    obtain ⟨A, hsA, hpre, q1, _⟩ := hall j' hj'
+    have hApc : A.pc = sy.PlayerSubs := by rw [← hsA.pc]; exact hq'
+    simp only [phB, hApc, beq_self_eq_true, Bool.true_and, Bool.not_eq_true', Bool.or_eq_false_iff, Bool.not_eq_false', List.isEmpty_iff] at hpre
+    rcases q1 j hlt hq with e | e
+    · rw [hpre.1] at e
+      cases e
+    · exact e hpre.2
+  refine ⟨uniq, fun jq hq hf hrise hrt x hx => ?_⟩
+  have hjJ : jq < J := by
+    rcases Nat.lt_or_ge jq J with h1 | h1
+    · exact h1
+    · exfalso
+      have e := PipeEntryRule.trace_stop (m := m) (i := i) (j := J) (by simp [hJ1]) (jq - J)
+      rw [show J + (jq - J) = jq by omega] at e
+      rw [e, hJ1] at hf
+      omega
+  -- the end is in the player's routine, so the state at the end is not marked `[1]`
+  have hl1 : B.log ≠ [1] := by
+    intro hl
+    rw [hfin] at hB1
+    simp only [finB, hl, bne_self_eq_false, Bool.false_or, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at hB1
+    obtain ⟨⟨a1, a2⟩, a3⟩ := hB1
+    have e := isK_eq a2 (hB2.ram _ a1)
+    rw [← hJ3, hrt] at e
+    exact a3 e.symm
+  obtain ⟨q1, q2, q3, q4⟩ := hB3
+  have only : ∀ j₀, j₀ < J → (trace m i j₀).pc = sy.PlayerSubs → j₀ = jq := by
+    intro j₀ h1 h2
+    rcases Nat.lt_trichotomy j₀ jq with e | e | e
+    · exact absurd hq (uniq j₀ jq e h2 hf)
+    · exact e
+    · exact absurd h2 (uniq jq j₀ e hq (hJ2 j₀ h1))
+  rcases q4 with e | e | e
+  · rcases q1 jq hjJ hq with e2 | e2
+    · obtain ⟨_, j₀, a1, a2, a3⟩ := q2 e2
+      rw [only j₀ a1 a2] at a3
+      rw [hJ3]
+      exact a3 x hx
+    · exact absurd e e2
+  · exact absurd e hl1
+  · obtain ⟨j₀, a1, a2, a3⟩ := q3 e
+    rw [only j₀ a1 a2] at a3
+    exact absurd hrise a3
+
+/-- **The frame from the scroll handler, with the vertical page.** `after_Q`, for the bytes of `vKeepH`: the bytes of `vKeep` and the vertical page. If the frame comes to the
+scroll handler in the air and rising, and ends in the player's routine, no step from there to its end writes them. The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
+theorem after_QP {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phB sy E P) E P r K C Fu)
+    (hfin : C.fin = finB P r) (hap : apartB sy P = true) (hapH : apartH sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
+    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Rising sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
+       ∀ x ∈ vKeepH sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) := by
+  obtain ⟨S, hw, hs, s1, s2, s3⟩ := start_of_room h hm
+  have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
+  have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
+  have hsz : ∀ (A : AS) (y : Machine), Sim C.E (m.frame, 2) A y → A.ram.size = 2048 ∧ A.kn.size = 2048 := fun _ _ hs => ⟨hs.szR, hs.szK⟩
+  have hap2 : I sy.Player_State ≠ I sy.Player_Y_Speed := by
+    simp only [apartB, Bool.and_eq_true, bne_iff_ne, ne_eq] at hap
+    exact hap.2
+  let Φ : Nat → Bool → List Nat → Prop := fun j b l =>
+    (∀ j₀, j₀ < j → (trace m i j₀).pc = sy.PlayerSubs → (b = true ∨ l ≠ [])) ∧
+    (b = true → l = [] ∧ ∃ j₀, j₀ < j ∧ (trace m i j₀).pc = sy.PlayerSubs ∧ ∀ x ∈ vKeepH sy, (trace m i j).ram.get! x = (trace m i j₀).ram.get! x) ∧
+    (l = [2] → ∃ j₀, j₀ < j ∧ (trace m i j₀).pc = sy.PlayerSubs ∧ ¬ Rising sy (trace m i j₀)) ∧
+    (l = [] ∨ l = [1] ∨ l = [2])
+  have hz : ∀ (A' : AS) (x : Machine), A'.rk = false → Sim C.E (m.frame, 2) A' x → ∃ A₁ ∈ (phB sy E P).zone A', Sim C.E (m.frame, 2) A₁ x := by
+    intro A' x hr hsx
+    show ∃ A₁ ∈ (if A'.pc == sy.PlayerSubs && !A'.spent && A'.log.isEmpty then piecesQ sy A'
+      else if A'.spent && mayWriteV sy E P A' then [{ A' with spent := false, log := [1] }] else [A']), _
+    split
+    · exact piecesQ_cover hr hsx
+    · split
+      · exact ⟨_, List.mem_singleton.2 rfl, sim_bits hsx hr false [1]⟩
+      · exact ⟨A', List.mem_singleton.2 rfl, hsx⟩
+  have hstep : ∀ j (A' A₁ : AS), Φ j A'.spent A'.log → Sim C.E (m.frame, 2) A' (trace m i j) → (trace m i j).frame = m.frame → A'.rk = false →
+      A₁ ∈ (phB sy E P).zone A' → Sim C.E (m.frame, 2) A₁ (trace m i j) → (phB sy E P).ok A₁ = true → Φ (j + 1) A₁.spent A₁.log := by
+    intro j A' A₁ ⟨p1, p2, p3, p4⟩ hs' hf hr hA₁ hs₁ hok
+    have hpc : (trace m i j).pc = A'.pc := hs'.pc
+    have keep : A₁.spent = true → ∀ x ∈ vKeepH sy, (trace m i (j + 1)).ram.get! x = (trace m i j).ram.get! x := by
+      intro hb x hx
+      rw [trace_succ hf hs'.halted]
+      have hs₂ : Sim E (m.frame, 2) A₁ (trace m i j) := by rw [← h.env]; exact hs₁
+      exact keepVH_step h.places hap hapH hs₂ (hk j) hok hb x hx
     change A₁ ∈ (if A'.pc == sy.PlayerSubs && !A'.spent && A'.log.isEmpty then piecesQ sy A'
       else if A'.spent && mayWriteV sy E P A' then [{ A' with spent := false, log := [1] }] else [A']) at hA₁
     split at hA₁

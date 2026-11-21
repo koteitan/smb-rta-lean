@@ -6,6 +6,7 @@ import Theorems.PoleFrame
 import Theorems.PoleTileWalk
 import Theorems.PoleTileRead
 import Theorems.PoleTileHeight
+import Theorems.PoleTileFar
 import Theorems.StopRead
 
 /-!
@@ -35,28 +36,28 @@ open PoleGrab (Next Side InBlock MaskL Low low_of_side low_of_inBlock side_step 
 
 section Frames
 
-variable {top amax : Int}
+variable {top amax : Int} {wd : Bool}
 
-theorem v₂_range (h16 : 16 ≤ top) {f : Frame top amax} (hv : -top ≤ f.v ∧ f.v ≤ top) :
+theorem v₂_range (h16 : 16 ≤ top) {f : Frame top amax wd} (hv : -top ≤ f.v ∧ f.v ≤ top) :
     -top ≤ f.v₂ ∧ f.v₂ ≤ top := by
   have h1 : -top ≤ f.v₁ ∧ f.v₁ ≤ top := by
     rcases f.anim with ⟨h, _⟩ | ⟨h, _⟩ <;> rw [h] <;> omega
   exact f.friction h1
 
 /-- A frame below the block's top, on the ground or rising: `Side` at the side of the block, not moving left fast; left of it, he stays left of it. -/
-def Beside (Ps : Int) (f : Frame top amax) : Prop := (Side f ∧ -12 ≤ f.v₂) ∨ (f.P₂ < Ps ∧ f.P' < Ps)
+def Beside (Ps : Int) (f : Frame top amax wd) : Prop := (Side f ∧ -12 ≤ f.v₂) ∨ (f.P₂ < Ps ∧ f.P' < Ps)
 
 /-- With the feet over the block and inside it, falling: `InBlock`, and he is not moving left fast. -/
-def Inside (Pf : Int) (f : Frame top amax) : Prop := Pf ≤ f.P₂ ∧ InBlock f ∧ -12 ≤ f.v₂
+def Inside (Pf : Int) (f : Frame top amax wd) : Prop := Pf ≤ f.P₂ ∧ InBlock f ∧ -12 ≤ f.v₂
 
 /-- A frame falling below the block's top: left of where the feet get over the block he stays left of it; with the feet over it, `Inside`. -/
-def Falling (Pf : Int) (f : Frame top amax) : Prop := (f.P₂ < Pf ∧ f.P' < Pf) ∨ Inside Pf f
+def Falling (Pf : Int) (f : Frame top amax wd) : Prop := (f.P₂ < Pf ∧ f.P' < Pf) ∨ Inside Pf f
 
 /-- where he can be after the landing: pushed back from the landing's position `Z`; or left of the side of the block; or pushed back from there -/
-def HopState (Ps Z : Int) (f : Frame top amax) : Prop :=
+def HopState (Ps Z : Int) (f : Frame top amax wd) : Prop :=
   (Low f ∧ f.P ≤ Z) ∨ f.P < Ps ∨ (Low f ∧ f.P ≤ Ps + 16 * top - 256)
 
-theorem hopState_step (h16 : 16 ≤ top) (hA : amax ≤ 512) {Ps Z : Int} {f g : Frame top amax}
+theorem hopState_step (h16 : 16 ≤ top) (hA : amax ≤ 512) {Ps Z : Int} {f g : Frame top amax wd}
     (hv : -top ≤ f.v ∧ f.v ≤ top) (hs : HopState Ps Z f) (hb : Beside Ps f) (hn : Next f g) :
     HopState Ps (Z - 16) g := by
   have hP := hn.2.2
@@ -73,7 +74,7 @@ theorem hopState_step (h16 : 16 ≤ top) (hA : amax ≤ 512) {Ps Z : Int} {f g :
       exact Or.inr (Or.inr ⟨hl, by omega⟩)
   · exact Or.inr (Or.inl (by omega))
 
-theorem hopState_iter (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Z : Int) (L : Nat)
+theorem hopState_iter (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps Z : Int) (L : Nat)
     (h0 : HopState Ps Z (fr (L + 1))) :
     ∀ m, (∀ j, j < m → -top ≤ (fr (L + j + 1)).v ∧ (fr (L + j + 1)).v ≤ top) →
       (∀ j, j < m → Beside Ps (fr (L + j + 1))) → (∀ j, j < m → Next (fr (L + j + 1)) (fr (L + j + 2))) →
@@ -88,7 +89,7 @@ theorem hopState_iter (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame
     rw [e]
     exact h
 
-theorem short_of_state (h16 : 16 ≤ top) (hA : amax ≤ 512) {Ps Z P₀ : Int} {f : Frame top amax}
+theorem short_of_state (h16 : 16 ≤ top) (hA : amax ≤ 512) {Ps Z P₀ : Int} {f : Frame top amax wd}
     (hv : -top ≤ f.v ∧ f.v ≤ top) (hs : HopState Ps Z f) (hZ : Z + 32 < P₀) (hPs : Ps + 16 * top < P₀) :
     f.P₂ < P₀ := by
   rcases hs with ⟨h1, h3⟩ | h3 | ⟨h1, h3⟩
@@ -102,7 +103,7 @@ theorem short_of_state (h16 : 16 ≤ top) (hA : amax ≤ 512) {Ps Z P₀ : Int} 
 
 /-- After the landing, on the ground and rising: he can leave the side of the block, but he does not get to `P₀`, unless the landing's
 position allows it. `PoleGrab.hop_le` is the case in which every frame is at the side. -/
-theorem hop_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps P₀ : Int) (L m : Nat)
+theorem hop_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps P₀ : Int) (L m : Nat)
     (hPs : Ps + 16 * top < P₀)
     (hL : Beside Ps (fr L)) (hnL : Next (fr L) (fr (L + 1)))
     (hv : ∀ j, j ≤ m → -top ≤ (fr (L + j + 1)).v ∧ (fr (L + j + 1)).v ≤ top)
@@ -122,10 +123,10 @@ theorem hop_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top
 /-! ## Before the landing -/
 
 /-- he is left of where the feet get over the block, or he moved over it on frame `e` and his feet have stayed inside since -/
-def Crossed (fr : Nat → Frame top amax) (Pf : Int) (q j : Nat) : Prop :=
+def Crossed (fr : Nat → Frame top amax wd) (Pf : Int) (q j : Nat) : Prop :=
   (fr j).P < Pf ∨ ∃ e, q < e ∧ e < j ∧ (fr e).P < Pf ∧ Inside Pf (fr e) ∧ ∀ i, e < i → i < j → Inside Pf (fr i)
 
-theorem crossed (fr : Nat → Frame top amax) (Pf : Int) (q : Nat) (hq : (fr q).P' < Pf) :
+theorem crossed (fr : Nat → Frame top amax wd) (Pf : Int) (q : Nat) (hq : (fr q).P' < Pf) :
     ∀ n, (∀ j, j ≤ n → Next (fr (q + j)) (fr (q + j + 1))) → (∀ j, j < n → Falling Pf (fr (q + j + 1))) →
       Crossed fr Pf q (q + n + 1)
   | 0, hn, _ => Or.inl (by have := (hn 0 (Nat.le_refl _)).2.2; simp only [Nat.add_zero] at this ⊢; omega)
@@ -149,7 +150,7 @@ theorem crossed (fr : Nat → Frame top amax) (Pf : Int) (q : Nat) (hq : (fr q).
 
 /-- What a fast jump on the frame after the landing `L` needs from the frames before it. `abs j` is the stored speed after frame `j`; `right j` is the moving
 direction being right, at frame `j`'s collision. -/
-structure FastLink (fr : Nat → Frame top amax) (Pf : Int) (q L A : Nat) (abs : Nat → Nat) (right : Nat → Bool) : Prop where
+structure FastLink (fr : Nat → Frame top amax wd) (Pf : Int) (q L A : Nat) (abs : Nat → Nat) (right : Nat → Bool) : Prop where
   /-- a fast jump reads the stored speed of the frame before it -/
   takeoff : A ≤ abs L
   /-- a frame from a stopped Mario writes `|v₂|` into the stored speed, or keeps the stored speed and the moving direction -/
@@ -161,7 +162,7 @@ structure FastLink (fr : Nat → Frame top amax) (Pf : Int) (q L A : Nat) (abs :
 
 /-- Moved over the block at `e`, the feet inside until the landing `L`, and a fast jump after it: each frame after `e` starts stopped, so `|v₂|` is small there, and a frame that
 writes it would leave the stored speed below `A`. So no frame wrote it, the moving direction stayed right, and every frame pushed him back. This gives the hypotheses of `PoleGrab.landing_left`. -/
-theorem fast_pushes (hA : amax ≤ 512) {fr : Nat → Frame top amax} {Pf : Int} {q L A : Nat} {abs : Nat → Nat} {right : Nat → Bool}
+theorem fast_pushes (hA : amax ≤ 512) {fr : Nat → Frame top amax wd} {Pf : Int} {q L A : Nat} {abs : Nat → Nat} {right : Nat → Bool}
     (K : FastLink fr Pf q L A abs right) (hA13 : 13 ≤ A) {e : Nat} (hqe : q < e) (heL : e < L)
     (hnx : ∀ j, e ≤ j → j < L → Next (fr j) (fr (j + 1))) (he : Inside Pf (fr e)) (hv : 1 ≤ (fr e).v₂)
     (hb : ∀ i, e < i → i < L → Inside Pf (fr i)) (hvL : -12 ≤ (fr L).v₂) :
@@ -231,7 +232,7 @@ theorem fast_pushes (hA : amax ≤ 512) {fr : Nat → Frame top amax} {Pf : Int}
 
 /-- What a real run gives before a direct grab on frame `g`: `q` is a frame left of where the feet get over the block, from which he stays below the block's
 top until he lands on the ground on frame `L`; `T` is the takeoff frame of the jump, `fast` its class; `t` the last frame of the position bound. -/
-structure Approach (fr : Nat → Frame top amax) (Ps Pf : Int) (t q L T g : Nat) (fast : Bool) : Prop where
+structure Approach (fr : Nat → Frame top amax wd) (Ps Pf : Int) (t q L T g : Nat) (fast : Bool) : Prop where
   order : q < L ∧ L < T
   /-- left of where the feet get over the block -/
   left : (fr q).P' < Pf
@@ -252,7 +253,7 @@ structure Approach (fr : Nat → Frame top amax) (Ps Pf : Int) (t q L T g : Nat)
 
 /-- What the frames before the landing leave, when the landing is at the side of the block: not past the left of the block by one frame's move, or he moved
 over it on `e` at least two frames before and his feet stayed inside. -/
-theorem landing_cases (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) {Pf : Int} {q L : Nat}
+theorem landing_cases (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) {Pf : Int} {q L : Nat}
     (hC : Crossed fr Pf q L) (hsL : Side (fr L)) (hvL : -top ≤ (fr L).v ∧ (fr L).v ≤ top)
     (hnx : ∀ j, q < j → j < L → Next (fr j) (fr (j + 1)))
     (hvs : ∀ j, q < j → j < L → -top ≤ (fr j).v ∧ (fr j).v ≤ top) :
@@ -275,7 +276,7 @@ theorem landing_cases (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame
 
 /-- A fast jump that reads a stored speed nothing has updated since the landing `L`: `P₂(g) < P₀`, at any time, on any frame `g` after the frames on the ground and
 rising that follow the landing. The jump need not be on the frame after the landing. -/
-theorem fast_near (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ : Int) {q L g : Nat}
+theorem fast_near (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps Pf P₀ : Int) {q L g : Nat}
     (hPs : Ps + 16 * top < P₀) (hfar : Pf + 16 * top ≤ P₀ + 224)
     (hg : L + 2 ≤ g) (hqL : q < L) (hleft : (fr q).P' < Pf)
     (hnx : ∀ j, q ≤ j → j < g → Next (fr j) (fr (j + 1)))
@@ -315,7 +316,7 @@ theorem fast_near (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top
 /-- A frame `j` after the landing that ends its move with a speed of 13 or more, either way: the speed comes from running, so he has not been pushed since he was left of
 the block's side, and the frames on the ground and rising after it do not bring him to `P₀`, on any later frame `g`. A fast jump after such a frame reads the stored
 speed that it wrote; the jump need not be on the next frame. -/
-theorem fast_late (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps P₀ : Int) {L j g : Nat}
+theorem fast_late (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps P₀ : Int) {L j g : Nat}
     (hPs : Ps + 16 * top < P₀) (hLj : L < j) (hjg : j < g)
     (hland : Beside Ps (fr L)) (hnx : ∀ i, L ≤ i → i < g → Next (fr i) (fr (i + 1)))
     (hv : ∀ i, L < i → i ≤ g → -top ≤ (fr i).v ∧ (fr i).v ≤ top)
@@ -361,7 +362,7 @@ theorem fast_late (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top
 
 /-- A fast jump: `P₂(g) < P₀` at any time. So a fast jump gives no direct grab at all. The two cases are those of `Approach.fastWay`: no frame since the landing
 wrote the stored speed (`fast_near`), or one did (`fast_late`). -/
-theorem fast_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ : Int) (t : Nat) {q L T g : Nat}
+theorem fast_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps Pf P₀ : Int) (t : Nat) {q L T g : Nat}
     (hPs : Ps + 16 * top < P₀) (hfar : Pf + 16 * top ≤ P₀ + 224)
     (hnx : ∀ j, q ≤ j → j < g → Next (fr j) (fr (j + 1)))
     (hv : ∀ j, q ≤ j → j ≤ g → -top ≤ (fr j).v ∧ (fr j).v ≤ top)
@@ -375,7 +376,7 @@ theorem fast_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame to
       (fun i h1 h2 => hv i (by omega) h2) hhop hfast
 
 /-- A slow jump, in time: `P₂(g) < P₀` for `g ≤ t + 6`. `hB` is the position bound. -/
-theorem slow_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ B : Int) (t : Nat) {q L T g : Nat}
+theorem slow_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps Pf P₀ B : Int) (t : Nat) {q L T g : Nat}
     (hPs : Ps + 16 * top < P₀) (hfar : Pf + 16 * top ≤ P₀ + 224) (hgap : B + 32 < P₀)
     (hB : ∀ e d : Nat, q < e → e < g → e + d = t → Pf ≤ (fr e).P₂ → (fr e).P₂ + 16 * top * (d : Int) ≤ B)
     (hnx : ∀ j, q ≤ j → j < g → Next (fr j) (fr (j + 1)))
@@ -419,7 +420,7 @@ theorem slow_short (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame to
 
 /-- A slow jump on the first frame the position bound allows, `g = t + 7`: the landing's position bounds the touch. He has to move left on the two frames before the
 touch, or the block pushes him back. So the frame before the touch moves left, and his position at the touch is at most the landing's. -/
-theorem slow_tight (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax) (Ps Pf P₀ F : Int) (t : Nat) {q L T : Nat}
+theorem slow_tight (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame top amax wd) (Ps Pf P₀ F : Int) (t : Nat) {q L T : Nat}
     (hPs : Ps + 16 * top < P₀) (hF : Pf + 16 * top + 32 ≤ P₀ + F) (hF0 : 0 ≤ F) (hF2 : F ≤ 208)
     (hnx : ∀ j, q ≤ j → j < T + 2 → Next (fr j) (fr (j + 1)))
     (hv : ∀ j, q ≤ j → j ≤ T + 2 → -top ≤ (fr j).v ∧ (fr j).v ≤ top)
@@ -508,22 +509,22 @@ theorem slow_tight (h16 : 16 ≤ top) (hA : amax ≤ 512) (fr : Nat → Frame to
 /-! ## Lists of consecutive frames -/
 
 /-- the frames `a`, `a + 1`, ... -/
-def seg (fr : Nat → Frame top amax) : Nat → Nat → List (Frame top amax)
+def seg (fr : Nat → Frame top amax wd) : Nat → Nat → List (Frame top amax wd)
   | _, 0 => []
   | a, n + 1 => fr a :: seg fr (a + 1) n
 
-theorem seg_length (fr : Nat → Frame top amax) : ∀ n a, (seg fr a n).length = n
+theorem seg_length (fr : Nat → Frame top amax wd) : ∀ n a, (seg fr a n).length = n
   | 0, _ => rfl
   | n + 1, a => by simp [seg, seg_length fr n (a + 1)]
 
-theorem seg_chain (fr : Nat → Frame top amax) :
+theorem seg_chain (fr : Nat → Frame top amax wd) :
     ∀ n a, (∀ j, a ≤ j → j < a + n → Next (fr j) (fr (j + 1))) → Chain (fr a :: seg fr (a + 1) n)
   | 0, _, _ => trivial
   | n + 1, a, h => by
     obtain ⟨h1, h2, h3⟩ := h a (Nat.le_refl _) (by omega)
     exact ⟨h1, h2, h3, seg_chain fr n (a + 1) (fun j hj hj2 => h j (by omega) (by omega))⟩
 
-theorem seg_last (fr : Nat → Frame top amax) :
+theorem seg_last (fr : Nat → Frame top amax wd) :
     ∀ n a, (seg fr (a + 1) n).getLastD (fr a) = fr (a + n)
   | 0, a => rfl
   | n + 1, a => by
@@ -545,31 +546,48 @@ open SurfaceRun (Statement poleP hit_bound noHitCheck)
 
 variable {sy : Syms} {m0 : Machine} {tp am : Int}
 
-theorem speed_range (h16 : 16 ≤ (top sy : Int)) {fr : Nat → Frame (top sy) (amax sy m0)} {g : Nat}
+theorem speed_range (h16 : 16 ≤ (top sy : Int)) {fr : Nat → Frame (top sy) (amax sy m0) true} {g : Nat}
     (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0) :
     ∀ n, n + 1 ≤ g → -(top sy : Int) ≤ (fr (n + 1)).v ∧ (fr (n + 1)).v ≤ (top sy : Int)
   | 0, _ => by simp only [Nat.zero_add]; rw [hv]; omega
   | n + 1, h => by
     have ih := speed_range h16 hnx hv n (by omega)
-    have h1 := ((fr (n + 1)).bound h16 ih).1
+    have h1 := (fr (n + 1)).speed ih
     have h2 := (hnx (n + 1) (by omega) (by omega)).1
     rw [h2]
     exact h1
 
-/-- the crude bound, for the first frames -/
-theorem early_le (h16 : 16 ≤ (top sy : Int)) {fr : Nat → Frame (top sy) (amax sy m0)} {g : Nat} {PA : Int}
-    (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0) (hP : (fr 1).P = PA) :
-    ∀ n, n + 1 ≤ g → (fr (n + 1)).P ≤ PA + 16 * (top sy : Int) * (n : Int)
+/-- the crude bound, for the first frames: `max(P, B)` grows by at most `16·top` a frame (`TopSpeed.Frame.posB`, and the bases follow each other) -/
+theorem early_leB (h16 : 16 ≤ (top sy : Int)) {fr : Nat → Frame (top sy) (amax sy m0) true} {g : Nat} {PA : Int}
+    (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0) (hP : (fr 1).P = PA)
+    (hlk : ∀ t, 1 ≤ t → t < g → (fr (t + 1)).B ≤ max (max (fr t).P (fr t).B) (fr (t + 1)).P) (hb1 : (fr 1).B ≤ PA) :
+    ∀ n, n + 1 ≤ g → max (fr (n + 1)).P (fr (n + 1)).B ≤ PA + 16 * (top sy : Int) * (n : Int)
   | 0, _ => by simp only [Nat.zero_add, Int.natCast_zero, Int.mul_zero]; omega
   | n + 1, h => by
-    have ih := early_le h16 hnx hv hP n (by omega)
-    have h1 := ((fr (n + 1)).bound h16 (speed_range h16 hnx hv n (by omega))).2
+    have ih := early_leB h16 hnx hv hP hlk hb1 n (by omega)
+    have h1 := (fr (n + 1)).posB h16 (speed_range h16 hnx hv n (by omega))
     have h2 := (hnx (n + 1) (by omega) (by omega)).2.2
+    have h3 := hlk (n + 1) (by omega) (by omega)
     have e : 16 * (top sy : Int) * ((n + 1 : Nat) : Int) = 16 * (top sy : Int) * (n : Int) + 16 * (top sy : Int) := by
       push_cast
       rw [Int.mul_add, Int.mul_one]
-    rw [e, h2]
+    rw [e]
+    rw [h2] at h3 ⊢
     omega
+
+/-- the crude bound, for the first frames -/
+theorem early_le (h16 : 16 ≤ (top sy : Int)) {fr : Nat → Frame (top sy) (amax sy m0) true} {g : Nat} {PA : Int}
+    (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0) (hP : (fr 1).P = PA)
+    (hlk : ∀ t, 1 ≤ t → t < g → (fr (t + 1)).B ≤ max (max (fr t).P (fr t).B) (fr (t + 1)).P) (hb1 : (fr 1).B ≤ PA) :
+    ∀ n, n + 1 ≤ g → (fr (n + 1)).P ≤ PA + 16 * (top sy : Int) * (n : Int) := fun n h => by
+  have := early_leB h16 hnx hv hP hlk hb1 n h
+  omega
+
+/-- the bases of the frames `a`, `a + 1`, ... follow each other -/
+theorem seg_chainB {fr : Nat → Frame (top sy) (amax sy m0) true} :
+    ∀ n a, (∀ j, a ≤ j → j < a + n → (fr (j + 1)).B ≤ max (max (fr j).P (fr j).B) (fr (j + 1)).P) → TopSpeed.ChainB (fr a :: seg fr (a + 1) n)
+  | 0, _, _ => trivial
+  | n + 1, a, h => ⟨h a (Nat.le_refl _) (by omega), seg_chainB n (a + 1) (fun j hj hj2 => h j (by omega) (by omega))⟩
 
 theorem take_snoc {α : Type} (w : List α) (k : Nat) (hk : k < w.length) : ∃ i ∈ w, w.take (k + 1) = w.take k ++ [i] := by
   refine ⟨w[k], List.getElem_mem hk, ?_⟩
@@ -578,7 +596,7 @@ theorem take_snoc {α : Type} (w : List α) (k : Nat) (hk : k < w.length) : ∃ 
 /-- The line of the position bound, on a real run, hits included: at frame `j` at most `PA + X + 16·top·(j − N)`. This joins `Statement.after` and `hit_bound`. -/
 theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m0) (hE : 1 ≤ E) (hJ : 1 ≤ J)
-    {PA : Int} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat}
+    {PA : Int} {fr : Nat → Frame (top sy) (amax sy m0) true} {w : List HIn} {h g : Nat}
     (R : Surface sy m0 PA T J g fr w h) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
     (j : Nat) (h1 : N + E ≤ j) (h2 : j ≤ T) (h3 : j < g) :
     (fr j).P' ≤ PA + X + 16 * (top sy : Int) * ((j - N : Nat) : Int) := by
@@ -588,6 +606,17 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
     exact S.after (w.take a) (fun i hi => R.mem i (List.mem_of_mem_take hi)) (a - N)
       (by simp; have := R.long; omega)
   have hj1 : 1 ≤ j := by omega
+  -- every prefix up to `T`, with `S.within` for those up to `N`
+  have hd' : ∀ a, a ≤ T → hdist sy m0 (startHS sy m0) (w.take a) ≤ X + 16 * (top sy : Int) * ((a - N : Nat) : Int) := by
+    intro a ha1
+    by_cases haN : N ≤ a
+    · exact hd a ha1 haN
+    · have := S.within (w.take a) (fun i hi => R.mem i (List.mem_of_mem_take hi)) (by simp; omega)
+      rw [show a - N = 0 by omega]
+      simp only [Int.natCast_zero, Int.mul_zero, Int.add_zero]
+      exact this
+  have hmono : ∀ a b : Nat, a ≤ b → 16 * (top sy : Int) * (a : Int) ≤ 16 * (top sy : Int) * (b : Int) :=
+    fun a b hab => Int.mul_le_mul_of_nonneg_left (by omega) hs
   by_cases hjh : j < h
   · have := R.model j hj1 hjh h2 h3
     have := hd j h2 (by omega)
@@ -599,11 +628,11 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
       have e2 : 16 * (top sy : Int) * ((a + 1 : Nat) : Int) = 16 * (top sy : Int) * (a : Int) + 16 * (top sy : Int) := by
         push_cast
         rw [Int.mul_add, Int.mul_one]
-      rcases R.hit h2 with h4 | h4
+      rcases R.hit h2 with h4 | ⟨s, hs1, h4⟩
       · have := hd j h2 (by omega)
         omega
-      · have h5 := hd (j - 1) (by omega) (by omega)
-        rw [e1] at h5
+      · have h5 := hd' s (by omega)
+        have h6 := hmono (s - N) a (by omega)
         rw [ha, e2]
         omega
     · -- after the first hit
@@ -613,19 +642,34 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
       obtain ⟨i, hi, hti⟩ := take_snoc w p (by have := R.long; omega)
       have hmemp : ∀ a ∈ w.take p, a ∈ inputs := fun a ha => R.mem a (List.mem_of_mem_take ha)
       have hnh := hnx h (by omega) (by omega)
+      have hlen : (w.take p).length = p := by simp; have := R.long; omega
       have hit : (fr h).P' ≤ PA + hdist sy m0 (startHS sy m0) (w.take p ++ [i]) - 256 ∨
-          (fr h).P' ≤ PA + hdist sy m0 (startHS sy m0) (w.take p) + 256 := by
-        have h4 := R.hit hhT
-        rw [hp] at h4 ⊢
-        rwa [hti, Nat.add_sub_cancel] at h4
+          ∃ s, s ≤ (w.take p).length ∧ (fr h).P' ≤ PA + hdist sy m0 (startHS sy m0) ((w.take p).take s) + 256 := by
+        rcases R.hit hhT with h4 | ⟨s, hs1, h4⟩
+        · left
+          rw [hp] at h4 ⊢
+          rwa [hti] at h4
+        · right
+          refine ⟨s, by omega, ?_⟩
+          rw [List.take_take, show min s p = s by omega]
+          exact h4
+      have hB : (fr (h + 1)).B ≤ (fr h).P' ∨
+          ∃ s, s ≤ (w.take p).length ∧ (fr (h + 1)).B ≤ PA + hdist sy m0 (startHS sy m0) ((w.take p).take s) := by
+        rcases R.base hhT with h4 | ⟨s, hs1, h4⟩
+        · exact Or.inl h4
+        · right
+          refine ⟨s, by omega, ?_⟩
+          rw [List.take_take, show min s p = s by omega]
+          exact h4
       have hlast := seg_last fr (j - h - 1) (h + 1)
       have hchain := seg_chain fr (j - h - 1) (h + 1) (fun a ha hb => hnx a (by omega) (by omega))
+      have hchainB := seg_chainB (fr := fr) (j - h - 1) (h + 1) (fun a ha hb => R.links a (by omega) (by omega))
       have hsp := speed_range h16 hnx hv h (by omega)
       have hstop := R.stop hhT
-      have hbd := hit_bound (k := j - N - E) F S.search S.hits h16 h255 hmemp (R.mem i hi)
-        (by simp; have := R.long; omega) hit (fr (h + 1)) (seg fr (h + 1 + 1) (j - h - 1)) hchain
+      have hbd := SurfaceRun.hit_boundB (k := j - N - E) F S.search S.hits h16 h255 hmemp (R.mem i hi)
+        (by simp; have := R.long; omega) hit (fr (h + 1)) (seg fr (h + 1 + 1) (j - h - 1)) hchain hchainB
         ⟨hsp.1, by rw [hnh.1]; exact hstop⟩
-        (by have h5 := hnh.2.1; have h6 := (fr h).impedeF; have h7 := (fr h).frac; omega) hnh.2.2
+        (by have h5 := hnh.2.1; have h6 := (fr h).impedeF; have h7 := (fr h).frac; omega) hnh.2.2 hB
         (by rw [seg_length]; simp; have := R.long; omega)
       rw [hlast, show h + 1 + (j - h - 1) = j by omega, show E + (j - N - E) = j - N by omega] at hbd
       exact hbd
@@ -633,7 +677,7 @@ theorem line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S
 /-- `hB` of `grab_short`: on any frame `e` with `Pf ≤ P₂(e)`, `P₂(e) + 16·top·(T − e)` is at most `B = PA + X + 16·top·(T − N)`. -/
 theorem hB_of_line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m0) (hE : 1 ≤ E) (hJ : 1 ≤ J)
-    {PA Pf : Int} {fr : Nat → Frame (top sy) (amax sy m0)} {w : List HIn} {h g : Nat}
+    {PA Pf : Int} {fr : Nat → Frame (top sy) (amax sy m0) true} {w : List HIn} {h g : Nat}
     (R : Surface sy m0 PA T J g fr w h) (hJh : J ≤ h) (hnx : ∀ j, 1 ≤ j → j < g → Next (fr j) (fr (j + 1))) (hv : (fr 1).v = 0)
     (hP : (fr 1).P = PA) (hearly : PA + 16 * (top sy : Int) * ((N + E : Nat) : Int) < Pf)
     (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ g) (hd : e + d = T) (hPf : Pf ≤ (fr e).P₂) :
@@ -646,7 +690,7 @@ theorem hB_of_line {n N E T J dx dy : Nat} {X : Int} (F : FastTakeoff.TFacts sy 
   have hm := (fr (a + 1)).move
   by_cases hae : a < N + E
   · exfalso
-    have h1 := early_le h16 hnx hv hP a (by omega)
+    have h1 := early_le h16 hnx hv hP R.links R.base₁ a (by omega)
     have h2 : 16 * (top sy : Int) * ((a + 1 : Nat) : Int) ≤ 16 * (top sy : Int) * ((N + E : Nat) : Int) :=
       Int.mul_le_mul_of_nonneg_left (by omega) hs
     have h3 : 16 * (top sy : Int) * ((a + 1 : Nat) : Int) = 16 * (top sy : Int) * (a : Int) + 16 * (top sy : Int) := by
@@ -672,11 +716,11 @@ section Rules
 open PoleGrab (Case collide ruleOk colX topY)
 open TopSpeed (Frame)
 
-variable {top amax : Int}
+variable {top amax : Int} {wd : Bool}
 
 /-- The real frame `f` runs `PlayerBGCollision` as `PoleGrab.collide` does on the case `c`: the speed and the position's pixel before and after are those of the case;
 the page and the fraction stay (`base`). -/
-structure Collides (sy : Syms) (mp : Machine) (f : Frame top amax) (c : Case) : Prop where
+structure Collides (sy : Syms) (mp : Machine) (f : Frame top amax wd) (c : Case) : Prop where
   pos : ∃ base : Int, f.P₂ = base + 256 * (c.x.toNat : Int) ∧
     f.P' = base + 256 * ((peek (collide sy mp c) sy.Player_X_Position).toNat : Int)
   v₂ : f.v₂ = sbyte c.v
@@ -707,7 +751,7 @@ theorem add_one_toNat {x : UInt8} (h : x.toNat < 255) : (x + 1).toNat = x.toNat 
 theorem sbyte_zero : sbyte 0 = 0 := by decide
 
 /-- pushed back: 1 px back and speed 0 -/
-theorem push_back {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (hx : 1 ≤ c.x.toNat) (C : Collides sy mp f c)
+theorem push_back {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd} (hx : 1 ≤ c.x.toNat) (C : Collides sy mp f c)
     (h1 : peek (collide sy mp c) sy.Player_X_Position = c.x - 1) (h2 : peek (collide sy mp c) sy.Player_X_Speed = 0) :
     f.v' = 0 ∧ f.P' = f.P₂ - 256 := by
   obtain ⟨⟨base, h3, h4⟩, _, h6⟩ := C
@@ -718,7 +762,7 @@ theorem push_back {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (hx
   omega
 
 /-- pushed forward: 1 px forward and speed 0 -/
-theorem push_forward {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (hx : c.x.toNat < 255) (C : Collides sy mp f c)
+theorem push_forward {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd} (hx : c.x.toNat < 255) (C : Collides sy mp f c)
     (h1 : peek (collide sy mp c) sy.Player_X_Position = c.x + 1) (h2 : peek (collide sy mp c) sy.Player_X_Speed = 0) :
     f.v' = 0 ∧ f.P' = f.P₂ + 256 := by
   obtain ⟨⟨base, h3, h4⟩, _, h6⟩ := C
@@ -729,7 +773,7 @@ theorem push_forward {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} 
   omega
 
 /-- not moved -/
-theorem no_push {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (C : Collides sy mp f c)
+theorem no_push {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd} (C : Collides sy mp f c)
     (h1 : peek (collide sy mp c) sy.Player_X_Position = c.x) (h2 : peek (collide sy mp c) sy.Player_X_Speed = c.v) :
     f.v' = f.v₂ ∧ f.P' = f.P₂ := by
   obtain ⟨⟨base, h3, h4⟩, h5, h6⟩ := C
@@ -738,7 +782,7 @@ theorem no_push {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (C : 
   exact ⟨h6, by omega⟩
 
 /-- the rule at the side of the block, on frames -/
-theorem side_of_sideRule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (hx : 1 ≤ c.x.toNat) (C : Collides sy mp f c)
+theorem side_of_sideRule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd} (hx : 1 ≤ c.x.toNat) (C : Collides sy mp f c)
     (h : (if 0 ≤ sbyte c.v then
         peek (collide sy mp c) sy.Player_X_Position == c.x - 1 && peek (collide sy mp c) sy.Player_X_Speed == 0 &&
           peek (collide sy mp c) sy.Player_CollisionBits == sy.noRight
@@ -758,7 +802,7 @@ theorem side_of_sideRule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top am
     exact Or.inr ⟨by omega, h1, h2⟩
 
 /-- on the ground or rising low, at the side of the block: `Side` -/
-theorem side_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax}
+theorem side_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd}
     (h : ruleOk sy mp c = true) (hl : lowCase sy c = true) (hs : sideCase sy c = true) (hx : 1 ≤ c.x.toNat)
     (hd : sy.LandDepth.toNat ≤ 16) (C : Collides sy mp f c) : PoleGrab.Side f := by
   simp only [lowCase] at hl
@@ -783,7 +827,7 @@ theorem side_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax}
     exact side_of_sideRule hx C h
 
 /-- moving right by speed, the direction is right -/
-theorem md_of_right {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (hmd : c.md ∈ Potential.mds c.v) (C : Collides sy mp f c)
+theorem md_of_right {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd} (hmd : c.md ∈ Potential.mds c.v) (C : Collides sy mp f c)
     (h6 : 1 ≤ f.v₂) : c.md = 1 := by
   have hv := C.v₂
   rw [hv] at h6
@@ -802,7 +846,7 @@ theorem md_of_right {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax} (
   simpa using hmd
 
 /-- falling with the feet inside the block: `InBlock` -/
-theorem inBlock_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax}
+theorem inBlock_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd}
     (h : ruleOk sy mp c = true) (hb : inBlockCase sy c = true) (hmd : c.md ∈ Potential.mds c.v)
     (hx : 1 ≤ c.x.toNat) (hx2 : c.x.toNat < 255) (C : Collides sy mp f c) : PoleGrab.InBlock f := by
   simp only [inBlockCase, Bool.and_eq_true, decide_eq_true_eq] at hb
@@ -830,7 +874,7 @@ theorem inBlock_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top ama
     · omega
 
 /-- falling with the feet inside the block, moving direction right: 1 px back -/
-theorem push_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax}
+theorem push_of_rule {sy : Syms} {mp : Machine} {c : Case} {f : Frame top amax wd}
     (h : ruleOk sy mp c = true) (hb : inBlockCase sy c = true) (hd : c.md = 1)
     (hx : 1 ≤ c.x.toNat) (C : Collides sy mp f c) : f.P' = f.P₂ - 256 := by
   simp only [inBlockCase, Bool.and_eq_true, decide_eq_true_eq] at hb
@@ -864,7 +908,7 @@ open PoleGrab (cases caseXs colX poleCheck maskCheck withPole)
 open CastleWalk (castle touchAt firstX fracs bigFrac otherYs grabXs)
 open PipeTransition (run zeros)
 
-variable {sy : Syms} {m0 : Machine} {tp am : Int}
+variable {sy : Syms} {m0 : Machine} {tp am : Int} {wd : Bool}
 
 /-- where his right side reaches the column of the pole, on the pole's page -/
 def sideP (sy : Syms) (m0 : Machine) : Int :=
@@ -876,21 +920,21 @@ def feetP (sy : Syms) (m0 : Machine) : Int :=
 
 /-- `Beside`, with `Side` read from the routine: left of the side of the block he stays left of it; otherwise the frame runs the collision routine on a
 case with the height of the rule for the side -/
-def BesideCase (sy : Syms) (m0 : Machine) (Ps : Int) (f : Frame tp am) : Prop :=
+def BesideCase (sy : Syms) (m0 : Machine) (Ps : Int) (f : Frame tp am wd) : Prop :=
   (f.P₂ < Ps ∧ f.P' < Ps) ∨ ∃ c ∈ cases sy, Collides sy (withPole sy m0) f c ∧ lowCase sy c = true
 
 /-- `Falling`, with `InBlock` read from the routine, on a case with the moving direction `d` and the height and fall speed of the vertical state `s` -/
-def FallingCase (sy : Syms) (m0 : Machine) (Pf : Int) (d : UInt8) (s : Jump.VS) (f : Frame tp am) : Prop :=
+def FallingCase (sy : Syms) (m0 : Machine) (Pf : Int) (d : UInt8) (s : Jump.VS) (f : Frame tp am wd) : Prop :=
   (f.P₂ < Pf ∧ f.P' < Pf) ∨
     (Pf ≤ f.P₂ ∧ ∃ c ∈ cases sy, Collides sy (withPole sy m0) f c ∧ inBlockCase sy c = true ∧ c.md = d ∧ c.y = s.y ∧ c.vy = s.vy)
 
 /-- After a push to the right, the next frame's speed comes from `hstep` in the air, from speed 0, with the Left button blocked. -/
-def MaskStep (sy : Syms) (m0 : Machine) (f g : Frame tp am) : Prop :=
+def MaskStep (sy : Syms) (m0 : Machine) (f g : Frame tp am wd) : Prop :=
   f.P' = f.P₂ + 256 → ∃ (s : HS) (i : HIn), s.v = 0 ∧ s.f ∈ bytes ∧ s.fd ∈ facings ∧ s.md ∈ ([0, 1, 2, 3] : List UInt8) ∧
     s.rs ∈ rsVals sy ∧ i ∈ inputsN ∧ i.st = 1 ∧ i.jump = false ∧
     g.v₂ = sbyte (hstep sy (poke m0 sy.Player_CollisionBits sy.noLeft) s i).v
 
-theorem maskL_of_step (hm : maskCheck sy m0 = true) {f g : Frame tp am} (h : MaskStep sy m0 f g) : MaskL f g := by
+theorem maskL_of_step (hm : maskCheck sy m0 = true) {f g : Frame tp am wd} (h : MaskStep sy m0 f g) : MaskL f g := by
   intro hp
   obtain ⟨s, i, h1, h2, h3, h4, h5, h6, h7, h8, h9⟩ := h hp
   simp only [maskCheck, List.all_eq_true, decide_eq_true_eq, List.mem_filter, Bool.and_eq_true, beq_iff_eq,
@@ -1025,7 +1069,7 @@ def trackOf (sy : Syms) {m0 : Machine} {S : FrameKeep.RealRun} {a g : Nat} {seq 
   { abs := fun j => (peek (seq j) sy.Player_XSpeedAbsolute).toNat, md := fun j => peek (seq j) sy.Player_MovingDir, u }
 
 /-- `Approach`, with the rules read from the routines -/
-structure ApproachCases (sy : Syms) (m0 : Machine) (rows : Nat) (fr : Nat → Frame tp am) (t q L T g : Nat) (fast : Bool) (tk : Track) : Prop where
+structure ApproachCases (sy : Syms) (m0 : Machine) (rows : Nat) (fr : Nat → Frame tp am wd) (t q L T g : Nat) (fast : Bool) (tk : Track) : Prop where
   order : q < L ∧ L < T
   /-- left of where the feet get over the block -/
   left : (fr q).P' < feetP sy m0
@@ -1051,7 +1095,7 @@ def domainOk (sy : Syms) : Bool :=
   decide (sy.LandDepth.toNat ≤ 16) && decide (13 ≤ sy.AirFastSpeed.toNat) && (caseXs sy).all fun x =>
     decide (1 ≤ x.toNat) && decide (x.toNat < 255) && decide (colX sy ≤ x.toNat + sy.SideAdderX.toNat)
 
-theorem beside_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) {Ps : Int} {f : Frame tp am}
+theorem beside_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) {Ps : Int} {f : Frame tp am wd}
     (h : BesideCase sy m0 Ps f) : Beside Ps f := by
   rcases h with h | ⟨c, hc, hC, hl⟩
   · exact Or.inr h
@@ -1062,7 +1106,7 @@ theorem beside_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) {
     have h4 := hC.v₂
     exact Or.inl ⟨side_of_rule (hp c hc) hl (by simpa [sideCase] using h3) h2 hd.1.1 hC, by omega⟩
 
-theorem falling_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) {Pf : Int} {d : UInt8} {s : Jump.VS} {f : Frame tp am}
+theorem falling_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) {Pf : Int} {d : UInt8} {s : Jump.VS} {f : Frame tp am wd}
     (h : FallingCase sy m0 Pf d s f) : Falling Pf f := by
   rcases h with h | ⟨h0, c, hc, hC, hl, _⟩
   · exact Or.inl h
@@ -1076,7 +1120,7 @@ theorem falling_of_case (hp : poleCheck sy m0 = true) (hd : domainOk sy = true) 
 /-- `FastLink` from the cases, with `htake`: the stored speed at the landing's end is at the air threshold or more; and `hstop`: a frame from a stopped Mario
 writes `|v₂|` into the stored speed, or keeps the stored speed and the moving direction (`Run.stop_step` on a real run) -/
 theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true)
-    {rows : Nat} {fr : Nat → Frame tp am} {t q L T g : Nat} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g true tk)
+    {rows : Nat} {fr : Nat → Frame tp am wd} {t q L T g : Nat} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g true tk)
     (htake : sy.AirFastSpeed.toNat ≤ tk.abs L)
     (hstop : ∀ j, q < j → j ≤ L → (fr j).v = 0 → tk.abs j = (fr j).v₂.natAbs ∨ (tk.abs j = tk.abs (j - 1) ∧ tk.md j = tk.md (j - 1))) :
     FastLink fr (feetP sy m0) q L sy.AirFastSpeed.toNat tk.abs (fun j => tk.md j == 1) := by
@@ -1104,7 +1148,7 @@ theorem fastLink_of_cases (hp : poleCheck sy m0 = true) (hd : domainOk sy = true
       simpa using h4
     exact push_of_rule (hp c hc) hl h5 (hd.2 c.x (mem_cases hc).1).1.1 hC
 
-theorem rows_of_cases {rows : Nat} (hr : fallCheck sy m0 rows = true) {fr : Nat → Frame tp am} {t q L T g : Nat} {tk : Track}
+theorem rows_of_cases {rows : Nat} (hr : fallCheck sy m0 rows = true) {fr : Nat → Frame tp am wd} {t q L T g : Nat} {tk : Track}
     (A : ApproachCases sy m0 rows fr t q L T g false tk)
     (hbase : ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (fr (w - 1)).P₂ → t + 1 ≤ w)
     (e : Nat) (hqe : q < e) (heL : e < L) (het : e ≤ t + 1) (hin : ∀ i, e ≤ i → i < L → feetP sy m0 ≤ (fr i).P₂) : L ≤ e + 3 := by
@@ -1136,7 +1180,7 @@ after the landing wrote it, with `|v₂|` at the threshold or more; or no frame 
 The frame before the takeoff need not start on the ground: the old field `ground` is gone. -/
 theorem approach_of_cases (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hd : domainOk sy = true)
     {rows : Nat} (hr : fallCheck sy m0 rows = true)
-    {fr : Nat → Frame tp am} {t q L T g : Nat} {fast : Bool} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g fast tk)
+    {fr : Nat → Frame tp am wd} {t q L T g : Nat} {fast : Bool} {tk : Track} (A : ApproachCases sy m0 rows fr t q L T g fast tk)
     (hbase : ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (fr (w - 1)).P₂ → t + 1 ≤ w)
     (hstop : fast = true → ∀ j, q < j → j ≤ L → (fr j).v = 0 →
       tk.abs j = (fr j).v₂.natAbs ∨ (tk.abs j = tk.abs (j - 1) ∧ tk.md j = tk.md (j - 1)))
@@ -1268,7 +1312,7 @@ def IsDirect (sy : Syms) (y : UInt8) (rising : Bool) : Prop :=
   rising = true ∧ sy.FlagGrabY.toNat ≤ y.toNat ∧ y.toNat < Jump.cornerY sy 1
 
 /-- What a direct grab on frame `g` gives: the jump, the frames before it, and the castle flag after it. -/
-structure DirectWay (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (rows : Nat) (fr : Nat → Frame tp am) (flag : Nat → Bool)
+structure DirectWay (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (rows : Nat) (fr : Nat → Frame tp am wd) (flag : Nat → Bool)
     (t Nc : Nat) (F : Int) (g c : Nat) (y : UInt8) (rising : Bool) (q L T : Nat) (a : Nat → Jump.Arc) (tk : Track) : Prop where
   one_le : 1 ≤ q
   path : JumpPath sy m0 T g a
@@ -1288,7 +1332,7 @@ def flagOf (sy : Syms) (seq : Nat → Machine) (j : Nat) : Bool := castle sy (se
 of the counted frame `j`, so `seq 0` is the machine at control. `seq` is not a field: it is the real run `S` at the end of the `j`-th frame from frame `a` on that ends not paused,
 on every frame, before the touch and after it (`Run.seq`, `FrameKeep.Keep.seq`). `g` is the frame he touches the pole, `c` the frame of the castle entry. The castle flag is read from the machines (`flagOf`). On frame `g` only the
 fields of `fr g` up to `P₂` are the real frame's: the touch moves him, and that is not a `Frame`. `B.m` is the machine of the private proof at control. Every field is a hypothesis of the theorem:
-none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `posKeep`, `yKeep`, `bufAll`, `tilesFar`, `edge` and `keep`, with the map at control (`PoleTileCtl.colMap₀`), by the walk of the whole frame of the touch (`PoleFrame`, `PoleTileWalk`, `PoleTileRead`, `PoleTileHeight`, `Run.inRange`); that `P₂(g)` is the position at the end of the move is a theorem too (`Run.moved`, by `SubsOnce`).
+none is proved here. What the machine at control is, is not a field: it comes from the rows of the change (`SurfaceFrames.Start`). That he is in the pole's range at the touch is a theorem from `touches`, `posKeep`, `yKeep`, `bufAll`, `tilesCol`, `edge` and `keep`, with the map at control (`PoleTileCtl.colMap₀`), by the walk of the whole frame of the touch (`PoleFrame`, `PoleTileWalk`, `PoleTileRead`, `PoleTileHeight`, `PoleTileFar`, `Run.inRange`); that `P₂(g)` is the position at the end of the move is a theorem too (`Run.moved`, by `SubsOnce`).
 That the fraction of `P₂(g)` is a multiple of 1/16 px is a theorem from `keep`, the walk of one whole frame in control (`FrameKeep`), and the check on the ROM (`Run.frac`). That no machine up to the touch
 has the castle flag is a theorem from the machine at control, `keep` and the check (`Run.noCastle_of`); so the castle entry is after the touch (`Run.afterTouch`).
 The frames up to the touch are those of the real run `S` from frame `a` on (`keep`), so the machine at control is `S.seq a` (`Run.seq0`). -/
@@ -1312,16 +1356,18 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   touches : PoleEntryRule.Touches sy (keep.fm g) (keep.pad g)
   /-- each instruction of each frame up to the touch's frame, counted or not: a store through an index or a pointer writes a pole's tile into the block buffers
   only in the pole's column. With the map at control (`PoleTileCtl.colMap₀`, from the rows of the change) the map holds at the start of the touch's frame
-  (`Run.tilesStart`); the old field `tiles` is a theorem from that, this, `yKeep` and `tilesFar` (`PoleTileHeight.no_write_frameH`) -/
+  (`Run.tilesStart`); the old field `tiles` is a theorem from that, this, `yKeep` and `tilesCol` (`PoleTileFar.no_write_frameF`) -/
   bufAll : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleTileWalk.BufAt (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- up to the routine's write, inside the collision routine (the stack holds its return address), no store through an index or a pointer writes the height (with it the
-  old field `ySide`, the height at the start of the side check, is no longer needed: the walk of `PoleTileHeight.no_write_frameH` knows the height is below the
+  old field `ySide`, the height at the start of the side check, is no longer needed: the walk of `PoleTileFar.no_write_frameF` knows the height is below the
   bound rounded up to a whole row, at the side checks near the pole) -/
   yKeep : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n →
     PoleTileHeight.YKeep sy m0 (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
-  /-- up to the routine's write, right after a read of the side check with the page two or more before the pole's, the byte read is not one of the pole's tiles -/
-  tilesFar : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n →
-    PoleTileRead.TileFar (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
+  /-- up to the routine's write, right after a read of the side check with the page two or more before the pole's, at the pole's column, the byte read is not one
+  of the pole's tiles (the old field `tilesFar` asked it at every column: the walk of `PoleTileFar.no_write_frameF` knows that such a read is in the block buffers,
+  and the map says that a pole's tile there is in the pole's column) -/
+  tilesCol : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n →
+    PoleTileFar.TileCol (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
   /-- up to the write, a store through an index or a pointer that writes the position's pixel or page is one of the move routine's stores of them, with the index 0 -/
   posKeep : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n → PoleFrame.PosKeep sy m0 (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
   /-- up to the write, the scroll handler's store of the position at the screen's edges does not bring him into the pole's range: if he is in it right after that store
@@ -1349,7 +1395,7 @@ abbrev Run.seq {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : I
 /-- **Frame `j` from control above ground**: read from the machines of `keep` (`SurfaceFrames.frOf`). It was the field `fr`, tied to the machines by the field
 `frames.reads`. -/
 noncomputable abbrev Run.fr {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) :
-    Nat → Frame (top sy) (amax sy m0) := SurfaceFrames.frOf sy m0 R.keep.toFrames
+    Nat → Frame (top sy) (amax sy m0) true := SurfaceFrames.frOf sy m0 R.keep.toFrames
 
 /-- **The machine at control is the real run's frame `a`**: by the definition of the frames of `keep` (the old link `Route.Run.atCtl`) -/
 theorem Run.seq0 {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) :
@@ -1485,11 +1531,11 @@ theorem Run.stored_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Na
 /-- **The map at the start of the touch's frame**: the map at control (`hmap`: `PoleTileCtl.colMap₀`), and every frame before the touch's frame keeps it (`bufAll`, the
 walk of the frames with the test `okSK`: `PoleTileWalk.frames_colMap`) -/
 theorem Run.tilesStart {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
-    (hc : PoleTileHeight.poleCheckH sy m0 = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
+    (hc : PoleTileFar.poleCheckF sy m0 = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) :
     PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.keep.fm R.g) := by
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
-  exact PoleTileWalk.frames_colMap hk (PoleTileHeight.keepS_of_H hc) R.keep.toFrames hc0.start (R.watched₀ st hq hc0.castle) hmap (fun n hn k => R.bufAll n (by have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl; omega) k)
+  exact PoleTileWalk.frames_colMap hk (PoleTileFar.keepS_of_F hc) R.keep.toFrames hc0.start (R.watched₀ st hq hc0.castle) hmap (fun n hn k => R.bufAll n (by have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl; omega) k)
     (R.keep.toFrames.ix R.g - 1) (by omega)
 
 /-- the touch's frame meets `BufAt` on each instruction: `bufAll` on its frame -/
@@ -1499,19 +1545,19 @@ theorem Run.bufAt₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} 
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   exact R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j
 
-/-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleTileHeight.inRange_of_frameH`, the walk of `PoleFrame` with three more
+/-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleTileFar.inRange_of_frameF`, the walk of `PoleFrame` with more
 splits and three more tests) on frame `g` of `keep`. The frame starts in control (`FrameKeep.Frames.start`, from the machine at control), each instruction is `CleanK`
-(`keep.clean`), and up to the write each instruction meets `PosKeep` (`posKeep`), `YKeep` (`yKeep`), `BufAt` (`bufAll`: `Run.bufAt₁`) and `TileFar` (`tilesFar`); the
+(`keep.clean`), and up to the write each instruction meets `PosKeep` (`posKeep`), `YKeep` (`yKeep`), `BufAt` (`bufAll`: `Run.bufAt₁`) and `TileCol` (`tilesCol`); the
 frame starts with the map (`Run.tilesStart`).
 `P₂(g)` is the position at the end of the move (`Run.moved`). `hc` is the walk's check on the ROM, `hk` that of `FrameKeep`; `hN`, `hfr`, `hg` are as in `Run.reads`. -/
-theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (hc : PoleTileHeight.poleCheckH sy m0 = true) (R : Run sy m0 b vs B T J Nc F Sr ar)
+theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (hc : PoleTileFar.poleCheckF sy m0 = true) (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
     (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) :
     poleP sy m0 ≤ (R.fr R.g).P₂ :=
-  PoleTileHeight.inRange_of_frameH hc R.touches (R.keep.toFrames.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _))
-    (R.keep.toFrames.cleanAt R.g R.one_le (Nat.le_refl _)) R.posKeep R.yKeep (R.tilesStart hc hk st hq hc0 hmap) (fun _ _ j _ => R.bufAt₁ j) R.tilesFar R.edge
-    (fun _ j _ _ hj => R.moved (PoleTileHeight.subs_of_H hc) hN hfr st hq hk hc0 hg j hj)
+  PoleTileFar.inRange_of_frameF hc R.touches (R.keep.toFrames.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _))
+    (R.keep.toFrames.cleanAt R.g R.one_le (Nat.le_refl _)) R.posKeep R.yKeep (R.tilesStart hc hk st hq hc0 hmap) (fun _ _ j _ => R.bufAt₁ j) R.tilesCol R.edge
+    (fun _ j _ _ hj => R.moved (PoleTileFar.subs_of_F hc) hN hfr st hq hk hc0 hg j hj)
 
 /-- the numbers the join needs -/
 def joinCheck (sy : Syms) (m0 : Machine) (X : Int) (N E T J Nc lo : Nat) (F : Int) : Bool :=
@@ -1593,7 +1639,7 @@ theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 
 /-- No touch up to frame `T`: this is `P₂(g) < P₀` from the position bound, hits included. -/
 theorem touch_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hc : PoleTileHeight.poleCheckH sy m0 = true) (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
+    (hc : PoleTileFar.poleCheckF sy m0 = true) (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
     (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0))
     (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) : T + 1 ≤ R.g := by
   have H := numbers_of_check hn
@@ -1616,7 +1662,7 @@ later than that, `Nc − 1` frames are enough. -/
 theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleTileHeight.poleCheckH sy m0 = true)
+    (hf : frictionCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleTileFar.poleCheckF sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) (hd : IsDirect sy R.touchY R.touchRising) :
     T + 7 ≤ R.g ∧ (R.g ≤ T + 8 → R.g + Nc ≤ R.c) ∧ R.g + Nc ≤ R.c + 1 := by
@@ -1698,7 +1744,7 @@ control: its numbers and state, and the start of a frame in control with the cas
 theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleTileHeight.poleCheckH sy m0 = true)
+    (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleTileFar.poleCheckF sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) : T + 7 + Nc ≤ R.c := by
   have H := numbers_of_check hn
@@ -1717,7 +1763,7 @@ theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 theorem touch_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (C : CastleWalk.Statement sy b vs Nc lo)
     (hj : Jump.arcCheck sy m0 (Jump.groundY sy) 1 (Jump.riseOk sy 1 2 1) = true)
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
-    (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleTileHeight.poleCheckH sy m0 = true)
+    (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleTileFar.poleCheckF sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) :
     (T + 1 ≤ R.g ∧ R.g + Nc + 6 ≤ R.c) ∨ (T + 7 ≤ R.g ∧ R.g ≤ T + 8 ∧ R.g + Nc ≤ R.c) ∨ (T + 9 ≤ R.g ∧ R.g + Nc ≤ R.c + 1) := by

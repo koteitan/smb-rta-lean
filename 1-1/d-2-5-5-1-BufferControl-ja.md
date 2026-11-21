@@ -2,7 +2,7 @@
 
 # 部屋を通る画面のバッファの制御
 
-**主張.** 部屋のどのフレームも、部屋の最初の操作から横の土管に入るフレームまで、画面のバッファの制御が 0 か 6 で始まります。証明しました。ROM の確認は 2 つです。部屋のフレームの歩き 2 つ（ネイティブで合わせて約 8 秒）と、最初の切り替えの段の確認 1 つ（ネイティブで約 30 秒）です。フィールド `buffer₂` は残ります。今は値を 1 つだけ除きます。入るフレームの始めの制御 6 です。これはコインを消したフレームの後の値です。これが起きないことは証明していません。
+**主張.** 部屋のどのフレームも、部屋の最初の操作から横の土管に入るフレームまで、画面のバッファの制御が 0 か 6 で始まります。証明しました。ROM の確認は 2 つです。部屋のフレームの歩き 2 つ（ネイティブで合わせて約 8 秒）と、最初の切り替えの段の確認 1 つ（ネイティブで約 30 秒）です。フィールド `buffer₂` は残ります。このページにより、値を 1 つだけ除きます。入るフレームの始めの制御 6 です。これはコインを消したフレームの後の値です。ラウンド 24 でさらに狭めました。制御 6、ページ 0、16 から 180 px で始まるフレームは入りません（[BufferCoin](d-2-5-5-2-BufferCoin-ja.md)）。そこで `buffer₂` は、入口の直前のコインのフレームがそこで終わることだけを求めます。
 
 名前は [横の土管の入口の画面のバッファ](d-2-5-5-EntryBuffer-ja.md) のものです。`c(m)` は機械 `m` の画面のバッファの制御（`VRAM_Buffer_AddrCtrl`）です。`r` は部屋の基準の機械で、`c(r) = 0` です。`r₆` は `c = 6` にした `r` です。`K_T` は部屋の条件が知るビットの表（地図のビット）で、`K_B := K_T ∪ { c のすべてのビット }` です。`seq(n)` は走りのフレーム `n` が始まるときの機械、`trₙ(j)` はフレーム `n` の `j` 命令目の機械です。`b₁` は部屋の最初の操作、`a₂` は横の土管の入口です。
 
@@ -24,10 +24,11 @@ start_ctl      :  startCheckC,   InRowsT(m),   m は操作できる             
 ctl_of_rows    :  [b, a) で RoomMap.map_of_rows の条件,   keepCheck,   startCheckC     →   ∀ n ∈ [b, a],  c(seq n) ∈ {0, 6}
 
 Run.ctl₂       :  c(seq(a₂ − 1)) = 0   ∨   c(seq(a₂ − 1)) = 6                          （定理、新しい）
-Run.buffer₂    :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                        （フィールド、変わらない）
+Run.buffer₂    :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                        （ラウンド 23 のフィールド）
+Run.buffer₂    :  c(seq(a₂ − 1)) ≠ 6   ∨   (seq(a₂ − 1) で page = 0  ∧  16 ≤ x < 181)   ∨   EntryAt(L₅, seq a₂)     （フィールド、ラウンド 24 で狭めた）
 ```
 
-`Run.ctl₂` は `b = b₁`、`a = a₂` とします。`b₁` の機械は最初の切り替えの段にあり（`ChangesK.run₁`、`inRowsT`）、操作できます（`ChangesBase.ctl₁`）。`b₁` から `a₂` の前までの各フレームは `SiteOK` を満たし（`chg.roomSites`）、プレイヤーのルーチンで始まります（`ChangesBase.roomStay`）。`b₁ < a₂`（`Run.b₁_lt_a₂`）なので `b₁ ≤ a₂ − 1 ≤ a₂` です。確認 `keepCheck` と `startCheckC` はもう 1 つの引数（`BufferControl.Facts`）で来ます。`RoomChecks` のフィールドではありません。
+`Run.ctl₂` は `b = b₁`、`a = a₂` とします。`b₁` の機械は最初の切り替えの段にあり（`ChangesK.run₁`、`inRowsT`）、操作できます（`ChangesBase.ctl₁`）。`b₁` から `a₂` の前までの各フレームは `SiteOK` を満たし（`chg.roomSites`）、プレイヤーのルーチンで始まります（`ChangesBase.roomStay`）。`b₁ < a₂`（`Run.b₁_lt_a₂`）なので `b₁ ≤ a₂ − 1 ≤ a₂` です。ラウンド 24 から、確認 `keepCheck` と `startCheckC` は `RoomChecks.buffer`（そのフィールド `ctl`、`BufferCoin.FactsB`）にあり、`Run.ctl₂` にその引数はありません。`Run.buf₂` が `Run.ctl₂` を使います（`ref_of_ne6`: 0 か 6 で 6 でない制御は基準のもの）。
 
 Lean: `Theorems/BufferControl.lean`（`finK`、`ref6`、`walkK`、`keepCheck`、`keep_frame`、`cond0`、`cond6`、`keep_parts`、`ctl_step`、`ctl_run`、`startCheckC`、`and_ff`、`start_ctl`、`Facts`、`ctl_of_rows`）、`Theorems/Route.lean`（`Run.ctl₂`）、非公開の `Proof/BufferControl.lean`（`buffer_control_keep`、`buffer_control_start`、`buffer_control_facts`。`Main.lean` の `genBufferControl`）。公開のファイルにゲームのデータはありません。
 
@@ -70,7 +71,11 @@ Lean: `Theorems/BufferControl.lean`（`finK`、`ref6`、`walkK`、`keepCheck`、
 | `off` | 画面バッファのオフセットは使う所で最大 46。上限は 64 | 1 フレームが書く記録の上限 |
 | `xbit` | 横の土管の読みでの位置の下のビットは 3 か 4 | 入口での位置 |
 
-## `buffer₂` をなくすには（していない）
+## ラウンド 24
+
+[BufferCoin](d-2-5-5-2-BufferCoin-ja.md)（1-1-d-2-5-5-2）は、下の計画の、入るフレームの側の半分を証明します。制御 6、ページ 0、16 から 180 px で始まるフレームは、口より左でしか動きの終わりに来ないので、入りません。その歩きは、位置、足すバイト、桁上がりを動きの足し算でだけ値に分け、スクロールの処理で位置を忘れます。`buffer₂` は、残りの半分を 1 つの状態で求めるだけになりました。入口の直前のコインのフレームはページ 0 の 16 から 180 px で終わる、ということです。
+
+## `buffer₂` をなくすには（ラウンド 23 の計画）
 
 部屋のどのフレームでも `Cls(m) := c(m) = 0 ∨ (c(m) = 6 ∧ x(m) < 176)` を証明すればよいです。`x` はページの上の位置で、176 px はいちばん近いコインの右の列の左端です。つまり、`c = 6` で終わるフレームは 176 px より左で終わり、176 px より左で始まるフレームは入りません（口の左端は 195 px）。測った余裕は大きいです（173 px と 193 px）。しかし抽象の機械の足し算は、バイトのビットを全部知るか何も知らないかです。そこで歩きは、衝突のルーチンが位置にずれを足すところと、移動が速さを足すところで、位置を値に分けなければなりません。2 つの作りをプログラムで試しました（証明の一部ではない）:
 
@@ -88,11 +93,11 @@ Lean: `Theorems/BufferControl.lean`（`finK`、`ref6`、`walkK`、`keepCheck`、
 ## 経路で変わったこと
 
 * フィールド: なくなったものも、増えたものもありません。
-* 新しい定理 `Run.ctl₂`（確認は引数 `BufferControl.Facts`）。`route_1_1` はこれを使いません。
+* 新しい定理 `Run.ctl₂`。ラウンド 24 から `Run.buf₂` がこれを使い、その確認は `RoomChecks.buffer` にあり、`buffer₂` は、ページ 0 の 16 から 180 px の外での制御 6 だけを除きます。
 
 ## 仮定（Lean で証明していない）
 
-* `buffer₂`。前と同じです。`Run.ctl₂` により、入るフレームの始めの制御 6 だけを除きます。
+* `buffer₂`: `Run.ctl₂` と `Run.coin₂` により、入るフレームの始めの制御 6 で、始めがページ 0 の 16 から 180 px でないものだけを除きます。
 * 部屋の各命令で `SiteOK`（`chg.roomSites`）。前と同じです。
 
 **ファイル.** `Theorems/BufferControl.lean`、`Theorems/Route.lean`。非公開の確認は `Proof/BufferControl.lean`（`Main.lean` の `genBufferControl`）。

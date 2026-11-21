@@ -2,7 +2,45 @@
 
 # The screen's left edge at the frame's start
 
-This page is a measurement, and it reports a field that is false. No theorem here is new, but one field is narrowed (`clampR`, below).
+This page reports a field that was false on a real frame (round 23), and its fix (round 24, [below](#round-24-the-fix)). Round 23 also narrowed one field (`clampR`, below).
+
+## Round 24: the fix
+
+The new field `collide` and the frames of part e measure the push's bound from a **base**, not from the frame's start. `left(m)` is read as before.
+
+```
+edge(m) = 256·left(m) + 255        the last position on the edge's pixel (SurfaceRead.edgeOf)
+base(m) = max(P(m), edge(m))        (SurfaceRead.baseOf)
+
+collide (CollideS.P), third case :  P(Q) ≤ P(b) ≤ base(M) + 256  ∧  v(Q) ≤ 0          (round 23: P(b) ≤ P(M) + 256)
+edge   (new, each frame 1 ≤ j < g) :  edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))
+edge₀  (new, at control)           :  edge(seq 0) ≤ P(seq 0)
+TopSpeed.Frame with wide            :  impedeP's third case P′ ≤ B + 256 ∧ v₂ ≤ 0,  B = base(seq (j − 1))
+```
+
+**What it adds.** The new third case is weaker than the old one exactly on the frames where edge(M) > P(M): he starts on the edge's pixel (and not at its last position) or left of it. There it allows P(b) up to edge(M) + 256 instead of P(M) + 256. On every other frame it is the old case.
+
+**Why it holds (read from the code, measured, not proved).** When he moves left or not at all at the scroll handler, the screen does not scroll, so the edge is that of M. The clamp puts him on the edge's pixel and keeps the fraction, so after it P ≤ edge(M). At most one push of 1 px follows (the clamp comes before every push: [1-1-e-2-10-3-9](e-2-10-3-9-PositionOrder.md); two pushes in a frame were never measured). So P(b) ≤ max(P(Q), edge(M)) + 256 ≤ base(M) + 256. The edge moves only when the screen scrolls, and the screen scrolls only while he is right of its middle, so it stays behind him: `edge`. At control he is 56 px right of the edge: `edge₀`.
+
+On the false frame of round 23 (`edgeJump`, frame 190): P(b) = 730096, edge(M) = 256·2851 + 255 = 730111, so P(b) ≤ base(M) + 256 = 730367. On random run 188 (push to the right after the clamp): P(b) = 685984 ≤ 256·2678 + 255 + 256 = 686079.
+
+**What is proved with it.** max(P, B) grows by at most the old bound in each frame (`TopSpeed.Frame.posB`, `Frame.advB`), and the bases follow each other (`TopSpeed.ChainB`, from `edge`; `Surface.links`). So the chain after the first hit moves max(P, B) by at most `reach` (`SurfaceRun.chainB_reach`, `hit_boundB`), and the first `N + E` frames move it by at most `16·top` a frame (`PoleJoin.early_leB`). The edge stays behind a position he had (`OnFrames.edge_behind`), so the first hit and the frame after it are bounded by the model's positions (`Surface.hit`, `Surface.base`). The position's range uses the base too (`OnFrames.readAllB`). The route's numbers do not change: no table, no `farN`, no count of part e changed, and the margin at frame 233 is still 16.
+
+**`edge₀` from the rows (measured, not wired).** A native check on the private machine (a scratch file, removed after the run) shows that the rows of the change out of the side pipe ([1-1-d-2-3](d-2-3-SideChangeEnd.md)) know the two bytes of the edge at every state with control, with the values of the machine at control, and that there edge ≤ P. The route takes its state at control from the rows with the sound's tables ([1-1-d-3-4-2](d-3-4-2-SideChangeSound.md), [1-1-d-3-4-3](d-3-4-3-SidePause.md)), other parts' files and checks, so `edge₀` stays a field.
+
+**Measured (round 24, `edge-real FM2 256`, exit 0; the checks of the new fields on every frame, clean or not).**
+
+| runs | frames | start below the edge | clamp frames | most P(b) − P(a), clamp frames | most P(b) − P(Q), clamp frames | most P(b) − base(a), frames with a call and v(Q) ≤ 0 (the field asks ≤ 256) | most edge(b) − max(base(a), P(b)) (the field asks ≤ 0) | fields that fail |
+|---|---|---|---|---|---|---|---|---|
+| the movie from frame 852 | 239 | 0 | 0 | | | 256 | −14097 | 0 |
+| `edgePipe` with its five endings | 1,060 | 200 | 240 | 240 | 256 | 256 | 0 | 0 |
+| `edgeJump` | 191 | 26 | 34 | 496 | 512 | 256 | 0 | 0 |
+| 256 random runs from the movie's frames 852 to 1091 | 63,164 | 252 | 15,204 | 496 | 768 | 256 | 0 | 0 |
+| 256 random runs from the movie's frames 992 to 1011, mostly Left | 73,301 | 4,962 | 32,812 | 496 | 768 | 256 | 0 | 0 |
+
+At control (the movie's frame 852) edge − P = −14081 (pixel 2616, left edge 2560). On the frames after one that starts below the edge, P(b) − P(a) ≤ 496. Both new bounds are reached exactly (256 and 0). `collide-real FM2 200` (exit 0) checks `CollideS` at every arrival at the scroll handler and `edge` on every frame of its runs: 0 failures. `surface-frames-check FM2 200` checks the new move of `TopSpeed.Frame` on every frame in control (`impedeP`) and `Moves` with `edge` on the clean frames.
+
+**Not proved.** The fields `collide`, `edge` and `edge₀` are assumptions. That one push at most follows the clamp, and that the screen does not scroll when he moves left or not at all, are read from the code and measured.
 
 **Notation.** At a machine m, left(m) is the screen's left edge and pixel(m) the player's whole pixel, both with their pages (256 per page). They are read at the two operands of the clamp at the screen's edge (`ScreenClamp.places`). M is the machine at a frame's start, Q the machine at the scroll handler, b the machine at the frame's end. P is the position in 1/256 px (`posP`), v the speed.
 
@@ -45,10 +83,10 @@ Here P(b) − P(M) = 496 > 256. So the field `collide` of `OnFrames` (and so of 
 
 - `clampR`: on a frame that starts 1 px left of the edge, v(M) = 0 and Right is blocked by the collision bits, so pressing Right does not speed him up to the right there (this is read from the code, not proved), and `ClampR` speaks only when v > 0. `ClampR` held at every clamp with v > 0 on the runs of `pos-keep-real` and on `edgePipe` with its five endings. Round 23 asks it only where `PositionKeep.keep_frame` uses it: on a frame that moves right at the scroll handler and ends with that speed ([1-1-e-2-10-3-8](e-2-10-3-8-PositionKeep.md)).
 - `Moves.stop` is asked only on clean frames; a frame that starts below the edge is not clean. It held on every measured frame.
-- `CollideS.P` (`collide`) is false on the frame above. A fix needs a weaker third case for a frame that starts below the edge (for example P(b) < P(M) + 512), and then a change of `TopSpeed.Frame.impedeP` and of the bounds that use it (`Frame.adv_le`). The two frames together moved less than 2·256 on every measured case; a bound over two frames could keep the per-frame argument. This is not done.
+- `CollideS.P` (`collide`) is false on the frame above. Round 24 fixed it with the base ([above](#round-24-the-fix)). A bound P(b) ≤ P(M) + 512 would not do: it adds 3,248 to `reach` over the first 17 frames after a hit, and the hit table has no room for it (a first hit from frame 8 already fails the table with 256); and with a borrow of the fraction, the clamp and a push to the right in one frame the code allows P(b) − P(M) up to 752.
 - The plan of the brief, an induction over part e's frames for left(M) ≤ pixel(M), needs the relation above instead: left(M) − 1 ≤ pixel(M), with pixel(M) = left(M) − 1 only after a push to the left at the edge.
 
-**Not proved.** Everything on this page is measured. The relation at the frame's start, the bounds on the frames that start below the edge, and the clamp's rule (the clamp at the left edge comes only when pixel ≤ left) are not proved.
+**Not proved (round 23).** Everything in the sections from here on is measured. The relation at the frame's start, the bounds on the frames that start below the edge, and the clamp's rule (the clamp at the left edge comes only when pixel ≤ left) are not proved.
 
 ## Measured
 

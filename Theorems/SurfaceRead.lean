@@ -1,5 +1,6 @@
 import Theorems.FrameTime
 import Theorems.CtrlKeep
+import Theorems.ScreenClamp
 
 /-!
 # Above ground: a real frame read as a `TopSpeed.Frame`
@@ -11,8 +12,9 @@ frame starts, by the definition. When the frame meets the conditions of `ReadE` 
 * `frame_readE`: from the player's routine (`FrameModel.AtFrame`), with nothing written to the horizontal bytes before it, the frame's time (`FrameModel.InTime`), the
   position away from both ends of its range, and what the collision routine and the rest of the frame do (`CollideE`), the frame is a `TopSpeed.Frame` that ends with the
   bytes of the frame's end. It is `FrameModel.frame_readR` with `CollideE` in place of `FrameModel.Collide`: at the screen's left edge the scroll handler sets the
-  position to the edge, which `Collide` does not allow; `CollideE` allows it, as `TopSpeed.Frame.impedeP` does, when he moves left or not at all, and asks that it does not
-  move him left there.
+  position to the edge, which `Collide` does not allow; `CollideE` allows it, as `TopSpeed.Frame.impedeP` does, when he moves left or not at all, up to 1 px past the base
+  (`baseOf`: the larger of the frame's start and the screen's left edge; round 24), and asks that it does not move him left there. The frames are frames with
+  `wide`, and their base `B` is `baseOf` of the machine at the end of the frame before (`frameE_B`).
 * `frame_readH`: the touch's frame, up to the scroll handler. The touch moves him after it, so the frame's end is not that of a `Frame`; its `P₂` is the position at the
   scroll handler.
 
@@ -29,35 +31,43 @@ open PipeTransition (frame)
 
 variable {sy : Syms}
 
-/-- **What the collision routine and the rest of the frame do**, from the scroll handler `Q` to the frame's end `b`; `M` is the machine where the frame starts. The speed
-stays or becomes 0, the subspeed stays, and the position stays, goes 1 px back, or, when he moves left or not at all, goes right but not past 1 px right of where the frame
-started: the push of a block on his left and the screen's left edge. -/
-structure CollideE (sy : Syms) (M Q b : Machine) : Prop where
+/-- **The screen's left edge as a position**: the last position on the edge's pixel, `256·left + 255`, where `left` is the edge's pixel with its page, read at the two
+operands of the clamp (`ScreenClamp.places`, found in the machine's own program) -/
+def edgeOf (sy : Syms) (m : Machine) : Int :=
+  ((peek m (ScreenClamp.places sy m).edgeP).toNat * 256 + (peek m (ScreenClamp.places sy m).edgeX).toNat) * 256 + 255
+
+/-- **The base of the bound of a push to the right**: the larger of the position and the screen's left edge (`edgeOf`). On a frame that moves left or not at all the
+clamp at the edge puts him on the edge's pixel, keeping the fraction, and at most one push of 1 px follows. -/
+def baseOf (sy : Syms) (m : Machine) : Int := max (posP sy m) (edgeOf sy m)
+
+theorem le_baseOf (m : Machine) : posP sy m ≤ baseOf sy m := Int.le_max_left _ _
+
+/-- **What the collision routine and the rest of the frame do**, from the scroll handler `Q` to the frame's end `b`; `B₀` is the base of the frame: `baseOf` of the machine
+where the frame starts. The speed stays or becomes 0, the subspeed stays, and the position stays, goes 1 px back, or, when he moves left or not at all, goes right but not
+past 1 px right of the base: the push of a block on his left, and the screen's left edge, where the clamp puts him on the edge's pixel (round 24: the bound was 1 px right of
+where the frame started, false on a real frame that starts 1 px left of the edge). -/
+structure CollideE (sy : Syms) (B₀ : Int) (Q b : Machine) : Prop where
   v : peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∨ peek b sy.Player_X_Speed = 0
   f : peek b sy.Player_X_MoveForce = peek Q sy.Player_X_MoveForce
   P : posP sy b = posP sy Q ∨ posP sy b = posP sy Q - 256 ∨
-    (posP sy Q ≤ posP sy b ∧ posP sy b ≤ posP sy M + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
+    (posP sy Q ≤ posP sy b ∧ posP sy b ≤ B₀ + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
 
 /-- **`CollideE` but the speed**: the subspeed stays, and the position as in `CollideE`. The speed's part `CollideE.v` is a theorem on the frames above ground
 (`CollideKeep.speed_end`: a walk from the scroll handler to the frame's end). -/
-structure CollideR (sy : Syms) (M Q b : Machine) : Prop where
+structure CollideR (sy : Syms) (B₀ : Int) (Q b : Machine) : Prop where
   f : peek b sy.Player_X_MoveForce = peek Q sy.Player_X_MoveForce
   P : posP sy b = posP sy Q ∨ posP sy b = posP sy Q - 256 ∨
-    (posP sy Q ≤ posP sy b ∧ posP sy b ≤ posP sy M + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
+    (posP sy Q ≤ posP sy b ∧ posP sy b ≤ B₀ + 256 ∧ sbyte (peek Q sy.Player_X_Speed) ≤ 0)
 
 /-- `CollideR` and the speed's part give `CollideE` -/
-theorem CollideR.toE {M Q b : Machine} (h : CollideR sy M Q b)
-    (v : peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∨ peek b sy.Player_X_Speed = 0) : CollideE sy M Q b := ⟨v, h.f, h.P⟩
-
-/-- `CollideE` reads only the position of the frame's start -/
-theorem CollideE.ofP {M M' Q b : Machine} (h : CollideE sy M Q b) (e : posP sy M = posP sy M') : CollideE sy M' Q b :=
-  ⟨h.v, h.f, by rw [← e]; exact h.P⟩
+theorem CollideR.toE {B₀ : Int} {Q b : Machine} (h : CollideR sy B₀ Q b)
+    (v : peek b sy.Player_X_Speed = peek Q sy.Player_X_Speed ∨ peek b sy.Player_X_Speed = 0) : CollideE sy B₀ Q b := ⟨v, h.f, h.P⟩
 
 /-- `CollideE` as a check, for a program -/
-def collideEB (sy : Syms) (M Q b : Machine) : Bool :=
+def collideEB (sy : Syms) (B₀ : Int) (Q b : Machine) : Bool :=
   (peek b sy.Player_X_Speed == peek Q sy.Player_X_Speed || peek b sy.Player_X_Speed == 0) && peek b sy.Player_X_MoveForce == peek Q sy.Player_X_MoveForce &&
     (posP sy b == posP sy Q || posP sy b == posP sy Q - 256 ||
-      (decide (posP sy Q ≤ posP sy b) && decide (posP sy b ≤ posP sy M + 256) && decide (sbyte (peek Q sy.Player_X_Speed) ≤ 0)))
+      (decide (posP sy Q ≤ posP sy b) && decide (posP sy b ≤ B₀ + 256) && decide (sbyte (peek Q sy.Player_X_Speed) ≤ 0)))
 
 /-- the position is away from both ends of its range -/
 def Far (sy : Syms) (m : Machine) : Prop := 2048 ≤ posP sy m ∧ posP sy m + 2048 < 0x1000000
@@ -73,9 +83,9 @@ structure ReadH (sy : Syms) (m0 M : Machine) (i : UInt8) (n₀ : Nat) : Prop whe
   time : InTime (FrameModel.Rom.of m0) sy.EndlessLoop M i n₀
   far : Far sy M
 
-/-- **What a whole frame needs to be read**: `ReadH`, and what the collision routine and the rest of the frame do at each arrival at the scroll handler -/
-structure ReadE (sy : Syms) (m0 M : Machine) (i : UInt8) (n₀ : Nat) : Prop extends ReadH sy m0 M i n₀ where
-  collide : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → CollideE sy M (trace M i k) (frame M i)
+/-- **What a whole frame needs to be read**: `ReadH`, and what the collision routine and the rest of the frame do at each arrival at the scroll handler, with the base `B₀` -/
+structure ReadE (sy : Syms) (m0 M : Machine) (i : UInt8) (n₀ : Nat) (B₀ : Int) : Prop extends ReadH sy m0 M i n₀ where
+  collide : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → CollideE sy B₀ (trace M i k) (frame M i)
 
 /-! ## A real frame is a `TopSpeed.Frame` -/
 
@@ -148,10 +158,10 @@ theorem read_move {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadH sy m0 M i
 /-- **A real frame is a `TopSpeed.Frame`**, with `CollideE` for the part after the scroll handler: `FrameModel.frame_readR` with the screen's left edge. The collision
 routine and the rest of the frame move him at most 1 px left from the end of the move (`P₂ − 256 ≤ P'`). The frame comes to the scroll handler at an instruction `k`,
 and `v₂`, `f₂`, `P₂` are the bytes there (`read_move`). -/
-theorem frame_readE {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀) :
-    ∃ f : Frame (top sy : Int) (amax sy m0), f.v = sbyte (peek M sy.Player_X_Speed) ∧ f.f = ((peek M sy.Player_X_MoveForce).toNat : Int) ∧ f.P = posP sy M ∧
+theorem frame_readE {m0 M : Machine} {i : UInt8} {n₀ : Nat} {B₀ : Int} (h : ReadE sy m0 M i n₀ B₀) :
+    ∃ f : Frame (top sy : Int) (amax sy m0) true, f.v = sbyte (peek M sy.Player_X_Speed) ∧ f.f = ((peek M sy.Player_X_MoveForce).toNat : Int) ∧ f.P = posP sy M ∧
       f.v' = sbyte (peek (frame M i) sy.Player_X_Speed) ∧ f.f' = ((peek (frame M i) sy.Player_X_MoveForce).toNat : Int) ∧ f.P' = posP sy (frame M i) ∧
-      f.P₂ - 256 ≤ f.P' ∧
+      f.P₂ - 256 ≤ f.P' ∧ f.B = B₀ ∧
       ∃ k, n₀ ≤ k ∧ (trace M i k).pc = sy.PlayerSubs ∧ f.v₂ = sbyte (peek (trace M i k) sy.Player_X_Speed) ∧
         f.f₂ = ((peek (trace M i k) sy.Player_X_MoveForce).toNat : Int) ∧ f.P₂ = posP sy (trace M i k) := by
   obtain ⟨c, k, hk, hpc, e1, e2, e3, e4, e5, e6, _, _, _⟩ := read_move h.toReadH
@@ -160,9 +170,10 @@ theorem frame_readE {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M
       c.P₂ = posP sy (trace M i k) := ⟨e4, e5, e6⟩
   generalize hQ : trace M i k = Q at hco e4 e5 e6
   generalize hb : frame M i = b at hco ⊢
-  refine ⟨{ c with
+  refine ⟨({ c with
       v' := sbyte (peek b sy.Player_X_Speed), f' := ((peek b sy.Player_X_MoveForce).toNat : Int), P' := posP sy b,
-      impedeV := ?_, impedeF := ?_, impedeP := ?_ }, e1, e2, e3, rfl, rfl, rfl, ?_, k, hk, hpc, hmv⟩
+      B := B₀, baseP := fun h => Bool.noConfusion h,
+      impedeV := ?_, impedeF := ?_, impedeP := ?_ } : Frame (top sy : Int) (amax sy m0) true), e1, e2, e3, rfl, rfl, rfl, ?_, rfl, k, hk, hpc, hmv⟩
   · rcases hco.v with e | e
     · left
       show sbyte (peek b sy.Player_X_Speed) = c.v₂
@@ -173,8 +184,8 @@ theorem frame_readE {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M
       rfl
   · show ((peek b sy.Player_X_MoveForce).toNat : Int) = c.f₂
     rw [hco.f, e5]
-  · show posP sy b = c.P₂ ∨ posP sy b = c.P₂ - 256 ∨ (posP sy b ≤ c.P + 256 ∧ c.v₂ ≤ 0)
-    rw [e6, e3, e4]
+  · show posP sy b = c.P₂ ∨ posP sy b = c.P₂ - 256 ∨ (posP sy b ≤ B₀ + 256 ∧ c.v₂ ≤ 0)
+    rw [e6, e4]
     rcases hco.P with e | e | ⟨_, e7, e8⟩
     · exact Or.inl e
     · exact Or.inr (Or.inl e)
@@ -185,23 +196,35 @@ theorem frame_readE {m0 M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M
 
 /-! ## The frames as definitions -/
 
-/-- a frame that starts at `v`, `f`, `P` and stops there: what `frameE` and `frameH` are when the conditions fail -/
-def stillFrame (sy : Syms) (m0 : Machine) (v f P : Int) : Frame (top sy : Int) (amax sy m0) :=
+/-- a frame that starts at `v`, `f`, `P` and stops there, with the base `B`: what `frameE` and `frameH` are when the conditions fail -/
+def stillFrame (sy : Syms) (m0 : Machine) (v f P B : Int) : Frame (top sy : Int) (amax sy m0) true :=
   { v, f, P, v₁ := v, f₁ := f, v₂ := 0, f₂ := 0, P₂ := P, v' := 0, f' := 0, P' := P,
     anim := Or.inl ⟨rfl, rfl⟩, friction := fun h => by omega,
     friction_gain := by have := FastAccel.amax_nonneg sy m0; omega,
-    frac := by omega, move := by omega, impedeV := Or.inl rfl, impedeF := rfl, impedeP := Or.inl rfl }
+    frac := by omega, move := by omega, impedeV := Or.inl rfl, impedeF := rfl, B, baseP := fun h => Bool.noConfusion h, impedeP := Or.inl rfl }
 
 /-- a frame with its start replaced by equal values -/
-def withStart {tp am : Int} (c : Frame tp am) (v f P : Int) (hv : c.v = v) (hf : c.f = f) (hP : c.P = P) : Frame tp am :=
+def withStart {tp am : Int} {wd : Bool} (c : Frame tp am wd) (v f P : Int) (hv : c.v = v) (hf : c.f = f) (hP : c.P = P) : Frame tp am wd :=
   { c with
     v, f, P
     anim := by rw [← hv, ← hf]; exact c.anim
     move := by rw [← hP]; exact c.move
-    impedeP := by rw [← hP]; exact c.impedeP }
+    baseP := fun h => (c.baseP h).trans hP
+    impedeP := c.impedeP }
+
+/-- a frame without `wide` read as one with it, with a base `B` at least its start -/
+def widen {tp am : Int} (c : Frame tp am) (B : Int) (hB : c.P ≤ B) : Frame tp am true :=
+  { c with
+    B, baseP := fun h => Bool.noConfusion h
+    impedeP := by
+      have e := c.baseP rfl
+      rcases c.impedeP with h | h | ⟨h, h2⟩
+      · exact Or.inl h
+      · exact Or.inr (Or.inl h)
+      · exact Or.inr (Or.inr ⟨by omega, h2⟩) }
 
 /-- a frame with its end replaced by equal values -/
-def withEnd {tp am : Int} (c : Frame tp am) (v' f' P' : Int) (hv : c.v' = v') (hf : c.f' = f') (hP : c.P' = P') : Frame tp am :=
+def withEnd {tp am : Int} {wd : Bool} (c : Frame tp am wd) (v' f' P' : Int) (hv : c.v' = v') (hf : c.f' = f') (hP : c.P' = P') : Frame tp am wd :=
   { c with
     v', f', P'
     impedeV := by rw [← hv]; exact c.impedeV
@@ -223,22 +246,23 @@ open Classical in
 /-- **A frame before the touch, read from the machines**: the frame of `M` with the input `i`, which comes to the player's routine at the instruction `n₀`; `a` is the
 machine at the end of the counted frame before (`M`, or earlier by `lag` frames). It starts with the speed, the subspeed and the position of `a`. If the frame meets `ReadE`
 and `M` has the horizontal bytes of `a`, it is the `TopSpeed.Frame` of `frame_readE`, and it ends with those of the frame's end; else it stops where it starts (`stillFrame`). -/
-noncomputable def frameE (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Frame (top sy : Int) (amax sy m0) :=
-  if h : ReadE sy m0 M i n₀ ∧ Same sy a M then
+noncomputable def frameE (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Frame (top sy : Int) (amax sy m0) true :=
+  if h : ReadE sy m0 M i n₀ (baseOf sy a) ∧ Same sy a M then
     let c := Classical.choose (frame_readE h.1)
     have s := Classical.choose_spec (frame_readE h.1)
     withEnd (withStart c _ _ _ (s.1.trans h.2.v) (s.2.1.trans h.2.f) (s.2.2.1.trans h.2.P)) _ _ _ s.2.2.2.1 s.2.2.2.2.1 s.2.2.2.2.2.1
-  else stillFrame sy m0 (sbyte (peek a sy.Player_X_Speed)) ((peek a sy.Player_X_MoveForce).toNat : Int) (posP sy a)
+  else stillFrame sy m0 (sbyte (peek a sy.Player_X_Speed)) ((peek a sy.Player_X_MoveForce).toNat : Int) (posP sy a) (baseOf sy a)
 
 open Classical in
 /-- **The touch's frame, read from the machines, up to the scroll handler**: it starts with the speed, the subspeed and the position of `a`. If the frame meets `ReadH` and
 `M` has the horizontal bytes of `a`, it is the `TopSpeed.Frame` of `read_move`: `P₂` is the position at the scroll handler; else it stops where it starts. -/
-noncomputable def frameH (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Frame (top sy : Int) (amax sy m0) :=
+noncomputable def frameH (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Frame (top sy : Int) (amax sy m0) true :=
   if h : ReadH sy m0 M i n₀ ∧ Same sy a M then
     let c := Classical.choose (read_move h.1)
     have s := Classical.choose_spec (read_move h.1)
-    withStart c _ _ _ ((Classical.choose_spec s).2.2.1.trans h.2.v) ((Classical.choose_spec s).2.2.2.1.trans h.2.f) ((Classical.choose_spec s).2.2.2.2.1.trans h.2.P)
-  else stillFrame sy m0 (sbyte (peek a sy.Player_X_Speed)) ((peek a sy.Player_X_MoveForce).toNat : Int) (posP sy a)
+    widen (withStart c _ _ _ ((Classical.choose_spec s).2.2.1.trans h.2.v) ((Classical.choose_spec s).2.2.2.1.trans h.2.f) ((Classical.choose_spec s).2.2.2.2.1.trans h.2.P))
+      (baseOf sy a) (le_baseOf a)
+  else stillFrame sy m0 (sbyte (peek a sy.Player_X_Speed)) ((peek a sy.Player_X_MoveForce).toNat : Int) (posP sy a) (baseOf sy a)
 
 theorem frameE_v (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameE sy m0 a M i n₀).v = sbyte (peek a sy.Player_X_Speed) := by
   unfold frameE; split <;> rfl
@@ -248,6 +272,16 @@ theorem frameE_f (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameE sy m0 a M
 
 theorem frameE_P (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameE sy m0 a M i n₀).P = posP sy a := by
   unfold frameE; split <;> rfl
+
+theorem frameE_B (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameE sy m0 a M i n₀).B = baseOf sy a := by
+  unfold frameE
+  split
+  · rename_i h
+    exact (Classical.choose_spec (frame_readE h.1)).2.2.2.2.2.2.2.1
+  · rfl
+
+theorem frameH_B (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameH sy m0 a M i n₀).B = baseOf sy a := by
+  unfold frameH; split <;> rfl
 
 theorem frameH_v (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameH sy m0 a M i n₀).v = sbyte (peek a sy.Player_X_Speed) := by
   unfold frameH; split <;> rfl
@@ -259,7 +293,7 @@ theorem frameH_P (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : (frameH sy m0 a M
   unfold frameH; split <;> rfl
 
 /-- **A frame that meets `ReadE` ends with the bytes of the frame's end**, and the part after the scroll handler moves him at most 1 px left from the end of the move -/
-theorem frameE_end {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀) (hs : Same sy a M) :
+theorem frameE_end {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀ (baseOf sy a)) (hs : Same sy a M) :
     (frameE sy m0 a M i n₀).v' = sbyte (peek (frame M i) sy.Player_X_Speed) ∧ (frameE sy m0 a M i n₀).f' = ((peek (frame M i) sy.Player_X_MoveForce).toNat : Int) ∧
       (frameE sy m0 a M i n₀).P' = posP sy (frame M i) ∧ (frameE sy m0 a M i n₀).P₂ - 256 ≤ (frameE sy m0 a M i n₀).P' := by
   have s := Classical.choose_spec (frame_readE h)
@@ -272,11 +306,11 @@ theorem frameE_end {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 
   omega
 
 /-- **A frame that meets `ReadE`, at the end of the move**: `v₂`, `f₂` and `P₂` are the speed, the subspeed and the position at an arrival at the scroll handler -/
-theorem frameE_move {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀) (hs : Same sy a M) :
+theorem frameE_move {m0 a M : Machine} {i : UInt8} {n₀ : Nat} (h : ReadE sy m0 M i n₀ (baseOf sy a)) (hs : Same sy a M) :
     ∃ k, n₀ ≤ k ∧ (trace M i k).pc = sy.PlayerSubs ∧ (frameE sy m0 a M i n₀).v₂ = sbyte (peek (trace M i k) sy.Player_X_Speed) ∧
       (frameE sy m0 a M i n₀).f₂ = ((peek (trace M i k) sy.Player_X_MoveForce).toNat : Int) ∧ (frameE sy m0 a M i n₀).P₂ = posP sy (trace M i k) := by
   have s := Classical.choose_spec (frame_readE h)
-  obtain ⟨k, hk, hpc, e1, e2, e3⟩ := s.2.2.2.2.2.2.2
+  obtain ⟨k, hk, hpc, e1, e2, e3⟩ := s.2.2.2.2.2.2.2.2
   refine ⟨k, hk, hpc, ?_, ?_, ?_⟩ <;> unfold frameE <;> rw [dif_pos ⟨h, hs⟩]
   · exact e1
   · exact e2
@@ -341,12 +375,12 @@ def readScan (sy : Syms) (m0 a M : Machine) (i : UInt8) (last : Bool) : ReadScan
     if n ≤ n0 + moveLen then f := "longer" :: f
     if subs.isEmpty then f := "no scroll handler" :: f
     if !last then
-      if !subs.all (fun Q => collideEB sy M Q b) then f := "collide" :: f
+      if !subs.all (fun Q => collideEB sy (baseOf sy a) Q b) then f := "collide" :: f
       for Q in subs do
         let vok := peek b sy.Player_X_Speed == peek Q sy.Player_X_Speed || peek b sy.Player_X_Speed == 0
         let d := posP sy b - posP sy Q
         let pok := d == 0 || d == -256 || (d == 256 && decide (sbyte (peek Q sy.Player_X_Speed) ≤ 0))
-        if collideEB sy M Q b && !(vok && pok) then loose := true
+        if collideEB sy (baseOf sy a) Q b && !(vok && pok) then loose := true
   return { fails := f, next := b, loose, dP := posP sy b - posP sy a }
 
 end Smbrta.SurfaceRead

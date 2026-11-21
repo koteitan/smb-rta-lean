@@ -36,7 +36,7 @@ Two walks of the abstract machine of `TaintRun` follow the frame. Their steps ar
 | first, from the frame's start to `Q` | 4,382 | 378 | 0 | 2 |
 | second, from `Q` to the frame's end | 709,326 | 46,413 | 0 | 0 (none comes to `Q` again) |
 
-The check takes 2.7 s natively. It is part of `PoleFrame.poleFrameCheck`, and since round 22 of `PoleTileRead.poleCheckU` (round 23: `PoleTileHeight.poleCheckH`), so the private `pole_check_h` (by `native_decide`) checks it too.
+The check takes 2.7 s natively. It is part of `PoleFrame.poleFrameCheck`, and since round 22 of `PoleTileRead.poleCheckU` (round 23: `PoleTileHeight.poleCheckH`; round 24: `PoleTileFar.poleCheckF`), so the private `pole_check_f` (by `native_decide`) checks it too.
 
 On real touches (`touch-move-check`): no touch's frame comes to the end of the move more than once. This only checks the theorem; the proof does not use it.
 
@@ -44,4 +44,4 @@ On real touches (`touch-move-check`): no touch's frame comes to the end of the m
 
 Nothing new. `subs_once` asks only `StartK` and `CleanK_K`. Every frame up to the touch has them (`FrameKeep.Frames.start`, `Frames.cleanAt`). `Run.moved` uses part e's `OnFrames.touchMove`, with its conditions (`frames`, and the touch not later than `farN` frames after control). A later touch is the case `SurfaceLate`, which does not use `Run.inRange`.
 
-**Files.** `Theorems/SubsOnce.lean`, `Run.moved` and `Run.inRange` in `Theorems/PoleJoin.lean`, `PoleFrame.poleFrameCheck` in `Theorems/PoleFrame.lean`, private `Proof/PoleTiles.lean` (`pole_check_h`, round 23; `pole_check_u` in round 22; until round 21 `Proof/PoleFrame.lean`, `pole_frame_check`).
+**Files.** `Theorems/SubsOnce.lean`, `Run.moved` and `Run.inRange` in `Theorems/PoleJoin.lean`, `PoleFrame.poleFrameCheck` in `Theorems/PoleFrame.lean`, private `Proof/PoleTiles.lean` (`pole_check_f`, round 24; `pole_check_h` in round 23; `pole_check_u` in round 22; until round 21 `Proof/PoleFrame.lean`, `pole_frame_check`).

@@ -19,7 +19,7 @@ buffer_frame    :  WalkOK(finB),  RoomCond(K_B, m),  ∀ j, SiteOK(tr(j)),  rt(f
 buffer_of_rows  :  the hypotheses of RoomMap.map_of_rows on [b, a),  the checks,  b ≤ k < a,
                    c(seq k) = c(r),   rt(frame(seq k, inp k)) = e_s                 →   EntryAt(L₅, frame(seq k, inp k))
 
-Run.buffer₂     :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                   (field, new)
+Run.buffer₂     :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                   (field, new; narrowed in round 24, see below)
 Run.buf₂        :  EntryAt(L₅, seq a₂)                                                (theorem)
 entryAt_of_buf  :  EntryAt(L₅, m)  ∧  EntryAt(R₃, m)   →   EntryAt(R₈, m)
 chg.entry₂      :  EntryAt(R₃, seq a₂)                                                (3 bytes; it was R₉)
@@ -82,6 +82,10 @@ In the 31 entries with stale bytes of the timer's record, these are bytes 1 and 
 
 [The control of the screen's buffers through the room](d-2-5-5-1-BufferControl.md) (1-1-d-2-5-5-1) proves that every frame of the room, from the first control to the entering frame, starts with the control at 0 or 6 (`Run.ctl₂`): the walk of this page from the control at 0 and at 6 ends with the control at 0 or 6, and the rows of the first change know it at 0 at the room's first control. So `buffer₂` excludes only the control at 6 at the start of the entering frame. Two designs of a walk that would follow the position over the coin's frame and the entering frame grew too large; the numbers are on that page. `buffer₂` is unchanged.
 
+## Round 24: the field narrowed
+
+`buffer₂` is now `c(seq(a₂ − 1)) ≠ 6 ∨ (page = 0 ∧ 16 ≤ x < 181 at seq(a₂ − 1)) ∨ EntryAt(L₅, seq a₂)`. `Run.buf₂` covers the first case with `Run.ctl₂` (the control is 0 or 6, so not 6 is the reference's 0) and the middle case with `Run.coin₂` ([BufferCoin](d-2-5-5-2-BufferCoin.md): such a frame does not enter). So the field asks only: if the frame before the entering frame erased a coin, it ended on page 0 at 16 to 180 px.
+
 ## Uses from other parts
 
 * Part c: `RoomMap.cond_of_rows`, `RoomMap.stepT`, `RoomMap.s_stepT`, and through `Run.rt₂` the field `room.enters`, `Run.roomEnter`, `SideEntryEnd`, `SideEntryRest`.
@@ -98,7 +102,7 @@ Removed from the assumptions: the five bytes of the screen's buffer of `entry₂
 
 ## Assumptions (not proved in Lean)
 
-* `buffer₂`: the entering frame starts with the control of the screen's buffers at 0, or the five bytes at the entry are those of a reference. Since round 23 the control there is proved to be 0 or 6 (`Run.ctl₂`), so this excludes only 6.
+* `buffer₂`: the entering frame does not start with the control of the screen's buffers at 6, or it starts on page 0 at 16 to 180 px, or the five bytes at the entry are those of a reference (round 24). With `Run.ctl₂` and `Run.coin₂` this excludes only a start with the control at 6 outside page 0 at 16 to 180 px.
 * `chg.entry₂`: 3 bytes at the entry have the values of a reference: the area music's buffer, the event music's queue, the added note length. They wait for the game timer (see [The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).
 * `SiteOK` on each instruction in the room (`chg.roomSites`), as before.
 

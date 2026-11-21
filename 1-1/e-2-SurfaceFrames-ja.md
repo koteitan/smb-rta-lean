@@ -4,6 +4,8 @@
 
 **主張.** [操作から城まで](f-5-PoleJoin-ja.md) は走り全体についての文 `model`、`hit`、`stop`、`box`、`off`、`next`、`startP`、`startV` を仮定していました。これらは定理になりました。残る仮定は 1 フレームについての文です。1〜8 フレーム目の縦の一歩（`vstep`）も本物の機械で定理になりました。そこで残るのは、スクロールの処理からあとが縦のバイトのうち 5 つを変えないことです。各フレームの始まりからプレイヤーのルーチンまでの部分は定理になりました。その部分の歩き（[`CtrlKeep`](#プレイヤーのルーチンまでのフレーム)）が、25 バイトを保ち、移動の要る状態でルーチンに来ることを示します。なのでフィールド `vBefore`、`Moves.at_ctrl`、`Moves.before`、`Moves.bits` はなくなりました。フレームの両端も、1 つの機械か 1 つのフレームの条件から定理になりました。数えるフレームはポーズでない状態で終わるので、プレイヤーのルーチンに来ます（`Moves.arrive` をなくし、新しく `unpaused`）。数えないフレームはプレイヤーのルーチンに来ないので、25 バイトを保ちます（`Moves.lag` をなくしました）。フレームの残り、プレイヤーのルーチンからフレームの終わりまでの歩き（[下](#フレーム全体-プレイヤーのルーチンから終わりまで)）が、ルーチンに来たフレームはポーズでない状態で終わることと、操作中のどのフレームもエリアの種類、泳ぎのフラグ、大きさの変化を保つことを示すようになりました。なので数えないフレームがルーチンに来ないことは定理です（`OnFrames.lagNo`。新しく `lagPaused`: 数えないフレームはポーズで終わる）。`state` の値のうち 3 つも定理です。各命令の新しい条件は `spare` です: 添字かポインタでの書き込みは、これらの 4 バイトを書きません。フレームは `Run` のフィールド `keep`（[操作中の 1 フレーム全体](f-6-19-FrameKeep-ja.md)）のものと同じなので、フィールド `ends` もなくなりました。押している側がふさがれたフレームも定理になり、フィールド `masked` はなくなりました。`moves` の条件があと 2 つ定理になりました（[フレームの時間と位置の範囲](#フレームの時間と位置の範囲)）。移動のあいだにフレームが終わらないこと（`Moves.longer` をなくしました。移動の歩きと `CleanK` の条件 `time` から出ます）と、位置が範囲の端から遠いこと（`Moves.far` をなくしました。操作のときの位置と、`hstep` のとおりの前のフレームから出ます）です。`startP`、`startV` は本物の機械で証明しました。[地上への切り替えの最後のフレーム](d-2-3-SideChangeEnd-ja.md) の最後の段から出ます。条件はその切り替えの条件と、`left` が操作の前に 0 にならないことだけです。`moves` の部分があと 2 つ定理になりました。`state.prevA` はなくなりました: 操作中のどのフレームも、前のフレームの A と B の 7 ビット目を A と B の 7 ビット目と同じに保ちます（`OnFrames.prevAll`、[下](#前のフレームの-a-と-b)）。`After` のフィールド `md`、`rs` はなくなり、`stored` はスクロールの処理での機械の条件 `storedQ` になりました: フレームの終わりの動く向き、走りの速さ、覚えている速さは、スクロールの処理でのものです（`AfterKeep.keepH`、[下](#スクロールの処理からあと-3-つのバイト)）。各命令の新しい条件は `spareE` です: 添字かポインタでの書き込みは、これらの 5 バイトを書きません。`After` のフィールド `storedQ` もなくなりました: スクロールの処理での覚えている速さは、そこでの `|v|` です（`MovesAt.stored`、[下](#スクロールの処理での覚えている速さ)）。`ImposeFriction` がそれを書き、`FrameModel.stored_path` の歩きがスクロールの処理まで追います。フレームはプレイヤーのルーチンのあと、スクロールの処理に 1 度だけ来ます（`AfterKeep.subs_once`）。新しく `numbersCheck` の中の確認 `storedOK` と、`TopSpeed.frictionCheck`（`SurfaceRun.Statement` のフィールド `fric`）。フレーム `fr` はもう `Run` のデータではありません。`keep` の機械の上の定義です（`SurfaceFrames.frOf`、[下](#機械から読むフレーム)）。なのでフィールド `reads` はなくなりました。触る前の各フレームが、機械で始まり機械で終わる `TopSpeed.Frame` であることは、1 つのフレームか 1 つの機械の条件から証明です。新しく `state`（どのフレームでも。前は `Moves.state` で、`T` までの clean なフレームだけでした）、`coll`、`collide`、`farLate`。`collide` は `After` と同じフレームの部分の文なので、`After` は小さくなりました（`AfterR`）: サブ速さと、スクロールの処理で左へ動くか止まっているフレームは `collide` から出ます。この 4 つのうち 2 つはなくなりました。`coll` は定理です: プレイヤーのルーチンからのフレームの歩きで、`ImpedePlayerMove` で `X` を分けると、当たり判定のビットは 4 つの値のどれかのままです（`OnFrames.collAll`、[下](#当たり判定のビット)）。新しく `spareC`、各命令の条件です: 添字かポインタでの書き込みは当たり判定のビットを書きません。`farLate` はなくなりました: 操作から `farN` フレームより後に触る走りは別の場合で、その上限はフレームの数だけから出ます（`SurfaceLate`、[下](#遅く触る走り)）。そのために新しいのは `B.m` の確認だけです。`spareC` もなくなりました: `keep.cleanE` のガード `guardE` が当たり判定のビットも守ります（[下](#当たり判定のビット)）。`collide` の速さの部分も定理になりました: スクロールの処理からフレームの終わりまで速さを追う歩きが、終わりの速さはスクロールの処理のものか 0 だと示します（`OnFrames.collideAt`、[下](#スクロールの処理からあと-速さ)）。`collide` はいまは `CollideR` で、サブ速さと位置だけです。新しく `spareV`、各命令の条件です: 添字かポインタでの書き込みは速さを書きません。`spareV` もなくなりました: `guardE` が速さも守ります（`FrameKeep.speedE`）。`vAfter` の 10 のバイトのうち 4 つは定理になりました: 下向きの縦の力、ジャンプの始まりの高さ、ジャンプを止める値、A は、スクロールの処理からフレームの終わりまで変わりません（`OnFrames.kAt`、[下](#スクロールの処理からあと-縦の-4-つのバイト)）。`vAfter` は残りの 6 つを求めます。新しく、`guardE` がさらに 3 つのバイトを守ります（`FrameKeep.vertE`）。スクロールの処理からあとの向き、サブ速さ、当たり判定のビットは、小さい条件 2 つを残して定理になりました（[下](#スクロールの処理からあと-向きサブ速さ当たり判定のビット)）。歩きが示すのは、フレームがスクロールの処理から終わりまで向きとサブ速さを保つか、速さ 0 とサブ速さ 0 で終わることです（`FaceKeep.keepZ_end`）。`After` の残りと合わせると、速さ 0 で終わるフレームは当たりで、当たりには向きは要りません: `OneFrame` に `Hit` だけの場合が入りました。なので `After` の向きはもうフィールドではありません。ただし `J` より前のフレームは `hstep` のとおりでなければならないので、そこでは新しいフィールド `faceJ` が、速さ 0 とサブ速さ 0 で終わるフレームの向きを求めます。`collide` がサブ速さを求めるのも、そう終わるフレームだけです（`CollideS`）。もう 1 つの歩きは、スクロールの処理で右へ動くフレームが、当たり判定のビット `FF` か左をふさぐビットで終わるか、速さ 0 で終わることを示します（`FaceKeep.bits_end`）。なので `AfterR` は `AfterP` になりました: そこで右へ動くフレームの位置だけです。新しく、`guardE` がさらに 2 つのバイトを守ります（`FrameKeep.faceE`: 向きとサブ速さ）。`numbersCheck` の中の確認 `zCheck` と `bCheck` も新しいものです。縦の力も `vAfter` から外れました（[下](#スクロールの処理からあと-縦の力)）: 歩きが示すのは、フレームがスクロールの処理から終わりまで縦の力を保つか、ジャンプ台への着地が書く値を持って地面の上で終わることです（`FaceKeep.vf_end`）。縦のモデルは地面の上でその値を許します（`VStep`）。`vAfter` が求めるのは 5 つのバイトです。新しく、`guardE` がさらに 2 つのバイトを守ります（`FrameKeep.stateE`: プレイヤーの状態と縦の力）。`numbersCheck` の中の確認 `vfCheck` も新しいものです。
 
+**第 24 回.** フィールド `collide` は、画面の左端より 1 px 左で始まる本物のフレームで偽でした（[フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md)）。その 3 番目の場合はいま P(b) ≤ base(M) + 256 を求めます。base(M) = max(P(M), edge(M)) で、edge(M) = 256·left(M) + 255 は端のピクセルの最後の位置です。`Hit`、`MaskStop`、`After` も同じことを言います。操作からのフレームは `wide` つきの `TopSpeed.Frame` で、その基点 B は base(seq (j − 1)) です（`frOf_B`）。新しいフィールドは 2 つです: 各フレームの `edge` と操作の始めの `edge₀`。これらで max(P, B) は 1 フレームに前と同じ上限しか増えません（`TopSpeed.Frame.posB`、`Frame.advB`、`SurfaceRun.chainB_reach`、`SurfaceRun.hit_boundB`）。だからルートの数は変わりません。`Surface` には新しい部分が 3 つあり、すべて証明済みです: `base`、`links`、`base₁`。その `hit` はいま、当たりより前のあるフレームでのモデルの位置を使います（`OnFrames.edge_behind`）。
+
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
 ## 1 フレームの形
@@ -19,11 +21,13 @@ t = hstep(hs a, i)     v₂ = v(t)     P₂ = P(a) + 16·v₂
 
 Clean(m)          : inD(hs m) ∧ abs(m) = |v(m)| ∧ (bits(m) = FF ∨ (bits(m) = noLeft ∧ 0 < v(m)))
 Pre(i, a, b)      : hs(b) は v を除いて t と同じ ∧ abs(b) = |v₂|
-Hit(i, a, b)      : v(b) ≤ 0 ∧ (P(b) ≤ P₂ − 256 ∨ P(b) ≤ P(a) + 256)
+edge(m)           : 256·left(m) + 255     left(m): 画面の左端のピクセルとページ（SurfaceRead.edgeOf）
+base(m)           : max(P(m), edge(m))                                                （SurfaceRead.baseOf）
+Hit(i, a, b)      : v(b) ≤ 0 ∧ (P(b) ≤ P₂ − 256 ∨ P(b) ≤ base(a) + 256)
 Coll(i, a, b)     : (P(b) = P₂ ∧ v(b) = v₂ ∧ bits(b) = FF)
                   ∨ (0 < v₂ ∧ P(b) = P₂ ∧ v(b) = v₂ ∧ bits(b) = noLeft)
                   ∨ Hit(i, a, b)
-MaskStop(a, b)    : bits(a) = noLeft ∧ v(b) ≤ 0 ∧ P(b) ≤ P(a) + 256
+MaskStop(a, b)    : bits(a) = noLeft ∧ v(b) ≤ 0 ∧ P(b) ≤ base(a) + 256
 OneFrame(i, a, b) : MaskStop(a, b) ∨ (Pre(i, a, b) ∧ Coll(i, a, b)) ∨ Hit(i, a, b)
 ```
 
@@ -43,7 +47,7 @@ Masked(i, a)       : bits(a) & lr ≠ lr            lr は hstep が i から読
 After(a, Q, b)     : b の f は Q のもの ∧ (b の fd は Q のもの ∨ (v(b) = 0 ∧ f(b) = 0))
                      ∧ ( (P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = FF)
                        ∨ (0 < v(Q) ∧ P(b) = P(Q) ∧ v(b) = v(Q) ∧ bits(b) = noLeft)
-                       ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)) )
+                       ∨ (v(b) ≤ 0 ∧ (P(b) ≤ P(Q) − 256 ∨ P(b) ≤ base(a) + 256)) )
 AfterP(a, Q, b)    : 0 < v(Q)  →  (v(b) = v(Q) → P(b) = P(Q))                          After がまだ求めるもの: 位置。keep は定理 OnFrames.keepAt、stop は Moves.stop
                                   ∧ (v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256)
 After.of           : AfterP(a, Q, b) ∧ CollideE(a, Q, b) ∧ (fd(b) = fd(Q) ∨ (v(b) = 0 ∧ f(b) = 0)) ∧ (0 < v(Q) → bits(b) ∈ {FF, noLeft} ∨ v(b) = 0)
@@ -96,8 +100,10 @@ one_of_frames : OnFrames ∧ (∀ n < ix g, StartK(all n)) ∧ AreaRun(v) ∧ Cl
 ```
 state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       （前は Moves.state で、T までの clean なフレームだけ）
 collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j − 1), Q, seq j, Calls)  Calls: Q からフレームの中で押し戻しか補正の入口に来る
-           CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
+           CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ base(M) + 256 ∧ v(Q) ≤ 0))
                                                   速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
+edge     : 1 ≤ j < g  →  edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))        （第 24 回: 画面は彼が画面の中央より右にいるときだけ進む）
+edge₀    : edge(seq 0) ≤ P(seq 0)                                               （第 24 回: 操作の始めに端は彼の後ろ）
 moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves は AfterP.stop だけになった
 posW     : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  PosW(R)       位置を番地で書くのは押し戻しと補正の内側だけ。その外で添字かポインタで書く命令は位置を書かない
            （第 23 回: 絶対番地と添字で書き、基の番地からどの添字でも位置に届かない命令には求めない: PositionKeep.absFar）
@@ -165,6 +171,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `AfterR.coll`: スクロールの処理で右へ動くフレームは、何もしないか、左をふさぐか、当たり | 当たり判定のビットは定理 `FaceKeep.bits_end`、速さは `CollideKeep.speed_end`。`Moves.after` はいまは `AfterP`: 位置。新しく `numbersCheck` の中の確認 `bCheck` |
 | `AfterP.keep`: スクロールの処理で右へ動き、その速さで終わるフレームは位置を保つ。`collide` の位置もそのフレームと、呼び出しのないフレームで | 定理 `OnFrames.keepAt`（`PositionKeep.keep_frame`）と `OnFrames.stillAt`（`PositionKeep.still_frame`）。`Moves` は `stop` だけ。`collide` はそのフレームの位置を求めない（新しい引数 `Calls`）。新しく 1 命令ずつのフィールド `posW`、`clampR`、`numbersCheck` の中の確認 `pCheck`（[位置を保つフレーム](e-2-10-3-8-PositionKeep-ja.md)） |
 | すべてのフレームの `clampR`（第 23 回） | スクロールの処理で右へ動き、その速さで終わるフレームだけで求める。`PositionKeep.keep_frame` が使うのはそこだけ。フィールド `collide` は本物のフレームで偽（画面の左端より 1 px 左で始まるフレーム）: [フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md) |
+| `collide` の 3 番目の場合 P(b) ≤ P(M) + 256（本物のフレームで偽、第 23 回） | 第 24 回: 画面の左端を入れた P(b) ≤ base(M) + 256。新しい: フィールド `edge`（1 フレーム）と `edge₀`（操作の始めの状態） |
 | `collide` のサブ速さの部分（`CollideR.f`）: サブ速さは変わらない | 速さ 0 とサブ速さ 0 で終わるフレームのほかは定理 `FaceKeep.keepZ_end`。`collide` はいまは `CollideS`: 位置と、そう終わるフレームのサブ速さ |
 | `After.storedQ`: スクロールの処理での覚えている速さはそこでの `\|v\|` | 定理 `storedQ_of`: `FrameModel.stored_path` の歩きと `AfterKeep.subs_once`。新しく `numbersCheck` の中の確認 `storedOK` と、`TopSpeed.frictionCheck`（`SurfaceRun.Statement` のフィールド `fric`） |
 
@@ -310,9 +317,9 @@ rkOff(A)           : A が速さを追っていて、A.pc の命令が速さを�
 finV(B)            : B は速さをまだ追っている ∨ B で速さは 0 と分かっている
 speed_end          : ctrlCheck ∧ vCheck(v) ∧ StartK(M) ∧ (∀ n, CleanK_E(trM(n)) ∧ ¬CtlStore(trM(n))) ∧ AreaOK(v, M) ∧ Arrive(M, x, n₀)
                      →  ∀ k ≥ n₀, pc(trM(k)) = PlayerSubs  →  v(frame(M, x)) = v(trM(k)) ∨ v(frame(M, x)) = 0
-CollideR(M, Q, b)  : f(b) = f(Q) ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))        前のフィールド collide。いまは CollideS とサブ速さの歩きから（CollideS.toR）
-CollideR.toE       : CollideR(M, Q, b) ∧ (v(b) = v(Q) ∨ v(b) = 0)  →  CollideE(M, Q, b)
-OnFrames.collideAt : 1 ≤ j < g ∧ k ≥ arr j ∧ pc(trM(k)) = PlayerSubs  →  CollideE(seq (j − 1), trM(k), frame(fm j, pad j))       M = fm j, x = pad j
+CollideR(M, Q, b)  : f(b) = f(Q) ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ base(M) + 256 ∧ v(Q) ≤ 0))        前のフィールド collide。いまは CollideS とサブ速さの歩きから（CollideS.toR）
+CollideR.toE       : CollideR(B₀, Q, b) ∧ (v(b) = v(Q) ∨ v(b) = 0)  →  CollideE(B₀, Q, b)
+OnFrames.collideAt : 1 ≤ j < g ∧ k ≥ arr j ∧ pc(trM(k)) = PlayerSubs  →  CollideE(base(seq (j − 1)), trM(k), frame(fm j, pad j))       M = fm j, x = pad j
 ```
 
 * **かけら.** 追うのをやめた状態は、もとの状態が覆う機械をどれも覆います（`cov_rkOff`）: `Sim` の `rkv` は追っているときだけ求めます。歩き `walkKV` は `AfterKeep.walkKR` に、`FrameKeep.preK` のかけらのあとで `rkOff` のかけらを足したものです（`CollKeep.walkKX` と同じ形）。`endKV` は `AfterKeep.endKR` と同じ証明です。
@@ -496,10 +503,10 @@ storedQ_of  : modelOK ∧ frictionCheck ∧ storedOK ∧ AtCtrl0(R) ∧ Clean(a)
 `fr j` は前は `Run` のデータで、フィールド `reads` が、`seq (j − 1)` のバイトで始まり `seq j` のバイトで終わると言っていました。なので `reads` には書かれていない主張が入っていました: 本物の各フレームは `TopSpeed.Frame` である、です。いまは `fr` は定義で（`SurfaceFrames.frOf`、`Run.fr`）、その主張は 1 つのフレームか 1 つの機械の条件から証明です。
 
 ```
-CollideE(M, Q, b) : (v(b) = v(Q) ∨ v(b) = 0) ∧ f(b) = f(Q)
-                    ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ P(M) + 256 ∧ v(Q) ≤ 0))
+CollideE(B₀, Q, b) : (v(b) = v(Q) ∨ v(b) = 0) ∧ f(b) = f(Q)
+                    ∧ (P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ B₀ + 256 ∧ v(Q) ≤ 0))
 ReadH(M, x, n₀)   : modelOK ∧ frictionCheck ∧ AtFrame(R) ∧ R の横の 8 バイトは M のもの ∧ InTime ∧ far(M)
-ReadE(M, x, n₀)   : ReadH(M, x, n₀) ∧ スクロールの処理に来るどの Q でも CollideE(M, Q, b)
+ReadE(M, x, n₀, B₀) : ReadH(M, x, n₀) ∧ スクロールの処理に来るどの Q でも CollideE(B₀, Q, b)      （B₀ は数えるフレームの 1 つ前の終わりの基点 base(seq (j − 1))）
 frameE(a, M, x, n₀) = frame_readE の Frame で、始まりは a のもの        ReadE で、M が a の横のバイトを持つとき
                       a の始まりで止まるフレーム                         そうでないとき
 frameH(a, M, x, n₀) = read_move の Frame で、始まりは a のもの          ReadH で、M が a の横のバイトを持つとき

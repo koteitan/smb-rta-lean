@@ -16,6 +16,8 @@ before_R :  RoomCond(M),  各命令が SiteOK
 after_Q  :  RoomCond(M),  各命令が SiteOK
             →  pc(tr(j)) = Q  となる j はフレームに高々 1 つ,
                そして  pc(tr(j)) = Q,  上昇中(tr(j)),  rt(end) = rt_部屋  →  V(end) = V(tr(j))
+after_QP :  after_Q で、縦のページも: 歩きは vKeepH = V と縦のページのバイトを保つ
+            （1-1-c-7-5-18 で足した。[ジャンプを通した縦のページ](c-7-5-18-RoomHigh-ja.md)）
 vert_air :  vertAirOK,  AtV(R),  st(R) ∈ {1, 2},  (st(R) = 1 → DTHJ(R) = 1),  PrevA(R) & 80 = A_B(R) & 80
             →  ∃ k ≤ 728,  pc(stepN(k, R)) = Q  ∧  vs(stepN(k, R)) = vstepV(vs(R), A(R), 0)  ∧  InFrameN(R, k)
 bridge_of:  bridgeOK,  u ∈ arcSet(h, 8)  →  st(u) ∈ {1, 2}  ∧  ∀ a,  vstepV(u, a, 0) = vstep_m0(u, a, 0)

@@ -145,7 +145,7 @@ theorem reach_le_top {t a : Int} (h16 : 16 ≤ t) :
 
 /-- The frames up to the first hit follow `hstep` (`pre`, then `i`); the frame `i` ends with a hit; the frames after it are any `Frame`s
 (so they may hit again), the first with a speed of at most 0 and a fraction. If the first hit is on frame `J` or later, at frame
-`N + E + k` the position is at most `X + 16·top·(E + k)` past the start. -/
+`N + E + k` the position is at most `X + 16·top·(E + k)` past the start. These are frames without `wide`; the frames above ground use `hit_boundB`. -/
 theorem hit_bound {sy : Syms} {m : Machine} {s0 : HS} {X : Int} {N E J : Nat} (F : TFacts sy m)
     (h : runCheck sy m s0 X N = true) (ht : hitTable sy m (Opening.pOf sy m s0) X N E J = true)
     (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m)
@@ -204,6 +204,172 @@ theorem hit_bound {sy : Syms} {m : Machine} {s0 : HS} {X : Int} {N E J : Nat} (F
       push_cast
       rw [Int.mul_add, Int.mul_one]
     rcases hit with h3 | h3 <;> omega
+
+/-! ### Frames with `wide` (round 24): the base -/
+
+/-- `dbound` does not fall with one more frame, from a potential of at least 0 -/
+theorem dbound_succ {sy : Syms} {m : Machine} (F : Potential.Facts sy m) :
+    ∀ (n : Nat) (p : Int), 0 ≤ p → dbound sy m p n ≤ dbound sy m p (n + 1)
+  | 0, p, hp => by
+    have h1 : 0 ≤ Potential.nxt sy m p := by
+      unfold Potential.nxt
+      have := F.gs_nonneg
+      have := F.gf_nonneg
+      split <;> omega
+    show (0 : Int) ≤ 16 * min (top sy : Int) (Potential.nxt sy m p / 256) + 0
+    have : (0 : Int) ≤ (top sy : Int) := by omega
+    omega
+  | n + 1, p, hp => by
+    have h1 : 0 ≤ Potential.nxt sy m p := by
+      unfold Potential.nxt
+      have := F.gs_nonneg
+      have := F.gf_nonneg
+      split <;> omega
+    have ih := dbound_succ F n (Potential.nxt sy m p) h1
+    show 16 * min (top sy : Int) (Potential.nxt sy m p / 256) + dbound sy m (Potential.nxt sy m p) n ≤
+      16 * min (top sy : Int) (Potential.nxt sy m p / 256) + dbound sy m (Potential.nxt sy m p) (n + 1)
+    omega
+
+theorem dbound_mono {sy : Syms} {m : Machine} (F : Potential.Facts sy m) {p : Int} (hp : 0 ≤ p) (a : Nat) :
+    ∀ k : Nat, dbound sy m p a ≤ dbound sy m p (a + k)
+  | 0 => Int.le_refl _
+  | k + 1 => Int.le_trans (dbound_mono F hp a k) (dbound_succ F (a + k) p hp)
+
+/-- `n` chained frames with `wide`, whose bases follow each other (`TopSpeed.ChainB`), end at most `reach` past `max(P, B)` of the first: the frames of
+`TopSpeed.chain_reach`, with `max(P, B)` for `P` -/
+theorem chainB_reach {top amax : Int} (h255 : 255 ≤ amax) :
+    ∀ (fs : List (Frame top amax true)) (f : Frame top amax true) (w : Int), Chain (f :: fs) → TopSpeed.ChainB (f :: fs) →
+      (-top ≤ f.v ∧ f.v ≤ top) → max (256 * f.v + f.f) 0 ≤ w →
+      (fs.getLastD f).P' ≤ max f.P f.B + TopSpeed.reach top amax w (fs.length + 1)
+  | [], f, w, _, _, hv, hw => by
+    have := f.advB w hv hw
+    simp only [List.getLastD_nil, TopSpeed.reach]
+    omega
+  | g :: rest, f, w, hc, hb, hv, hw => by
+    obtain ⟨hgv, hgf, hgP, hrest⟩ := hc
+    obtain ⟨hgB, hbrest⟩ := hb
+    have hf := f.speed hv
+    have hg : -top ≤ g.v ∧ g.v ≤ top := by rw [hgv]; exact hf
+    have hG := f.gain h255
+    have hgw : max (256 * g.v + g.f) 0 ≤ w + amax := by rw [hgv, hgf]; omega
+    have ih := chainB_reach h255 rest g (w + amax) hrest hbrest hg hgw
+    have ha := f.advB w hv hw
+    have hadv : 0 ≤ TopSpeed.adv top amax w := by unfold TopSpeed.adv; omega
+    have hlast : ((g :: rest).getLastD f) = (rest.getLastD g) := List.getLastD_cons
+    rw [hlast]
+    simp only [TopSpeed.reach, List.length_cons] at ih ⊢
+    omega
+
+/-- the model's distance at a prefix of `pre`, past `N` frames: at most `X + 16·top·d` when `pre` has `N + d` frames -/
+theorem prefix_le {sy : Syms} {m : Machine} {s0 : HS} {X : Int} {N : Nat} (h16 : 16 ≤ (top sy : Int))
+    (hw : ∀ is : List HIn, (∀ i ∈ is, i ∈ inputs) → is.length ≤ N → hdist sy m s0 is ≤ X)
+    (ha : ∀ is : List HIn, (∀ i ∈ is, i ∈ inputs) → ∀ k, is.length = N + k → hdist sy m s0 is ≤ X + 16 * (top sy : Int) * (k : Int))
+    {pre : List HIn} (hpre : ∀ j ∈ pre, j ∈ inputs) {d : Nat} (hd : pre.length = N + d) {s : Nat} (hs : s ≤ pre.length) :
+    hdist sy m s0 (pre.take s) ≤ X + 16 * (top sy : Int) * (d : Int) := by
+  have hmem : ∀ j ∈ pre.take s, j ∈ inputs := fun j hj => hpre j (List.mem_of_mem_take hj)
+  have hl : (pre.take s).length = s := by simp; omega
+  have htop : (0 : Int) ≤ 16 * (top sy : Int) := by omega
+  by_cases hsN : s ≤ N
+  · have := hw _ hmem (by omega)
+    have : 0 ≤ 16 * (top sy : Int) * (d : Int) := Int.mul_nonneg htop (by omega)
+    omega
+  · have := ha _ hmem (s - N) (by omega)
+    have : 16 * (top sy : Int) * ((s - N : Nat) : Int) ≤ 16 * (top sy : Int) * (d : Int) := Int.mul_le_mul_of_nonneg_left (by omega) htop
+    omega
+
+/-- **`hit_bound` for frames with `wide`** (round 24): after the first hit the frames are `TopSpeed.Frame`s with `wide` whose bases follow each other. The first
+hit ends 1 px behind the model's move, or at most 1 px past the model's position at some frame before it (`s ≤ pre.length`), and the base of the first frame after it
+is its start or at most such a position. Then `max(P, B)` at that frame is within the table's bound, and the frames after it move `max(P, B)` by at most `reach`
+(`chainB_reach`): the same bound as `hit_bound`. -/
+theorem hit_boundB {sy : Syms} {m : Machine} {s0 : HS} {X : Int} {N E J : Nat} (F : TFacts sy m)
+    (h : runCheck sy m s0 X N = true) (ht : hitTable sy m (Opening.pOf sy m s0) X N E J = true)
+    (h16 : 16 ≤ (top sy : Int)) (h255 : 255 ≤ amax sy m)
+    {pre : List HIn} {i : HIn} (hpre : ∀ j ∈ pre, j ∈ inputs) (hi : i ∈ inputs) (hj : J ≤ pre.length + 1)
+    {P0 Pj : Int}
+    (hit : Pj ≤ P0 + hdist sy m s0 (pre ++ [i]) - 256 ∨ ∃ s, s ≤ pre.length ∧ Pj ≤ P0 + hdist sy m s0 (pre.take s) + 256)
+    (f : Frame (top sy) (amax sy m) true) (fs : List (Frame (top sy) (amax sy m) true)) (hc : Chain (f :: fs)) (hcb : TopSpeed.ChainB (f :: fs))
+    (hv : -(top sy : Int) ≤ f.v ∧ f.v ≤ 0) (hf : f.f ≤ 255) (hP : f.P = Pj)
+    (hB : f.B ≤ Pj ∨ ∃ s, s ≤ pre.length ∧ f.B ≤ P0 + hdist sy m s0 (pre.take s))
+    {k : Nat} (hlen : pre.length + 1 + (fs.length + 1) = N + E + k) :
+    (fs.getLastD f).P' ≤ P0 + X + 16 * (top sy : Int) * ((E + k : Nat) : Int) := by
+  have hD : inD sy s0 = true := by
+    simp only [runCheck, Bool.and_eq_true] at h
+    exact h.1
+  have hall : ∀ j ∈ pre ++ [i], j ∈ inputs := fun j hm => by
+    rcases List.mem_append.1 hm with h1 | h1
+    · exact hpre j h1
+    · rw [List.mem_singleton.1 h1]
+      exact hi
+  have hreach := chainB_reach (w := 255) (by omega) fs f hc hcb ⟨hv.1, by omega⟩ (by omega)
+  rw [hP] at hreach
+  have htop : (0 : Int) ≤ 16 * (top sy : Int) := by omega
+  have eEk : 16 * (top sy : Int) * ((E + k : Nat) : Int) = 16 * (top sy : Int) * (E : Int) + 16 * (top sy : Int) * (k : Int) := by
+    push_cast
+    rw [Int.mul_add]
+  by_cases hjN : pre.length + 1 ≤ N
+  · -- the hit comes within `N` frames: the table
+    have hd2 := dist_le F.pot (pre ++ [i]) s0 _ (Opening.J_pOf hD) hall
+    simp only [List.length_append, List.length_singleton] at hd2
+    have hpref : ∀ s, s ≤ pre.length → hdist sy m s0 (pre.take s) ≤ dbound sy m (Opening.pOf sy m s0) pre.length := by
+      intro s hs
+      have h1 := dist_le F.pot (pre.take s) s0 _ (Opening.J_pOf hD) (fun j hj => hpre j (List.mem_of_mem_take hj))
+      have hl : (pre.take s).length = s := by simp; omega
+      rw [hl] at h1
+      have h2 := dbound_mono F.pot (pOf_nonneg F.pot s0) s (pre.length - s)
+      rw [show s + (pre.length - s) = pre.length by omega] at h2
+      omega
+    have hrow : hitPos sy m (Opening.pOf sy m s0) (pre.length + 1) +
+        TopSpeed.reach (top sy) (amax sy m) 255 (N + E - (pre.length + 1)) ≤ X + 16 * (top sy : Int) * (E : Int) := by
+      simp only [hitTable, List.all_eq_true, Bool.or_eq_true, decide_eq_true_eq] at ht
+      rcases ht (pre.length + 1) (List.mem_range.2 (by omega)) with h1 | h1
+      · omega
+      · exact h1
+    have hsplit := TopSpeed.reach_add (top := (top sy : Int)) (amax := amax sy m)
+      (N + E - (pre.length + 1)) k 255
+    rw [show N + E - (pre.length + 1) + k = fs.length + 1 by omega] at hsplit
+    have hk := reach_le_top (a := amax sy m) h16 k (255 + amax sy m * ((N + E - (pre.length + 1) : Nat) : Int))
+    have hpos : Pj - P0 ≤ hitPos sy m (Opening.pOf sy m s0) (pre.length + 1) := by
+      unfold hitPos
+      simp only [Nat.add_sub_cancel]
+      rcases hit with h1 | ⟨s, hs, h1⟩
+      · omega
+      · have := hpref s hs
+        omega
+    have hposB : f.B - P0 ≤ hitPos sy m (Opening.pOf sy m s0) (pre.length + 1) := by
+      rcases hB with h1 | ⟨s, hs, h1⟩
+      · omega
+      · have := hpref s hs
+        unfold hitPos
+        simp only [Nat.add_sub_cancel]
+        omega
+    omega
+  · -- the hit comes past `N` frames: the bound of the search, and at most `16·top` per frame after
+    obtain ⟨d, hd⟩ : ∃ d, pre.length = N + d := ⟨pre.length - N, by omega⟩
+    have hw : ∀ is : List HIn, (∀ i ∈ is, i ∈ inputs) → is.length ≤ N → hdist sy m s0 is ≤ X := fun is hi hl => within_of_check F h hi hl
+    have ha : ∀ is : List HIn, (∀ i ∈ is, i ∈ inputs) → ∀ k, is.length = N + k → hdist sy m s0 is ≤ X + 16 * (top sy : Int) * (k : Int) :=
+      fun is hi k hl => after_of_check F h hi hl
+    have h2 := after_of_check F h hall (k := d + 1) (by simp; omega)
+    have hk : E + k = d + 1 + (fs.length + 1) := by omega
+    have hr := reach_le_top (a := amax sy m) h16 (fs.length + 1) 255
+    have e1 : 16 * (top sy : Int) * ((E + k : Nat) : Int) =
+        16 * (top sy : Int) * ((d + 1 : Nat) : Int) + 16 * (top sy : Int) * ((fs.length + 1 : Nat) : Int) := by
+      rw [hk]
+      push_cast
+      rw [← Int.mul_add]
+    have e2 : 16 * (top sy : Int) * ((d + 1 : Nat) : Int) = 16 * (top sy : Int) * (d : Int) + 16 * (top sy : Int) := by
+      push_cast
+      rw [Int.mul_add, Int.mul_one]
+    have hpj : Pj ≤ P0 + X + 16 * (top sy : Int) * (d : Int) + 16 * (top sy : Int) := by
+      rcases hit with h3 | ⟨s, hs, h3⟩
+      · omega
+      · have := prefix_le h16 hw ha hpre hd hs
+        omega
+    have hpb : f.B ≤ P0 + X + 16 * (top sy : Int) * (d : Int) + 16 * (top sy : Int) := by
+      rcases hB with h3 | ⟨s, hs, h3⟩
+      · omega
+      · have := prefix_le h16 hw ha hpre hd hs
+        omega
+    omega
 
 /-- A wall behind him while he moves right blocks Left on the next frame, and nothing else. With Left blocked, a frame moving right is
 the same frame as without, or it stops him (Left on the ground at a low speed stops a skid, and the blocked Left does not start him moving

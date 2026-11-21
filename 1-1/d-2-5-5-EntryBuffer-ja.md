@@ -19,7 +19,7 @@ buffer_frame    :  WalkOK(finB),  RoomCond(K_B, m),  ∀ j, SiteOK(tr(j)),  rt(f
 buffer_of_rows  :  [b, a) での RoomMap.map_of_rows の仮定,  確認,  b ≤ k < a,
                    c(seq k) = c(r),   rt(frame(seq k, inp k)) = e_s                 →   EntryAt(L₅, frame(seq k, inp k))
 
-Run.buffer₂     :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                   （フィールド、新しい）
+Run.buffer₂     :  c(seq(a₂ − 1)) = c(r)   ∨   EntryAt(L₅, seq a₂)                   （フィールド、新しい。ラウンド 24 で狭めた、下を見よ）
 Run.buf₂        :  EntryAt(L₅, seq a₂)                                                （定理）
 entryAt_of_buf  :  EntryAt(L₅, m)  ∧  EntryAt(R₃, m)   →   EntryAt(R₈, m)
 chg.entry₂      :  EntryAt(R₃, seq a₂)                                                （3 バイト。前は R₉）
@@ -82,6 +82,10 @@ Lean: `Theorems/EntryBuffer.lean`（`finB`、`keyB`、`optsB`、`buffer_frame`�
 
 [部屋を通る画面のバッファの制御](d-2-5-5-1-BufferControl-ja.md)（1-1-d-2-5-5-1）は、部屋のどのフレームも、最初の操作から入るフレームまで、制御が 0 か 6 で始まることを証明します（`Run.ctl₂`）。このページの歩きは、制御 0 からも 6 からも、制御 0 か 6 で終わります。最初の切り替えの段は、部屋の最初の操作で制御を 0 と知ります。そこで `buffer₂` は、入るフレームの始まりの制御 6 だけを除きます。コインのフレームと入るフレームの位置を追う歩きを 2 通り作りましたが、大きくなりすぎました。数はそのページにあります。`buffer₂` は変わりません。
 
+## ラウンド 24: フィールドを狭めた
+
+`buffer₂` は今 `c(seq(a₂ − 1)) ≠ 6 ∨ (seq(a₂ − 1) で page = 0 ∧ 16 ≤ x < 181) ∨ EntryAt(L₅, seq a₂)` です。`Run.buf₂` は、最初の場合を `Run.ctl₂` で（制御は 0 か 6 なので、6 でなければ基準の 0）、真ん中の場合を `Run.coin₂` で扱います（[BufferCoin](d-2-5-5-2-BufferCoin-ja.md): そういうフレームは入らない）。そこでこのフィールドが求めるのは、入るフレームの前のフレームがコインを消したなら、ページ 0 の 16 から 180 px で終わった、ということだけです。
+
 ## ほかのパートから使うもの
 
 * パート c: `RoomMap.cond_of_rows`、`RoomMap.stepT`、`RoomMap.s_stepT`。`Run.rt₂` を通して、フィールド `room.enters`、`Run.roomEnter`、`SideEntryEnd`、`SideEntryRest`。
@@ -98,7 +102,7 @@ Lean: `Theorems/EntryBuffer.lean`（`finB`、`keyB`、`optsB`、`buffer_frame`�
 
 ## 仮定（Lean で証明していない）
 
-* `buffer₂`: 入るフレームは画面のバッファの制御が 0 で始まる、または入口の 5 バイトは基準のもの。ラウンド 23 で、そこでの制御は 0 か 6 と証明しました（`Run.ctl₂`）。そこでこれは 6 だけを除きます。
+* `buffer₂`: 入るフレームは画面のバッファの制御 6 で始まらない、またはページ 0 の 16 から 180 px で始まる、または入口の 5 バイトは基準のもの（ラウンド 24）。`Run.ctl₂` と `Run.coin₂` により、これは、ページ 0 の 16 から 180 px の外での制御 6 の始まりだけを除きます。
 * `chg.entry₂`: 入口の 3 バイトは基準の値: エリア音楽のバッファ、イベント音楽の待ち、足す音の長さ。ゲームタイマーが要ります（[部屋のフレームを通る音楽のバイト](d-2-5-1-RoomMusic-ja.md)）。
 * 部屋の各命令の `SiteOK`（`chg.roomSites`）。前と同じです。
 

@@ -71,7 +71,14 @@ As a separate check (a program, not a theorem), the model with a hit of any kind
 * The frames after a hit are `TopSpeed.Frame`s: the assumptions of [Top speed bound](../0-0/0-1-TopSpeed.md) and [Reach](../0-0/0-2-Reach.md). Enemies are as on that page: a contact writes none of these bytes, except a death.
 * On frames 1 to 8 Mario stays in the box of `noHit`. That he stays in the box is proved for `x` and the height (`SurfaceFrames.quiet_upto`).
 * `mask` in Lean runs the fractions 0, 128 and 255. As a program over every fraction: same frame 2,288,640 times, stopped 46,080 times, anything else 0 times.
-* The left screen edge is in `Frame` and `SurfaceFrames.Hit` ([Above ground: the frames from control, one by one](e-2-SurfaceFrames.md)). At the edge he can stop with `v₂ > 0` (largest measured 4), so `P` rises by 16·v₂. What holds is `v′ ≤ 0 ∧ P′ ≤ P + 256`.
+* The left screen edge is in `Frame` and `SurfaceFrames.Hit` ([Above ground: the frames from control, one by one](e-2-SurfaceFrames.md)). At the edge he can stop with `v₂ > 0` (largest measured 4), so `P` rises by 16·v₂. What holds is `v′ ≤ 0 ∧ P′ ≤ B + 256`, with the base B = max(P, edge) (round 24: `P′ ≤ P + 256` was false on a real frame that starts 1 px left of the edge, [1-1-e-2-10-3-10](e-2-10-3-10-ScreenEdge.md)).
+* **Round 24: `hit_boundB`.** The frames above ground are `TopSpeed.Frame`s with `wide`. `hit_boundB` is `hit_bound` for them: the first hit ends at most 1 px past the model's position at some frame before it (`s ≤ |pre|`), and the base of the frame after it is its start or such a position. Along frames whose bases follow each other (`TopSpeed.ChainB`), max(P, B) moves by at most `reach(255, n)` (`chainB_reach`). The table and the numbers are the same; the prefixes need `dbound` to grow with the number of frames (`dbound_mono`). `hit_bound` and `hit_short` stay, for frames without `wide`.
+
+```
+hit_boundB :  9 ≤ j,  P(j) ≤ P(A) + d(pre ++ [i]) − 256  or  ∃ s ≤ |pre|, P(j) ≤ P(A) + d(pre.take s) + 256,
+              B(f) ≤ P(j)  or  ∃ s ≤ |pre|, B(f) ≤ P(A) + d(pre.take s),   Chain(f :: fs) ∧ ChainB(f :: fs)
+              →  P′(last) ≤ P(A) + X + 16·top·(E + k)          (the conclusion of hit_bound)
+```
 * The start is one real run. Other runs are not covered by a theorem. On the emulator: the TAS at 852 has the same horizontal state, position and height as `A` (17 RAM bytes differ, all timers and random numbers), and changing the fraction, speed or facing at the side pipe's entry gives the same state after the same 282 frames. If control comes later than 852 and the state is the same, `short` still applies, because it holds for every `|w| ≤ 233`.
 * No Start or Select.
 

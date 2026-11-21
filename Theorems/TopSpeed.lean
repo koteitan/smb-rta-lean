@@ -158,9 +158,11 @@ this order: `GetPlayerAnimSpeed` (`anim`), `X_Physics` + `ImposeFriction` (`fric
 the adder is a table entry, so at most `amax`), `MoveObjectHorizontally` (`move`),
 `ImpedePlayerMove` (`impede*`). The subspeed is written only by the first two (and by the
 climbing code, which is not in a running frame). The third case of `impedeP` is a push out of a wall, and
-the screen's left edge, which holds him at its pixel: moving left, `P` ends at most 1 px past where it began. -/
+the screen's left edge, which holds him at its pixel: moving left, `P` ends at most 1 px past `B`. `B` is the frame's start `P`
+(the default), but on a frame with `wide` it can be more: the frames above ground (`SurfaceRead.frameE`) take for `B` the larger of `P` and
+the screen's left edge, because the clamp puts him back on the edge's pixel (`baseP`: without `wide`, `B = P`). -/
 
-structure Frame (top amax : Int) where
+structure Frame (top amax : Int) (wide : Bool := false) where
   v : Int
   f : Int
   P : Int
@@ -179,7 +181,10 @@ structure Frame (top amax : Int) where
   move : P₂ = P + 16 * v₂
   impedeV : v' = v₂ ∨ v' = 0
   impedeF : f' = f₂
-  impedeP : P' = P₂ ∨ P' = P₂ - 256 ∨ (P' ≤ P + 256 ∧ v₂ ≤ 0)
+  /-- the base of the third case of `impedeP`: `P`, or with `wide` at least `P` and the screen's left edge -/
+  B : Int := P
+  baseP : wide = false → B = P := by intro _; rfl
+  impedeP : P' = P₂ ∨ P' = P₂ - 256 ∨ (P' ≤ B + 256 ∧ v₂ ≤ 0)
 
 /-- one frame keeps `|v| ≤ top` and moves `P` by at most `16·top` -/
 theorem Frame.bound {top amax : Int} (f : Frame top amax) (h16 : 16 ≤ top) (hv : -top ≤ f.v ∧ f.v ≤ top) :
@@ -190,10 +195,11 @@ theorem Frame.bound {top amax : Int} (f : Frame top amax) (h16 : 16 ≤ top) (hv
   have hm := f.move
   refine ⟨?_, ?_⟩
   · rcases f.impedeV with h | h <;> rw [h] <;> omega
-  · rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
+  · have eB := f.baseP rfl
+    rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
 
 /-- `GainBound` for one frame: `V' ≤ max(V, 0) + amax`, with `V = 256·v + f` -/
-theorem Frame.gain {top amax : Int} (f : Frame top amax) (h255 : 255 ≤ amax) :
+theorem Frame.gain {top amax : Int} {wd : Bool} (f : Frame top amax wd) (h255 : 255 ≤ amax) :
     256 * f.v' + f.f' ≤ max (256 * f.v + f.f) 0 + amax := by
   have hg := f.friction_gain
   have hfr := f.frac
@@ -218,13 +224,52 @@ theorem Frame.adv_le {top amax : Int} (f : Frame top amax) (w : Int) (hv : -top 
   have hm := f.move
   have hA : max (256 * f.v₁ + f.f₁) 0 ≤ max (256 * f.v + f.f) 0 := by
     rcases f.anim with ⟨h1, h2⟩ | ⟨h1, h2⟩ <;> rw [h1, h2] <;> omega
+  have eB := f.baseP rfl
+  rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
+
+/-! ### Frames with `wide`: the bounds from `max(P, B)` -/
+
+/-- one frame keeps `|v| ≤ top` (any frame, `wide` or not) -/
+theorem Frame.speed {top amax : Int} {wd : Bool} (f : Frame top amax wd) (hv : -top ≤ f.v ∧ f.v ≤ top) : -top ≤ f.v' ∧ f.v' ≤ top := by
+  have h1 : -top ≤ f.v₁ ∧ f.v₁ ≤ top := by
+    rcases f.anim with ⟨h, _⟩ | ⟨h, _⟩ <;> rw [h] <;> omega
+  have h2 := f.friction h1
+  rcases f.impedeV with h | h <;> rw [h] <;> omega
+
+/-- one frame ends at most `16·top` past `max(P, B)` -/
+theorem Frame.posB {top amax : Int} {wd : Bool} (f : Frame top amax wd) (h16 : 16 ≤ top) (hv : -top ≤ f.v ∧ f.v ≤ top) :
+    f.P' ≤ max f.P f.B + 16 * top := by
+  have h1 : -top ≤ f.v₁ ∧ f.v₁ ≤ top := by
+    rcases f.anim with ⟨h, _⟩ | ⟨h, _⟩ <;> rw [h] <;> omega
+  have h2 := f.friction h1
+  have hm := f.move
+  rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
+
+/-- one frame ends at most `adv` past `max(P, B)`, when `max(V, 0) ≤ w` before it -/
+theorem Frame.advB {top amax : Int} {wd : Bool} (f : Frame top amax wd) (w : Int) (hv : -top ≤ f.v ∧ f.v ≤ top)
+    (hw : max (256 * f.v + f.f) 0 ≤ w) : f.P' ≤ max f.P f.B + adv top amax w := by
+  unfold adv
+  have h1 : -top ≤ f.v₁ ∧ f.v₁ ≤ top := by
+    rcases f.anim with ⟨h, _⟩ | ⟨h, _⟩ <;> rw [h] <;> omega
+  have h2 := f.friction h1
+  have hg := f.friction_gain
+  have hfr := f.frac
+  have hm := f.move
+  have hA : max (256 * f.v₁ + f.f₁) 0 ≤ max (256 * f.v + f.f) 0 := by
+    rcases f.anim with ⟨h1, h2⟩ | ⟨h1, h2⟩ <;> rw [h1, h2] <;> omega
   rcases f.impedeP with h | h | ⟨h, hneg⟩ <;> omega
 
 /-- frames that follow each other -/
-def Chain {top amax : Int} : List (Frame top amax) → Prop
+def Chain {top amax : Int} {wd : Bool} : List (Frame top amax wd) → Prop
   | [] => True
   | [_] => True
   | f :: g :: rest => g.v = f.v' ∧ g.f = f.f' ∧ g.P = f.P' ∧ Chain (g :: rest)
+
+/-- the bases of frames that follow each other: the base of the next frame is at most the larger of `max(P, B)` of this frame and the next frame's start -/
+def ChainB {top amax : Int} {wd : Bool} : List (Frame top amax wd) → Prop
+  | [] => True
+  | [_] => True
+  | f :: g :: rest => g.B ≤ max (max f.P f.B) g.P ∧ ChainB (g :: rest)
 
 /-- in `n` chained frames, `P` grows by at most `16·top·n` -/
 theorem chain_bound {top amax : Int} (h16 : 16 ≤ top) :

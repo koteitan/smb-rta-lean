@@ -39,7 +39,22 @@ ROM の中で、マリオの速さや位置を書き換える命令を、解析�
 
 `Frame` は 1 フレームをこの 5 つの事実で表したもので、`Frame.bound` と `chain_bound` は算数で出ます。
 右へ押される唯一の場合（`ImpedePlayerMove`）は `v ≤ 0` のときだけなので、そのフレームの移動は
-多くても 256 で、16·v_top より小さくなります。`impedeP` の 3 番目は押し戻しと画面の左端で、`P′ ≤ P + 256 ∧ v₂ ≤ 0` です。
+多くても 256 で、16·v_top より小さくなります。`impedeP` の 3 番目は押し戻しと画面の左端で、`P′ ≤ B + 256 ∧ v₂ ≤ 0` です。
+
+**基点 `B`（第 24 回）.** `Frame` にはパラメータ `wide`（書かなければ `false`）とフィールド `B` があります。`B` は 3 番目の場合の基点です。
+`wide` がなければ `B = P` です（`baseP`。`B := P` が既定なので、前と同じに作ったフレームは `P′ ≤ P + 256` を持ちます）。`Frame.bound`、
+`Frame.adv_le`、`chain_bound` は前と同じです。地上のフレーム（1-1 のパート e）は `wide` つきのフレームです。そこでは `B` は `P` と画面の左端の
+大きい方です。端での補正は彼を端のピクセルに置き、そのあと 1 px の押し戻しが来ることがあるからです（`P′ ≤ P + 256` は本物のフレームで偽でした:
+[1-1-e-2-10-3-10](../1-1/e-2-10-3-10-ScreenEdge-ja.md)）。どのフレームでも:
+
+```
+Frame.speed : |v| ≤ v_top  →  |v′| ≤ v_top
+Frame.posB  : |v| ≤ v_top  →  P′ ≤ max(P, B) + 16·v_top
+Frame.advB  : |v| ≤ v_top ∧ max(V, 0) ≤ w  →  P′ ≤ max(P, B) + adv(w)
+ChainB(f :: g :: rest) : B(g) ≤ max(max(P(f), B(f)), P(g)) ∧ ChainB(g :: rest)
+```
+
+だから基点が続いていくフレーム（`ChainB`）の上で、max(P, B) は 1 フレームに多くても `adv` しか増えません（`SurfaceRun.chainB_reach`）。
 
 ## 前提（Lean では証明していない）
 
