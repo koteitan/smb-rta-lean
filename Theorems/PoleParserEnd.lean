@@ -25,7 +25,9 @@ search did protect `N`. Here the guard of each walk to the end protects the byte
 frames by `pole-keep parser`, 0 hits). The checks on the ROM are `eCheckP` and `colCheckK`.
 
 What is not proved here: `CleanK` of `guardN` and `AfterKeep.guardH` for the parser's bytes on the frames of the run, no wrap of the scroll (`NoWrap`), the edge below
-`65280 − L` px, and the rest of `tilesCol` (`hslot`, `hnear`, `hread`). Nothing in the route uses this file yet.
+`65280 − L` px, and the rest of `tilesCol` (`hslot`, `hnear`, `hread`). Round 29: `PoleParserRun` takes `inv_onFrames` to the route's frames (`guardE` protects the
+parser's four bytes, so `cleanE` gives `CleanK` of `guardPI`; no wrap is the field `PoleJoin.Run.parWrap`, the edge's bound the theorem `PoleParserRun.edgeLow_run`), and the old field
+`tilesCol` is a theorem from the narrower field (`PoleTileFar.TileSlot`).
 There is no game data in this file. Page: `1-1/f-6-17-9-PoleParserEnd.md`.
 -/
 
@@ -1087,7 +1089,7 @@ theorem frame_six (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false) :
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false) :
     ∃ k₂, (trace m i k₂).pc = sy.UpdScrollVar ∧ (trace m i k₂).frame = m.frame ∧
       (∀ x ∈ pK sy m0, (trace m i k₂).ram.get! x = m.ram.get! x) ∧
       ((ScrollRule.left16 (placesS sy m0) (trace m i k₂) = ScrollRule.left16 (placesS sy m0) m ∧
@@ -1124,7 +1126,7 @@ theorem frame_six (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
       have := sy.PlayerSubs.toNat_lt
       omega
     · exact e
-  obtain ⟨huniq, k₂, _, hq2, hf2, _, hU, hEnd⟩ := HU (fun j hj hfj => hp kq hqq j hj hfj)
+  obtain ⟨huniq, k₂, _, hq2, hf2, _, hU, hEnd⟩ := HU (fun j hj hfj => hp kq (Nat.le_of_lt hkq) hqq j hj hfj)
   have e1 : kq + k = k₁ := huniq (kq + k) (by omega) (by rw [eq.1]; exact pcR)
   have hk₁ : trace m i k₁ = FrameModel.stepN k (trace m i kq) := by rw [← e1]; exact eq.1
   have hKm : ∀ x ∈ pK sy m0, (trace m i k₂).ram.get! x = m.ram.get! x := by
@@ -1262,7 +1264,7 @@ theorem rule_six (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheck
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (hw : ∀ k, (trace m i k).pc = sy.UpdScrollVar → (trace m i k).frame = m.frame → NoWrap sy m0 m (trace m i k))
     (hsix : vSix.contains (m.ram.get! (nI sy m0)) = true) :
     RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) := by
@@ -1348,7 +1350,7 @@ theorem rule_col (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheck
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (hw : ∀ k, (trace m i k).pc = sy.UpdScrollVar → (trace m i k).frame = m.frame → NoWrap sy m0 m (trace m i k))
     (hcol : vCol.contains (m.ram.get! (nI sy m0)) = true) (hc16 : (m.ram.get! (cIdx sy m0)).toNat < 16) (hp255 : m.ram.get! (gIdx sy m0) ≠ 255) :
     RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) := by
@@ -1402,7 +1404,7 @@ theorem rule_zero (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (hw : ∀ k, (trace m i k).pc = sy.UpdScrollVar → (trace m i k).frame = m.frame → NoWrap sy m0 m (trace m i k))
     (hz : m.ram.get! (nI sy m0) = 0) :
     RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) := by
@@ -1428,7 +1430,7 @@ theorem rule_frame (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChe
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (hw : ∀ k, (trace m i k).pc = sy.UpdScrollVar → (trace m i k).frame = m.frame → NoWrap sy m0 m (trace m i k))
     (h8 : (m.ram.get! (nI sy m0)).toNat ≤ 8) (hc16 : (m.ram.get! (cIdx sy m0)).toNat < 16) (hp255 : m.ram.get! (gIdx sy m0) ≠ 255) :
     RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) := by
@@ -1528,7 +1530,7 @@ theorem col_frame (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (h8 : (m.ram.get! (nI sy m0)).toNat ≤ 8) (hc16 : ColOK sy m0 m) (hp255 : m.ram.get! (gIdx sy m0) ≠ 255) :
     ColOK sy m0 (frame m i) := by
   obtain ⟨k₂, _, _, hK, _, hE⟩ := frame_six hc hq hqe he hs hidle h0 hcl hH hN hx hv harr hf0 hfirst ht hp
@@ -1635,7 +1637,7 @@ theorem step_frame {L : Nat} (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} 
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (hw : ∀ k, (trace m i k).pc = sy.UpdScrollVar → (trace m i k).frame = m.frame → NoWrap sy m0 m (trace m i k))
     (hI : Inv (places sy m0) L m) (hC : ColOK sy m0 m) (hE : edgeOf (places sy m0) m + L < 65280) :
     RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) ∧ ColOK sy m0 (frame m i) :=
@@ -1671,7 +1673,8 @@ end NoCut
 /-! ## On the frames of a run
 
 `inv_onFrames`: on the frames of a run up to the touch's frame (`FrameKeep.Frames`, from the machine at control on), the invariant and the column below 16 hold at
-every frame's start, from their values at the first and, for each frame before the touch's frame, the area's type `v`, the field `posW` from the scroll handler on, no
+every frame's start, from their values at the first and, for each frame before the touch's frame, the area's type `v`, the field `posW` from the scroll handler on
+(round 29: only on a frame that comes to the player's routine, from its first arrival there), no
 wrap of the scroll, the edge below `65280 − L` px and `CleanK` of `guardPI` (no store through an index or a pointer writes the parser's four bytes). The rest comes from
 the frames: each starts in the idle loop in control (`Frames.all_start`), `cleanE` (with `cleanPar_of`), `noStore`, and the time. A frame that comes to the player's
 routine takes `step_frame`, one that does not `step_noCut` (`arrival_cases`). -/
@@ -1704,7 +1707,9 @@ theorem inv_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine}
     (h0 : Inv (places sy m0) L (K.all 0) ∧ ColOK sy m0 (K.all 0))
     (hI : ∀ n, n + 1 < K.ix g → ∀ k, FrameKeep.CleanK (guardPI sy m0) (FrameKeep.spotOf sy m0).store (trace (K.all n) (K.inp n) k))
     (hv : ∀ n, n + 1 < K.ix g → CtrlKeep.AreaOK sy v (K.all n))
-    (hp : ∀ n, n + 1 < K.ix g → ∀ k, (trace (K.all n) (K.inp n) k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace (K.all n) (K.inp n) j).frame = (K.all n).frame →
+    (hp : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
+      (∀ j, j < n₀ → (trace (K.all n) (K.inp n) j).pc ≠ sy.PlayerCtrlRoutine) →
+      ∀ k, n₀ ≤ k → (trace (K.all n) (K.inp n) k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace (K.all n) (K.inp n) j).frame = (K.all n).frame →
       EdgeStep.cutPos sy m0 (trace (K.all n) (K.inp n) j).pc = false)
     (hw : ∀ n, n + 1 < K.ix g → ∀ k, (trace (K.all n) (K.inp n) k).pc = sy.UpdScrollVar → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
       NoWrap sy m0 (K.all n) (trace (K.all n) (K.inp n) k))
@@ -1727,7 +1732,7 @@ theorem inv_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine}
     have ht : ∀ k, (trace (K.all n) (K.inp n) k).pc ≠ sy.EndlessLoop → (trace (K.all n) (K.inp n) k).fdot ≤ dotsPerFrame - 64 := fun k hk => (hcE k).time hk
     rw [K.next n]
     rcases arrival_cases hq hst hclK with ⟨n₀, a1, a2, a3⟩ | hno
-    · have r := step_frame hc hq hqe he hs hidle hst hP (K.noStore n hn) (hv n hn) a1 a2 a3 ht (hp n hn) (hw n hn) hIn hCn (hE n hn)
+    · have r := step_frame hc hq hqe he hs hidle hst hP (K.noStore n hn) (hv n hn) a1 a2 a3 ht (hp n hn n₀ a1 a2 a3) (hw n hn) hIn hCn (hE n hn)
       exact ⟨(invV_iff (P := places sy m0) (m := frame (K.all n) (K.inp n))).2 (inv_ruleW ((invV_iff (P := places sy m0) (m := K.all n)).1 hIn) r.1), r.2⟩
     · have r := step_noCut hq hqe hst hclK hno hCn
       exact ⟨(invV_iff (P := places sy m0) (m := frame (K.all n) (K.inp n))).2 (inv_ruleW ((invV_iff (P := places sy m0) (m := K.all n)).1 hIn) r.1), r.2⟩

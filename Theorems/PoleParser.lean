@@ -18,7 +18,8 @@ those tasks, S the scroll counter of 32 px and edge the screen's left edge in px
   N ≤ 8 ∧ 16·col + 16·p(N) + S = edge + L.
 
 `L` is a parameter: the check at control gives its value. What is not proved here: that each frame in control moves these bytes by `Rule` (the scroll's part, the
-parser's part; measured by `pole-keep parser`), and that he is not far left of the edge at the read. So `tilesCol` stays.
+parser's part; measured by `pole-keep parser`), and that he is not far left of the edge at the read. So `tilesCol` stays. (Round 28: `PoleParserEnd` proves the
+parser's part; round 29: `PoleParserRun` puts the invariant on the route's frames, and `tilesCol` asks only `PoleTileFar.TileSlot`.)
 
 The code of one frame, as the rule follows it (UpdScrollVar, the parser's task routine, the column's step):
 * the scroll handler adds the scroll's amount Y to S and to the edge;
@@ -1205,7 +1206,7 @@ theorem frame_toU (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
-    (hp : ∀ k, (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false) :
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false) :
     ∃ k₂, (trace m i k₂).pc = sy.UpdScrollVar ∧ (trace m i k₂).frame = m.frame ∧
       (∀ x ∈ pK sy m0, (trace m i k₂).ram.get! x = m.ram.get! x) ∧
       ((ScrollRule.left16 (placesS sy m0) (trace m i k₂) = ScrollRule.left16 (placesS sy m0) m ∧
@@ -1231,7 +1232,7 @@ theorem frame_toU (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
       have := sy.PlayerSubs.toNat_lt
       omega
     · exact e
-  obtain ⟨huniq, k₂, _, hq2, hf2, _, hU⟩ := HU (fun j hj hfj => hp kq hqq j hj hfj)
+  obtain ⟨huniq, k₂, _, hq2, hf2, _, hU⟩ := HU (fun j hj hfj => hp kq (Nat.le_of_lt hkq) hqq j hj hfj)
   have e1 : kq + k = k₁ := huniq (kq + k) (by omega) (by rw [eq.1]; exact pcR)
   have hk₁ : trace m i k₁ = FrameModel.stepN k (trace m i kq) := by rw [← e1]; exact eq.1
   refine ⟨k₂, hq2, hf2, fun x hx => ?_, ?_⟩

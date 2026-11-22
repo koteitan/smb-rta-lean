@@ -14,6 +14,8 @@
 
 **第 28 回.** フィールド `near` は定理になりました（`OnFrames.nearAt`、[動きがスクロールのために書くバイト](e-2-10-3-16-MoveScroll-ja.md)）: スクロールの処理での彼のピクセルは、プレイヤーのルーチンに最初に来たところのピクセルに、動きが書くバイトを足したものです（`MoveScroll.move_xs`、動きのルーチンの歩き）。`PlaceKeep.keep_place` の歩きが、スクロールの 3 つのバイトと端を、ルーチンに来たところからスクロールの処理まで運びます。かわりに、ルーチンに来たところの状態についての新しいフィールド `nearA` を置きます: 横のタイマーとスクロールのロックが 0 で、画面での彼の場所がしきい値以上なら、left16(R) + 2 ≤ pixel16(R)。動きのことは言いません。`numbersCheck` は確認を 2 つ多く持ちます（`PlaceKeep.placeCheck`、`MoveScroll.xsCheck`）。`OnFrames.edgeAt` と `OnFrames.edge_behind` は、前のフレームの速さと位置をとります（`OnFrames.readAll` から）。フィールド `Moves.stop` は求めることが減りました: スクロールの処理で右に動いていて、速さ 0 で、P(Q) で終わるフレームだけです（そこで P(Q) ≤ P(a) + 256）。ほかのそういうフレームでは、`CollideE` が彼を P(Q) の 1 px 後ろに置き、それは `AfterP.stop` の 1 つ目の場合です（`Moves.stopP`）。残るのは、速さを 0 にして、動きのあとの位置をそのままにするフレームです: 打ち消し合う 2 回の押し戻し（コードでは、プレイヤーの当たり判定のルーチンは多くて 1 回押し戻し、足場のルーチンはもう一度押し戻せます。証明していません）か、押し戻しなしで速さを 0 にする呼び出し。
 
+**第 29 回.** フィールド `nearA` は定理になりました（`OnFrames.nearAAt`、[フレームの始めからプレイヤーのルーチンまでのスクロールのバイト](e-2-10-3-17-SideTimer-ja.md)）: フレームの始めからルーチンに来るところまでに、横のタイマーは高々 1 減り（`SideTimer.side_at`。タイマーのループの `DEC abs,X` を追う歩き）、場所のバイト、ロック、端、位置は保たれます（`SideTimer.keep_at`、`CtrlKeep.ctrl_keep`）。だから、フレームの始めでの `NearM` から、ルーチンに来たところでの `NearA` が出ます（`SideTimer.nearA_of_M`）。`NearM(M)` := side(M) ≤ 1 → lock(M) = 0 → thr ≤ pfs(M) → left16(M) + 2 ≤ pixel16(M)。これはコントロールの始めで成り立ち（`AreaRun.near₀`。`numbersCheck` の edge(B.m) + 257 ≤ P(B.m) と `Start` から）、数えないフレームはそのバイトを保ちます（`OnFrames.nearLag`。`SideTimer.side_noCut`、`SideTimer.keep_noCut`）。`nearA` のかわりに新しいフィールド `nearStep` を置きます: タッチの前の最後のもの以外の数えるフレームのそれぞれが、始めから終わりまで `NearM` を保つこと。帰納法で、タッチより前の数えるフレームはすべて `NearM` で始まります（`OnFrames.nearMAll`）。`numbersCheck` は確認を 3 つ多く持ちます（`SideTimer.sideCheck`、`SideTimer.keepCheck`、コントロールの始めでの余裕）。
+
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
 ## 1 フレームの形
@@ -111,7 +113,8 @@ state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       �
 collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j − 1), Q, seq j, Calls)  Calls: Q からフレームの中で押し戻しか補正の入口に来る
            CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ base(M) + 256 ∧ v(Q) ≤ 0))
                                                   速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
-nearA    : 1 ≤ j < g → NearA(R)、R = trace(fm j, pad j, arrAt)       （第 28 回、near のかわり。スクロールの処理での NearX を出す: OnFrames.nearAt）
+nearStep : 1 ≤ j, j + 1 < g → NearM(fm j) → NearM(seq j)               （第 29 回、nearA のかわり。NearM(seq 0) と数えないフレームと合わせて、
+           1 ≤ j < g で NearM(fm j)（OnFrames.nearMAll）、ルーチンに来たところでの NearA（OnFrames.nearAAt）、スクロールの処理での NearX（OnFrames.nearAt）を出す）
            NearA(R) := side(R) = 0 → lock(R) = 0 → thr ≤ pfs(R) → left16(R) + 2 ≤ pixel16(R)
 moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves は stop だけになった（第 28 回: P(Q) で終わるフレームだけ）
 posW     : 1 ≤ j < g、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  PosW(R)       位置を番地で書くのは押し戻しと補正の内側だけ。その外で添字かポインタで書く命令は位置を書かない
@@ -182,6 +185,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | すべてのフレームの `clampR`（第 23 回） | スクロールの処理で右へ動き、その速さで終わるフレームだけで求める。`PositionKeep.keep_frame` が使うのはそこだけ。フィールド `collide` は本物のフレームで偽（画面の左端より 1 px 左で始まるフレーム）: [フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md) |
 | `collide` の 3 番目の場合 P(b) ≤ P(M) + 256（本物のフレームで偽、第 23 回） | 第 24 回: 画面の左端を入れた P(b) ≤ base(M) + 256。新しい: フィールド `edge`（1 フレーム）と `edge₀`（操作の始めの状態） |
 | `edge`: 1 ≤ j < g → edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))（第 24 回） | 第 26 回: `EdgeStep` の歩き、スクロールの規則、`collide`、`posW` からの定理 `OnFrames.edgeAt`。新しいフィールドはスクロールの処理での `near`。`guardE` は端の 2 つのバイトを守る（[フレームの端の進み](e-2-10-3-13-EdgeStep-ja.md)） |
+| プレイヤーのルーチンに最初に来たところでの `nearA`: NearA(R)（第 28 回） | 第 29 回: フレームの始めでの `NearM` からの定理 `OnFrames.nearAAt`。`DEC abs,X` を追う横のタイマーの歩き（`SideTimer.side_at`）と `SideTimer.keep_at` の歩きから。コントロールの始めと数えないフレームでの `NearM` は定理。新しいフィールド `nearStep`: 数えるフレームのそれぞれが `NearM` を保つ。`numbersCheck` の確認が 3 つ増えた（[フレームの始めからプレイヤーのルーチンまでのスクロールのバイト](e-2-10-3-17-SideTimer-ja.md)） |
 | スクロールの処理での `near`: NearX(Q)（第 27 回） | 第 28 回: 動きのルーチンの歩き（`MoveScroll.move_xs`）、`PlaceKeep.keep_place`、`GuardE.subs_onceE` からの定理 `OnFrames.nearAt`。新しいフィールドは、プレイヤーのルーチンに最初に来たところでの `nearA`。動きのバイトは言わない。`numbersCheck` の確認が 2 つ増えた（[動きがスクロールのために書くバイト](e-2-10-3-16-MoveScroll-ja.md)） |
 | `near` を `Near` で: スクロールの量 `X`（第 26 回） | 第 27 回: `NearX`。`X` のかわりに動きの書くバイト: スクロールの処理では、スクロールへの足場の力は 0（定理 `OnFrames.platQ`。3 つ目のバイトを追う `EdgeStep` の歩き、`Start.plat`、`numbersCheck` から）。`guardE` は足場の力も守る。新しいフィールドはない（[スクロールへの足場の力](e-2-10-3-14-PlatformForce-ja.md)） |
 | `edge₀`: 操作の始めに edge(seq 0) ≤ P(seq 0)（第 24 回） | 第 25 回: 横の土管からの切り替えの行（`Start.edgeX`、`Start.edgeP`）と `numbersCheck`（`Numbers.edgeB`）からの定理 `edge_zero`。`AreaRun.edge₀` の中（[操作の始めに画面の左端は彼の後ろ](e-2-10-3-11-EdgeStart-ja.md)）。`Surface.base₁` は 1 ≤ g のときに求める。新しいフィールドはない |

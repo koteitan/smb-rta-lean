@@ -10,7 +10,7 @@ The two theorems that used `spareE` are the walk of A and B of the frame before 
 
 ```
 spareE           :=  {A_B_Buttons, PreviousA_B_Buttons, Player_MovingDir, RunningSpeed, Player_XSpeedAbsolute}
-Prot_E           :=  edgeE  ∪  stateE  ∪  faceE  ∪  spareE  ∪  collE  ∪  speedE  ∪  vertE  ∪  Prot_F    (guardE, 70 bytes; round 26: edgeE = the pixel and the page of the screen's left edge, 1-1-e-2-10-3-13; round 27: and the platforms' force on the scroll, 1-1-e-2-10-3-14; round 15: stateE = {Player_State, VerticalForce}, faceE = {PlayerFacingDir, Player_X_MoveForce}; round 13: collE = {Player_CollisionBits}; round 14: speedE = {Player_X_Speed}, vertE = {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump}; so `spareC`, `spareV` and four bytes of `vAfter` of part e come from `keep.cleanE`)
+Prot_E           :=  edgeE  ∪  parE  ∪  stateE  ∪  faceE  ∪  spareE  ∪  collE  ∪  speedE  ∪  vertE  ∪  Prot_F    (guardE, 70 bytes before round 29; round 29: parE = the area parser's four bytes, the tasks left, the scroll counter of 32 px, the column and the page, 1-1-f-6-17-10; round 26: edgeE = the pixel and the page of the screen's left edge, 1-1-e-2-10-3-13; round 27: and the platforms' force on the scroll, 1-1-e-2-10-3-14; round 15: stateE = {Player_State, VerticalForce}, faceE = {PlayerFacingDir, Player_X_MoveForce}; round 13: collE = {Player_CollisionBits}; round 14: speedE = {Player_X_Speed}, vertE = {VerticalForceDown, JumpOrigin_Y_Position, DiffToHaltJump}; so `spareC`, `spareV` and four bytes of `vAfter` of part e come from `keep.cleanE`)
 CleanK_E(m)      :=  CleanK(m) with Prot_E for Prot_K
 keep.cleanE      :  n < ix g  →  ∀ k,  CleanK_E(tr_n(k))                               (the field; it was cleanF, with Prot_F)
 

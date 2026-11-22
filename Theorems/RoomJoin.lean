@@ -534,23 +534,29 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) where
   /-- a frame by `runF` that does not follow `hstep` leaves `RunningSpeed` 0 -/
   stop_run : ∀ n, C ≤ n → n < C + N.runF → ¬Follow sy m fr n → (fr.hs (n + 1)).rs = 0
   /-- he stands away from the floor only at the end of a frame that does not follow `hstep`: a side stops him on that frame. Asked only after an earlier frame that ends
-  in the state 0: the first stand of the fall is proved (`RoomRun.stand_first`), and the theorems use no other frame (`RoomRun.stand_off_of`, `RoomCore.stand_off`) -/
+  in the state 0: the first stand of the fall is proved (`RoomRun.stand_first`), and the theorems use no other frame (`RoomRun.stand_off_of`, `RoomCore.stand_off`). Since
+  round 29 asked from the end of the fall on only with no jump since such a frame (page `1-1/c-7-5-22-StandNoJump.md`): `wall_turn`, the only user there, has none, and a
+  landing on the block needs a jump -/
   stand_wall : ∀ n, C ≤ n → n + 1 < C + N.standF → (∃ j, C < j ∧ j ≤ n ∧ (fr.vs j).st = 0) →
+    (n + 1 < C + N.fall ∨ ∃ j, C < j ∧ j ≤ n ∧ (fr.vs j).st = 0 ∧ ∀ l, j ≤ l → l ≤ n → (fr.inp (l + 1)).jump = false) →
     (fr.vs (n + 1)).st = 0 → ¬OnFloor sy (fr.vs (n + 1)) → ¬Follow sy m fr n
-  /-- a frame in the air and a jump frame keep the facing direction. Since round 28 (page `1-1/c-7-13-1-FallFacing.md`) asked only on the frames that do not follow
-  `hstep`: on the others `hstep` keeps it (`faceCheck`, `WallFacts.face1`, `face2`, `face3`) -/
-  facing : ∀ n, C ≤ n → n < C + N.fall → (fr.inp (n + 1)).st ≠ 0 ∨ (fr.inp (n + 1)).jump = true → ¬Follow sy m fr n → (fr.hs (n + 1)).fd = (fr.hs n).fd
-  /-- before a stand in the fall he moves left fast, and he is near the wall -/
+  /-- before a stand in the fall he moves left fast, and he is near the wall. Since round 29 `stand_P` is asked only on the frame before the first stand of the fall
+  (page `1-1/c-7-13-3-FirstStandP.md`): `stand_first` and `wall_turn` use no other -/
   stand_fast : ∀ n, C ≤ n → n + 1 < C + N.fall → (fr.vs (n + 1)).st = 0 → N.standV ≤ -V (fr.hs n)
-  stand_P : ∀ n, C ≤ n → n + 1 < C + N.fall → (fr.vs (n + 1)).st = 0 → fr.P n ≤ N.standP
+  stand_P : ∀ n, C ≤ n → n + 1 < C + N.fall → (∀ j, C < j → j ≤ n → (fr.vs j).st ≠ 0) → (fr.vs (n + 1)).st = 0 → fr.P n ≤ N.standP
   way : Way sy m N fr C t0 E sz
 
 /-- the frames as numbers: what the theorems below use. `RoomRun.toCore` makes them from real machines -/
 structure RoomCore (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) extends RoomFields sy m N sz where
   /-- he stands away from the floor before `standF`, before the end of the fall or after an earlier frame that ends in the state 0, only at the end of a frame that does
   not follow `hstep`. `RoomRun.stand_off_of` proves it from the field `stand_wall` and the first stand of the fall (`RoomRun.stand_first`) -/
-  stand_off : ∀ n, C ≤ n → n + 1 < C + N.standF → (n + 1 < C + N.fall ∨ ∃ j, C < j ∧ j ≤ n ∧ (fr.vs j).st = 0) → (fr.vs (n + 1)).st = 0 →
+  stand_off : ∀ n, C ≤ n → n + 1 < C + N.standF →
+    (n + 1 < C + N.fall ∨ ∃ j, C < j ∧ j ≤ n ∧ (fr.vs j).st = 0 ∧ ∀ l, j ≤ l → l ≤ n → (fr.inp (l + 1)).jump = false) → (fr.vs (n + 1)).st = 0 →
     ¬OnFloor sy (fr.vs (n + 1)) → ¬Follow sy m fr n
+  /-- a frame in the air and a jump frame keep the facing direction. Once a field of `RoomFields` (since round 28 only on the frames that do not follow `hstep`); since
+  round 29 (page `1-1/c-7-13-2-FaceWalk.md`) `RoomRun.facing_of` proves it on every such frame: at the player's routine the frame is in the air or starts a jump, and the walk
+  of the room's whole frame that follows the facing from there (`InRoom.face`) keeps it to the frame's end. `wall_turn` uses it on every frame of its chain -/
+  facing : ∀ n, C ≤ n → n < C + N.fall → (fr.inp (n + 1)).st ≠ 0 ∨ (fr.inp (n + 1)).jump = true → (fr.hs (n + 1)).fd = (fr.hs n).fd
   /-- with no wall, a frame from `hitF` to the end of the low frames that ends on the floor, on the floor since the end of the fall, after a frame that is `LowAt`, is
   `LowAt`. `RoomRun.low_floor_of` proves it: at its end of the move he is at or past the corner only at the block's left side, where the collision routine pushes him back
   one pixel with the speed 0 or he moves left (`InRoom.corner`). Since round 28 for `LowS` with any slack of `SlackOK` (`LowAt` is `LowS` with `lowSlack`; `low_by` uses
@@ -1032,7 +1038,8 @@ theorem gain_of_check {sy : Syms} {m : Machine} (hsp : speedsComplete sy = true)
     · rw [e] at h4
       exact h4
 
-/-- one frame of `hstep` in the air or with a jump keeps the facing direction (round 28, for `facing`) -/
+/-- one frame of `hstep` in the air or with a jump keeps the facing direction (round 28, for `facing`). Not used by the route since round 29: `RoomCore.facing`
+holds on every frame (`RoomRun.facing_of`), so `WallFacts` no longer checks it -/
 def faceCheck (sy : Syms) (m : Machine) (fd : UInt8) : Bool :=
   (statesFd sy fd).all fun s => inputsN.all fun i => (i.st == 0 && !i.jump) || (hstep sy m s i).fd == s.fd
 
@@ -1306,10 +1313,6 @@ structure WallFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   y : wallYCheck sy m N = true
   small : N.standP + 256 < 4096
   ground : groundY sy < 256
-  /-- one frame of `hstep` in the air or with a jump keeps the facing, for each facing (round 28, `facing`) -/
-  face1 : faceCheck sy m 1 = true
-  face2 : faceCheck sy m 2 = true
-  face3 : faceCheck sy m 3 = true
 
 /-- from a vertical state, the frames of a jump for `k` more frames, with A or not, end at `cornerY + 16` or below (round 28) -/
 def riseFrom (sy : Syms) (m : Machine) (N : Nums) : VS → Nat → Bool
@@ -2154,7 +2157,8 @@ theorem fall_states (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) (hair : �
 /-! ### Standing -/
 
 /-- with `Follow` on the frame, off the floor he is not standing at its end -/
-theorem st_ne {n : Nat} (hn : r.C ≤ n) (h1 : n + 1 < r.C + N.standF) (hs : n + 1 < r.C + N.fall ∨ ∃ j, r.C < j ∧ j ≤ n ∧ (r.fr.vs j).st = 0)
+theorem st_ne {n : Nat} (hn : r.C ≤ n) (h1 : n + 1 < r.C + N.standF)
+    (hs : n + 1 < r.C + N.fall ∨ ∃ j, r.C < j ∧ j ≤ n ∧ (r.fr.vs j).st = 0 ∧ ∀ l, j ≤ l → l ≤ n → (r.fr.inp (l + 1)).jump = false)
     (hf : Follow sy m r.fr n) (h2 : ¬OnFloor sy (r.fr.vs (n + 1))) : (r.fr.vs (n + 1)).st ≠ 0 :=
   fun h3 => r.stand_off n hn h1 hs h3 h2 hf
 
@@ -3478,14 +3482,8 @@ theorem wall_turn (H : Checks sy m N) {b : Nat} (hge : r.C + N.wallF ≤ b) (hbD
               · exact h5
               · exact absurd ⟨r.C + d, by omega, by omega, h4, by simpa using h5⟩ hc
             · exact Or.inl h4
-          rw [show r.C + (d + 1) = r.C + d + 1 by omega]
-          by_cases hfo : Follow sy m r.fr (r.C + d)
-          · have hD : inD sy (r.fr.hs (r.C + d)) = true := inD_at r H (n := r.C + d) (by omega) (by omega)
-            have hk := face_of_check H.standW.sp H.normI H.standW.face1 H.standW.face2 H.standW.face3 (r.fr.hs (r.C + d)) hD (r.fr.inp (r.C + d + 1)) hfo.1 h3
-            rw [hfo.2.1, hk]
-            exact h2
-          · rw [r.facing (r.C + d) (by omega) (by omega) h3 hfo]
-            exact h2
+          rw [show r.C + (d + 1) = r.C + d + 1 by omega, r.facing (r.C + d) (by omega) (by omega) h3]
+          exact h2
       have h1 := hchain (b + 1 - r.C) (by omega)
       rw [show r.C + (b + 1 - r.C) = b + 1 by omega] at h1
       exact hfd h1
@@ -3520,7 +3518,7 @@ theorem wall_turn (H : Checks sy m N) {b : Nat} (hge : r.C + N.wallF ≤ b) (hbD
     obtain ⟨h', h6, h7, h8, h9⟩ := first_hit _ hn
     by_cases h10 : h' = i'
     · subst h10
-      have h11 := left_far r H h6 h9 (r.stand_P h' h6 (by omega) hst) hN.stand_far
+      have h11 := left_far r H h6 h9 (r.stand_P h' h6 (by omega) (fun l hl1 hl2 => hfirst l (by omega) (by omega)) hst) hN.stand_far
       omega
     · have h11 := wall_first r H h6 h9 (r.wall h' h6 (by omega) h8).before
       omega
@@ -3599,7 +3597,8 @@ theorem wall_turn (H : Checks sy m N) {b : Nat} (hge : r.C + N.wallF ≤ b) (hbD
             omega
           · obtain ⟨n', hn'⟩ : ∃ n', i + e = n' + 1 := ⟨i + e - 1, by omega⟩
             rw [hn']
-            exact st_ne r (by omega) (by omega) (Or.inr ⟨i, by omega, by omega, hst⟩) (hfol n' (by omega) (by omega)) (by rw [← hn']; exact hnf)
+            exact st_ne r (by omega) (by omega) (Or.inr ⟨i, by omega, by omega, hst, fun l hl1 hl2 => ih (by omega) (by omega) l hl1 (by omega)⟩)
+              (hfol n' (by omega) (by omega)) (by rw [← hn']; exact hnf)
   -- so every frame after `b` up to there is an air frame
   let n2 := min r.t0 (i + k + 1)
   have hn2 : b + 1 ≤ n2 := by
@@ -3621,7 +3620,8 @@ theorem wall_turn (H : Checks sy m N) {b : Nat} (hge : r.C + N.wallF ≤ b) (hbD
       unfold standB at hq6 hYi
       omega
     obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
-    have h12 := r.air_in (n' + 1) (by omega) (by omega) (st_ne r (by omega) (by omega) (Or.inr ⟨i, by omega, by omega, hst⟩) (hfol n' (by omega) (by omega)) hnf)
+    have h12 := r.air_in (n' + 1) (by omega) (by omega)
+      (st_ne r (by omega) (by omega) (Or.inr ⟨i, by omega, by omega, hst, fun l hl1 hl2 => h7 l hl1 (by omega)⟩) (hfol n' (by omega) (by omega)) hnf)
     simp [isAir, h12.2.1]
   obtain ⟨hJ1, hc1, _, _⟩ := wall_next r H hP hJ (hfol b (Nat.le_refl _) hb0)
   have hcap := capped_along r H (u := b + 1) (w := n2) (by omega) (by simp only [n2]; omega) hc1 hairF
@@ -4750,6 +4750,17 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
           (vstep sy m (VertModel.vsOf sy (r.fm n)) (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.SavedJoypadBits &&& 0x80 != 0) 0).y.toNat →
         CornerEnd sy (cornerY sy N.h) ((PipeEntryRule.trace (r.fm n) (r.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Position))
           ((PipeEntryRule.trace (r.fm n) (r.inAt n) j).ram.get! (FrameModel.I sy.Player_X_Speed)) (PipeTransition.frame (r.fm n) (r.inAt n)))
+  /-- a frame of the room before the entering frame that comes to the player's routine at `k` in the air (the state 1 or 2), or on the ground with a new press of A (the
+  state 0, bit 7 of the joypad set and bit 7 of A of the frame before clear), ends with the facing it had there (round 29, `Route.Run.roomFace`: `RoomFace.face_frame`, a walk
+  of the room's whole frame that follows the facing from the player's routine) -/
+  face : ∀ n, r.C ≤ n → n + 1 < r.E → ∀ k, (PipeEntryRule.trace (r.fm n) (r.inAt n) k).pc = sy.PlayerCtrlRoutine →
+    (PipeEntryRule.trace (r.fm n) (r.inAt n) k).frame = (r.fm n).frame →
+    ((PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.Player_State) = 1 ∨
+      (PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.Player_State) = 2 ∨
+      ((PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.Player_State) = 0 ∧
+        (PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.SavedJoypadBits) &&& 0x80 = 0x80 ∧
+        (PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.PreviousA_B_Buttons) &&& 0x80 = 0)) →
+    peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.PlayerFacingDir = peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.PlayerFacingDir
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `P(E)` is read at the frame's end (`read_PE`), and the walks of the room's frames put the position
 there (`InRoom.mouthE`) -/
@@ -5290,6 +5301,48 @@ theorem jump_read {n : Nat} (hC : r.C ≤ n) (ht : n < r.t0) (hj : (r.fr.inp (n 
   rw [← r.read_inp hC ht]
   exact hj
 
+theorem and80_ne : ∀ n : Fin 256, UInt8.ofNat n.val &&& 0x80 ≠ 0 → UInt8.ofNat n.val &&& 0x80 = 0x80 := by decide +kernel
+
+/-- an input read at the player's routine with an air input or a jump: the state there is 1 or 2, or 0 with a new press of A -/
+theorem faceIn_of_read {T : Machine} (hst : peek T sy.Player_State ∈ [(0 : UInt8), 1, 2])
+    (hin : (FrameModel.readIn sy T).st ≠ 0 ∨ (FrameModel.readIn sy T).jump = true) :
+    T.ram.get! (FrameModel.I sy.Player_State) = 1 ∨ T.ram.get! (FrameModel.I sy.Player_State) = 2 ∨
+      (T.ram.get! (FrameModel.I sy.Player_State) = 0 ∧ T.ram.get! (FrameModel.I sy.SavedJoypadBits) &&& 0x80 = 0x80 ∧
+        T.ram.get! (FrameModel.I sy.PreviousA_B_Buttons) &&& 0x80 = 0) := by
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hst
+  rcases hin with h | h
+  · rcases hst with e | e | e
+    · simp only [FrameModel.readIn] at h
+      rw [e] at h
+      exact absurd rfl h
+    · exact Or.inl e
+    · exact Or.inr (Or.inl e)
+  · simp only [FrameModel.readIn, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq] at h
+    obtain ⟨⟨h2, h3⟩, h4⟩ := h
+    have h5 := and80_ne ⟨(T.ram.get! (FrameModel.I sy.SavedJoypadBits)).toNat, (T.ram.get! (FrameModel.I sy.SavedJoypadBits)).toNat_lt⟩
+    simp only [UInt8.ofNat_toNat] at h5
+    exact Or.inr (Or.inr ⟨h2, h5 h3, h4⟩)
+
+/-- **`facing`** (round 29): before the end of the fall a frame with an air input or a jump input keeps the facing. The input is read at the player's routine
+(`read_inp`): the state there is 1 or 2 (`InRoom.cut`), or 0 with a new press of A (`faceIn_of_read`). `InRoom.face` says that such a frame ends with the facing it
+had at the player's routine, and that is the facing at the frame's start (`InRoom.before`). No condition on `hstep` -/
+theorem facing_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ n, r.C ≤ n → n < r.C + N.fall →
+    (r.fr.inp (n + 1)).st ≠ 0 ∨ (r.fr.inp (n + 1)).jump = true → (r.fr.hs (n + 1)).fd = (r.fr.hs n).fd := by
+  intro n hC h1 hin
+  have hle := H.nums.fall_le
+  have hfar := r.t0_far H hr st
+  have hE := r.t0_le_E H hr
+  have ht : n < r.t0 := by omega
+  have hpc := r.arrive H hr hC ht
+  have hf := hr.arrive n hC (by omega) _ hpc
+  rw [r.read_inp hC ht] at hin
+  have hfi := faceIn_of_read (r.atV_of H hr hC ht).st hin
+  have hface := hr.face n hC (by omega) _ hpc hf hfi
+  have hb := hr.before n hC (by omega) _ hpc sy.PlayerFacingDir (by simp [FrameModel.hBytes])
+  rw [r.hs_fe (n := n + 1) (by omega) (by omega), r.next hC (r.ups_lt hr hC (by omega)), r.hs_fm hr hC (by omega) (by omega)]
+  show peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.PlayerFacingDir = peek (r.fm n) sy.PlayerFacingDir
+  rw [hface, hb]
+
 /-- **`air_in`**: a frame before `standF` that starts in the air has an air input. The input is read from the machine (`read_inp`), and at the player's routine the
 player's state is that of the frame's start (`InRoom.stR`): so not 0, and no jump; and every input read from a machine is one of `inputs` (`readIn_mem`) -/
 theorem air_in_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ n, r.C ≤ n → n < r.C + N.standF → (r.fr.vs n).st ≠ 0 →
@@ -5576,7 +5629,7 @@ theorem stand_first (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe
     rw [e, ha]
     exact (highCheck_spec H.high hd hmem' a).2
   -- the page and x at `Q`
-  have hP := r.stand_P (r.C + d) hC' h1 h0
+  have hP := r.stand_P (r.C + d) hC' h1 hns h0
   have hPe : r.fr.P (r.C + d + 1) = posP sy (PipeTransition.frame (r.fm (r.C + d)) (r.inAt (r.C + d))) := by
     rw [r.P_fe (n := r.C + d + 1) (by omega) (by omega), r.next hC' (r.ups_lt hr hC' (by omega))]
   have hmv := hf.2.2
@@ -5640,14 +5693,15 @@ theorem stand_first (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe
 /-- **He stands away from the floor before `standF` only at the end of a frame that does not follow `hstep`**: the first stand of the fall by `stand_first`, the
 others by the field `stand_wall` -/
 theorem stand_off_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) :
-    ∀ n, r.C ≤ n → n + 1 < r.C + N.standF → (n + 1 < r.C + N.fall ∨ ∃ j, r.C < j ∧ j ≤ n ∧ (r.fr.vs j).st = 0) → (r.fr.vs (n + 1)).st = 0 →
+    ∀ n, r.C ≤ n → n + 1 < r.C + N.standF →
+      (n + 1 < r.C + N.fall ∨ ∃ j, r.C < j ∧ j ≤ n ∧ (r.fr.vs j).st = 0 ∧ ∀ l, j ≤ l → l ≤ n → (r.fr.inp (l + 1)).jump = false) → (r.fr.vs (n + 1)).st = 0 →
       ¬OnFloor sy (r.fr.vs (n + 1)) → ¬Follow sy m r.fr n := by
   intro n hC h1 hs h0 hf
   by_cases h : ∃ j, r.C < j ∧ j ≤ n ∧ (r.fr.vs j).st = 0
-  · exact r.stand_wall n hC h1 h h0 hf
-  · rcases hs with h2 | h2
+  · exact r.stand_wall n hC h1 h hs h0 hf
+  · rcases hs with h2 | ⟨j, h2, h3, h4, _⟩
     · exact r.stand_first H hr st hC h2 (fun j a b c => h ⟨j, a, b, c⟩) h0 hf
-    · exact absurd h2 h
+    · exact absurd ⟨j, h2, h3, h4⟩ h
 
 /-! ### The frames from the first stand on, with any input -/
 
@@ -6478,6 +6532,7 @@ def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : 
     vfloor := fun hw _ h1 h2 _ hall => r.vfloor_of H hr st hw h1 h2 hall
     varc := fun _ _ hC ht hE ha hk => r.varc_of H hr hC ht hE ha hk
     stand_row := r.stand_row_of H hr, stand_off := r.stand_off_of H hr st
+    facing := r.facing_of H hr st
     low_floor := fun hw _ h1 h2 h3 hall _ hs hl => r.low_floor_of H hr st hw h1 h2 h3 hall hs hl
     low_jump := fun hw _ _ h0 h1 h2 h3 hfl harc hylo _ hs hT => r.low_jump_of H hr st hw h0 h1 h2 h3 hfl harc hylo hs hT
     push_one := fun _ hC ht hsF hst hn => r.push_one_of H hr st hC ht hsF hst hn

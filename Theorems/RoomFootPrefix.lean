@@ -153,7 +153,7 @@ theorem Run.roomFootMap {es₁ : List Machine}
       (ScreenPage.placesR sy nmS m0).idle →
       (PipeEntryRule.trace (R.base.seq k) (R.base.inp k) j).fdot ≤ dotsPerFrame-64 := by
     intro j hj
-    apply Nat.le_trans (R.chg.roomLate k hk0 hk1 j hj)
+    apply Nat.le_trans ((R.roomSites hR hB hK k hk0 hk1 j).late hj)
     change dotsPerFrame-6000 ≤ dotsPerFrame-64
     decide
   have eq := FrameModel.trace_inFrame loop hf ifr time np (Nat.le_refl _)

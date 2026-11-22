@@ -89,4 +89,6 @@ All are conditions on single instructions or single states. None is a field: not
 
 So `tilesCol` stays.
 
+Round 29: the route supplies these conditions, and `tilesCol` asks only `TileSlot` ([The area parser on the route's frames](f-6-17-10-PoleParserRun.md)). The walks ask `posW` only from the first arrival at the player's routine on.
+
 **Files.** `Theorems/PoleParserEnd.lean`; `genPoleParserEnd` and `pole-keep parser` (the round 28 line) in `Main.lean`.

@@ -47,6 +47,26 @@ def TileCol (Q : Spots) (m : Machine) : Prop :=
 /-- `TileFar` gives `TileCol` -/
 theorem tileCol_of_far {Q : Spots} {m : Machine} (h : PoleTileRead.TileFar Q m) : TileCol Q m := fun a b c _ => h a b c
 
+/-- **What stays assumed of a read far from the pole at the pole's column** (round 29, the field `PoleJoin.Run.tilesCol`), with `c₀` the area parser's column
+(16 a page) and `e₀` the screen's left edge in px, both at the frame's start: right after a read of the side check with the page two or more before the pole's, at
+the pole's column, (`slot`) if the byte read is one of the pole's tiles, the parser's column had come to the pole's; (`near`) his pixel is at most 112 px left of
+`e₀`; (`read`) the read is in the column of his pixel plus less than 16 px, counted mod 32. With the parser's invariant at the frame's start (`16·c₀ ≤ e₀ + 384`) it
+gives `TileCol` (`tileCol_of_slot`): the parser is at most 24 columns past the edge, so it has not come to the pole's column while he reads 32
+columns or more before it. -/
+def TileSlot (Q : Spots) (c₀ e₀ : Nat) (m : Machine) : Prop :=
+  m.pc = Q.read + 2 → m.ram.get! Q.saveI ∈ Q.idx → (m.ram.get! Q.pI).toNat + 1 < Q.pg → onCol Q (readAt Q m) = true →
+    ((m.a = Q.ball ∨ m.a = Q.shaft) → 16 * Q.pg + Q.col.toNat ≤ c₀) ∧
+    e₀ ≤ (m.ram.get! Q.pI).toNat * 256 + (m.ram.get! Q.xI).toNat + 112 ∧
+    ∃ a, a < 16 ∧ ((m.ram.get! Q.pI).toNat * 256 + (m.ram.get! Q.xI).toNat + a) / 16 % 32 = (16 * Q.pg + Q.col.toNat) % 32
+
+/-- **`TileCol` from `TileSlot`** and the parser's column at most 384 px past the edge: pure arithmetic -/
+theorem tileCol_of_slot {Q : Spots} {c₀ e₀ : Nat} {m : Machine} (h : TileSlot Q c₀ e₀ m) (hc : 16 * c₀ ≤ e₀ + 384) : TileCol Q m := by
+  intro h1 h2 hpg hon ht
+  obtain ⟨hs, hn, a, ha, hm⟩ := h h1 h2 hpg hon
+  have h3 := hs ht
+  have hx : (m.ram.get! Q.xI).toNat < 256 := (m.ram.get! Q.xI).toNat_lt
+  omega
+
 /-! ## The pieces -/
 
 /-- right before the page's bit is moved into the carry: the instruction before the `ORA` of the sum -/

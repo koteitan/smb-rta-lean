@@ -1392,13 +1392,27 @@ def edgeE (sy : Syms) (m0 : Machine) : List Nat :=
   let pg := PipeEntryRule.findOp m0 (entry + 1) 0xB9 32
   [(romWE m0 (entry + 1) &&& 0x7FF).toNat, (romWE m0 (pg + 1) &&& 0x7FF).toNat, (sy.Platform_X_Scroll &&& 0x7FF).toNat]
 
+/-- **The area parser's task routine** (round 29): in `UpdScrollVar` its call of the task handler, in the handler its call of the task routine; that routine's
+first entry is the column's step (as `PoleParser.places`) -/
+def parRt (sy : Syms) (m0 : Machine) : UInt16 :=
+  let h := romWE m0 (sy.UpdScrollVar + 0x21)
+  let t := romWE m0 (h + 0x0D)
+  romWE m0 (t + 3)
+
+/-- **The area parser's four bytes** (round 29), which no frame of a run writes through an index or a pointer: the tasks left, the scroll counter of 32 px, the
+parser's column in its page and its page, found from the code of `UpdScrollVar` as `PoleParser.places` finds them (`PoleParser.pI` is this list, `PoleParserRun.pI_eq`):
+the operands of its load of the task count and of its load of the scroll counter; its call of the task handler, the handler's call of the task routine, whose first
+entry is the column's step, with its two `INC`s -/
+def parE (sy : Syms) (m0 : Machine) : List Nat :=
+  [romWE m0 (sy.UpdScrollVar + 8), romWE m0 (sy.UpdScrollVar + 13), romWE m0 (parRt sy m0 + 1), romWE m0 (parRt sy m0 + 0x0E)].map fun a => (a &&& 0x7FF).toNat
+
 /-- **The guard of the condition on each instruction of the frames of a run** (`Frames.cleanE`): `guardF`, with the screen's left edge and the platforms' force on the
-scroll (`edgeE`, rounds 26 and 27), the player's
+scroll (`edgeE`, rounds 26 and 27), the area parser's four bytes (`parE`, round 29), the player's
 state and the vertical force (`stateE`), the facing and the subspeed (`faceE`), the bytes of `spareE`, the collision bits (`collE`), the speed (`speedE`) and three
 vertical bytes (`vertE`) protected too. The walks of this file use `guardK` or `guardF`, and `CleanK` of `guardE` gives both (`cleanK_of_E`, `cleanK_sub`); the walk of
 `PhaseFrame` uses `guardE` with two more bytes. -/
 def guardE (sy : Syms) (m0 : Machine) : Guard :=
-  { guardF sy m0 with prot := edgeE sy m0 ++ stateE sy ++ faceE sy ++ spareE sy ++ collE sy ++ speedE sy ++ vertE sy ++ (guardF sy m0).prot }
+  { guardF sy m0 with prot := edgeE sy m0 ++ (parE sy m0 ++ stateE sy) ++ faceE sy ++ spareE sy ++ collE sy ++ speedE sy ++ vertE sy ++ (guardF sy m0).prot }
 
 /-- `CleanK` of `guardE` gives `CleanK` of `guardF` -/
 theorem cleanK_of_E {sy : Syms} {m0 : Machine} {q : UInt16} {m : Machine} (h : CleanK (guardE sy m0) q m) : CleanK (guardF sy m0) q m := cleanK_weak h
@@ -1430,7 +1444,8 @@ structure Frames (sy : Syms) (m0 : Machine) (S : RealRun) (a : Nat) (g : Nat) (s
   /-- each instruction of each frame up to the touch's frame, counted or not, meets `CleanK` of `guardE`: no store through an index or a pointer writes the bytes of
   `guardK` (but the player's own store of the fraction), the pause byte, the area's type, the swimming flag, the change of size, A and B, A and B of the frame before,
   the moving direction, the running speed, the stored speed, the player's collision bits, the player's speed, the vertical force down, the jump's origin, the jump's
-  halt value, the player's facing, the player's subspeed, the player's state, the vertical force or the screen's left edge (round 26) -/
+  halt value, the player's facing, the player's subspeed, the player's state, the vertical force, the screen's left edge (round 26) or the area parser's four
+  bytes (round 29: `parE`) -/
   cleanE : ∀ n, n < ixOf sy m0 S a top g → ∀ k, CleanK (guardE sy m0) (spotOf sy m0).store (trace (S.seq (a + n)) (S.inp (a + n)) k)
 
 section

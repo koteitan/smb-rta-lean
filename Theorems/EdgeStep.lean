@@ -30,7 +30,8 @@ scroll handler stores 0 to it at its end, and `rCheck` also asks that the middle
 there and at the frame's end. The only other store to it in the ROM comes after a store to his position by its address in the platforms' routine, where the second
 walk stops (`cutPos`, excluded by the field `posW`). So at each scroll handler it is 0 (`SurfaceFrames.OnFrames.platQ`), and the field `near` asks `NearX`, with the
 byte the move stores in place of `X` (`near_of_x`). Page: `1-1/e-2-10-3-14-PlatformForce.md`. Round 28: `NearX` at the scroll handler is a theorem
-(`SurfaceFrames.OnFrames.nearAt`) from the field `nearA` at the player's routine (`MoveScroll`).
+(`SurfaceFrames.OnFrames.nearAt`) from the field `nearA` at the player's routine (`MoveScroll`). Round 29: `nearA` is a theorem too (`SideTimer`), from `NearM`
+at the frame's start and the field `nearStep`.
 -/
 
 namespace Smbrta.EdgeStep

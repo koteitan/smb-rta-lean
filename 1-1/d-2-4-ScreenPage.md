@@ -169,6 +169,8 @@ So no part can be split off by the walks as they are. Every theorem that uses th
 
 **Round 28.** `reads` through the screen update's pointer is proved on every frame of the room but the first one and those after a frame that starts with the control at 6 ([The screen buffers' records](d-2-4-2-2-BufferRecords.md), item 1-1-d-2-4-2-2): a frame from the control at 0 leaves records in the buffer that the walk knows, and the next frame's screen update reads them. `off` is proved also on the frames that start with the control at 6 after a frame at 0: the walk knows the offset that the frame before left.
 
+**Round 29.** `late` is proved on every frame of the room but the first one and those after a frame that starts with the control at 6, if each instruction of the sound routine's code runs at dot 9,000 or earlier ([The time of the room's frames](d-2-4-2-3-RoomLate.md), item 1-1-d-2-4-2-3): the walks from the buffers' patterns check the time at every state and clamp it only in the sound routine's code. Without a clamp the walk's time grows for ever only in the sound routine (it does not know the music's offsets), and in the wait for the sprite-0 flag, where the search forgot A after the read of the picture's status (`ScreenPage.jsrRets` takes the byte `0x20` of the status's address as a call; `RoomLate.fixCuts`).
+
 ## Assumptions (not proved in Lean)
 
 * **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5. The route now asks 11 of them: five music bytes follow from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).

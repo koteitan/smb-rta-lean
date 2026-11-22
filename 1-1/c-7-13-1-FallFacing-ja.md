@@ -40,4 +40,6 @@ facing（フィールド、狭めた）:
 - `hstep` に従わないフレームでの `facing`。そのフレームでは、当たり判定のルーチンが左の壁で止めます。プレイヤーのルーチンからフレームの終わりまで向きのバイトを追う部屋のフレームの歩きで証明できます（つるを登るルーチンと旗ざおのルーチンが向きを書きます。パート e の `FaceKeep` と同じです）。
 - `stand_fast`、`stand_P`: 変えていません。同じ走りで測りました。`C + 34` より前の立ちは 44 個（大きい）と 50 個（小さい）で、すべて 1 つ前のフレームで `−V ≥ standV` と `P ≤ standP` でした。いちばん小さい `−V` は 3952（大きい）と 4256（小さい）で、`standV = 3584` です。いちばん大きい `P` は 3632 で、`standP = 3712` です。証明には、1 つ前のフレームの位置を使う左の壁での当たり判定が要ります。
 
-**ファイル。** `Theorems/RoomJoin.lean`: `faceCheck`、`norm_jump`、`face_of_check`。`WallFacts.face1`、`face2`、`face3`。`RoomFields.facing` を狭めた。`wall_turn`。非公開: `room_stand_w`（`native_decide` の行が 3 つ増えた）。プログラム: `room-approach-check`（カウンタ 34 から 37。38 から 40 は `stand_fast` と `stand_P` を測る）。
+ラウンド 29: `hstep` に従わないフレームでの `facing` も、その歩きで証明しました（[落下の間の向き（すべてのフレーム）](c-7-13-2-FaceWalk-ja.md)）。フィールドはなくなりました。
+
+**ファイル。** `Theorems/RoomJoin.lean`: `faceCheck`、`norm_jump`、`face_of_check`。`WallFacts.face1`、`face2`、`face3`。`RoomFields.facing` を狭めた。`wall_turn`。非公開: `room_stand_w`（`native_decide` の行が 3 つ増えた）。ラウンド 29 から `WallFacts.face1`〜`face3` とこの 3 行はなくなった。向きはすべてのフレームで証明した（[落下の間の向き（すべてのフレーム）](c-7-13-2-FaceWalk-ja.md)）。プログラム: `room-approach-check`（カウンタ 34 から 37。38 から 40 は `stand_fast` と `stand_P` を測る）。

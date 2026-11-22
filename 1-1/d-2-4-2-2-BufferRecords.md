@@ -12,6 +12,8 @@ This is proved, with one check on the ROM (four walks of the room's frame). Unti
 * `Reads` through the screen update's pointer only on the room's first frame and on the frames after a frame that starts with the control at 6;
 * `Off` only on the frames that start with the control at 6 after a frame that starts with it at 6.
 
+Round 29: the route uses `RoomLate.recCheckT`, this check with the walks (ii) and (iii) that also check the time at every state ([The time of the room's frames](d-2-4-2-3-RoomLate.md)).
+
 `tr_n(j)` is the machine after `j` instructions of frame `n`. `c(m)` is the control of the screen's buffers. `Z₁` is the screen update's pointer (`SiteParts.ptrS`). `Rest(Z, m)` is `Late ∧ ReadsAt(Z) ∧ Read ∧ Erase ∧ Xbit` at `m` ([The parts of `SiteOK`](d-2-4-2-1-SiteParts.md)). `Rest(∅, m)` asks no read.
 
 ## The statement

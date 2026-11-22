@@ -108,4 +108,6 @@ N、列、ページ  =  フレームの始まりのもの、
 
 28 回目: フレームの後半は、`N` が 0 から 8 のどれでも、不変式を保つ弱い形の決まりで証明しました: [エリアの解析、フレームの後半](f-6-17-9-PoleParserEnd-ja.md)。
 
+29 回目: 触るまでのルートのフレームの上の不変式と、それからの `TileCol`: [ルートのフレームの上のエリアの解析](f-6-17-10-PoleParserRun-ja.md)。
+
 **ファイル。** `Theorems/PoleParser.lean`。`Main.lean` の `genPoleParser` と `pole-keep parser`。

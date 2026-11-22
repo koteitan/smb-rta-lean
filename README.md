@@ -212,7 +212,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
     - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
     - 🚨 1-1-c-7-5 The fall and the height of the feet (`stand_wall`, `read_stop`)
-      <details><summary>21 lines of proved parts (the parent's own assumptions remain)</summary>
+      <details><summary>22 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-5-1 A jump's first 8 frames follow `vstep` (the air part of `vframes`: two walks of the room's frames)
       - ✅ 1-1-c-7-5-2 The halt value and A of the frame before (`halt`, `prevA` gone: two walks of the room and the rows of the change)
@@ -235,6 +235,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-c-7-5-19 A frame above 152 px after a frame left of the corner (`move_top`; `low_at` only after a frame at or past the corner)
       - ✅ 1-1-c-7-5-20 A bound for each low frame (`lowB`; `low_at` only when every frame from C + 40 is at or past the corner)
       - ✅ 1-1-c-7-5-21 One pixel after a frame at the corner (`push_one`, `lowT`, `riseCheck`; `low_at` gone)
+      - ✅ 1-1-c-7-5-22 A later stand with no jump since (`stand_wall` from C + 34 only with no jump since a frame in the state 0)
 
       </details>
     - 🚨 1-1-c-7-6 The stored speed: proved on frames that follow the model; other frames before `C + 37` assumed (`ab_early`)
@@ -255,10 +256,12 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-c-7-12-2 The map's bytes stay at every instruction, and a real collision call returns them (`RoomCollisionMap`)
 
       </details>
-    - 🚨 1-1-c-7-13 Standing during the fall (`facing`, `stand_fast`, `stand_P`)
-      <details><summary>1 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-c-7-13 Standing during the fall (`stand_fast`, `stand_P`)
+      <details><summary>3 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-13-1 The facing on frames that follow `hstep` (`faceCheck`; `facing` only off `hstep`)
+      - ✅ 1-1-c-7-13-2 The facing on every frame (`InRoom.face`, `RoomFace`; `facing` gone)
+      - ✅ 1-1-c-7-13-3 The position before the first stand (`stand_P` only before the first stand)
 
       </details>
     - 🚨 1-1-c-7-14 No run jumps from the wall and clears the block with no landing (`way`)
@@ -286,11 +289,12 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-d-2-3 The last 122 frames (under the condition at the exit, no Start on the game core's frames)
   - 🚨 1-1-d-2-4 The screen stays on the first page, the entry has the long timer
     - ✅ 1-1-d-2-4-1 `Room` at the first control in the room: from the change's rows of the time (`chg.roomRest` removed)
-    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (round 28: left: `roomLate`, `roomRead`, `roomErase`, `roomXbit`, `roomReads` on the first frame and after a frame from control 6, `roomOff₆` on a frame from 6 after a frame from 6)
-      <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (round 29: left: `roomLate`, `roomReads` on the first frame and after a frame from control 6, `roomLateS` (the sound routine by dot 9,000) on the others, `roomRead`, `roomErase`, `roomXbit`, `roomOff₆` on a frame from 6 after a frame from 6)
+      <details><summary>3 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-d-2-4-2-1 The parts of `SiteOK`: the offset from control 0 and the reads but the screen pointer's proved (`SiteParts`; `roomSites` gone)
       - ✅ 1-1-d-2-4-2-2 The screen buffers' records: the screen update's reads and the offset after a frame from control 0 proved (`BufferRecords`)
+      - ✅ 1-1-d-2-4-2-3 The time of the room's frames: proved after a frame from control 0, but in the sound routine (`RoomLate`; new field `roomLateS`)
 
       </details>
     - ✅ 1-1-d-2-4-3 Each frame up to the entry starts in the player's routine (from the definition of `a₂`)
@@ -388,8 +392,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `fr` gone; `fr` is the definition `frOf`)
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
-      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.nearA`)
-        <details><summary>15 lines of proved parts (the parent's own assumptions remain)</summary>
+      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.nearStep`)
+        <details><summary>16 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; `spareV` is a part of `keep.cleanE`)
         - ✅ 1-1-e-2-10-3-2 The subspeed on the other frames (a walk that follows it)
@@ -406,6 +410,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - ✅ 1-1-e-2-10-3-14 The platforms' force on the scroll (`near` asks `NearX`)
         - ✅ 1-1-e-2-10-3-15 His place at the player's routine (used by the route since round 28)
         - ✅ 1-1-e-2-10-3-16 The byte the move stores for the scroll (`near` is gone; new `nearA`)
+        - ✅ 1-1-e-2-10-3-17 The scroll's bytes from the frame's start to the player's routine (`nearA` is gone; new `nearStep`)
 
         </details>
         - 🚨 1-1-e-2-10-3-10 The push's bound from the screen's left edge (`collide` fixed in round 24 after it was found false, assumed; `edge₀` is a theorem since round 25 and `OnFrames.edge` since round 26)
@@ -441,8 +446,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-14 No enemy near the flag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
-    - 🚨 1-1-f-6-17 The pole's tiles: stores and reads (`bufAll`, `keepB`, `tilesCol`; `tiles`, `tilesRead`, `ySide`, `tilesFar`, `yKeep` gone)
-      <details><summary>9 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-f-6-17 The pole's tiles: stores and reads (`bufAll`, `keepB`, `tilesCol`, `parWrap`; `tiles`, `tilesRead`, `ySide`, `tilesFar`, `yKeep` gone)
+      <details><summary>10 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-f-6-17-1 `TileRead` at an actual load from a frame-start tile condition (`PoleTiles`; the write checks and the read range remain)
       - ✅ 1-1-f-6-17-2 `TileRead` from the map at control (`PoleTileWalk`; `tiles` gone; new fields `bufAll`, `tilesRead`)
@@ -453,6 +458,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-f-6-17-7 The stores that `keepB` and `bufAll` still speak of (`PoleKeepFar`; the same condition per instruction)
       - ✅ 1-1-f-6-17-8 The area parser against the screen's left edge (`PoleParser`; the invariant at control and the first half of a frame)
       - ✅ 1-1-f-6-17-9 The area parser, the second half of a frame (`PoleParserEnd`; the weak rule on every frame, the invariant on a run)
+      - ✅ 1-1-f-6-17-10 The area parser on the route's frames (`PoleParserRun`; `tilesCol` asks `TileSlot`, new field `parWrap`)
 
       </details>
     - 🚨 1-1-f-6-18 The edge store does not bring him into the range (`edge`); `P₂(g)` is the position at the end of the move (`moved` removed: 1-1-f-6-18-2)

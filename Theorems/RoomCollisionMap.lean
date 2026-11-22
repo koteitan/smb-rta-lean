@@ -41,7 +41,7 @@ theorem Run.roomCollisionMap {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndSt
       (PipeEntryRule.trace (R.base.seq k) (R.base.inp k) (n+nr+nt)).frame = (R.base.seq k).frame := by
   apply RoomCollision.frame_returned_map hc g pc x hf loop ?_ ?_ hl hr nc
   · intro j hj
-    apply Nat.le_trans (R.chg.roomLate k hk0 hk1 j hj)
+    apply Nat.le_trans ((R.roomSites hR hB hK k hk0 hk1 j).late hj)
     change dotsPerFrame-6000 ≤ dotsPerFrame-64
     decide
   · exact R.roomBlocksTrace hT₁ hM hS hW hRw hR hB hK k hk0 hk1

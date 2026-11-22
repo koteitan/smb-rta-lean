@@ -128,4 +128,6 @@ So `tilesCol` stays.
 
 Round 28: the second half of a frame is proved, for every `N` from 0 to 8, in a weak form of the rule that keeps the invariant: [The area parser, the second half of a frame](f-6-17-9-PoleParserEnd.md).
 
+Round 29: the invariant on the route's frames up to the touch, and `TileCol` from it: [The area parser on the route's frames](f-6-17-10-PoleParserRun.md).
+
 **Files.** `Theorems/PoleParser.lean`; `genPoleParser` and `pole-keep parser` in `Main.lean`.

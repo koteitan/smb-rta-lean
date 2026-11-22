@@ -89,4 +89,6 @@ Inv(L, ms 0) ∧ ColOK(ms 0)  ∧  ∀ n, (フレーム n の条件、edge(ms n)
 
 なので `tilesCol` は残ります。
 
+29 回目: ルートがこれらの条件を与え、`tilesCol` は `TileSlot` だけを求めます（[ルートのフレームの上のエリアの解析](f-6-17-10-PoleParserRun-ja.md)）。歩きは、プレイヤーのルーチンに最初に来たところからだけ `posW` を求めます。
+
 **ファイル。** `Theorems/PoleParserEnd.lean`。`Main.lean` の `genPoleParserEnd` と `pole-keep parser`（28 回目の行）。

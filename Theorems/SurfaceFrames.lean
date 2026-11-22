@@ -14,6 +14,7 @@ import Theorems.ImpedePosition
 import Theorems.PositionKeep
 import Theorems.EdgeStep
 import Theorems.MoveScroll
+import Theorems.SideTimer
 
 /-!
 # Above ground: the frames from control, one by one
@@ -400,7 +401,7 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     decide (c.prg = m0.prg) && decide (c.prgMask = m0.prgMask) && decide (SurfaceRead.edgeOf sy c ≤ posP sy c) &&
     EdgeStep.qCheck sy m0 (peek c sy.AreaType) && EdgeStep.rCheck sy m0 (peek c sy.AreaType) && ScrollRule.check sy m0 &&
     peek c sy.Platform_X_Scroll == 0 && (ScrollRule.places sy m0).plat == EdgeStep.platI sy && PlaceKeep.placeCheck sy m0 (peek c sy.AreaType) &&
-    MoveScroll.xsCheck sy m0
+    MoveScroll.xsCheck sy m0 && SideTimer.sideCheck sy m0 && SideTimer.keepCheck sy m0 && decide (SurfaceRead.edgeOf sy c + 257 ≤ posP sy c)
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -469,13 +470,19 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   place : PlaceKeep.placeCheck sy m0 (peek B.m sy.AreaType) = true
   /-- round 28: the walks of the byte the move stores (`MoveScroll.move_xs`) -/
   xs : MoveScroll.xsCheck sy m0 = true
+  /-- round 29: the walk of the side collision's timer from the frame's start to the player's routine (`SideTimer.side_at`) -/
+  side : SideTimer.sideCheck sy m0 = true
+  /-- round 29: the walks of the place byte, the scroll lock and the edge's two bytes from the frame's start to the player's routine (`SideTimer.keep_at`) -/
+  keepS : SideTimer.keepCheck sy m0 = true
+  /-- round 29: on `B.m` he is at least 2 px (and a fraction step) right of the screen's left edge -/
+  nearB : SurfaceRead.edgeOf sy B.m + 257 ≤ posP sy B.m
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, PrevKeep.prevOKB, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩, h25⟩,
-    h26⟩, h27⟩, h28⟩, h29⟩, h30⟩, h31⟩, h32⟩, h33⟩, h34⟩, h35⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0, ha⟩, hm⟩, hk⟩, hb⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, h10⟩, h11⟩, h12⟩, h13⟩, h14⟩, h15⟩, h16⟩, h17⟩, h18⟩, h19⟩, h20⟩, h21⟩, h22⟩, h23⟩, h24⟩, h25⟩,
+    h26⟩, h27⟩, h28⟩, h29⟩, h30⟩, h31⟩, h32⟩, h33⟩, h34⟩, h35⟩, h36⟩, h37⟩, h38⟩ := h
   exact ⟨h0, ha, hm, hk, hb, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, List.contains_iff_mem.1 h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, h25,
-    h26, h27, h28, h29, h30, h31, h32, h33, h34, h35⟩
+    h26, h27, h28, h29, h30, h31, h32, h33, h34, h35, h36, h37, h38⟩
 
 /-- **At control the screen's left edge is behind him** (round 25; the old field `edge₀` of `OnFrames`): a machine with the state of `B.m` (`Start`: with the two bytes of
 the edge) that starts a frame in control (so it has the program of `m0`, which `B.m` has too) has the edge of `B.m`, and on `B.m` the edge is behind him (`numbersCheck`) -/
@@ -488,6 +495,20 @@ theorem edge_zero {B : Box} {J : Nat} {m : Machine} (Nm : Numbers sy m0 B J) (st
   unfold SurfaceRead.edgeOf at h ⊢
   rw [e, st.edgeX, st.edgeP, st.P]
   exact h
+
+/-- **At control `SideTimer.NearM` holds** (round 29): a machine with the state of `B.m` (`Start`: with the two bytes of the edge and the position) that starts a
+frame in control is as far right of the edge as `B.m`, at least 2 px (`numbersCheck`), so `NearM` holds whatever its timer, lock and place byte -/
+theorem near_zero {B : Box} {J : Nat} {m : Machine} (Nm : Numbers sy m0 B J) (st : Start sy B m) (h0 : FrameKeep.StartK sy m0 m) :
+    SideTimer.NearM sy (ScrollRule.places sy m0) m := by
+  have hp : m.prg = B.m.prg := h0.prg.trans Nm.prgB.symm
+  have hk : m.prgMask = B.m.prgMask := h0.mask.trans Nm.maskB.symm
+  have e : ScreenClamp.places sy m = ScreenClamp.places sy B.m := SurfaceRead.places_congr hp hk
+  have h := Nm.nearB
+  have h2 : SurfaceRead.edgeOf sy m + 257 ≤ posP sy m := by
+    unfold SurfaceRead.edgeOf at h ⊢
+    rw [e, st.edgeX, st.edgeP, st.P]
+    exact h
+  exact SideTimer.nearM_of_edge h0.prg h0.mask h2
 
 theorem absB_natAbs (v : UInt8) : (absB v).toNat = (sbyte v).natAbs := by
   have h1 := v.toNat_lt
@@ -1177,13 +1198,16 @@ structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat
   the clamp after the scroll handler (`Calls`) and does not keep a speed to the right: on the other frames it is a theorem (`OnFrames.stillAt`, `OnFrames.keepAt`). -/
   collide : ∀ j, 1 ≤ j → j < g → ∀ k, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
     CollideS sy (seq (j - 1)) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (seq j) (Calls sy m0 (K.fm j) (K.pad j) k)
-  /-- round 28 (in place of the field `near` of rounds 26 and 27, which was at the scroll handler): each counted frame before the touch, where it first comes to the
-  player's routine: when the side collision's timer and the scroll lock are 0 and his place on the screen is at least the scroll's threshold, he is at least 2 px
-  right of the screen's left edge (`MoveScroll.NearA`, one state). There the timer part of the frame is done, and the move is not. The walks of
-  `PlaceKeep.keep_place` carry the three bytes and the edge to the scroll handler, and there his pixel is that of the arrival plus the byte the move stores
-  (`MoveScroll.move_xs`), so this gives the old field `near` (`EdgeStep.NearX` at the scroll handler: `OnFrames.nearAt`). With the walks of `EdgeStep`, the scroll's
-  rule and `collide` this gives the old field `edge` of round 24 (`OnFrames.edgeAt`). -/
-  nearA : ∀ j, 1 ≤ j → j < g → MoveScroll.NearA sy (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j)))
+  /-- round 29 (in place of the field `nearA` of round 28, which was where the frame first comes to the player's routine; round 26, 27: `near`, at the scroll
+  handler): each counted frame before the last one before the touch keeps `SideTimer.NearM` from its start `K.fm j` to its end `seq j` (when the side collision's
+  timer is at most 1, the scroll lock is 0 and his place on the screen is at least the scroll's threshold, he is at least 2 px right of the screen's left edge). At
+  control `NearM` holds (`AreaRun.near₀`: he is far enough right of the edge), and the frames not counted keep its bytes (`OnFrames.nearLag`), so every counted
+  frame before the touch starts with `NearM` (`OnFrames.nearMAll`). Up to the player's routine the timer falls by one at most (`SideTimer.side_at`) and the frame
+  keeps the other bytes (`SideTimer.keep_at`), so this gives `MoveScroll.NearA` there (`OnFrames.nearAAt`). The walks of `PlaceKeep.keep_place` carry the three
+  bytes and the edge to the scroll handler, and there his pixel is that of the arrival plus the byte the move stores (`MoveScroll.move_xs`), so this gives the old
+  field `near` (`EdgeStep.NearX` at the scroll handler: `OnFrames.nearAt`). With the walks of `EdgeStep`, the scroll's rule and `collide` this gives the old field
+  `edge` of round 24 (`OnFrames.edgeAt`). -/
+  nearStep : ∀ j, 1 ≤ j → j + 1 < g → SideTimer.NearM sy (ScrollRule.places sy m0) (K.fm j) → SideTimer.NearM sy (ScrollRule.places sy m0) (seq j)
   /-- each counted frame before the touch, from the scroll handler to its end, at each instruction: a store of a byte of the position by its address is inside the
   push or the clamp at the screen's edge, and outside them a store through an index or a pointer writes no byte of the position (`PositionKeep.PosW`). With
   `clampR` this gives the position on a frame that keeps a speed to the right (`PositionKeep.keep_frame`: the field `AfterP.keep` and a part of `collide`) -/
@@ -1248,6 +1272,12 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   /-- round 28: the checks of the walks of `PlaceKeep.keep_place` and of the byte the move stores (`MoveScroll.move_xs`) -/
   pl : PlaceKeep.placeCheck sy m0 v = true
   xs : MoveScroll.xsCheck sy m0 = true
+  /-- round 29: the checks of the walks from the frame's start to the player's routine of the side collision's timer (`SideTimer.side_at`) and of the place byte,
+  the scroll lock and the edge's two bytes (`SideTimer.keep_at`) -/
+  side : SideTimer.sideCheck sy m0 = true
+  keepS : SideTimer.keepCheck sy m0 = true
+  /-- round 29: at control `SideTimer.NearM` holds (a theorem: `near_zero`): he is at least 2 px right of the screen's left edge there -/
+  near₀ : 0 < g → SideTimer.NearM sy (ScrollRule.places sy m0) (seq 0)
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
 routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
@@ -1430,8 +1460,17 @@ theorem OnFrames.areaRun {J' : Nat} (Nm : Numbers sy m0 B J') (O : OnFrames sy m
     rw [e0] at st ⊢
     exact edge_zero Nm st hs0
   have hp0 : (seq 0).ram.get! (EdgeStep.platI sy) = 0 := st.plat.trans Nm.platB
+  have hn0 : 0 < g → SideTimer.NearM sy (ScrollRule.places sy m0) (seq 0) := by
+    intro hg
+    have h1 := K.order 0 hg
+    rw [K.ix0] at h1
+    have h2 := K.ix_mono 1 g hg (Nat.le_refl g)
+    have hs0 : FrameKeep.StartK sy m0 (K.all 0) := hst 0 (by simp only [Nat.zero_add] at h1; omega)
+    have e0 : seq 0 = K.all 0 := by rw [K.at_ix 0 (Nat.zero_le _), K.ix0]
+    rw [e0] at st ⊢
+    exact near_zero Nm st hs0
   exact ⟨Nm.after, Nm.area3, hall, Nm.keepH, O.collAll Nm.ctrl hcc hall hst h0, hcb, Nm.vkeep, Nm.vk, Nm.zk, Nm.bk, Nm.vfk, Nm.pk, he0, Nm.edgeQ, Nm.edgeR, Nm.scroll,
-    hp0, Nm.platP, Nm.place, Nm.xs⟩
+    hp0, Nm.platP, Nm.place, Nm.xs, Nm.side, Nm.keepS, hn0⟩
 
 /-- **A counted frame before the touch that moves right at the scroll handler and keeps that speed to its end keeps the position from there**
 (`PositionKeep.keep_frame` on the frames of `K`, with `posW` and `clampR`): the field `AfterP.keep` and a part of `collide` -/
@@ -1967,11 +2006,76 @@ theorem far_of_range {P0 Pm : Int} {t d : Nat}
   rw [Int.mul_comm Z] at hr
   omega
 
+/-- **The frames not counted before the counted frame `j` keep the bytes of `SideTimer.NearM`** (round 29): each starts in control and does not come to the player's
+routine (`OnFrames.lagNo`), and the walks of `SideTimer` show that such a frame writes none of the timer, the place byte, the lock and the edge's two bytes
+(`SideTimer.side_noCut`, `SideTimer.keep_noCut`) -/
+theorem OnFrames.nearLag (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j ≤ g) : ∀ x ∈ SideTimer.nearI sy m0, (O.fm j).ram.get! x = (seq (j - 1)).ram.get! x := by
+  have ho := K.order (j - 1) (by omega)
+  rw [show j - 1 + 1 = j by omega] at ho
+  have hg := K.ix_mono j g (by omega) (Nat.le_refl g)
+  have step : ∀ d, K.ix (j - 1) + d + 1 ≤ K.ix j → ∀ x ∈ SideTimer.nearI sy m0, (K.all (K.ix (j - 1) + d)).ram.get! x = (K.all (K.ix (j - 1))).ram.get! x := by
+    intro d
+    induction d with
+    | zero => exact fun _ _ _ => rfl
+    | succ d ih =>
+      intro hd x hx
+      have hn := K.next (K.ix (j - 1) + d)
+      rw [show K.ix (j - 1) + (d + 1) = K.ix (j - 1) + d + 1 by omega, hn]
+      have hno := O.lagNo hck Ar hst j h1 h3 (K.ix (j - 1) + d) (by omega) (by omega)
+      have hkx : (PipeTransition.frame (K.all (K.ix (j - 1) + d)) (K.inp (K.ix (j - 1) + d))).ram.get! x = (K.all (K.ix (j - 1) + d)).ram.get! x := by
+        simp only [SideTimer.nearI, List.mem_cons] at hx
+        rcases hx with rfl | hx
+        · exact SideTimer.side_noCut Ar.side (hst _ (by omega)) (K.clean _ (by omega)) hno
+        · exact SideTimer.keep_noCut Ar.keepS (hst _ (by omega)) (K.clean _ (by omega)) hno x hx
+      rw [hkx]
+      exact ih (by omega) x hx
+  intro x hx
+  have e := step (K.ix j - 1 - K.ix (j - 1)) (by omega) x hx
+  rw [show K.ix (j - 1) + (K.ix j - 1 - K.ix (j - 1)) = K.ix j - 1 by omega] at e
+  rw [K.at_ix (j - 1) (by omega)]
+  exact e
+
+/-- **Every counted frame before the touch starts with `SideTimer.NearM`** (round 29): at control it holds (`AreaRun.near₀`), each counted frame keeps it to its end
+(the field `nearStep`), and the frames not counted keep its bytes (`OnFrames.nearLag`) and the position (`OnFrames.lagKeep`) -/
+theorem OnFrames.nearMAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) : ∀ j, 1 ≤ j → j < g → SideTimer.NearM sy (ScrollRule.places sy m0) (K.fm j) := by
+  have lag : ∀ j, 1 ≤ j → j < g → SideTimer.NearM sy (ScrollRule.places sy m0) (seq (j - 1)) → SideTimer.NearM sy (ScrollRule.places sy m0) (K.fm j) := by
+    intro j h1 h3 h
+    have kl := O.lagKeep hck hst Ar h1 (by omega)
+    exact SideTimer.nearM_congr (O.nearLag hck hst Ar h1 (by omega)) (kl _ (by simp [CtrlKeep.keepA])) (kl _ (by simp [CtrlKeep.keepA])) h
+  intro j
+  induction j with
+  | zero => intro h; omega
+  | succ j ih =>
+    intro h1 h3
+    by_cases hj : j = 0
+    · subst hj
+      exact lag 1 (Nat.le_refl 1) h3 (Ar.near₀ (by omega))
+    · have h := O.nearStep j (by omega) h3 (ih (by omega) (by omega))
+      exact lag (j + 1) h1 h3 (by rw [show j + 1 - 1 = j by omega]; exact h)
+
+/-- **The old field `nearA`, a theorem (round 29)**: where each counted frame before the touch first comes to the player's routine, `MoveScroll.NearA`. The frame
+starts in control (`hst`) and comes to the routine (`OnFrames.arrive`); up to there the side collision's timer falls by one at most and the frame keeps the place
+byte, the lock, the edge and the position (`SideTimer.nearA_of_M`, with the walks of `SideTimer.sideCheck`, `SideTimer.keepCheck`, `CtrlKeep.ctrlCheck`), and the
+frame starts with `SideTimer.NearM` (`OnFrames.nearMAll`, from the field `nearStep`). -/
+theorem OnFrames.nearAAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) :
+    MoveScroll.NearA sy (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j))) := by
+  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+  have a3 := K.order j h3
+  have harr := O.arrive hck hst h1 (by omega)
+  have h0 := start_fm hst h1 (by omega)
+  have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
+  have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun n => FrameKeep.cleanK_of_F (FrameKeep.cleanK_of_E (hclE n))
+  exact SideTimer.nearA_of_M Ar.side Ar.keepS hck h0 hclK harr.1 harr.2.1 harr.2.2 (O.nearMAll hck hst Ar j h1 h3)
+
 /-- **The old field `near`, a theorem (round 28)**: at the first scroll handler `Q` of each counted frame before the touch, `EdgeStep.NearX`. The frame is read up
 to `Q` (`OnFrames.readH`, with the speed and the position of the frame before), so there his pixel is that of the first arrival at the player's routine plus the byte
 the move stores, when that byte is from 1 to 128 (`MoveScroll.move_xs`, and the frame comes to the scroll handler once: `GuardE.subs_onceE`); the walks of
-`PlaceKeep.keep_place` carry the scroll's three bytes and the edge from the arrival to `Q`; the platforms' force is 0 at `Q` (`hp0`); and the field `nearA` is the
-condition at the arrival (`MoveScroll.nearX_of_a`). -/
+`PlaceKeep.keep_place` carry the scroll's three bytes and the edge from the arrival to `Q`; the platforms' force is 0 at `Q` (`hp0`); and `MoveScroll.NearA` (the old field `nearA`) is the
+condition at the arrival (`MoveScroll.nearX_of_a`; round 29: a theorem, `OnFrames.nearAAt`, from `SideTimer.NearM` at the frame's start, `OnFrames.nearMAll`). -/
 theorem OnFrames.nearAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
     (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g)
@@ -1997,13 +2101,13 @@ theorem OnFrames.nearAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMode
   obtain ⟨k, hk0, hpk, hmv⟩ := MoveScroll.move_xs hR Ar.xs honce
   have ek : k = kq := honce k kq hk0 hk hpk hqq
   subst ek
-  exact MoveScroll.nearX_of_a (O.nearA j h1 h3) hkp hp0 hmv
+  exact MoveScroll.nearX_of_a (O.nearAAt hck hst Ar h1 h3) hkp hp0 hmv
 
 /-- **The old field `edge`, a theorem (round 26)**: each counted frame before the touch moves the screen's left edge only behind him: at its end the edge is at most
 the larger of the base at the end of the frame before and the position at its end. `OnFrames.scrollAt` gives the scroll handler `Q`, with the edge of the end of the
 frame before, the instruction `R` after the call, with the edge of the frame's end, and the scroll's rule between them. `collide` gives P(Q) − 256 ≤ P
 (`OnFrames.collideAt`), and `EdgeStep.NearX` is the condition at `Q` (round 27: it gives `EdgeStep.Near` as the platforms' force is 0 there; round 28: a theorem,
-`OnFrames.nearAt`, from the field `nearA`, with the speed `hsp` and the position `hfar` of the frame before). -/
+`OnFrames.nearAt`, from the field `nearA`, with the speed `hsp` and the position `hfar` of the frame before; round 29: `nearA` is a theorem, `OnFrames.nearAAt`). -/
 theorem OnFrames.edgeAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
     (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
@@ -2771,12 +2875,26 @@ def nearB (sy : Syms) (m0 Q : Machine) : Bool :=
   !(Q.ram.get! P.lockB == 0 && decide (P.thr1 ≤ Q.ram.get! P.pfs) && Q.ram.get! P.sideB == 0 && ScrollRule.xOK (ScrollRule.amountOf P Q)) ||
     decide (ScrollRule.left16 P Q + (Q.ram.get! P.xs).toNat + 2 ≤ EdgeStep.pixel16 sy Q)
 
-/-- round 28: the field `nearA` at the first arrival at the player's routine `R` (`MoveScroll.NearA`), as a check: when the side collision's timer and the scroll
+/-- round 28: the field `nearA` at the first arrival at the player's routine `R` (`MoveScroll.NearA`; round 29: a theorem, `OnFrames.nearAAt`), as a check: when the side collision's timer and the scroll
 lock are 0 and his place on the screen is at least the scroll's threshold, he is at least 2 px right of the screen's left edge -/
 def nearAB (sy : Syms) (m0 R : Machine) : Bool :=
   let P := ScrollRule.places sy m0
   !(R.ram.get! P.sideB == 0 && R.ram.get! P.lockB == 0 && decide (P.thr1 ≤ R.ram.get! P.pfs)) ||
     decide (ScrollRule.left16 P R + 2 ≤ EdgeStep.pixel16 sy R)
+
+/-- round 29: `SideTimer.NearM` on a machine (at the frame's start `M`, a theorem: `OnFrames.nearMAll`; the field `nearStep` asks it at the frame's end when it holds at
+the start), as a check: when the side collision's timer is at most 1, the scroll lock is 0 and
+his place on the screen is at least the scroll's threshold, he is at least 2 px right of the screen's left edge -/
+def nearMB (sy : Syms) (m0 M : Machine) : Bool :=
+  let P := ScrollRule.places sy m0
+  !(decide (M.ram.get! P.sideB ≤ 1) && M.ram.get! P.lockB == 0 && decide (P.thr1 ≤ M.ram.get! P.pfs)) ||
+    decide (ScrollRule.left16 P M + 2 ≤ EdgeStep.pixel16 sy M)
+
+/-- round 29: what `SideTimer.side_at` and `SideTimer.keep_at` prove, as a check: at the arrival `R` the side collision's timer is that of the frame's start `M`
+or one less, and the place byte, the lock and the edge's two bytes are those of `M` -/
+def sideAtB (sy : Syms) (m0 M R : Machine) : Bool :=
+  let i := SideTimer.sideI sy m0
+  (R.ram.get! i == M.ram.get! i || R.ram.get! i == M.ram.get! i - 1) && (SideTimer.startI sy m0).all fun x => R.ram.get! x == M.ram.get! x
 
 /-- round 28: what `MoveScroll.move_xs` proves, as a check: at the scroll handler `Q`, when the byte the move stores is from 1 to 128, his pixel is that of the
 arrival `R` plus that byte -/
@@ -2821,6 +2939,8 @@ structure MovesScan where
   inp : Option HIn := none
   /-- after the first scroll handler a byte of `vKeep` takes another value, at some instruction -/
   vMid : Bool := false
+  /-- round 29, measured: `SideTimer.NearM` at the frame's start asks the bound and `MoveScroll.NearA` at the arrival does not (the timer at most 1 there, not 0) -/
+  nearMore : Bool := false
   deriving Inhabited
 
 /-- run the frame of `M` with the input `i` instruction by instruction, `a` the machine at the end of the counted frame before, and look at `Moves`, and at `box` if `box` -/
@@ -2877,7 +2997,10 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
     if !subs.all (fun Q => collideSB sy a Q b calls) then f := "collideS" :: f
     if !edgeB sy a b then f := "edge" :: f
     if !subs.all (fun Q => nearB sy m0 Q) then f := "near" :: f
-    if !nearAB sy m0 R then f := "nearA" :: f
+    if !nearAB sy m0 R then f := "nearA (a theorem)" :: f
+    if !nearMB sy m0 M then f := "nearM at the start (a theorem)" :: f
+    if nearMB sy m0 M && !nearMB sy m0 b then f := "nearStep" :: f
+    if !sideAtB sy m0 M R then f := "side timer (a theorem)" :: f
     if !subs.all (fun Q => moveXsB sy m0 R Q) then f := "move xs (a theorem)" :: f
     if !subs.all (fun Q => keepZB sy Q b) then f := "keepZ (a theorem)" :: f
     if !subs.all (fun Q => bitsEndB sy Q b) then f := "bits_end (a theorem)" :: f
@@ -2896,6 +3019,8 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
       if !(decide (HaltOK sy a) && decide (HaltOK sy b)) then bf := "halt" :: bf
       if !subs.all (fun Q => peek b sy.Player_X_Speed != 0 || peek b sy.Player_X_MoveForce != 0 || peek b sy.PlayerFacingDir == peek Q sy.PlayerFacingDir) then
         bf := "faceJ" :: bf
-    return { fails := f, boxFails := bf, next := b, subs := subs.length, inp := some (FrameModel.readIn sy R), vMid }
+    let P := ScrollRule.places sy m0
+    let nearMore := decide (M.ram.get! P.sideB ≤ 1) && M.ram.get! P.lockB == 0 && decide (P.thr1 ≤ M.ram.get! P.pfs) && R.ram.get! P.sideB != 0
+    return { fails := f, boxFails := bf, next := b, subs := subs.length, inp := some (FrameModel.readIn sy R), vMid, nearMore }
 
 end Smbrta.SurfaceFrames
