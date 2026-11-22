@@ -18,7 +18,10 @@ Rounds 27 and 28 proved the area parser's invariant `Inv` (`16·col + 16·p(N) +
 So the invariant holds at every frame's start up to the touch's frame (`inv_run`), and with it the parser's column at the start of the touch's frame is at most 384 px
 past the screen's left edge. That and the field `PoleJoin.Run.tilesCol` (`PoleTileFar.TileSlot`) give `PoleTileFar.TileCol` on the touch's frame (`tilesCol_run`),
 which was the old field `tilesCol`; on the route, with the invariant and the column at control from the rows of the change (`PoleParser.inv₀`, `PoleParser.col₀`):
-`tilesCol_route`.
+`tilesCol_route`. Round 33 (`PoleSlot`, `1-1/f-6-17-14-PoleSlot.md`): `tilesCol_run` gives what the touch's frame needs of the parser
+(`PoleJoin.Run.TileColAll`): the bound at the start of the touch's frame, the parser's column not going back from frame to frame (`colMono_run`, from the weak
+rule of each frame: `PoleStrict.ruleW_onFrames`), and no pole's tile in the block buffers at control; the part (`slot`) of `TileSlot` is then a theorem of the walk
+of the touch's frame (`PoleSlot.no_write_frameZS`).
 
 There is no game data in this file. Page: `1-1/f-6-17-10-PoleParserRun.md`.
 -/
@@ -321,7 +324,7 @@ theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFra
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
     ∀ n, n < R.keep.toFrames.ix R.g →
-      (Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n)) ∧ PoleWrap.JV (valsOf (places sy m0) (R.keep.toFrames.all n)) := by
+      (Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n)) ∧ PoleLag.JY (valsOf (places sy m0) (R.keep.toFrames.all n)) := by
   subst hv
   have hE := edgeLow_run R hN hfr st hfq hk hc0 hg hb
   have Nm := SurfaceFrames.numbers_of_check hN
@@ -331,7 +334,7 @@ theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFra
   have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
   have hix : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
-  refine PoleStrict.invJ_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs hsc Nm.idle (by rw [e0]; exact h0) (by rw [e0]; exact hJ)
+  refine PoleStrict.invJ_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs hsc Nm.idle (by rw [e0]; exact h0) (by rw [e0]; exact PoleLag.jy_of_jv hJ)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
     (fun n hn n₀ a1 a2 k hk hf => R.ctlU n (by omega) n₀ a1 a2 k hk hf)
@@ -348,21 +351,62 @@ theorem inv_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFram
     ∀ n, n < R.keep.toFrames.ix R.g → Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n) :=
   fun n hn => (invJ_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ n hn).1
 
-/-- **`TileCol` on the touch's frame up to the write** (the old field `tilesCol`): the parser's invariant at the start of the touch's frame (`inv_run`) puts its column at
-most 384 px past the edge (`PoleParser.col_le`), and the field `tilesCol` (`PoleTileFar.TileSlot`) gives `TileCol` with it (`PoleTileFar.tileCol_of_slot`) -/
+/-- **The parser's column does not go back** from a frame's start to the next one up to the touch's frame (round 33): the weak rule of each frame
+(`PoleStrict.ruleW_onFrames`, under the conditions of `invJ_run`) keeps the column or adds one (`PoleStrict.col_of_ruleW`) -/
+theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
+    (st : SurfaceFrames.Start sy B (R.seq 0))
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
+    (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
+    ∀ n, n + 1 < R.keep.toFrames.ix R.g →
+      PoleJoin.parColOf sy m0 (R.keep.toFrames.all n) ≤ PoleJoin.parColOf sy m0 (R.keep.toFrames.all (n + 1)) := by
+  subst hv
+  have hE := edgeLow_run R hN hfr st hfq hk hc0 hg hb
+  have Nm := SurfaceFrames.numbers_of_check hN
+  have hw0 := R.watched₀ st hfq hc0.castle
+  have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
+    fun n hn => (R.keep.toFrames.all_start hk hc0.start hw0 n hn).1
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
+  have hix : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
+  intro n hn
+  exact PoleStrict.col_of_ruleW (PoleStrict.ruleW_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs hsc Nm.idle (by rw [e0]; exact h0)
+    (by rw [e0]; exact PoleLag.jy_of_jv hJ)
+    (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
+    (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
+    (fun n hn n₀ a1 a2 k hk hf => R.ctlU n (by omega) n₀ a1 a2 k hk hf)
+    (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
+    (fun n hn => by rw [← edge_eq]; exact hE n hn) n hn)
+
+/-- **What the touch's frame needs of the parser** (`PoleJoin.Run.TileColAll`, round 33; up to round 32 it was `TileCol` on the touch's frame, from the field
+`tilesCol` and the parser's invariant there): the column does not go back from frame to frame (`colMono_run`); and at control no byte of the block buffers holds
+a pole's tile (`hNT`, from the rows of the change: `PoleParser.inv₀`), so the slot's map holds there (`PoleSlot.slotMap_of_none`) -/
 theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
     (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
-    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) : R.TileColAll := by
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
+    (hNT : NoTiles (PoleFrame.spotsF sy m0) (R.seq 0)) : R.TileColAll := by
+  have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
+  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ, ?_⟩
+  rw [e0]
+  exact PoleSlot.slotMap_of_none hNT
+
+/-- **The parser's column at the start of the touch's frame is at most 384 px past the edge there** (`inv_run`, `PoleParser.col_le`): with it the round 30 parts
+(`near`) and (`read`) of the far reads give the field `tilesCol` of round 33 (`PoleSlot.tileSlotC_of_N`) -/
+theorem colEdge_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
+    (st : SurfaceFrames.Start sy B (R.seq 0))
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
+    (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
+    16 * PoleJoin.parColOf sy m0 (R.keep.fm R.g) ≤ ScrollRule.left16 (ScrollRule.places sy m0) (R.keep.fm R.g) + 384 := by
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have hI := inv_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ (R.keep.toFrames.ix R.g - 1) (by omega)
-  have hc : 16 * PoleJoin.parColOf sy m0 (R.keep.fm R.g) ≤ ScrollRule.left16 (ScrollRule.places sy m0) (R.keep.fm R.g) + 384 := by
-    rw [parCol_eq, edge_eq]
-    exact col_le hI.1
-  intro n hn j hj
-  exact PoleTileFar.tileCol_of_slot (R.tilesCol n hn j hj) hc
+  rw [parCol_eq, edge_eq]
+  exact col_le hI.1
 
 end Run
 
@@ -373,8 +417,8 @@ variable {m0 : Machine} {N : Nat} {D : Int} {rN : RoomJoin.Nums}
   {b : Machine} {vs : List Jump.VS} {Ts J Nc : Nat} {F : Int} {q t0 : Nat} {nm₁ : PipeTransitionAll.Names} {d₁ : PipeChangeEnd.Data}
   {nm₂ nx₂ nmS : PipeTransitionAll.Names} {fc : FlagRule.Ctx} {tc : TitleStart.Ctx}
 
-/-- **`TileCol` on the touch's frame of the route**: `tilesCol_run` on `R.pole`, with the invariant and the column at control from the rows of the change out of the
-side pipe (`PoleParser.inv₀`, `PoleParser.col₀`; the checks `hmI`, `hmC` on the ROM). The box is written `⟨M, dx, dy, rows⟩`, as in `PoleJoin.touch_castle`, so that
+/-- **What the touch's frame of the route needs of the parser** (`PoleJoin.Run.TileColAll`): `tilesCol_run` on `R.pole`, with the invariant, no pole's tile in
+the block buffers and the column at control from the rows of the change out of the side pipe (`PoleParser.inv₀`, `PoleParser.col₀`; the checks `hmI`, `hmC` on the ROM). The box is written `⟨M, dx, dy, rows⟩`, as in `PoleJoin.touch_castle`, so that
 the private proof's facts on its machine `M` match without unfolding it -/
 theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
     (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
@@ -390,6 +434,7 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (htop : TopSpeed.top sy ≤ 48) : R.pole.TileColAll :=
   tilesCol_run R.pole hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop ⟨(inv₀ hS hT hQ hR hmI hB hK R).1, col₀ hS hT hQ hR hmC hB hK R⟩ (PoleStrict.jv₀ hS hT hQ hR hmJ hB hK R)
+    (inv₀ hS hT hQ hR hmI hB hK R).2
 
 end Route
 

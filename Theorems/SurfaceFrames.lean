@@ -19,6 +19,7 @@ import Theorems.ClampSide
 import Theorems.RightEdge
 import Theorems.PushTimer
 import Theorems.StopEdge
+import Theorems.StopClamp
 
 /-!
 # Above ground: the frames from control, one by one
@@ -506,7 +507,7 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   relB : RightEdge.Rel (ClampSide.places sy m0) B.m
   /-- round 31: in the first `farN` frames from control the base stays below the page 255 of the screen's left edge -/
   pageB : posP sy B.m + 16 * (top sy : Int) * (farN sy B.m : Int) < 65280 * 256
-  /-- round 32: the walks of his pixel and his page after the scroll handler's call (`PushTimer.pix_end`) -/
+  /-- round 32: the walks of his pixel and his page after the scroll handler's call (`PushTimer.pix_end`; round 33: and his speed) -/
   pushC : PushTimer.sCheck sy m0 (peek B.m sy.AreaType) = true
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
@@ -1117,11 +1118,18 @@ structure Moves (sy : Syms) (m0 a M : Machine) (i : UInt8) (n₀ : Nat) : Prop w
   behind it, and 1 px behind is the first case of `AfterP.stop` (`StopAt.stopP`). So what is left is a frame that sets the speed to 0 and leaves the position as it
   is after the move (two pushes that cancel, a call that sets the speed to 0 without a push). Round 32: asked only of a frame where at the scroll handler he is
   right of the screen's left edge, or that starts left of it. On the other frames (at the scroll handler at or left of the edge, at the start at or right of it) the
-  frame keeps the edge up to the scroll handler, so his pixel there is at most that of the start: `OnFrames.stopAt` (the old field is `StopAt`). -/
+  frame keeps the edge up to the scroll handler, so his pixel there is at most that of the start: `OnFrames.stopAt` (the old field is `StopAt`). Round 33: where
+  he is right of the edge at the scroll handler, asked only of a frame that ends with the side collision's timer at the value the push stores
+  (`PushTimer.pushT`: a push on this frame). A frame that ends with the timer at another value ends at the left edge (`OnFrames.stopRight`: the speed 0 at the end comes from the clamp, and it is the left clamp), and then, right of the edge at
+  the scroll handler, the edge moved there on this frame, which the scroll's rule and `EdgeStep.NearX` exclude (`OnFrames.noStopRight`). And where the frame
+  starts left of the edge, asked only when the frame before ended with the timer at the push's value: a counted frame that ends with the timer at another value ends at or
+  right of the edge (`OnFrames.leftEnd`), and so does the machine at control (`AreaRun.edge₀`). So the field is asked only on a frame with a push: the timer at
+  the push's value at the end of this frame or of the frame before. -/
   stop : ∀ k, n₀ ≤ k → (trace M i k).pc = sy.PlayerSubs → 0 < vOf sy (trace M i k) → peek (frame M i) sy.Player_X_Speed = 0 →
     posP sy (frame M i) = posP sy (trace M i k) →
-    (ScrollRule.left16 (ScrollRule.places sy m0) (trace M i k) < EdgeStep.pixel16 sy (trace M i k) ∨
-      EdgeStep.pixel16 sy a < ScrollRule.left16 (ScrollRule.places sy m0) a) →
+    ((ScrollRule.left16 (ScrollRule.places sy m0) (trace M i k) < EdgeStep.pixel16 sy (trace M i k) ∧
+        (frame M i).ram.get! (ScrollRule.places sy m0).sideB = PushTimer.pushT sy m0) ∨
+      (EdgeStep.pixel16 sy a < ScrollRule.left16 (ScrollRule.places sy m0) a ∧ a.ram.get! (ScrollRule.places sy m0).sideB = PushTimer.pushT sy m0)) →
     posP sy (trace M i k) ≤ posP sy a + 256
 
 /-- **The old field `Moves.stop`** (round 32: a theorem, `OnFrames.stopAt`, from the narrowed field): on a frame that moves right at the scroll handler, ends with
@@ -1379,11 +1387,15 @@ structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat
   the screen at least the scroll's threshold (the frames where `EndKeep` and `NearM` ask something), from the scroll handler to its end, at each instruction: a
   store through an index or a pointer does not write the timer (`PushTimer.SideW`). With it and `posW` the walk of `PushTimer` keeps the timer known after a push
   that moves him (the push stores 16 there first), so such a frame ends with the pixel and the page of the instruction after the scroll handler's call
-  (`PushTimer.pix_end`): the pixel part of the old `endKeep`. -/
-  sideW : ∀ j, 1 ≤ j → j + 1 < g → (seq j).ram.get! (ScrollRule.places sy m0).sideB ≤ 1 → (seq j).ram.get! (ScrollRule.places sy m0).lockB = 0 →
-    (ScrollRule.places sy m0).thr1 ≤ (seq j).ram.get! (ScrollRule.places sy m0).pfs →
+  (`PushTimer.pix_end`): the pixel part of the old `endKeep`. Round 33: asked only at a store that may reach the timer (`PushTimer.NearW`: a store to an
+  absolute address plus an index from whose base some index reaches the timer, or a store through a pointer); at every other instruction it is a theorem
+  (`PushTimer.sideW_far`). And asked on every counted frame before the touch that does not end with the timer at the push's value (`PushTimer.pushT`), whatever the lock and the place byte (round 32
+  asked it only with the lock 0 and the place byte at least the threshold, and not on the last frame before the touch): `OnFrames.stopRight` uses it there,
+  with the walk of the speed. So it asks less at each frame and more frames than round 32's field. -/
+  sideW : ∀ j, 1 ≤ j → j < g → (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 →
     ∀ k n, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → k ≤ n → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
-    (PipeEntryRule.trace (K.fm j) (K.pad j) n).frame = (K.fm j).frame → PushTimer.SideW sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n)
+    (PipeEntryRule.trace (K.fm j) (K.pad j) n).frame = (K.fm j).frame → PushTimer.NearW sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n) →
+    PushTimer.SideW sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n)
   /-- each counted frame before the touch, from the scroll handler to its end, at each instruction: a store of a byte of the position by its address is inside the
   push or the clamp at the screen's edge, and outside them a store through an index or a pointer writes no byte of the position (`PositionKeep.PosW`). With
   `clampR` this gives the position on a frame that keeps a speed to the right (`PositionKeep.keep_frame`: the field `AfterP.keep` and a part of `collide`) -/
@@ -1463,7 +1475,7 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   rel₀ : 0 < g → RightEdge.Rel (ClampSide.places sy m0) (seq 0)
   /-- round 31: in the first `farN` frames from control the base stays below the page 255 of the screen's left edge (`numbersCheck`, with the position of control) -/
   pageB : 0 < g → posP sy (seq 0) + 16 * (top sy : Int) * (farN sy (seq 0) : Int) < 65280 * 256
-  /-- round 32: the walks of his pixel and his page after the scroll handler's call (`PushTimer.pix_end`) -/
+  /-- round 32: the walks of his pixel and his page after the scroll handler's call (`PushTimer.pix_end`; round 33: and his speed) -/
   pt : PushTimer.sCheck sy m0 v = true
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
@@ -1926,201 +1938,223 @@ theorem OnFrames.platQ (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy 
   rw [Ar.platP, hpq]
   exact O.platPrev hck hst Ar h1 h3
 
-/-- **The old field `Moves.stop` (`StopAt`) on every counted frame from a clean state** (round 32). The field asks it only where at the scroll handler `Q` he is right
-of the screen's left edge, or the frame starts left of it. On the other frames he is at or left of the edge at `Q` and the frame starts at or right of it. The frame
-keeps the edge's two bytes from its start to `Q` (`EdgeStep.keep_q`; `Q` is the only scroll handler after the arrival: `GuardE.subs_onceE`), and the frames not
-counted keep them from the end of the frame before (`OnFrames.edgeLag`). So pixel(Q) ≤ left(Q) = left(a) ≤ pixel(a), and P(Q) ≤ P(a) + 255
-(`StopEdge.stop_of_edge`). -/
-theorem OnFrames.stopAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) (hc : Clean sy (seq (j - 1))) :
-    StopAt sy (seq (j - 1)) (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j)) := by
-  intro k hk hpc hv h0 e
-  by_cases hcase : ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) <
-      EdgeStep.pixel16 sy (PipeEntryRule.trace (K.fm j) (K.pad j) k) ∨
-      EdgeStep.pixel16 sy (seq (j - 1)) < ScrollRule.left16 (ScrollRule.places sy m0) (seq (j - 1))
-  · exact (O.moves j h1 h2 h3 hc).stop k hk hpc hv h0 e hcase
-  · have a1 := K.order (j - 1) (by omega)
-    have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
-    rw [show j - 1 + 1 = j by omega] at a1
-    have harr := O.arrive hck hst h1 (by omega)
-    have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
-    have h0' := start_fm hst h1 (by omega)
-    have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
-    have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
-    have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
-      fun n => FrameKeep.cleanK_of_E (hclE n)
-    have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
-      fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
-    have honce := GuardE.subs_onceE hck Ar.keep h0' hclE hxs hAf harr.1 harr.2.1 harr.2.2
-    have hb : ∀ j', CtrlKeep.arrAt sy (K.fm j) (K.pad j) < j' → j' < k → (PipeEntryRule.trace (K.fm j) (K.pad j) j').pc ≠ sy.PlayerSubs := by
-      intro j' hj1 hj2 hpj
-      have := honce j' k (Nat.le_of_lt hj1) hk hpj hpc
-      omega
-    have HQ := EdgeStep.keep_q hck Ar.eq h0' hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 hk hpc hb
-    have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
-    have hp0 : ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_of_mem _ List.mem_cons_self
-    have elx : (ScrollRule.places sy m0).lx = ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat := rfl
-    have elp : (ScrollRule.places sy m0).lp = ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat := rfl
-    have ex : (PipeEntryRule.trace (K.fm j) (K.pad j) k).ram.get! ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat =
-        (seq (j - 1)).ram.get! ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat := (HQ _ hx0).2.trans (O.edgeLag hck hst Ar h1 (by omega) _ hx0)
-    have ep : (PipeEntryRule.trace (K.fm j) (K.pad j) k).ram.get! ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat =
-        (seq (j - 1)).ram.get! ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat := (HQ _ hp0).2.trans (O.edgeLag hck hst Ar h1 (by omega) _ hp0)
-    have eL : ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) =
-        ScrollRule.left16 (ScrollRule.places sy m0) (seq (j - 1)) := by
-      unfold ScrollRule.left16
-      rw [elx, elp, ex, ep]
-    have := StopEdge.stop_of_edge sy (ScrollRule.places sy m0) (a := seq (j - 1)) (Q := PipeEntryRule.trace (K.fm j) (K.pad j) k) (by omega) (by omega) eL
-    omega
-
-/-- the state at the player's routine of the counted frame `j`, from a clean state: `Moves.toAt` with the frame's start in control (`hst`), `K.cleanAt`, `OnFrames.arrive`
-and `OnFrames.lagKeep` -/
-theorem OnFrames.movesAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
-    (hfr : TopSpeed.frictionCheck sy m0 = true) (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true)
-    (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) (hc : Clean sy (seq (j - 1)))
-    (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) :
-    MovesAt sy m0 (seq (j - 1)) (O.fm j) (O.pad j) (O.arr j) := by
-  have a1 := K.order (j - 1) (by omega)
+/-- **round 31: one counted frame keeps the right edge's relation.** The frame comes to the scroll handler `Q` (`EdgeStep.keep_r`, `EdgeStep.keep_q`: a `Good`
+machine in the frame with the four bytes of the edges of the frame's start, which are those of the end of the frame before, `OnFrames.edgeLag`); the scroll's part of
+the scroll handler keeps the relation (`RightEdge.scroll_rel`: the right edge's routine sets it after a scroll); the clamp keeps both edges (`ClampSide.clamp_end`);
+the scroll handler's return keeps the RAM (`ret_step`); and from the instruction after the call to the frame's end the walks of `EdgeStep.keep_r` keep the four bytes
+(with `posW`). -/
+theorem OnFrames.relStep (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) (hr : RightEdge.Rel (ClampSide.places sy m0) (seq (j - 1))) :
+    RightEdge.Rel (ClampSide.places sy m0) (seq j) := by
   have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
-  rw [show j - 1 + 1 = j by omega] at a1
-  have hA : CtrlKeep.AreaOK sy v (seq (j - 1)) := by
-    rw [K.at_ix (j - 1) (by omega)]
-    exact Ar.all _ (by omega)
-  have harea : peek (seq (j - 1)) sy.AreaType ∈ [(1 : UInt8), 2, 3] := by
-    rw [hA.1]
-    exact Ar.v3
+  have a3 := K.order j h3
+  have a4 := K.ix_mono (j + 1) g (by omega) (Nat.le_refl g)
+  have a5 := K.ix_mono 0 j (by omega) (by omega)
   have harr := O.arrive hck hst h1 (by omega)
   have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
-  have hkh := GuardE.keepHE hck Ar.keep (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
-    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
-  have honce := GuardE.subs_onceE hck Ar.keep (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
-    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
-  have hz := FaceKeep.keepZ_end hck Ar.zk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
-    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
-  have hlag := O.lagKeep hck hst Ar h1 (by omega)
-  have hbits0 : peek (O.fm j) sy.Player_CollisionBits &&& sy.noLeft = sy.noLeft := by
-    rw [hlag _ (keepA_mem (by simp))]
-    rcases hc.2.2 with e | ⟨e, _⟩
-    · have e' : peek (seq (j - 1)) sy.Player_CollisionBits = 0xFF := e
-      rw [e', ff_and]
-    · have e' : peek (seq (j - 1)) sy.Player_CollisionBits = sy.noLeft := e
-      rw [e', UInt8.and_self]
-  have hb := FaceKeep.bits_end hck Ar.bk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
-    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf hbits0 harr.1 harr.2.1 harr.2.2 honce
-  exact Moves.toAt hck hOK hfr hso (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) hc harr hlag
-    harea hA.2.1 hA.2.2 hfar hidle hkh honce (O.state j h1 (by omega))
-    (O.collideAt hck hst Ar h1 h3)
-    (fun k hk hpc => hz k hk hpc (FaceKeep.fdI sy) (by simp [FaceKeep.zI]))
-    (fun k hk hpc hv => hb k hk hpc (sign_of_pos hv)) (O.keepAt hck hst Ar h1 h3) (O.stopAt hck hst Ar h1 h2 h3 hc)
+  have h0 := start_fm hst h1 (by omega)
+  have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
+  have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
+  have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun n => FrameKeep.cleanK_of_E (hclE n)
+  have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
+  obtain ⟨kq, hkq, hqq, hfq, hbq, HR⟩ := EdgeStep.keep_r hck Ar.er h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2
+  have HQ := EdgeStep.keep_q hck Ar.eq h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 (Nat.le_of_lt hkq) hqq hbq
+  have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
+  have hgQ := (HQ _ hx0).1
+  have hp : ∀ n', kq ≤ n' → (PipeEntryRule.trace (K.fm j) (K.pad j) n').frame = (K.fm j).frame →
+      EdgeStep.cutPos sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc = false := by
+    intro n' hn' hf'
+    have W := (O.posW j h1 h3 kq n' (Nat.le_of_lt hkq) hn' hqq hf').1
+    have hpg := StepPrg.trace_prg (K.fm j) (K.pad j) n'
+    have e1 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prg = m0.prg := hpg.1.trans h0.prg
+    have e2 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prgMask = m0.prgMask := hpg.2.trans h0.mask
+    rw [e1, e2] at W
+    unfold EdgeStep.cutPos
+    cases hs : FrameKeep.storesTo (PositionWriters.posI sy) m0.prg m0.prgMask (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc with
+    | false => rfl
+    | true => rw [W hs]; rfl
+  have hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true := (PositionKeep.pCheck_parts Ar.pk).2.2.2.2
+  have hscc : ScreenClamp.check sy m0 = true := (PositionKeep.pCheck_parts Ar.pk).2.2.1
+  have rQ : RightEdge.Rel (ClampSide.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) :=
+    rel_congr (fun x hx => (HQ x hx).2.trans (O.edgeLag hck hst Ar h1 (by omega) x hx)) hr
+  obtain ⟨k2, g2, pc2, s2, hi2, lo2, _, _, C2, rel2⟩ := RightEdge.scroll_rel Ar.rc hgQ hqq
+  have hck2 := K.cleanAt j h1 (by omega)
+  have ht : ∀ n, (PipeEntryRule.trace (K.fm j) (K.pad j) n).pc ≠ sy.EndlessLoop →
+      (PipeEntryRule.trace (K.fm j) (K.pad j) n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hck2 n).time hn
+  obtain ⟨k3, g3, pc3, s3, we3, _, up3, _, _, C3⟩ := ClampSide.clamp_end Ar.clampS hscc g2 pc2
+  have C23 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3) := FrameModel.InFrameN.add' C2 rfl C3
+  have r2 := rel2 rQ
+  generalize hQ2 : FrameModel.stepN k2 (PipeEntryRule.trace (K.fm j) (K.pad j) kq) = Q2 at g2 pc2 s2 hi2 lo2 r2 we3 up3 C3 g3 pc3 s3
+  generalize hQ3 : FrameModel.stepN k3 Q2 = Q3 at we3 up3 g3 pc3 s3
+  have lo3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1)) = (sy.PlayerSubs + 2).toUInt8 := by
+    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add1]
+    exact lo2
+  have hi3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1 + 1)) = ((sy.PlayerSubs + 2) >>> 8).toUInt8 := by
+    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add2]
+    exact hi2
+  obtain ⟨_, pc4, rm4, C4⟩ := ret_step hscc g3 pc3 lo3 hi3
+  have C234 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3 + 1) := by
+    refine FrameModel.InFrameN.add' C23 ?_ C4
+    rw [FrameModel.stepN_add, hQ2, hQ3]
+  have tr4 := FrameModel.trace_inFrame hidle hfq C234 ht (k2 + k3 + 1) (Nat.le_refl _)
+  rw [FrameModel.stepN_add, FrameModel.stepN_add, hQ2, hQ3] at tr4
+  have eR := HR hp (kq + (k2 + k3 + 1)) (by omega) (by rw [tr4.1]; exact pc4)
+  have r3 : RightEdge.Rel (ClampSide.places sy m0) Q3 := by
+    unfold RightEdge.Rel ClampSide.edge16 at r2 ⊢
+    rw [we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW])]
+    exact r2
+  refine rel_congr (fun x hx => ?_) r3
+  rw [K.ends j h1 (by omega), ← rm4, ← tr4.1]
+  exact eR.1 x hx
 
-/-- **Each frame from a clean state is a `OneFrame`**, by the movement: `one_of_moves`, or with the side he presses masked `one_of_movesM`. -/
-theorem one_of_frames (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hmk : FrameModel.maskOK sy m0 (FrameModel.ctrlStack sy m0) = true)
-    (hfr : TopSpeed.frictionCheck sy m0 = true) (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true)
-    (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g)
-    (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
-    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) :
-    OneFrame sy m0 (O.inp j) (seq (j - 1)) (seq j) := by
-  have hmv := O.movesAt hck hOK hfr hso hst Ar h1 h2 h3 hc hfar hidle
-  by_cases hm : Masked sy (O.inp j) (seq (j - 1))
-  · have e := one_of_movesM hOK hmk hmv hc hm
-    rw [← O.ends j h1 h2 h3] at e
-    exact e
-  · have e := one_of_moves hOK hmv hm
-    rw [← O.ends j h1 h2 h3] at e
-    exact Or.inr e
+/-- **round 31: every counted frame before the touch ends with the right edge's relation** (and so does the machine at control: `AreaRun.rel₀`), by
+`OnFrames.relStep`. It is the first half of the old field `rightRel`. -/
+theorem OnFrames.relAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) : ∀ j, j < g → RightEdge.Rel (ClampSide.places sy m0) (seq j) := by
+  intro j
+  induction j with
+  | zero => exact fun h => Ar.rel₀ h
+  | succ j ih =>
+    intro h3
+    exact O.relStep hck hst Ar (j := j + 1) (by omega) h3 (by rw [show j + 1 - 1 = j by omega]; exact ih (by omega))
 
-/-- **The vertical step of a frame before `J`**: from the vertical model (`VertModel.vert_model`, proved), the state at the player's routine (`moves`, and the walk of
-`CtrlKeep` for the vertical bytes up to there: `vBefore`, and bit 7 of A of the frame before: `OnFrames.prevAll`), and the frame's part from the scroll handler on
-(`vAfter` for five bytes, the walk of `VertKeep` for four others: `OnFrames.kAt`, the walk of `FaceKeep` for the vertical force: `OnFrames.vfAt`). The step is
-`VStep`: that of `vNext`, or on the ground that of `vNext` with the vertical force of a jumpspring's landing. In a jump the jump's halt value is 1 at the frame's
-start, and so at its end. -/
-theorem vert_of (hv : VertModel.vertOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hck : CtrlKeep.ctrlCheck sy m0 = true)
-    (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
-    (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true) (O : OnFrames sy m0 B T J g seq K)
-    (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j < J) (hT : j ≤ T) (h3 : j < g)
-    (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
-    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (hh : HaltOK sy (seq (j - 1))) (hpv : PrevKeep.PrevOK sy (seq (j - 1))) :
-    VStep sy m0 (FaceKeep.vfC sy m0 v) (seq (j - 1)) (seq j) ∧ HaltOK sy (seq j) := by
-  have hmv := O.movesAt hck hOK hfr hso hst Ar h1 hT h3 hc hfar hidle
-  have hv0 : peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.Player_X_Speed = peek (seq (j - 1)) sy.Player_X_Speed := hmv.before _ (.head _)
-  have hat := hmv.at_ctrl
-  obtain ⟨vb1, vb2, vb3⟩ := vBefore hck (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) (O.arrive hck hst h1 (by omega)) (O.lagKeep hck hst Ar h1 (by omega)) hpv
-  change (∀ x ∈ vKeep sy, peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) x = peek (seq (j - 1)) x) at vb1
-  change peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.A_B_Buttons &&& 0x80 = _ at vb2
-  change peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.PreviousA_B_Buttons &&& 0x80 =
-    peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.A_B_Buttons &&& 0x80 at vb3
-  generalize hR : PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j) = R at vb1 vb2 vb3 hv0 hat
-  have hd : peek R sy.Player_State = 1 → peek R sy.DiffToHaltJump = 1 := by
-    intro e
-    rw [vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))))]
-    rw [vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))))] at e
-    exact hh e
-  obtain ⟨k, hk, _, hpc, _, hvs, hhk, hC⟩ := VertModel.vert_model hv hat hd vb3
-  have e0 : PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k) = FrameModel.stepN k R := by
-    have e1 := (FrameModel.trace_inFrame hmv.idle hmv.start (by rw [hR]; exact hC) hmv.time k (Nat.le_refl k)).1
-    rw [hR] at e1
-    exact e1
-  have hpc' : (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)).pc = sy.PlayerSubs := by rw [e0]; exact hpc
-  have va0 := O.vAfter j h1 h2 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
-  have vk := O.kAt hck hst Ar h1 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
-  have vf0 := O.vfAt hck hst Ar h1 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
-  have va1 : ∀ x ∈ vHard sy, peek (seq j) x = peek (FrameModel.stepN k R) x := by
+/-- round 33: **A counted frame that moves right at the scroll handler and ends there with the speed 0 ends at the screen's left edge, when it ends with the side
+collision's timer not at the push's value (`PushTimer.pushT`)** (`OnFrames.stopAt`). The frame comes to the scroll handler `Q` once after the arrival (`EdgeStep.keep_r`, `GuardE.subs_onceE`); the
+scroll's part keeps his position and his speed up to the routine of the offscreen bits (`RightEdge.scroll_rel`), where the right edge is the left edge plus
+255 px (`OnFrames.relAll`); the routine and the clamp bring him to the scroll handler's return instruction with his pixel that of the choice (`ClampSide.pixAfter`),
+the edges kept, and his speed kept when nothing is chosen (`ClampSide.clamp_end`); the return keeps the RAM (`ret_step`); and from the instruction after the call
+to the frame's end his pixel, his page and his speed are kept (`PushTimer.pix_end`, with the fields `posW` and `sideW`), and the left edge too (`EdgeStep.keep_r`).
+So with the speed 0 at the end a clamp was chosen. The right clamp leaves him at the right edge minus its amount, and there the choice would not be the right
+clamp (`ClampSide.rightAmt`); but his pixel at the end is that of `Q`, so the choice at `Q`'s pixel would be that place: a contradiction. So it is the left
+clamp, which leaves him at the left edge. -/
+theorem OnFrames.stopRight (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) {k : Nat} (hk : CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k)
+    (hpc : (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs) (hv : 0 < vOf sy (PipeEntryRule.trace (K.fm j) (K.pad j) k))
+    (hz : peek (seq j) sy.Player_X_Speed = 0) (he : posP sy (seq j) = posP sy (PipeEntryRule.trace (K.fm j) (K.pad j) k))
+    (hside : (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0) :
+    EdgeStep.pixel16 sy (seq j) = ScrollRule.left16 (ScrollRule.places sy m0) (seq j) := by
+  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+  have a3 := K.order j h3
+  have a4 := K.ix_mono (j + 1) g (by omega) (Nat.le_refl g)
+  have a5 := K.ix_mono 0 j (by omega) (by omega)
+  have harr := O.arrive hck hst h1 (by omega)
+  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
+  have h0 := start_fm hst h1 (by omega)
+  have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
+  have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
+  have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun n => FrameKeep.cleanK_of_E (hclE n)
+  have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
+  obtain ⟨kq, hkq, hqq, hfq, hbq, HR⟩ := EdgeStep.keep_r hck Ar.er h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2
+  -- `Q` is the frame's only scroll handler after the arrival
+  have honce := GuardE.subs_onceE hck Ar.keep h0 hclE hxs hAf harr.1 harr.2.1 harr.2.2
+  have hkk : k = kq := honce k kq hk (Nat.le_of_lt hkq) hpc hqq
+  subst hkk
+  have HQ := EdgeStep.keep_q hck Ar.eq h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 (Nat.le_of_lt hkq) hqq hbq
+  have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
+  have hgQ := (HQ _ hx0).1
+  have hp : ∀ n', k ≤ n' → (PipeEntryRule.trace (K.fm j) (K.pad j) n').frame = (K.fm j).frame →
+      EdgeStep.cutPos sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc = false := by
+    intro n' hn' hf'
+    have W := (O.posW j h1 h3 k n' hk hn' hqq hf').1
+    have hpg := StepPrg.trace_prg (K.fm j) (K.pad j) n'
+    have e1 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prg = m0.prg := hpg.1.trans h0.prg
+    have e2 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prgMask = m0.prgMask := hpg.2.trans h0.mask
+    rw [e1, e2] at W
+    unfold EdgeStep.cutPos
+    cases hs : FrameKeep.storesTo (PositionWriters.posI sy) m0.prg m0.prgMask (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc with
+    | false => rfl
+    | true => rw [W hs]; rfl
+  have hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true := (PositionKeep.pCheck_parts Ar.pk).2.2.2.2
+  have hscc : ScreenClamp.check sy m0 = true := (PositionKeep.pCheck_parts Ar.pk).2.2.1
+  -- the scroll's part of the scroll handler, up to the routine of the offscreen bits, with the right edge's relation
+  have rQ : RightEdge.Rel (ClampSide.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) :=
+    rel_congr (fun x hx => (HQ x hx).2.trans (O.edgeLag hck hst Ar h1 (by omega) x hx)) (O.relAll hck hst Ar (j - 1) (by omega))
+  obtain ⟨k2, g2, pc2, s2, hi2, lo2, pw2, sp2, C2, rel2⟩ := RightEdge.scroll_rel Ar.rc hgQ hqq
+  have hR1 := rel2 rQ
+  -- the routine of the offscreen bits and the clamp
+  have hck2 := K.cleanAt j h1 (by omega)
+  have ht : ∀ n, (PipeEntryRule.trace (K.fm j) (K.pad j) n).pc ≠ sy.EndlessLoop →
+      (PipeEntryRule.trace (K.fm j) (K.pad j) n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hck2 n).time hn
+  obtain ⟨k3, g3, pc3, s3, we3, _, up3, hp3, hv3, C3⟩ := ClampSide.clamp_end Ar.clampS hscc g2 pc2
+  have C23 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (k2 + k3) := FrameModel.InFrameN.add' C2 rfl C3
+  have tr3 := FrameModel.trace_inFrame hidle hfq C23 ht (k2 + k3) (Nat.le_refl _)
+  rw [FrameModel.stepN_add] at tr3
+  generalize hQ2 : FrameModel.stepN k2 (PipeEntryRule.trace (K.fm j) (K.pad j) k) = Q2 at g2 pc2 s2 hi2 lo2 pw2 sp2 hR1 we3 up3 hp3 hv3 C3 tr3 g3 pc3 s3
+  generalize hQ3 : FrameModel.stepN k3 Q2 = Q3 at we3 up3 hp3 hv3 tr3 g3 pc3 s3
+  have lo3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1)) = (sy.PlayerSubs + 2).toUInt8 := by
+    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add1]
+    exact lo2
+  have hi3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1 + 1)) = ((sy.PlayerSubs + 2) >>> 8).toUInt8 := by
+    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add2]
+    exact hi2
+  obtain ⟨_, pc4, rm4, C4⟩ := ret_step hscc g3 pc3 lo3 hi3
+  have C234 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) (k2 + k3 + 1) := by
+    refine FrameModel.InFrameN.add' C23 ?_ C4
+    rw [FrameModel.stepN_add, hQ2, hQ3]
+  have tr4 := FrameModel.trace_inFrame hidle hfq C234 ht (k2 + k3 + 1) (Nat.le_refl _)
+  rw [FrameModel.stepN_add, FrameModel.stepN_add, hQ2, hQ3] at tr4
+  have pcR : (PipeEntryRule.trace (K.fm j) (K.pad j) (k + (k2 + k3 + 1))).pc = EdgeStep.rPc sy := by rw [tr4.1]; exact pc4
+  have eR := HR hp (k + (k2 + k3 + 1)) (by omega) pcR
+  -- his pixel, his page and his speed from the instruction after the call to the frame's end (`PushTimer.pix_end`)
+  have hoff := (PositionWriters.wCheck_facts (PositionKeep.pCheck_parts Ar.pk).1).2.2
+  obtain ⟨kq', hkq'', hqq', _, hbq', HP⟩ := PushTimer.pix_end hck Ar.pt hoff h0 hclE hxs hAf harr.1 harr.2.1 harr.2.2
+  have hkk : kq' = k := by
+    rcases Nat.lt_trichotomy kq' k with h | h | h
+    · exact absurd hqq' (hbq kq' hkq'' h)
+    · exact h
+    · exact absurd hqq (hbq' k hkq h)
+  rw [hkk] at HP
+  have hs' : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 := by
+    rw [← K.ends j h1 (by omega)]; exact hside
+  have E := HP (fun n' hn' hf' => ⟨O.posW j h1 h3 k n' hk hn' hqq hf', O.sideW j h1 h3 hside k n' hk hn' hqq hf'⟩) (k + (k2 + k3 + 1)) (by omega) pcR hs'
+  have ex : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).x =
+      (PipeEntryRule.trace (K.fm j) (K.pad j) (k + (k2 + k3 + 1))).ram.get! (ScrollRule.places sy m0).x := E _ PushTimer.pvI_x
+  have ep : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).page =
+      (PipeEntryRule.trace (K.fm j) (K.pad j) (k + (k2 + k3 + 1))).ram.get! (ScrollRule.places sy m0).page := E _ PushTimer.pvI_page
+  have ev : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (sy.Player_X_Speed &&& 0x7FF).toNat =
+      (PipeEntryRule.trace (K.fm j) (K.pad j) (k + (k2 + k3 + 1))).ram.get! (sy.Player_X_Speed &&& 0x7FF).toNat := E _ PushTimer.pvI_speed
+  rw [tr4.1, rm4, ← K.ends j h1 (by omega)] at ex ep ev
+  have eRb : ∀ x ∈ EdgeStep.eI sy m0, (seq j).ram.get! x = Q3.ram.get! x := by
     intro x hx
-    rw [← e0]
-    exact va0 x hx
-  have vk1 : ∀ x ∈ VertKeep.kI sy, (seq j).ram.get! x = (FrameModel.stepN k R).ram.get! x := by
-    intro x hx
-    rw [← e0]
-    exact vk x hx
-  have vf1 : peek (seq j) sy.VerticalForce = peek (FrameModel.stepN k R) sy.VerticalForce ∨
-      (peek (seq j) sy.VerticalForce = FaceKeep.vfC sy m0 v ∧ peek (seq j) sy.Player_State = 0) := by
-    rw [← e0]
-    exact vf0
-  have y1 : peek (seq j) sy.Player_Y_Position = peek (FrameModel.stepN k R) sy.Player_Y_Position := va1 _ (by simp [vHard])
-  have y2 : peek (seq j) sy.Player_Y_MoveForce = peek (FrameModel.stepN k R) sy.Player_Y_MoveForce := va1 _ (by simp [vHard])
-  have y3 : peek (seq j) sy.Player_Y_Speed = peek (FrameModel.stepN k R) sy.Player_Y_Speed := va1 _ (by simp [vHard])
-  have y4 : peek (seq j) sy.Player_YMF_Dummy = peek (FrameModel.stepN k R) sy.Player_YMF_Dummy := va1 _ (by simp [vHard])
-  have y6 : peek (seq j) sy.VerticalForceDown = peek (FrameModel.stepN k R) sy.VerticalForceDown := vk1 _ (by simp [VertKeep.kI])
-  have y7 : peek (seq j) sy.JumpOrigin_Y_Position = peek (FrameModel.stepN k R) sy.JumpOrigin_Y_Position := vk1 _ (by simp [VertKeep.kI])
-  have y8 : peek (seq j) sy.Player_State = peek (FrameModel.stepN k R) sy.Player_State := va1 _ (by simp [vHard])
-  have y9 : peek (seq j) sy.DiffToHaltJump = peek (FrameModel.stepN k R) sy.DiffToHaltJump := vk1 _ (by simp [VertKeep.kI])
-  have yA : peek (seq j) sy.A_B_Buttons = peek (FrameModel.stepN k R) sy.A_B_Buttons := vk1 _ (by simp [VertKeep.kI])
-  -- the vertical bytes at the frame's end are those at the scroll handler, but the vertical force
-  have eb : vsOf sy (seq j) = { VertModel.vsOf sy (FrameModel.stepN k R) with vf := peek (seq j) sy.VerticalForce } := by
-    unfold vsOf VertModel.vsOf
-    rw [y1, y2, y3, y4, y6, y7, y8, yA]
-  have ea : VertModel.vsOf sy R = vsOf sy (seq (j - 1)) := by
-    show Jump.VS.mk _ _ _ _ _ _ _ _ _ = Jump.VS.mk _ _ _ _ _ _ _ _ _
-    rw [vb1 _ (.head _), vb1 _ (.tail _ (.head _)), vb1 _ (.tail _ (.tail _ (.head _))), vb1 _ (.tail _ (.tail _ (.tail _ (.head _)))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))), vb2]
-  have eab : peek R sy.Player_XSpeedAbsolute = peek (seq (j - 1)) sy.Player_XSpeedAbsolute := by
-    rw [hat.abs, hc.2.1, hv0]
-  rw [ea, eab] at hvs
-  have ePA : (vsOf sy (seq j)).prevA = (VertModel.vsOf sy (FrameModel.stepN k R)).prevA := by
-    show (peek (seq j) sy.A_B_Buttons &&& 0x80 != 0) = (peek (FrameModel.stepN k R) sy.A_B_Buttons &&& 0x80 != 0)
-    rw [yA]
-  have eXA : (VertModel.vsOf sy (FrameModel.stepN k R)).prevA = (peek R sy.SavedJoypadBits &&& 0x80 != 0) := by
-    rw [hvs, VertModel.vstepV_eq]
-  have eQ : VertModel.vsOf sy (FrameModel.stepN k R) = vNext sy m0 (seq (j - 1)) (seq j) := by
-    unfold vNext
-    rw [ePA, eXA]
-    exact hvs
-  refine ⟨?_, ?_⟩
-  · rcases vf1 with e | ⟨e1, e2⟩
-    · left
-      rw [eb, e, ← eQ]
-      rfl
-    · right
-      refine ⟨?_, by rw [eb, e1, eQ]⟩
-      rw [← eQ]
-      show peek (FrameModel.stepN k R) sy.Player_State = 0
-      rw [← y8]
-      exact e2
-  · intro e
-    show peek (seq j) sy.DiffToHaltJump = 1
-    rw [y9]
-    rw [y8] at e
-    exact hhk e
+    rw [K.ends j h1 (by omega), ← rm4, ← tr4.1]
+    exact eR.1 x hx
+  -- the pixels: at the end, at the return instruction, at the routine of the offscreen bits, at `Q`
+  have m1 : (ClampSide.places sy m0).x = (ScrollRule.places sy m0).x := rfl
+  have m2 : (ClampSide.places sy m0).page = (ScrollRule.places sy m0).page := rfl
+  have pb3 : ClampSide.pix16 (ClampSide.places sy m0) (seq j) = ClampSide.pix16 (ClampSide.places sy m0) Q3 := by
+    unfold ClampSide.pix16
+    rw [m1, m2, ex, ep]
+  have pq2 : ClampSide.pix16 (ClampSide.places sy m0) Q2 = ClampSide.pix16 (ClampSide.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) := by
+    unfold ClampSide.pix16
+    rw [m1, m2, pw2 _ (by simp [ScrollRule.posW]), pw2 _ (by simp [ScrollRule.posW])]
+  have pbq : ClampSide.pix16 (ClampSide.places sy m0) (seq j) = ClampSide.pix16 (ClampSide.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) := pix16_of_posP he
+  -- the left edge at the end is that of the routine of the offscreen bits
+  have hed : ClampSide.edge16 (ClampSide.places sy m0) 0 (seq j) = ClampSide.edge16 (ClampSide.places sy m0) 0 Q2 := by
+    have ex0 : (seq j).ram.get! (ClampSide.eX (ClampSide.places sy m0) 0) = Q3.ram.get! (ClampSide.eX (ClampSide.places sy m0) 0) := by
+      rw [ClampSide.eX_zero]; exact eRb _ hx0
+    have ep0 : (seq j).ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) = Q3.ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) := by
+      rw [ClampSide.eP_zero]; exact eRb _ (List.mem_cons_of_mem _ List.mem_cons_self)
+    unfold ClampSide.edge16
+    rw [ex0, ep0, we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW])]
+  have eL : ScrollRule.left16 (ScrollRule.places sy m0) (seq j) = ClampSide.edge16 (ClampSide.places sy m0) 0 (seq j) := by
+    unfold ScrollRule.left16 ClampSide.edge16
+    rw [ClampSide.eX_zero, ClampSide.eP_zero]
+    rfl
+  have eP : EdgeStep.pixel16 sy (seq j) = ClampSide.pix16 (ClampSide.places sy m0) (seq j) := rfl
+  rw [eP, eL]
+  -- the speed at the end (0) is not that of the routine of the offscreen bits (that of `Q`, above 0)
+  have hvb : (seq j).ram.get! (ClampSide.places sy m0).speed = Q3.ram.get! (ClampSide.places sy m0).speed := ev
+  have hne : (seq j).ram.get! (ClampSide.places sy m0).speed ≠ Q2.ram.get! (ClampSide.places sy m0).speed := by
+    intro e0
+    have e1 : peek (seq j) sy.Player_X_Speed = peek (PipeEntryRule.trace (K.fm j) (K.pad j) k) sy.Player_X_Speed := e0.trans sp2
+    unfold vOf at hv
+    rw [← e1, hz] at hv
+    exact absurd hv (by decide)
+  exact StopClamp.stop_clamp Ar.clampS hR1 hp3 hv3 pb3 hvb (pq2.trans pbq.symm) hed hne
 
 /-! ### The frames as `TopSpeed.Frame`s, read from the machines -/
 
@@ -2296,88 +2330,6 @@ theorem page_of_base {v : UInt8} (Ar : AreaRun sy m0 K v) {m : Machine} (hp : m.
   rw [t] at he
   omega
 
-/-- **round 31: one counted frame keeps the right edge's relation.** The frame comes to the scroll handler `Q` (`EdgeStep.keep_r`, `EdgeStep.keep_q`: a `Good`
-machine in the frame with the four bytes of the edges of the frame's start, which are those of the end of the frame before, `OnFrames.edgeLag`); the scroll's part of
-the scroll handler keeps the relation (`RightEdge.scroll_rel`: the right edge's routine sets it after a scroll); the clamp keeps both edges (`ClampSide.clamp_end`);
-the scroll handler's return keeps the RAM (`ret_step`); and from the instruction after the call to the frame's end the walks of `EdgeStep.keep_r` keep the four bytes
-(with `posW`). -/
-theorem OnFrames.relStep (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) (hr : RightEdge.Rel (ClampSide.places sy m0) (seq (j - 1))) :
-    RightEdge.Rel (ClampSide.places sy m0) (seq j) := by
-  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
-  have a3 := K.order j h3
-  have a4 := K.ix_mono (j + 1) g (by omega) (Nat.le_refl g)
-  have a5 := K.ix_mono 0 j (by omega) (by omega)
-  have harr := O.arrive hck hst h1 (by omega)
-  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
-  have h0 := start_fm hst h1 (by omega)
-  have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
-  have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
-  have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
-    fun n => FrameKeep.cleanK_of_E (hclE n)
-  have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
-    fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
-  obtain ⟨kq, hkq, hqq, hfq, hbq, HR⟩ := EdgeStep.keep_r hck Ar.er h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2
-  have HQ := EdgeStep.keep_q hck Ar.eq h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 (Nat.le_of_lt hkq) hqq hbq
-  have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
-  have hgQ := (HQ _ hx0).1
-  have hp : ∀ n', kq ≤ n' → (PipeEntryRule.trace (K.fm j) (K.pad j) n').frame = (K.fm j).frame →
-      EdgeStep.cutPos sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc = false := by
-    intro n' hn' hf'
-    have W := (O.posW j h1 h3 kq n' (Nat.le_of_lt hkq) hn' hqq hf').1
-    have hpg := StepPrg.trace_prg (K.fm j) (K.pad j) n'
-    have e1 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prg = m0.prg := hpg.1.trans h0.prg
-    have e2 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prgMask = m0.prgMask := hpg.2.trans h0.mask
-    rw [e1, e2] at W
-    unfold EdgeStep.cutPos
-    cases hs : FrameKeep.storesTo (PositionWriters.posI sy) m0.prg m0.prgMask (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc with
-    | false => rfl
-    | true => rw [W hs]; rfl
-  have hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true := (PositionKeep.pCheck_parts Ar.pk).2.2.2.2
-  have hscc : ScreenClamp.check sy m0 = true := (PositionKeep.pCheck_parts Ar.pk).2.2.1
-  have rQ : RightEdge.Rel (ClampSide.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) :=
-    rel_congr (fun x hx => (HQ x hx).2.trans (O.edgeLag hck hst Ar h1 (by omega) x hx)) hr
-  obtain ⟨k2, g2, pc2, s2, hi2, lo2, _, _, C2, rel2⟩ := RightEdge.scroll_rel Ar.rc hgQ hqq
-  have hck2 := K.cleanAt j h1 (by omega)
-  have ht : ∀ n, (PipeEntryRule.trace (K.fm j) (K.pad j) n).pc ≠ sy.EndlessLoop →
-      (PipeEntryRule.trace (K.fm j) (K.pad j) n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hck2 n).time hn
-  obtain ⟨k3, g3, pc3, s3, we3, _, up3, _, C3⟩ := ClampSide.clamp_end Ar.clampS hscc g2 pc2
-  have C23 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3) := FrameModel.InFrameN.add' C2 rfl C3
-  have r2 := rel2 rQ
-  generalize hQ2 : FrameModel.stepN k2 (PipeEntryRule.trace (K.fm j) (K.pad j) kq) = Q2 at g2 pc2 s2 hi2 lo2 r2 we3 up3 C3 g3 pc3 s3
-  generalize hQ3 : FrameModel.stepN k3 Q2 = Q3 at we3 up3 g3 pc3 s3
-  have lo3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1)) = (sy.PlayerSubs + 2).toUInt8 := by
-    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add1]
-    exact lo2
-  have hi3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1 + 1)) = ((sy.PlayerSubs + 2) >>> 8).toUInt8 := by
-    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add2]
-    exact hi2
-  obtain ⟨_, pc4, rm4, C4⟩ := ret_step hscc g3 pc3 lo3 hi3
-  have C234 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3 + 1) := by
-    refine FrameModel.InFrameN.add' C23 ?_ C4
-    rw [FrameModel.stepN_add, hQ2, hQ3]
-  have tr4 := FrameModel.trace_inFrame hidle hfq C234 ht (k2 + k3 + 1) (Nat.le_refl _)
-  rw [FrameModel.stepN_add, FrameModel.stepN_add, hQ2, hQ3] at tr4
-  have eR := HR hp (kq + (k2 + k3 + 1)) (by omega) (by rw [tr4.1]; exact pc4)
-  have r3 : RightEdge.Rel (ClampSide.places sy m0) Q3 := by
-    unfold RightEdge.Rel ClampSide.edge16 at r2 ⊢
-    rw [we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW])]
-    exact r2
-  refine rel_congr (fun x hx => ?_) r3
-  rw [K.ends j h1 (by omega), ← rm4, ← tr4.1]
-  exact eR.1 x hx
-
-/-- **round 31: every counted frame before the touch ends with the right edge's relation** (and so does the machine at control: `AreaRun.rel₀`), by
-`OnFrames.relStep`. It is the first half of the old field `rightRel`. -/
-theorem OnFrames.relAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    {v : UInt8} (Ar : AreaRun sy m0 K v) : ∀ j, j < g → RightEdge.Rel (ClampSide.places sy m0) (seq j) := by
-  intro j
-  induction j with
-  | zero => exact fun h => Ar.rel₀ h
-  | succ j ih =>
-    intro h3
-    exact O.relStep hck hst Ar (j := j + 1) (by omega) h3 (by rw [show j + 1 - 1 = j by omega]; exact ih (by omega))
-
 /-- **The old field `nearStep`, a theorem (round 30)**: each counted frame before the last one before the touch ends with `SideTimer.NearM`. The frame comes to the
 scroll handler `Q` (`EdgeStep.keep_r`, `EdgeStep.keep_q`: a `Good` machine in the frame); the scroll's part of the scroll handler (round 31: `RightEdge.scroll_rel`;
 round 30: `ScrollRule.jsrCheck`, `ScrollRule.scroll_of_facts`) brings it to the routine of the offscreen bits, where the right edge's relation holds (round 31:
@@ -2427,7 +2379,7 @@ theorem OnFrames.nearStepAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrame
   have hck2 := K.cleanAt j h1 (by omega)
   have ht : ∀ n, (PipeEntryRule.trace (K.fm j) (K.pad j) n).pc ≠ sy.EndlessLoop →
       (PipeEntryRule.trace (K.fm j) (K.pad j) n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hck2 n).time hn
-  obtain ⟨k3, g3, pc3, s3, we3, _, up3, hp3, C3⟩ := ClampSide.clamp_end Ar.clampS hscc g2 pc2
+  obtain ⟨k3, g3, pc3, s3, we3, _, up3, hp3, _, C3⟩ := ClampSide.clamp_end Ar.clampS hscc g2 pc2
   have hl3 := ClampSide.left_of Ar.clampS hR1 hp3
   have C23 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3) := FrameModel.InFrameN.add' C2 rfl C3
   have tr3 := FrameModel.trace_inFrame hidle hfq C23 ht (k2 + k3) (Nat.le_refl _)
@@ -2488,10 +2440,10 @@ theorem OnFrames.nearStepAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrame
       · exact h
       · exact absurd hqq (hbq' kq hkq h)
     rw [hkk] at HP
-    have hs' : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).sideB ≤ 1 := by
-      rw [← K.ends j h1 (by omega)]; exact hside
+    have hs' : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 := by
+      rw [← K.ends j h1 (by omega)]; exact PushTimer.pushT_ne Ar.pt hside
     have pcR : (PipeEntryRule.trace (K.fm j) (K.pad j) (kq + (k2 + k3 + 1))).pc = EdgeStep.rPc sy := by rw [tr4.1]; exact pc4
-    have E := HP (fun n' hn' hf' => ⟨O.posW j h1 (by omega) kq n' (Nat.le_of_lt hkq') hn' hqq hf', O.sideW j h1 h3 hside hlock hthr kq n' (Nat.le_of_lt hkq') hn' hqq hf'⟩)
+    have E := HP (fun n' hn' hf' => ⟨O.posW j h1 (by omega) kq n' (Nat.le_of_lt hkq') hn' hqq hf', O.sideW j h1 (by omega) (PushTimer.pushT_ne Ar.pt hside) kq n' (Nat.le_of_lt hkq') hn' hqq hf'⟩)
       (kq + (k2 + k3 + 1)) (by omega) pcR hs'
     have ex : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).x =
         (PipeEntryRule.trace (K.fm j) (K.pad j) (kq + (k2 + k3 + 1))).ram.get! (ScrollRule.places sy m0).x := E _ List.mem_cons_self
@@ -2503,6 +2455,135 @@ theorem OnFrames.nearStepAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrame
     unfold ClampSide.pix16
     rw [m1, m2, K.ends j h1 (by omega), ex, ep]
   exact nearM_of_end hE hpix hl3 hw hed hlt Ar.thr2
+
+/-- round 33: **A counted frame that does not end with the side collision's timer at the push's value ends at or right of the screen's left edge** (`OnFrames.stopAt`), when the
+left edge's page there is not 255: as `OnFrames.nearStepAt`, the clamp leaves him at the left edge or at most 255 px right of it (`ClampSide.left_of`), and to the
+frame's end his pixel and the edge are kept (`PushTimer.pix_end`, `EdgeStep.keep_r`). -/
+theorem OnFrames.leftEnd (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h3 : j < g) (hpj : PageOK sy m0 (seq j))
+    (hside : (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0) :
+    ScrollRule.left16 (ScrollRule.places sy m0) (seq j) ≤ EdgeStep.pixel16 sy (seq j) := by
+  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+  have a3 := K.order j (by omega)
+  have a4 := K.ix_mono (j + 1) g (by omega) (Nat.le_refl g)
+  have a5 := K.ix_mono 0 j (by omega) (by omega)
+  have harr := O.arrive hck hst h1 (by omega)
+  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
+  have h0 := start_fm hst h1 (by omega)
+  have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
+  have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
+  have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun n => FrameKeep.cleanK_of_E (hclE n)
+  have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
+  obtain ⟨kq, hkq, hqq, hfq, hbq, HR⟩ := EdgeStep.keep_r hck Ar.er h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2
+  have HQ := EdgeStep.keep_q hck Ar.eq h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 (Nat.le_of_lt hkq) hqq hbq
+  have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
+  have hgQ := (HQ _ hx0).1
+  have hkq' : CtrlKeep.arrAt sy (K.fm j) (K.pad j) < kq := hkq
+  have hp : ∀ n', kq ≤ n' → (PipeEntryRule.trace (K.fm j) (K.pad j) n').frame = (K.fm j).frame →
+      EdgeStep.cutPos sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc = false := by
+    intro n' hn' hf'
+    have W := (O.posW j h1 (by omega) kq n' (Nat.le_of_lt hkq) hn' hqq hf').1
+    have hpg := StepPrg.trace_prg (K.fm j) (K.pad j) n'
+    have e1 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prg = m0.prg := hpg.1.trans h0.prg
+    have e2 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prgMask = m0.prgMask := hpg.2.trans h0.mask
+    rw [e1, e2] at W
+    unfold EdgeStep.cutPos
+    cases hs : FrameKeep.storesTo (PositionWriters.posI sy) m0.prg m0.prgMask (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc with
+    | false => rfl
+    | true => rw [W hs]; rfl
+  have hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true := (PositionKeep.pCheck_parts Ar.pk).2.2.2.2
+  have hscc : ScreenClamp.check sy m0 = true := (PositionKeep.pCheck_parts Ar.pk).2.2.1
+  -- the scroll's part of the scroll handler, up to the routine of the offscreen bits, with the right edge's relation (round 31)
+  have rQ : RightEdge.Rel (ClampSide.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) :=
+    rel_congr (fun x hx => (HQ x hx).2.trans (O.edgeLag hck hst Ar h1 (by omega) x hx)) (O.relAll hck hst Ar (j - 1) (by omega))
+  obtain ⟨k2, g2, pc2, s2, hi2, lo2, pw2, sp2, C2, rel2⟩ := RightEdge.scroll_rel Ar.rc hgQ hqq
+  have hR1 := rel2 rQ
+  -- the routine of the offscreen bits and the clamp
+  have hck2 := K.cleanAt j h1 (by omega)
+  have ht : ∀ n, (PipeEntryRule.trace (K.fm j) (K.pad j) n).pc ≠ sy.EndlessLoop →
+      (PipeEntryRule.trace (K.fm j) (K.pad j) n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hck2 n).time hn
+  obtain ⟨k3, g3, pc3, s3, we3, _, up3, hp3, _, C3⟩ := ClampSide.clamp_end Ar.clampS hscc g2 pc2
+  have hl3 := ClampSide.left_of Ar.clampS hR1 hp3
+  have C23 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3) := FrameModel.InFrameN.add' C2 rfl C3
+  have tr3 := FrameModel.trace_inFrame hidle hfq C23 ht (k2 + k3) (Nat.le_refl _)
+  rw [FrameModel.stepN_add] at tr3
+  -- the scroll handler's return, and the left edge from there to the frame's end (`EdgeStep.keep_r`)
+  generalize hQ2 : FrameModel.stepN k2 (PipeEntryRule.trace (K.fm j) (K.pad j) kq) = Q2 at g2 pc2 s2 hi2 lo2 pw2 sp2 hR1 we3 up3 hp3 hl3 C3 tr3 g3 pc3 s3
+  generalize hQ3 : FrameModel.stepN k3 Q2 = Q3 at we3 up3 hp3 hl3 tr3 g3 pc3 s3
+  have lo3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1)) = (sy.PlayerSubs + 2).toUInt8 := by
+    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add1]
+    exact lo2
+  have hi3 : Q3.ram.get! (FrameModel.stkI (Q3.s + 1 + 1)) = ((sy.PlayerSubs + 2) >>> 8).toUInt8 := by
+    rw [s3, up3 _ (by simp), s2, ScrollRule.sub2_add2]
+    exact hi2
+  obtain ⟨_, pc4, rm4, C4⟩ := ret_step hscc g3 pc3 lo3 hi3
+  have C234 : FrameModel.InFrameN (FrameModel.Rom.of m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq) (k2 + k3 + 1) := by
+    refine FrameModel.InFrameN.add' C23 ?_ C4
+    rw [FrameModel.stepN_add, hQ2, hQ3]
+  have tr4 := FrameModel.trace_inFrame hidle hfq C234 ht (k2 + k3 + 1) (Nat.le_refl _)
+  rw [FrameModel.stepN_add, FrameModel.stepN_add, hQ2, hQ3] at tr4
+  have eR := HR hp (kq + (k2 + k3 + 1)) (by omega) (by rw [tr4.1]; exact pc4)
+  have ex : (seq j).ram.get! (ClampSide.eX (ClampSide.places sy m0) 0) = Q3.ram.get! (ClampSide.eX (ClampSide.places sy m0) 0) := by
+    rw [ClampSide.eX_zero, K.ends j h1 (by omega), ← rm4, ← tr4.1]
+    exact (eR.1 _ List.mem_cons_self)
+  have ep : (seq j).ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) = Q3.ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) := by
+    rw [ClampSide.eP_zero, K.ends j h1 (by omega), ← rm4, ← tr4.1]
+    exact (eR.1 _ (List.mem_cons_of_mem _ List.mem_cons_self))
+  have hed : ClampSide.edge16 (ClampSide.places sy m0) 0 (seq j) = ClampSide.edge16 (ClampSide.places sy m0) 0 Q3 := by
+    unfold ClampSide.edge16
+    rw [ex, ep]
+  -- the left edge at the return instruction, and its page
+  have hw : ClampSide.edge16 (ClampSide.places sy m0) 0 Q3 = ClampSide.edge16 (ClampSide.places sy m0) 0 Q2 := by
+    unfold ClampSide.edge16
+    rw [we3 _ (by simp [ClampSide.EW]), we3 _ (by simp [ClampSide.EW])]
+  have hlt : ClampSide.edge16 (ClampSide.places sy m0) 0 Q2 < 65280 := by
+    have h : Q2.ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) ≠ 255 := by
+      rw [← we3 _ (by simp [ClampSide.EW]), ← ep]
+      exact hpj
+    unfold ClampSide.edge16
+    have h' := Q2.ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) |>.toNat_lt
+    have h2 := Q2.ram.get! (ClampSide.eX (ClampSide.places sy m0) 0) |>.toNat_lt
+    have h3' : (Q2.ram.get! (ClampSide.eP (ClampSide.places sy m0) 0)).toNat ≠ 255 := by
+      intro e
+      apply h
+      exact UInt8.toNat_inj.1 (by rw [e]; rfl)
+    omega
+  -- when the frame does not end with the side collision's timer at the push's value, his pixel and his page there
+  -- are those of the instruction after the scroll handler's call (`PushTimer.pix_end`, with the fields `posW` and `sideW`), and so those of the return instruction
+  have hpix : ClampSide.pix16 (ClampSide.places sy m0) (seq j) = ClampSide.pix16 (ClampSide.places sy m0) Q3 := by
+    have hoff := (PositionWriters.wCheck_facts (PositionKeep.pCheck_parts Ar.pk).1).2.2
+    obtain ⟨kq', hkq'', hqq', _, hbq', HP⟩ := PushTimer.pix_end hck Ar.pt hoff h0 hclE hxs hAf harr.1 harr.2.1 harr.2.2
+    have hkk : kq' = kq := by
+      rcases Nat.lt_trichotomy kq' kq with h | h | h
+      · exact absurd hqq' (hbq kq' hkq'' h)
+      · exact h
+      · exact absurd hqq (hbq' kq hkq h)
+    rw [hkk] at HP
+    have hs' : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 := by
+      rw [← K.ends j h1 (by omega)]; exact hside
+    have pcR : (PipeEntryRule.trace (K.fm j) (K.pad j) (kq + (k2 + k3 + 1))).pc = EdgeStep.rPc sy := by rw [tr4.1]; exact pc4
+    have E := HP (fun n' hn' hf' => ⟨O.posW j h1 (by omega) kq n' (Nat.le_of_lt hkq') hn' hqq hf', O.sideW j h1 (by omega) hside kq n' (Nat.le_of_lt hkq') hn' hqq hf'⟩)
+      (kq + (k2 + k3 + 1)) (by omega) pcR hs'
+    have ex : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).x =
+        (PipeEntryRule.trace (K.fm j) (K.pad j) (kq + (k2 + k3 + 1))).ram.get! (ScrollRule.places sy m0).x := E _ List.mem_cons_self
+    have ep : (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).page =
+        (PipeEntryRule.trace (K.fm j) (K.pad j) (kq + (k2 + k3 + 1))).ram.get! (ScrollRule.places sy m0).page := E _ (List.mem_cons_of_mem _ List.mem_cons_self)
+    rw [tr4.1, rm4] at ex ep
+    have m1 : (ClampSide.places sy m0).x = (ScrollRule.places sy m0).x := rfl
+    have m2 : (ClampSide.places sy m0).page = (ScrollRule.places sy m0).page := rfl
+    unfold ClampSide.pix16
+    rw [m1, m2, K.ends j h1 (by omega), ex, ep]
+  -- his pixel at the return instruction is the left edge's or at most 255 px right of it (`ClampSide.left_of`), and the edge's page is not 255
+  have eL : ScrollRule.left16 (ScrollRule.places sy m0) (seq j) = ClampSide.edge16 (ClampSide.places sy m0) 0 (seq j) := by
+    unfold ScrollRule.left16 ClampSide.edge16
+    rw [ClampSide.eX_zero, ClampSide.eP_zero]
+    rfl
+  have eP : EdgeStep.pixel16 sy (seq j) = ClampSide.pix16 (ClampSide.places sy m0) (seq j) := rfl
+  rw [eL, eP, hpix, hed, hw]
+  have := ClampSide.pix16_lt (ClampSide.places sy m0) Q3
+  omega
 
 /-- **Every counted frame before the touch starts with `SideTimer.NearM`** (round 29): at control it holds (`AreaRun.near₀`), each counted frame ends with it
 (round 30: `OnFrames.nearStepAt`, from the fields `rightRel` and `endKeep`; round 31: from the field `endKeep` and the left edge's page at the earlier frames,
@@ -2567,6 +2648,351 @@ theorem OnFrames.nearAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameMode
   have ek : k = kq := honce k kq hk0 hk hpk hqq
   subst ek
   exact MoveScroll.nearX_of_a (O.nearAAt hck hst Ar h1 h3 hpg) hkp hp0 hmv
+
+/-- round 33: **No counted frame that moves right at the scroll handler, right of the screen's left edge there, ends with the speed 0 at the position there and
+with the side collision's timer not at the push's value** (`OnFrames.stopAt`). Such a frame ends at the left edge (`OnFrames.stopRight`), so his pixel at the scroll handler `Q`
+is the left edge at the frame's end. From `Q` to the instruction after the call the edge is kept, or the scroll is allowed and the edge moves at most the
+scroll's amount, which is the byte the move stores (the platforms' force is 0 at `Q`: `OnFrames.platQ`) (`ScrollRule.scroll_edge`); from there to the frame's
+end it is kept (`EdgeStep.keep_r`). Without a scroll the edge at the end is that of `Q`, left of his pixel there. With a scroll `EdgeStep.NearX` at `Q`
+(`OnFrames.nearAt`) puts his pixel at least 2 px right of the edge plus that byte. Both contradict. `hsp`, `hfar`, `hpg` are what `nearAt` needs: the speed and
+the position of the frame before, and the left edge's page on the frames before. -/
+theorem OnFrames.noStopRight (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
+    (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j)
+    (h3 : j < g) (hsp : TopSpeed.inSpeed sy (peek (seq (j - 1)) sy.Player_X_Speed) = true) (hfar : SurfaceRead.Far sy (seq (j - 1)))
+    (hpg : ∀ i, 1 ≤ i → i < j → PageOK sy m0 (seq i)) {k : Nat} (hk : CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k)
+    (hpc : (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs) (hv : 0 < vOf sy (PipeEntryRule.trace (K.fm j) (K.pad j) k))
+    (hz : peek (seq j) sy.Player_X_Speed = 0) (he : posP sy (seq j) = posP sy (PipeEntryRule.trace (K.fm j) (K.pad j) k))
+    (hside : (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0)
+    (hl : ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) <
+      EdgeStep.pixel16 sy (PipeEntryRule.trace (K.fm j) (K.pad j) k)) : False := by
+  have hlb := O.stopRight hck hst Ar h1 h3 hk hpc hv hz he hside
+  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+  have a3 := K.order j h3
+  have a4 := K.ix_mono (j + 1) g (by omega) (Nat.le_refl g)
+  have a5 := K.ix_mono 0 j (by omega) (by omega)
+  have harr := O.arrive hck hst h1 (by omega)
+  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
+  have h0 := start_fm hst h1 (by omega)
+  have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
+  have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
+  have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun n => FrameKeep.cleanK_of_E (hclE n)
+  have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+    fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
+  obtain ⟨kq, hkq, hqq, hfq, hbq, HR⟩ := EdgeStep.keep_r hck Ar.er h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2
+  have honce := GuardE.subs_onceE hck Ar.keep h0 hclE hxs hAf harr.1 harr.2.1 harr.2.2
+  have hkk : k = kq := honce k kq hk (Nat.le_of_lt hkq) hpc hqq
+  subst hkk
+  have HQ := EdgeStep.keep_q hck Ar.eq h0 hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 (Nat.le_of_lt hkq) hqq hbq
+  have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
+  have hgQ := (HQ _ hx0).1
+  have hp : ∀ n', k ≤ n' → (PipeEntryRule.trace (K.fm j) (K.pad j) n').frame = (K.fm j).frame →
+      EdgeStep.cutPos sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc = false := by
+    intro n' hn' hf'
+    have W := (O.posW j h1 h3 k n' hk hn' hqq hf').1
+    have hpg' := StepPrg.trace_prg (K.fm j) (K.pad j) n'
+    have e1 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prg = m0.prg := hpg'.1.trans h0.prg
+    have e2 : (PipeEntryRule.trace (K.fm j) (K.pad j) n').prgMask = m0.prgMask := hpg'.2.trans h0.mask
+    rw [e1, e2] at W
+    unfold EdgeStep.cutPos
+    cases hs : FrameKeep.storesTo (PositionWriters.posI sy) m0.prg m0.prgMask (PipeEntryRule.trace (K.fm j) (K.pad j) n').pc with
+    | false => rfl
+    | true => rw [W hs]; rfl
+  -- `NearX` at `Q`
+  obtain ⟨kq2, hk2, hq2, hp02⟩ := O.platQ hck hst Ar h1 h3
+  have hkk2 : kq2 = k := honce kq2 k hk2 hk hq2 hqq
+  subst hkk2
+  have hNX := O.nearAt hck hOK hfr hidle hst Ar h1 h3 hsp hfar hk hqq hbq hp02 hpg
+  -- the scroll handler's call, with the edge
+  have hck2 := K.cleanAt j h1 (by omega)
+  have ht : ∀ n, (PipeEntryRule.trace (K.fm j) (K.pad j) n).pc ≠ sy.EndlessLoop →
+      (PipeEntryRule.trace (K.fm j) (K.pad j) n).fdot ≤ dotsPerFrame - 64 := fun n hn => (hck2 n).time hn
+  obtain ⟨k', g', pc', _, hedge, C'⟩ := ScrollRule.scroll_edge Ar.sr hgQ hqq
+  have tr := FrameModel.trace_inFrame hidle hfq C' ht k' (Nat.le_refl _)
+  have hk' : 0 < k' := by
+    rcases Nat.eq_zero_or_pos k' with e0 | e0
+    · exfalso
+      subst e0
+      have e2 : (FrameModel.stepN 0 (PipeEntryRule.trace (K.fm j) (K.pad j) kq2)).pc = sy.PlayerSubs := hqq
+      rw [pc'] at e2
+      have e3 := congrArg UInt16.toNat e2
+      simp only [UInt16.toNat_add] at e3
+      have e4 : (3 : UInt16).toNat = 3 := rfl
+      rw [e4] at e3
+      have := sy.PlayerSubs.toNat_lt
+      omega
+    · exact e0
+  have pcR : (PipeEntryRule.trace (K.fm j) (K.pad j) (kq2 + k')).pc = EdgeStep.rPc sy := by rw [tr.1]; exact pc'
+  have eR := HR hp (kq2 + k') (by omega) pcR
+  have hpe : (seq j).prg = m0.prg ∧ (seq j).prgMask = m0.prgMask := by
+    have s := hst (K.ix j) (by omega)
+    rw [K.at_ix j (by omega)]
+    exact ⟨s.prg, s.mask⟩
+  have eb : SurfaceRead.edgeOf sy (seq j) = SurfaceRead.edgeOf sy (FrameModel.stepN k' (PipeEntryRule.trace (K.fm j) (K.pad j) kq2)) := by
+    refine EdgeStep.edgeOf_eq hpe.1 hpe.2 g'.prg g'.mask fun x hx => ?_
+    rw [K.ends j h1 (by omega), ← tr.1]
+    exact eR.1 x hx
+  rw [ScrollRule.edgeOf_left16 hpe.1 hpe.2, ScrollRule.edgeOf_left16 g'.prg g'.mask] at eb
+  rw [ScrollRule.edgeOf_left16 g'.prg g'.mask, ScrollRule.edgeOf_left16 hgQ.prg hgQ.mask] at hedge
+  -- his pixel at `Q` is that of the frame's end, which is the left edge there
+  have pq : EdgeStep.pixel16 sy (seq j) = EdgeStep.pixel16 sy (PipeEntryRule.trace (K.fm j) (K.pad j) kq2) := pix16_of_posP (m0 := m0) he
+  have ham : (ScrollRule.amountOf (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) kq2)).toNat =
+      ((PipeEntryRule.trace (K.fm j) (K.pad j) kq2).ram.get! (ScrollRule.places sy m0).xs).toNat := by
+    unfold ScrollRule.amountOf
+    rw [hp02, UInt8.add_zero]
+  rcases hedge with h | ⟨ha, Y, hY, hle⟩
+  · omega
+  · have := hNX ha
+    omega
+
+/-- **The old field `Moves.stop` (`StopAt`) on every counted frame from a clean state** (round 32). The field asks it only where at the scroll handler `Q` he is right
+of the screen's left edge, or the frame starts left of it. On the other frames he is at or left of the edge at `Q` and the frame starts at or right of it. The frame
+keeps the edge's two bytes from its start to `Q` (`EdgeStep.keep_q`; `Q` is the only scroll handler after the arrival: `GuardE.subs_onceE`), and the frames not
+counted keep them from the end of the frame before (`OnFrames.edgeLag`). So pixel(Q) ≤ left(Q) = left(a) ≤ pixel(a), and P(Q) ≤ P(a) + 255
+(`StopEdge.stop_of_edge`). Round 33: a frame right of the edge at `Q` that does not end with the side collision's timer at the push's value does not exist (`OnFrames.noStopRight`),
+and a frame that starts left of the edge after a frame that did not end with the timer at that value does not exist (`OnFrames.leftEnd`; at control `AreaRun.edge₀`); so
+the field asks only the frames near a push. `hfar` and `hpg` (the position of `a`, the left edge's page on the frames before) are for `OnFrames.nearAt`. -/
+theorem OnFrames.stopAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hfr : TopSpeed.frictionCheck sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
+    (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) (hc : Clean sy (seq (j - 1)))
+    (hfar : SurfaceRead.Far sy (seq (j - 1))) (hpg : ∀ i, 1 ≤ i → i < j → PageOK sy m0 (seq i)) :
+    StopAt sy (seq (j - 1)) (K.fm j) (K.pad j) (CtrlKeep.arrAt sy (K.fm j) (K.pad j)) := by
+  intro k hk hpc hv h0 e
+  by_cases hA : (ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) <
+      EdgeStep.pixel16 sy (PipeEntryRule.trace (K.fm j) (K.pad j) k) ∧
+        (PipeTransition.frame (K.fm j) (K.pad j)).ram.get! (ScrollRule.places sy m0).sideB = PushTimer.pushT sy m0) ∨
+      (EdgeStep.pixel16 sy (seq (j - 1)) < ScrollRule.left16 (ScrollRule.places sy m0) (seq (j - 1)) ∧
+        (seq (j - 1)).ram.get! (ScrollRule.places sy m0).sideB = PushTimer.pushT sy m0)
+  · exact (O.moves j h1 h2 h3 hc).stop k hk hpc hv h0 e hA
+  -- round 33: the frame does not start left of the edge, when the frame before did not end with the side collision's timer at the push's value (`OnFrames.leftEnd`)
+  have hstart : EdgeStep.pixel16 sy (seq (j - 1)) < ScrollRule.left16 (ScrollRule.places sy m0) (seq (j - 1)) → False := by
+    intro ha
+    have hsa : (seq (j - 1)).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 := fun h => hA (Or.inr ⟨ha, h⟩)
+    rcases Nat.lt_or_ge 1 j with hj | hj
+    · have := O.leftEnd hck hst Ar (j := j - 1) (by omega) (by omega) (hpg (j - 1) (by omega) (by omega)) hsa
+      omega
+    · -- `j = 1`: the machine at control
+      have hj1 : j - 1 = 0 := by omega
+      rw [hj1] at ha
+      have e0 := Ar.edge₀ (by omega)
+      have hp0 : (seq 0).prg = m0.prg ∧ (seq 0).prgMask = m0.prgMask := by
+        have s := hst (K.ix 0) (by have := K.ix_mono 0 g (by omega) (Nat.le_refl g); omega)
+        rw [K.at_ix 0 (by omega)]
+        exact ⟨s.prg, s.mask⟩
+      rw [ScrollRule.edgeOf_left16 hp0.1 hp0.2] at e0
+      have hP : posP sy (seq 0) ≤ 256 * (EdgeStep.pixel16 sy (seq 0) : Int) + 255 := by
+        show (((peek (seq 0) sy.Player_PageLoc).toNat * 256 + (peek (seq 0) sy.Player_X_Position).toNat) * 256 +
+          (peek (seq 0) sy.SprObject_X_MoveForce).toNat : Int) ≤
+          256 * (((peek (seq 0) sy.Player_PageLoc).toNat * 256 + (peek (seq 0) sy.Player_X_Position).toNat : Nat) : Int) + 255
+        have := (peek (seq 0) sy.SprObject_X_MoveForce).toNat_lt
+        omega
+      omega
+  by_cases hl : ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) <
+      EdgeStep.pixel16 sy (PipeEntryRule.trace (K.fm j) (K.pad j) k)
+  · -- round 33: right of the left edge at `Q`, with the side collision's timer not at the push's value at the end: no such frame (`OnFrames.noStopRight`)
+    exfalso
+    have hz : peek (seq j) sy.Player_X_Speed = 0 := by rw [K.ends j h1 (Nat.le_of_lt h3)]; exact h0
+    have he : posP sy (seq j) = posP sy (PipeEntryRule.trace (K.fm j) (K.pad j) k) := by rw [K.ends j h1 (Nat.le_of_lt h3)]; exact e
+    have hs : (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 := by
+      rw [K.ends j h1 (Nat.le_of_lt h3)]
+      exact fun h => hA (Or.inl ⟨hl, h⟩)
+    have hsp : TopSpeed.inSpeed sy (peek (seq (j - 1)) sy.Player_X_Speed) = true := by
+      have h := hc.1
+      simp only [inD, Bool.and_eq_true] at h
+      exact h.1.1.1
+    exact O.noStopRight hck hOK hfr hidle hst Ar h1 h3 hsp hfar hpg hk hpc hv hz he hs hl
+  · have hcase : ¬ (ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) <
+        EdgeStep.pixel16 sy (PipeEntryRule.trace (K.fm j) (K.pad j) k) ∨
+        EdgeStep.pixel16 sy (seq (j - 1)) < ScrollRule.left16 (ScrollRule.places sy m0) (seq (j - 1))) := by
+      rintro (h | h)
+      · exact hl h
+      · exact hstart h
+    have a1 := K.order (j - 1) (by omega)
+    have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+    rw [show j - 1 + 1 = j by omega] at a1
+    have harr := O.arrive hck hst h1 (by omega)
+    have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
+    have h0' := start_fm hst h1 (by omega)
+    have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
+    have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
+    have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+      fun n => FrameKeep.cleanK_of_E (hclE n)
+    have hH : ∀ x ∈ EdgeStep.eI sy m0, ∀ n, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (PipeEntryRule.trace (K.fm j) (K.pad j) n) :=
+      fun x hx n => EdgeStep.cleanH_of_E hx (hclE n)
+    have honce := GuardE.subs_onceE hck Ar.keep h0' hclE hxs hAf harr.1 harr.2.1 harr.2.2
+    have hb : ∀ j', CtrlKeep.arrAt sy (K.fm j) (K.pad j) < j' → j' < k → (PipeEntryRule.trace (K.fm j) (K.pad j) j').pc ≠ sy.PlayerSubs := by
+      intro j' hj1 hj2 hpj
+      have := honce j' k (Nat.le_of_lt hj1) hk hpj hpc
+      omega
+    have HQ := EdgeStep.keep_q hck Ar.eq h0' hclF hH hxs hAf harr.1 harr.2.1 harr.2.2 hk hpc hb
+    have hx0 : ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_self
+    have hp0 : ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat ∈ EdgeStep.eI sy m0 := List.mem_cons_of_mem _ List.mem_cons_self
+    have elx : (ScrollRule.places sy m0).lx = ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat := rfl
+    have elp : (ScrollRule.places sy m0).lp = ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat := rfl
+    have ex : (PipeEntryRule.trace (K.fm j) (K.pad j) k).ram.get! ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat =
+        (seq (j - 1)).ram.get! ((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat := (HQ _ hx0).2.trans (O.edgeLag hck hst Ar h1 (by omega) _ hx0)
+    have ep : (PipeEntryRule.trace (K.fm j) (K.pad j) k).ram.get! ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat =
+        (seq (j - 1)).ram.get! ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat := (HQ _ hp0).2.trans (O.edgeLag hck hst Ar h1 (by omega) _ hp0)
+    have eL : ScrollRule.left16 (ScrollRule.places sy m0) (PipeEntryRule.trace (K.fm j) (K.pad j) k) =
+        ScrollRule.left16 (ScrollRule.places sy m0) (seq (j - 1)) := by
+      unfold ScrollRule.left16
+      rw [elx, elp, ex, ep]
+    have := StopEdge.stop_of_edge sy (ScrollRule.places sy m0) (a := seq (j - 1)) (Q := PipeEntryRule.trace (K.fm j) (K.pad j) k) (by omega) (by omega) eL
+    omega
+
+/-- the state at the player's routine of the counted frame `j`, from a clean state: `Moves.toAt` with the frame's start in control (`hst`), `K.cleanAt`, `OnFrames.arrive`
+and `OnFrames.lagKeep` -/
+theorem OnFrames.movesAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hfr : TopSpeed.frictionCheck sy m0 = true) (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g) (hc : Clean sy (seq (j - 1)))
+    (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
+    (hpg : ∀ i, 1 ≤ i → i < j → PageOK sy m0 (seq i)) :
+    MovesAt sy m0 (seq (j - 1)) (O.fm j) (O.pad j) (O.arr j) := by
+  have a1 := K.order (j - 1) (by omega)
+  have a2 := K.ix_mono j g (by omega) (Nat.le_refl g)
+  rw [show j - 1 + 1 = j by omega] at a1
+  have hA : CtrlKeep.AreaOK sy v (seq (j - 1)) := by
+    rw [K.at_ix (j - 1) (by omega)]
+    exact Ar.all _ (by omega)
+  have harea : peek (seq (j - 1)) sy.AreaType ∈ [(1 : UInt8), 2, 3] := by
+    rw [hA.1]
+    exact Ar.v3
+  have harr := O.arrive hck hst h1 (by omega)
+  have hAf : CtrlKeep.AreaOK sy v (O.fm j) := Ar.all _ (by omega)
+  have hkh := GuardE.keepHE hck Ar.keep (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
+  have honce := GuardE.subs_onceE hck Ar.keep (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
+  have hz := FaceKeep.keepZ_end hck Ar.zk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf harr.1 harr.2.1 harr.2.2
+  have hlag := O.lagKeep hck hst Ar h1 (by omega)
+  have hbits0 : peek (O.fm j) sy.Player_CollisionBits &&& sy.noLeft = sy.noLeft := by
+    rw [hlag _ (keepA_mem (by simp))]
+    rcases hc.2.2 with e | ⟨e, _⟩
+    · have e' : peek (seq (j - 1)) sy.Player_CollisionBits = 0xFF := e
+      rw [e', ff_and]
+    · have e' : peek (seq (j - 1)) sy.Player_CollisionBits = sy.noLeft := e
+      rw [e', UInt8.and_self]
+  have hb := FaceKeep.bits_end hck Ar.bk (start_fm hst h1 (by omega)) (K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega))
+    (K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)) hAf hbits0 harr.1 harr.2.1 harr.2.2 honce
+  exact Moves.toAt hck hOK hfr hso (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) hc harr hlag
+    harea hA.2.1 hA.2.2 hfar hidle hkh honce (O.state j h1 (by omega))
+    (O.collideAt hck hst Ar h1 h3)
+    (fun k hk hpc => hz k hk hpc (FaceKeep.fdI sy) (by simp [FaceKeep.zI]))
+    (fun k hk hpc hv => hb k hk hpc (sign_of_pos hv)) (O.keepAt hck hst Ar h1 h3) (O.stopAt hck hOK hfr hidle hst Ar h1 h2 h3 hc hfar hpg)
+
+/-- **Each frame from a clean state is a `OneFrame`**, by the movement: `one_of_moves`, or with the side he presses masked `one_of_movesM`. -/
+theorem one_of_frames (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hmk : FrameModel.maskOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hfr : TopSpeed.frictionCheck sy m0 = true) (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true)
+    (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
+    {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j ≤ T) (h3 : j < g)
+    (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (hpg : ∀ i, 1 ≤ i → i < j → PageOK sy m0 (seq i)) :
+    OneFrame sy m0 (O.inp j) (seq (j - 1)) (seq j) := by
+  have hmv := O.movesAt hck hOK hfr hso hst Ar h1 h2 h3 hc hfar hidle hpg
+  by_cases hm : Masked sy (O.inp j) (seq (j - 1))
+  · have e := one_of_movesM hOK hmk hmv hc hm
+    rw [← O.ends j h1 h2 h3] at e
+    exact e
+  · have e := one_of_moves hOK hmv hm
+    rw [← O.ends j h1 h2 h3] at e
+    exact Or.inr e
+
+/-- **The vertical step of a frame before `J`**: from the vertical model (`VertModel.vert_model`, proved), the state at the player's routine (`moves`, and the walk of
+`CtrlKeep` for the vertical bytes up to there: `vBefore`, and bit 7 of A of the frame before: `OnFrames.prevAll`), and the frame's part from the scroll handler on
+(`vAfter` for five bytes, the walk of `VertKeep` for four others: `OnFrames.kAt`, the walk of `FaceKeep` for the vertical force: `OnFrames.vfAt`). The step is
+`VStep`: that of `vNext`, or on the ground that of `vNext` with the vertical force of a jumpspring's landing. In a jump the jump's halt value is 1 at the frame's
+start, and so at its end. -/
+theorem vert_of (hv : VertModel.vertOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hck : CtrlKeep.ctrlCheck sy m0 = true)
+    (hOK : FrameModel.modelOK sy m0 (FrameModel.ctrlStack sy m0) = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
+    (hso : FrameModel.storedOK sy m0 (FrameModel.ctrlStack sy m0) = true) (O : OnFrames sy m0 B T J g seq K)
+    (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n)) {v : UInt8} (Ar : AreaRun sy m0 K v) {j : Nat} (h1 : 1 ≤ j) (h2 : j < J) (hT : j ≤ T) (h3 : j < g)
+    (hc : Clean sy (seq (j - 1))) (hfar : 2048 ≤ posP sy (seq (j - 1)) ∧ posP sy (seq (j - 1)) + 2048 < 0x1000000)
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) (hh : HaltOK sy (seq (j - 1))) (hpv : PrevKeep.PrevOK sy (seq (j - 1)))
+    (hpg : ∀ i, 1 ≤ i → i < j → PageOK sy m0 (seq i)) :
+    VStep sy m0 (FaceKeep.vfC sy m0 v) (seq (j - 1)) (seq j) ∧ HaltOK sy (seq j) := by
+  have hmv := O.movesAt hck hOK hfr hso hst Ar h1 hT h3 hc hfar hidle hpg
+  have hv0 : peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.Player_X_Speed = peek (seq (j - 1)) sy.Player_X_Speed := hmv.before _ (.head _)
+  have hat := hmv.at_ctrl
+  obtain ⟨vb1, vb2, vb3⟩ := vBefore hck (start_fm hst h1 (by omega)) (K.cleanAt j h1 (by omega)) (O.arrive hck hst h1 (by omega)) (O.lagKeep hck hst Ar h1 (by omega)) hpv
+  change (∀ x ∈ vKeep sy, peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) x = peek (seq (j - 1)) x) at vb1
+  change peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.A_B_Buttons &&& 0x80 = _ at vb2
+  change peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.PreviousA_B_Buttons &&& 0x80 =
+    peek (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j)) sy.A_B_Buttons &&& 0x80 at vb3
+  generalize hR : PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j) = R at vb1 vb2 vb3 hv0 hat
+  have hd : peek R sy.Player_State = 1 → peek R sy.DiffToHaltJump = 1 := by
+    intro e
+    rw [vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))))]
+    rw [vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))))] at e
+    exact hh e
+  obtain ⟨k, hk, _, hpc, _, hvs, hhk, hC⟩ := VertModel.vert_model hv hat hd vb3
+  have e0 : PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k) = FrameModel.stepN k R := by
+    have e1 := (FrameModel.trace_inFrame hmv.idle hmv.start (by rw [hR]; exact hC) hmv.time k (Nat.le_refl k)).1
+    rw [hR] at e1
+    exact e1
+  have hpc' : (PipeEntryRule.trace (O.fm j) (O.pad j) (O.arr j + k)).pc = sy.PlayerSubs := by rw [e0]; exact hpc
+  have va0 := O.vAfter j h1 h2 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
+  have vk := O.kAt hck hst Ar h1 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
+  have vf0 := O.vfAt hck hst Ar h1 h3 (O.arr j + k) (Nat.le_add_right _ _) hpc'
+  have va1 : ∀ x ∈ vHard sy, peek (seq j) x = peek (FrameModel.stepN k R) x := by
+    intro x hx
+    rw [← e0]
+    exact va0 x hx
+  have vk1 : ∀ x ∈ VertKeep.kI sy, (seq j).ram.get! x = (FrameModel.stepN k R).ram.get! x := by
+    intro x hx
+    rw [← e0]
+    exact vk x hx
+  have vf1 : peek (seq j) sy.VerticalForce = peek (FrameModel.stepN k R) sy.VerticalForce ∨
+      (peek (seq j) sy.VerticalForce = FaceKeep.vfC sy m0 v ∧ peek (seq j) sy.Player_State = 0) := by
+    rw [← e0]
+    exact vf0
+  have y1 : peek (seq j) sy.Player_Y_Position = peek (FrameModel.stepN k R) sy.Player_Y_Position := va1 _ (by simp [vHard])
+  have y2 : peek (seq j) sy.Player_Y_MoveForce = peek (FrameModel.stepN k R) sy.Player_Y_MoveForce := va1 _ (by simp [vHard])
+  have y3 : peek (seq j) sy.Player_Y_Speed = peek (FrameModel.stepN k R) sy.Player_Y_Speed := va1 _ (by simp [vHard])
+  have y4 : peek (seq j) sy.Player_YMF_Dummy = peek (FrameModel.stepN k R) sy.Player_YMF_Dummy := va1 _ (by simp [vHard])
+  have y6 : peek (seq j) sy.VerticalForceDown = peek (FrameModel.stepN k R) sy.VerticalForceDown := vk1 _ (by simp [VertKeep.kI])
+  have y7 : peek (seq j) sy.JumpOrigin_Y_Position = peek (FrameModel.stepN k R) sy.JumpOrigin_Y_Position := vk1 _ (by simp [VertKeep.kI])
+  have y8 : peek (seq j) sy.Player_State = peek (FrameModel.stepN k R) sy.Player_State := va1 _ (by simp [vHard])
+  have y9 : peek (seq j) sy.DiffToHaltJump = peek (FrameModel.stepN k R) sy.DiffToHaltJump := vk1 _ (by simp [VertKeep.kI])
+  have yA : peek (seq j) sy.A_B_Buttons = peek (FrameModel.stepN k R) sy.A_B_Buttons := vk1 _ (by simp [VertKeep.kI])
+  -- the vertical bytes at the frame's end are those at the scroll handler, but the vertical force
+  have eb : vsOf sy (seq j) = { VertModel.vsOf sy (FrameModel.stepN k R) with vf := peek (seq j) sy.VerticalForce } := by
+    unfold vsOf VertModel.vsOf
+    rw [y1, y2, y3, y4, y6, y7, y8, yA]
+  have ea : VertModel.vsOf sy R = vsOf sy (seq (j - 1)) := by
+    show Jump.VS.mk _ _ _ _ _ _ _ _ _ = Jump.VS.mk _ _ _ _ _ _ _ _ _
+    rw [vb1 _ (.head _), vb1 _ (.tail _ (.head _)), vb1 _ (.tail _ (.tail _ (.head _))), vb1 _ (.tail _ (.tail _ (.tail _ (.head _)))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _))))))), vb1 _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))))), vb2]
+  have eab : peek R sy.Player_XSpeedAbsolute = peek (seq (j - 1)) sy.Player_XSpeedAbsolute := by
+    rw [hat.abs, hc.2.1, hv0]
+  rw [ea, eab] at hvs
+  have ePA : (vsOf sy (seq j)).prevA = (VertModel.vsOf sy (FrameModel.stepN k R)).prevA := by
+    show (peek (seq j) sy.A_B_Buttons &&& 0x80 != 0) = (peek (FrameModel.stepN k R) sy.A_B_Buttons &&& 0x80 != 0)
+    rw [yA]
+  have eXA : (VertModel.vsOf sy (FrameModel.stepN k R)).prevA = (peek R sy.SavedJoypadBits &&& 0x80 != 0) := by
+    rw [hvs, VertModel.vstepV_eq]
+  have eQ : VertModel.vsOf sy (FrameModel.stepN k R) = vNext sy m0 (seq (j - 1)) (seq j) := by
+    unfold vNext
+    rw [ePA, eXA]
+    exact hvs
+  refine ⟨?_, ?_⟩
+  · rcases vf1 with e | ⟨e1, e2⟩
+    · left
+      rw [eb, e, ← eQ]
+      rfl
+    · right
+      refine ⟨?_, by rw [eb, e1, eQ]⟩
+      rw [← eQ]
+      show peek (FrameModel.stepN k R) sy.Player_State = 0
+      rw [← y8]
+      exact e2
+  · intro e
+    show peek (seq j) sy.DiffToHaltJump = 1
+    rw [y9]
+    rw [y8] at e
+    exact hhk e
 
 /-- **The old field `edge`, a theorem (round 26)**: each counted frame before the touch moves the screen's left edge only behind him: at its end the edge is at most
 the larger of the base at the end of the frame before and the position at its end. `OnFrames.scrollAt` gives the scroll handler `Q`, with the edge of the end of the
@@ -2889,7 +3315,8 @@ theorem stored_le {m : Machine} (h : Clean sy m) : (peek m sy.Player_XSpeedAbsol
 theorem quiet_upto (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy = true) (Nm : Numbers sy m0 B Jn) (hfr : TopSpeed.frictionCheck sy m0 = true) (hJT : Jn ≤ T + 1)
     (O : OnFrames sy m0 B T Jn g seq K)
     (st : Start sy B (seq 0)) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
-    (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000) :
+    (hfar : 2048 + 16 * (top sy : Int) * (T : Int) ≤ posP sy B.m ∧ posP sy B.m + 16 * (top sy : Int) * (T : Int) + 2048 < 0x1000000)
+    (hpg : ∀ i, 1 ≤ i → i < g → PageOK sy m0 (seq i)) :
     ∀ d, d + 1 < Jn → d + 1 < g → (∀ i, i ≤ d → Follow sy m0 (O.inp (i + 1)) (seq i) (seq (i + 1))) ∧
       (∀ i, i ≤ d + 1 → Clean sy (seq i)) ∧ bitsOf sy (seq (d + 1)) = 0xFF ∧
       (∀ i, i ≤ d → VStep sy m0 (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (seq i) (seq (i + 1))) ∧ (∀ i, i ≤ d + 1 → HaltOK sy (seq i)) := by
@@ -2926,7 +3353,7 @@ where
     have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := O.areaRun Nm st hst
     have hfd : 2048 ≤ posP sy (seq (d + 1 - 1)) ∧ posP sy (seq (d + 1 - 1)) + 2048 < 0x1000000 := by
       simpa using far_of_follow F.pot Nm st hfar (fun j => inAt_mem Nm.model _ _ _) (d := d) (by omega) hf
-    have hmv := O.movesAt Nm.ctrl Nm.model hfr Nm.storedW hst Ar (j := d + 1) (by omega) (by omega) h2 hc' hfd Nm.idle
+    have hmv := O.movesAt Nm.ctrl Nm.model hfr Nm.storedW hst Ar (j := d + 1) (by omega) (by omega) h2 hc' hfd Nm.idle (fun i hi1 hi2 => hpg i hi1 (by omega))
     have hpv : PrevKeep.PrevOK sy (seq (d + 1 - 1)) := by
       have h0 : PrevKeep.PrevOK sy (seq 0) := by
         unfold PrevKeep.PrevOK
@@ -2936,6 +3363,7 @@ where
       rw [show d + 1 - 1 = d by omega, K.at_ix d (by omega)]
       exact O.prevAll Nm.ctrl Nm.prev Ar hst h0 (K.ix d) (by omega)
     have hvd := vert_of Nm.vmodel Nm.ctrl Nm.model hfr Nm.storedW O hst Ar (j := d + 1) (by omega) h1 (by omega) h2 hc' hfd Nm.idle (by simpa using hho d (Nat.le_refl d)) hpv
+      (fun i hi1 hi2 => hpg i hi1 (by omega))
     simp only [Nat.add_sub_cancel] at hvd
     obtain ⟨hvd, hhd⟩ := hvd
     have hvt' : ∀ i, i ≤ d → VStep sy m0 (FaceKeep.vfC sy m0 (peek B.m sy.AreaType)) (seq i) (seq (i + 1)) := by
@@ -3055,6 +3483,8 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
   have Nm := numbers_of_check hn
   have Ar : AreaRun sy m0 K (peek B.m sy.AreaType) := O.areaRun Nm st hst
   have Rd := O.reads Nm.ctrl Nm.model hfr Nm.idle hst Ar (start_v0 hn st) st.P hg
+  -- round 33: the left edge's page on every counted frame before the touch (`OnFrames.stopAt` uses it, through `OnFrames.nearAt`)
+  have hpgA := O.pageAll Nm.ctrl Nm.model hfr Nm.idle hst Ar (start_v0 hn st) st.P hg
   have hd0 : startHS sy (seq 0) = startHS sy m0 := by rw [st.hs, Nm.hs]
   have hin : ∀ j, O.inp j ∈ inputs := fun j => inAt_mem Nm.model _ _ _
   let FC : Nat → Prop := fun j => Follow sy m0 (O.inp j) (seq (j - 1)) (seq j) ∧ Clean sy (seq j)
@@ -3080,7 +3510,7 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
     intro hT
     obtain ⟨h1, h2, h3⟩ := H2 hT
     have hfh := far_of_follow F.pot Nm st hfar hin (d := h - 1) (by omega) (hfol (h - 1) (by omega) (by omega) (by omega))
-    have ho := one_of_frames Nm.model Nm.mask hfr Nm.storedW Nm.ctrl O hst Ar h1 hT h2 (hclean hT) hfh Nm.idle
+    have ho := one_of_frames Nm.model Nm.mask hfr Nm.storedW Nm.ctrl O hst Ar h1 hT h2 (hclean hT) hfh Nm.idle (fun i hi1 hi2 => hpgA i hi1 (by omega))
     rcases step_of_one F.pot (hin h) (hclean hT) ho with h4 | h4
     · exact absurd h4 h3
     · exact h4
@@ -3111,7 +3541,7 @@ theorem surface_of_frames (F : TFacts sy m0) (hc : noHitCheck sy B.m B.dx B.dy =
       · exact hJ
       · exfalso
         obtain ⟨d, rfl⟩ : ∃ d, h = d + 1 := ⟨h - 1, by omega⟩
-        obtain ⟨hf, hcl, _⟩ := quiet_upto F hc Nm hfr (by omega) O st hst hfar d (by omega) h2
+        obtain ⟨hf, hcl, _⟩ := quiet_upto F hc Nm hfr (by omega) O st hst hfar hpgA d (by omega) h2
         exact h3 ⟨by simpa using hf d (Nat.le_refl d), hcl (d + 1) (Nat.le_refl _)⟩
     · omega
   · -- `model`
@@ -3362,12 +3792,32 @@ def afterPB (sy : Syms) (a Q b : Machine) : Bool :=
 
 /-- round 28: the field `Moves.stop` as a check: a frame that moves right at the scroll handler, ends with the speed 0 and ends at the position there ends at most
 1 px past `a` (`AfterP.stop` is the theorem `StopAt.stopP`; `afterPB` checks it); round 32: asked only when he is right of the screen's left edge at `Q`
-or `a` is left of it (`OnFrames.stopAt`); `stopAtB` is the old field, a theorem -/
+or `a` is left of it (`OnFrames.stopAt`); round 33: and the side collision's timer is at least 2 at `b` (right of the edge at `Q`) or at `a` (`a` left of
+it); `stopAtB` is the old field, a theorem -/
 def stopB (sy : Syms) (m0 a Q b : Machine) : Bool :=
   !(decide (0 < vOf sy Q) && peek b sy.Player_X_Speed == 0 && posP sy b == posP sy Q &&
-    (decide (ScrollRule.left16 (ScrollRule.places sy m0) Q < EdgeStep.pixel16 sy Q) ||
-      decide (EdgeStep.pixel16 sy a < ScrollRule.left16 (ScrollRule.places sy m0) a))) ||
+    -- round 33: right of the left edge at the scroll handler with the side collision's timer at the push's value at the end, or the start left of the edge
+    -- with the timer at that value there
+    ((decide (ScrollRule.left16 (ScrollRule.places sy m0) Q < EdgeStep.pixel16 sy Q) && b.ram.get! (ScrollRule.places sy m0).sideB == PushTimer.pushT sy m0) ||
+      (decide (EdgeStep.pixel16 sy a < ScrollRule.left16 (ScrollRule.places sy m0) a) && a.ram.get! (ScrollRule.places sy m0).sideB == PushTimer.pushT sy m0))) ||
   decide (posP sy Q ≤ posP sy a + 256)
+
+/-- round 33: what `OnFrames.stopRight` proves, as a check: a frame that moves right at the scroll handler, ends with the speed 0 at the position there and
+with the side collision's timer not at the push's value, ends at the screen's left edge -/
+def stopRightB (sy : Syms) (m0 Q b : Machine) : Bool :=
+  !(decide (0 < vOf sy Q) && peek b sy.Player_X_Speed == 0 && posP sy b == posP sy Q && b.ram.get! (ScrollRule.places sy m0).sideB != PushTimer.pushT sy m0) ||
+  decide (EdgeStep.pixel16 sy b = ScrollRule.left16 (ScrollRule.places sy m0) b)
+
+/-- round 33: what `OnFrames.leftEnd` proves, as a check: a frame that does not end with the side collision's timer at the push's value (and the left edge's page not 255) ends at
+or right of the screen's left edge -/
+def leftEndB (sy : Syms) (m0 b : Machine) : Bool :=
+  !(b.ram.get! (ScrollRule.places sy m0).sideB != PushTimer.pushT sy m0 && b.ram.get! (ClampSide.eP (ClampSide.places sy m0) 0) != 255) ||
+  decide (ScrollRule.left16 (ScrollRule.places sy m0) b ≤ EdgeStep.pixel16 sy b)
+
+/-- round 33: what `OnFrames.noStopRight` proves, as a check: no such frame is right of the left edge at the scroll handler -/
+def noStopRightB (sy : Syms) (m0 Q b : Machine) : Bool :=
+  !(decide (0 < vOf sy Q) && peek b sy.Player_X_Speed == 0 && posP sy b == posP sy Q && b.ram.get! (ScrollRule.places sy m0).sideB != PushTimer.pushT sy m0 &&
+    decide (ScrollRule.left16 (ScrollRule.places sy m0) Q < EdgeStep.pixel16 sy Q))
 
 /-- round 32: the old field `Moves.stop` (`StopAt`, now the theorem `OnFrames.stopAt`) as a check -/
 def stopAtB (sy : Syms) (a Q b : Machine) : Bool :=
@@ -3492,6 +3942,7 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
   let idxP := PositionWriters.posI sy
   let mut posWBad := false
   let mut sideWBad := false
+  let mut sideWNearBad := false
   let mut clampRBad := false
   let mut calls := false
   let CP := ClampSide.places sy m0
@@ -3508,6 +3959,8 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
       if !PositionWriters.innerP sy m0 c.pc && idxP.any ((StepWrites.stepLocs c).contains ·) then posWBad := true
       -- round 32: the field `sideW`
       if !PushTimer.sideWB sy m0 c then sideWBad := true
+      -- round 33: the field asks it only at the stores that may reach the timer
+      if PushTimer.nearWB sy m0 c && !PushTimer.sideWB sy m0 c then sideWNearBad := true
       if c.pc == Pc.entry && decide (0 < sbyte (peek c sy.Player_X_Speed)) &&
           ScreenClamp.target (FrameModel.Rom.of m0) Pc c c.y != posP sy c then clampRBad := true
       if c.pc == sy.ImpedePlayerMove || c.pc == Pc.entry then calls := true
@@ -3536,9 +3989,11 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
     if !subs.all (fun Q => afterPB sy a Q b) then f := "afterP" :: f
     if !subs.all (fun Q => stopB sy m0 a Q b) then f := "stop" :: f
     if !subs.all (fun Q => stopAtB sy a Q b) then f := "stopAt (a theorem)" :: f
+    if !subs.all (fun Q => stopRightB sy m0 Q b) then f := "stopRight (a theorem)" :: f
+    if !subs.all (fun Q => noStopRightB sy m0 Q b) then f := "noStopRight (a theorem)" :: f
+    if !leftEndB sy m0 b then f := "leftEnd (a theorem)" :: f
     if posWBad then f := "posW" :: f
-    if sideWBad && decide (b.ram.get! (ScrollRule.places sy m0).sideB ≤ 1) && b.ram.get! (ScrollRule.places sy m0).lockB == 0 &&
-        decide ((ScrollRule.places sy m0).thr1 ≤ b.ram.get! (ScrollRule.places sy m0).pfs) then f := "sideW" :: f
+    if sideWNearBad && b.ram.get! (ScrollRule.places sy m0).sideB != PushTimer.pushT sy m0 then f := "sideW" :: f
     -- round 32: `SideW` on every frame (more than the field asks), for the page
     if sideWBad then f := "sideW on every frame (measured only)" :: f
     if clampRBad && subs.any (fun Q => decide (0 < sbyte (peek Q sy.Player_X_Speed)) && peek b sy.Player_X_Speed == peek Q sy.Player_X_Speed) then f := "clampR" :: f

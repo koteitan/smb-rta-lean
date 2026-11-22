@@ -774,13 +774,18 @@ def pixAfter (E : Rom) (P : Places) (o : Option UInt8) (R : Machine) : Nat :=
 theorem pixAfter_none (E : Rom) (P : Places) (R : Machine) : pixAfter E P none R = pix16 P R := rfl
 theorem pixAfter_some (E : Rom) (P : Places) (t : UInt8) (R : Machine) : pixAfter E P (some t) R = (edge16 P t R + 65536 - amt E P t) % 65536 := rfl
 
-/-- **The check on the ROM**: the pieces of the choice, the clamp's pieces that keep the edges, and the check of the pixels -/
+/-- round 33: **the right clamp does not choose itself after its own move**: the choice for the difference of the clamp's amount on the right is not the right
+clamp (so a right clamp never leaves him where it would be chosen again) -/
+def rightAmt (E : Rom) (P : Places) : Bool := selD E P (amt E P 1) != some 1
+
+/-- **The check on the ROM**: the pieces of the choice, the clamp's pieces that keep the edges, and the check of the pixels; round 33: and `rightAmt` -/
 def checkAll (sy : Syms) (m0 : Machine) : Bool :=
-  check sy m0 && clampCheck (Rom.of m0) (ScreenClamp.places sy m0) (EW (places sy m0)) && relCheck (Rom.of m0) (places sy m0)
+  check sy m0 && clampCheck (Rom.of m0) (ScreenClamp.places sy m0) (EW (places sy m0)) && relCheck (Rom.of m0) (places sy m0) && rightAmt (Rom.of m0) (places sy m0)
 
 /-- **The routine of the offscreen bits, the clamp and the scroll handler's return instruction, on a real machine**: from the routine's start (`ChkPOffscr`) the
 machine comes to the scroll handler's return instruction with the stack of the start, the two edges, the fraction and the two stack bytes above kept; his pixel
-(with its page) is his pixel at the start when `selM R = none`, and else the edge `t` minus the clamp's amount (modulo 2¹⁶), `selM R = some t`. -/
+(with its page) is his pixel at the start when `selM R = none`, and else the edge `t` minus the clamp's amount (modulo 2¹⁶), `selM R = some t`. Round 33: when
+`selM R = none` his speed is kept too. -/
 theorem clamp_end {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) (hcC : ScreenClamp.check sy m0 = true) {R : Machine}
     (hg : Good (Rom.of m0) R) (hpc : R.pc = (places sy m0).chk) :
     ∃ k, Good (Rom.of m0) (stepN k R) ∧ (stepN k R).pc = (places sy m0).ret ∧ (stepN k R).s = R.s ∧
@@ -788,8 +793,10 @@ theorem clamp_end {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) (hcC :
       (stepN k R).ram.get! (places sy m0).frac = R.ram.get! (places sy m0).frac ∧
       (∀ i ∈ [stkI (R.s + 1), stkI (R.s + 1 + 1)], (stepN k R).ram.get! i = R.ram.get! i) ∧
       pix16 (places sy m0) (stepN k R) = pixAfter (Rom.of m0) (places sy m0) (selM (Rom.of m0) (places sy m0) R) R ∧
+      (selM (Rom.of m0) (places sy m0) R = none → (stepN k R).ram.get! (places sy m0).speed = R.ram.get! (places sy m0).speed) ∧
       InFrameN (Rom.of m0) R k := by
   unfold checkAll at hc
+  obtain ⟨hc, _⟩ := Bool.and_eq_true_iff.1 hc
   obtain ⟨hc, _⟩ := Bool.and_eq_true_iff.1 hc
   obtain ⟨hP, hCC⟩ := Bool.and_eq_true_iff.1 hc
   have F := facts_of_check hP
@@ -815,7 +822,7 @@ theorem clamp_end {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) (hcC :
     rw [hs] at E1
     obtain ⟨s1, pc1⟩ := E1
     refine ⟨k1, by rw [hM]; exact g1, by rw [hM]; exact pc1, by rw [hM]; exact s1, fun i hi => by rw [hM]; exact wM i (ew i hi),
-      by rw [hM]; exact wM _ (by simp [W0]), fun i hi => by rw [hM]; exact upM i hi, ?_, C1⟩
+      by rw [hM]; exact wM _ (by simp [W0]), fun i hi => by rw [hM]; exact upM i hi, ?_, fun _ => by rw [hM]; exact wM _ (by simp [W0]), C1⟩
     rw [hM, pixAfter_none]
     unfold pix16
     rw [wM _ (by simp [W0] : P.page ∈ W0 P), wM _ (by simp [W0] : P.x ∈ W0 P)]
@@ -832,7 +839,7 @@ theorem clamp_end {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) (hcC :
     rw [c3, c4, c5] at m2
     have wE : ∀ i ∈ EW P, M2.ram.get! i = R.ram.get! i := fun i hi => (w2 i (List.mem_append_left _ hi)).trans (wM i (ew i hi))
     refine ⟨k1 + k2, by rw [e12]; exact g2, by rw [e12]; exact pc2, by rw [e12, s2, s1], fun i hi => by rw [e12]; exact wE i hi,
-      by rw [e12]; exact f2.trans (wM _ (by simp [W0])), fun i hi => ?_, ?_, InFrameN.add' C1 hM C2⟩
+      by rw [e12]; exact f2.trans (wM _ (by simp [W0])), fun i hi => ?_, ?_, (by intro h; cases h), InFrameN.add' C1 hM C2⟩
     · rw [e12]
       have hs' : i ∈ stackI := by
         simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
@@ -862,6 +869,7 @@ theorem left_of {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) {R R' : 
     (pix16 (places sy m0) R' + 65536 - edge16 (places sy m0) 0 R) % 65536 < 256 := by
   have hc' := hc
   unfold checkAll at hc'
+  obtain ⟨hc', _⟩ := Bool.and_eq_true_iff.1 hc'
   obtain ⟨_, hr⟩ := Bool.and_eq_true_iff.1 hc'
   unfold relCheck at hr
   obtain ⟨h0, hall⟩ := Bool.and_eq_true_iff.1 hr
@@ -892,6 +900,18 @@ theorem left_of {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) {R R' : 
       unfold amt
       omega
 
+/-- round 33: **the two facts of `checkAll` that a stop at the screen's edge uses**: the left clamp's amount is 0, and `rightAmt` -/
+theorem amt_facts {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) :
+    amt (Rom.of m0) (places sy m0) 0 = 0 ∧ selD (Rom.of m0) (places sy m0) (amt (Rom.of m0) (places sy m0) 1) ≠ some 1 := by
+  unfold checkAll at hc
+  obtain ⟨hc, hra⟩ := Bool.and_eq_true_iff.1 hc
+  obtain ⟨_, hr⟩ := Bool.and_eq_true_iff.1 hc
+  unfold relCheck at hr
+  obtain ⟨h0, _⟩ := Bool.and_eq_true_iff.1 hr
+  refine ⟨by simpa using h0, ?_⟩
+  unfold rightAmt at hra
+  simpa using hra
+
 /-- **The clamp keeps him on the screen** (with the right edge 255 px right of the left edge, modulo 2¹⁶): at the scroll handler's return instruction his pixel is
 the left edge's or at most 255 px right of it, counted modulo 2¹⁶ -/
 theorem left_after {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) (hcC : ScreenClamp.check sy m0 = true) {R : Machine}
@@ -902,7 +922,7 @@ theorem left_after {sy : Syms} {m0 : Machine} (hc : checkAll sy m0 = true) (hcC 
       (stepN k R).ram.get! (places sy m0).frac = R.ram.get! (places sy m0).frac ∧
       (∀ i ∈ [stkI (R.s + 1), stkI (R.s + 1 + 1)], (stepN k R).ram.get! i = R.ram.get! i) ∧
       (pix16 (places sy m0) (stepN k R) + 65536 - edge16 (places sy m0) 0 R) % 65536 < 256 ∧ InFrameN (Rom.of m0) R k := by
-  obtain ⟨k, g, pc, s, we, f, up, hp, C⟩ := clamp_end hc hcC hg hpc
+  obtain ⟨k, g, pc, s, we, f, up, hp, _, C⟩ := clamp_end hc hcC hg hpc
   exact ⟨k, g, pc, s, we, f, up, left_of hc hrel hp, C⟩
 
 end Smbrta.ClampSide

@@ -80,7 +80,7 @@ With these numbers a way to remove `ctlU` is: the map "no coin's tile in the blo
 
 ## What is not proved
 
-* `ctlU`: that he takes no coin above ground on a frame where the parser is late. A proof needs the block buffers' contents at his reads on every frame (no coin there). That is the same kind of fact as (slot) of `TileSlot`.
+* `ctlU`: that he takes no coin above ground on a frame where the parser is late. A proof needs the block buffers' contents at his reads on every frame (no coin there). That is the same kind of fact as (slot) of `TileSlot`. Round 33: `ctlU` is asked only where `S + 3·N ≥ 157` ([the area parser's lag may grow up to 157 px](f-6-17-15-PoleLag.md)).
 * A walk of the frame that follows `ctl` from the frame's start to `UpdScrollVar` would give only "`ctl = 0` unless the frame erases a coin". It needs `ctl` among the bytes that a store through an index or a pointer may not write (stores through a pointer run before `UpdScrollVar`, for example the block objects' update), so `guardE` would change, and with it the union guard of parts a and b. Not done.
 * `TileSlot` (slot, near, read on the page two before the pole's), `bufAll` (7 places), `keepB` (66 places): not changed.
 

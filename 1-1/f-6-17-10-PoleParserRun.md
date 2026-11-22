@@ -85,7 +85,7 @@ Round 28's measure with `N = 400` also found no store through an index or a poin
 
 ## What is not proved
 
-* `TileSlot` itself: (`slot`) the parser draws a pole's tile only once it has come to the pole's column; (`near`) he is not far left of the edge; (`read`) the read's column is that of his pixel plus the adder. On real runs no far read at the pole's column reads a pole's tile, so (`slot`) is never used there.
+* `TileSlot` itself: (`slot`) the parser draws a pole's tile only once it has come to the pole's column; (`near`) he is not far left of the edge; (`read`) the read's column is that of his pixel plus the adder. On real runs no far read at the pole's column reads a pole's tile, so (`slot`) is never used there. Round 33: (`slot`) is a theorem of the walk of the touch's frame, `bufAll` asks more in its place, and (`near`) and (`read`) are replaced by the weaker `PoleSlot.TileSlotC` (the parser's column has not come to the pole's) ([the slot of the area parser is a theorem](f-6-17-14-PoleSlot.md)).
 * `parWrap` (measured above). The parser may skip its tasks on a frame (the control byte 6), so the weak rule does not bound `S`. Round 30: it is asked only of a frame that comes to the player's routine, and it follows from the strict rule of each frame ([f-6-17-11](f-6-17-11-PoleWrap.md)). Round 31: `parWrap` is gone; the strict rule is proved, and `invJ_run` carries the invariant with `JV` from the new field `ctlU` (the control byte not 6 at `UpdScrollVar`), the scroll's amount at most 3 (the theorem `amount_run`) and `JV` at control ([f-6-17-12](f-6-17-12-PoleStrict.md)).
 * `bufAll` (7 places) and `keepB` (66 places): not attempted in this round.
 

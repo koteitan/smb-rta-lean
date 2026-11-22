@@ -81,7 +81,7 @@ ctlU :  at each UpdScrollVar k of it,   ctl(trace(all n, k)) ≠ 6
 
 It is not weaker than the old field: it asks something the old field did not ask. But it is a condition on one state: the counter carried over the run is gone from the fields. The code sets `ctl` to 6 when he takes a coin from the block buffers.
 
-Round 32 ([the control byte 6 on a frame where the parser is not late](f-6-17-13-PoleLate.md)): `ctlU` is asked only where the parser is late at `UpdScrollVar` (`S + 3·N ≥ 32`); on the other frames a frame with `ctl = 6` keeps `JV` too (`PoleLate.jv_weak`).
+Round 32 ([the control byte 6 on a frame where the parser is not late](f-6-17-13-PoleLate.md)): `ctlU` is asked only where the parser is late at `UpdScrollVar` (`S + 3·N ≥ 32`); on the other frames a frame with `ctl = 6` keeps `JV` too (`PoleLate.jv_weak`). Round 33 ([the area parser's lag may grow up to 157 px](f-6-17-15-PoleLag.md)): `step_strict` and `invJ_onFrames` carry the weaker `PoleLag.JY` (`S + 3·N < 157`), and `ctlU` is asked only where `S + 3·N ≥ 157`.
 
 Signatures: `PoleParserRun.invJ_run`, `inv_run`, `tilesCol_run` take `(hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)` after `hs` and `(hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))` after `h0`; `tilesCol_route` takes `hsc` and `htop` after `hs` and `(hmJ : PoleStrict.jvCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)` after `hmC`. `frame_six` and `keep_eP` have the two facts above as two more conjuncts at the end; `frame_sixA` is new. `PoleWrap` imports `PoleParserEnd` (it imported `PoleParserRun`). `route_1_1` still concludes `1748 + j ≤ L`.
 

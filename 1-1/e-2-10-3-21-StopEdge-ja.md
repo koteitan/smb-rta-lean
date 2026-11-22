@@ -63,4 +63,6 @@ stop : ∀ k, n₀ ≤ k → pc(trace k) = PlayerSubs → 0 < v(Q) → v(b) = 0 
 
 **ここで証明していないこと.** スクロールの処理で彼が画面の左端より右にいるフレームでの `Moves.stop`。そこでは、彼が左端の右 255 px の中にいるあいだ左端での補正は来ないので、速さは右端での補正か押し戻しで 0 にならなければなりません。証明するには: スクロールの処理の戻りからフレームの終わりまで速さを追うこと（`PushTimer` の歩きにバイトを 1 つ足す）、そこでの彼のピクセル（`PushTimer.pix_end`。そのフレームで `sideW` が要るが、`sideW` は場所のバイトがスクロールのしきい値以上のときだけ求める）。左端より左で始まるフレーム（pixel(a) < left(a)）は、きれいでないことを測っただけです（第 23 回、[フレームの始めの画面の左端](e-2-10-3-10-ScreenEdge-ja.md)）。`collide`、`posW`、`clampR`、`sideW`、`endKeep` の場所のバイトの部分。
 
+第 33 回（[補正が止めるフレームは画面の左端で終わる](e-2-10-3-23-StopClamp-ja.md)）: スクロールの処理で端より右にいて横のタイマーが押し戻しの値で終わらないフレームはない（`OnFrames.noStopRight`。速さを追い、彼のピクセルは `PushTimer.pix_end`）。タイマーがその値で終わらなかったフレームのあと、フレームは端より左で始まらない（`OnFrames.leftEnd`）。フィールドは押し戻しのあるフレームでだけ求める。`sideW` はいまはそれらのフレームでも求める。
+
 **ファイル:** `Theorems/StopEdge.lean`。`Theorems/SurfaceFrames.lean` がこれを使います（`Moves.stop`、`StopAt`、`StopAt.stopP`、`Moves.toAt`、`OnFrames.stopAt`、`OnFrames.movesAt`、`stopB`、`stopAtB`、`movesScan`）。`Main.lean`: `edge-real` の数え 1 つ（狭めたフィールドが求める `Moves.stop` のフレーム）。

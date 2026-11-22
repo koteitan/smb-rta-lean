@@ -4,6 +4,8 @@
 
 **Claim.** On every frame of the room, the `STA (zp),Y` that erases a coin writes in the block buffers.
 
+Round 33: the route's walks no longer use the split of this page; they keep bounds on the height and the row instead, with the same result and tables two to three times smaller: [The erase's row from bounds](d-2-4-2-7-EraseRange.md).
+
 This is proved, with one check on the ROM (the four walks of the room's frames). The field `roomErase` is gone. Until round 31 it asked that an erase whose pointer is at or past the second block buffer's start writes below the block buffers' end (`EraseTwo`). On every measured frame every erase was through a pointer into the first block buffer (round 30: 13 on the movie, 4,802 and 5,541 on own runs), so the field was never used on a real run.
 
 `tr_n(j)` is the machine after `j` instructions of frame `n`. `pc(m)` is its program counter. `erase` is the place of that `STA (zp),Y`. `ptr(m)` is the 16-bit pointer that it reads from the zero page, `Y` is the row's offset, and `addr(m)` = `ptr(m) + Y` is the address it writes. `bufLo` is the block buffers' start and `bufN` their length. `y` is the player's height on the screen, `size` the size byte (0 big, 1 small), `crouch` the crouch byte. For a byte `b` of an abstract state, `max(b)` is its largest value with its known bits.

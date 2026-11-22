@@ -10,12 +10,19 @@ moved him, and his pixel and his page at the frame's end are those after the scr
 
 The proof is a walk from the instruction after the scroll handler's call (`EdgeStep.rPc`) to the frame's end, for each of the two bytes of his pixel and his page
 (`pixI`): the walk follows the byte (TaintRun's counter), stops following it just before an instruction that writes it by its address (`CollideKeep.rkOff`), and
-asks at the frame's end that the byte is still followed or the timer is known to be at least 2 (`finS`). A path stops at a store to his position by its address
+asks at the frame's end that the byte is still followed or the timer is known to be at least 2 (`finS`; round 33: known to be the value the push stores,
+`pushT`). A path stops at a store to his position by its address
 outside the push and the clamp (`EdgeStep.cutPos`, which the field `posW` excludes). Its guard protects the timer, his pixel and his page (`guardS`). For his
 pixel and his page that is what `posW` says outside the push and the clamp (`posW_plain`), and the walk meets no store through an index or a pointer inside
 them (`okS`); for the timer the walk needs one more condition on each instruction from the scroll handler to the frame's end: a store through an index or a
 pointer does not write the timer (`SideW`). The walks before are those of `EdgeStep.keep_r`: the walk of `CtrlKeep` to the cut, the first walk of `AfterKeep` to the scroll handler, the middle walk
 to the instruction after its call. The check on the ROM is `sCheck`. No game data. Page: `1-1/e-2-10-3-20-PushTimer.md`.
+
+Round 33: the walks follow his speed too (`pvI`), and the guard protects his speed and his state (`FrameKeep.guardE` protects them), so a frame that ends with
+the timer at most 1 also ends with the speed of the instruction after the call (`SurfaceFrames.OnFrames.stopRight` uses it). And `SideW` is asked only at a store
+that may reach the timer (`NearW`: a store to an absolute address plus an index from whose base some index reaches the timer, or a store through a pointer); at
+every other instruction it is a theorem (`sideW_far`: a store through `X` to the zero page stays below the timer, and from the other bases no index reaches it).
+Page: `1-1/e-2-10-3-22-SideNear.md`.
 -/
 
 namespace Smbrta.PushTimer
@@ -31,6 +38,9 @@ def pixI (sy : Syms) (m0 : Machine) : List Nat := [(ScrollRule.places sy m0).x, 
 timer's index is the operand of the scroll handler's load of it, `ScrollRule.places`) -/
 def sideP (sy : Syms) (m0 : Machine) : List Nat := (ScrollRule.places sy m0).sideB :: pixI sy m0
 
+/-- round 33: **the bytes the walks follow**: his pixel, his page and his speed -/
+def pvI (sy : Syms) (m0 : Machine) : List Nat := pixI sy m0 ++ FrameKeep.speedE sy
+
 /-- **The condition on one instruction** (the field `OnFrames.sideW`, from the scroll handler to the frame's end): a store through an index or a pointer does
 not write the side collision's timer -/
 def SideW (sy : Syms) (m0 : Machine) (m : Machine) : Prop :=
@@ -45,20 +55,45 @@ def sideWB (sy : Syms) (m0 : Machine) (m : Machine) : Bool :=
 /-- the opcodes that store through an index or a pointer (those of `PipeWrites.wTarget`) -/
 def wOps : List UInt8 := [0x95, 0x94, 0xD6, 0xF6, 0x9D, 0xDE, 0xFE, 0x7E, 0x99, 0x91]
 
+/-- the opcodes of `wOps` that store to an absolute address plus an index -/
+def absWOps : List UInt8 := [0x9D, 0xDE, 0xFE, 0x7E, 0x99]
+
+/-- **A store that may reach the side collision's timer** (round 33), for a program: a store to an absolute address plus an index, from whose base some index
+reaches the timer (`PositionKeep.farB` fails), or a store through a pointer -/
+def nearWB (sy : Syms) (m0 : Machine) (m : Machine) : Bool :=
+  (absWOps.contains (PipeWrites.opAt m) && !PositionKeep.farB [(ScrollRule.places sy m0).sideB] (PositionKeep.operandAt m.prg m.prgMask m.pc)) ||
+    PipeWrites.opAt m == 0x91
+
+/-- **A store that may reach the side collision's timer** (round 33: the field `OnFrames.sideW` asks `SideW` only at such a store) -/
+def NearW (sy : Syms) (m0 : Machine) (m : Machine) : Prop := nearWB sy m0 m = true
+
 /-- **What the walk asks at a state**: at a store through an index or a pointer, no interrupt pending, the instruction and its two next bytes in the program's half
 of the address space, and the place not inside the push or the clamp (`PositionWriters.innerP`) -/
 def okS (sy : Syms) (m0 : Machine) (E : Env) (A : AS) : Bool :=
   !wOps.contains (E.prg.get! (A.pc &&& E.mask).toNat) ||
     (!A.nmi && decide (0x8000 ≤ A.pc) && decide (0x8000 ≤ A.pc + 1) && decide (0x8000 ≤ A.pc + 1 + 1) && !PositionWriters.innerP sy m0 A.pc)
 
-/-- **The walks' guard**: `FrameKeep.guardF` with the three bytes of `sideP` protected too -/
-def guardS (sy : Syms) (m0 : Machine) : PipeWrites.Guard := { FrameKeep.guardF sy m0 with prot := sideP sy m0 ++ (FrameKeep.guardF sy m0).prot }
+/-- **The walks' guard**: `FrameKeep.guardF` with the three bytes of `sideP` protected too, and (round 33) his speed and his state (`FrameKeep.guardE` protects
+them) -/
+def guardS (sy : Syms) (m0 : Machine) : PipeWrites.Guard :=
+  { FrameKeep.guardF sy m0 with prot := sideP sy m0 ++ (FrameKeep.speedE sy ++ FrameKeep.stateE sy) ++ (FrameKeep.guardF sy m0).prot }
 
 /-- the byte `s` is known, and it is at least 2 -/
 def highAt (s : Nat) (B : AS) : Bool := (B.getK s).isK && decide (2 ≤ (B.getK s).v)
 
-/-- **What the walk asks at the frame's end**: the followed byte is still followed, or the timer `s` is known to be at least 2 -/
-def finS (s : Nat) (B : AS) : Bool := (B.rk && !B.spent) || highAt s B
+/-- round 33: **the value the push stores to the side collision's timer**, read from the push (`ImpedePlayerMove`): the operand of the instruction before its
+store to the timer (`STY` absolute to the address of the scroll handler's load of the timer) -/
+def pushT (sy : Syms) (m0 : Machine) : UInt8 :=
+  let E := FrameModel.Rom.of m0
+  let a := E.w ((ScrollRule.places sy m0).side + 1)
+  E.b (FrameModel.findPat E sy.ImpedePlayerMove [0x8C, a.toUInt8, (a >>> 8).toUInt8] 64 - 1)
+
+/-- round 33: the byte `s` is known, and it is `t` -/
+def eqAt (s : Nat) (t : UInt8) (B : AS) : Bool := (B.getK s).isK && (B.getK s).v == t
+
+/-- **What the walk asks at the frame's end**: the followed byte is still followed, or the timer `s` is known to be `t` (round 33: the push's value `pushT`;
+round 32: at least 2) -/
+def finS (s : Nat) (t : UInt8) (B : AS) : Bool := (B.rk && !B.spent) || eqAt s t B
 
 /-- **The target of a store through an index, when the walk knows the index** (`STA`, `STY`, `DEC`, `INC` zero page with `X`; `STA`, `DEC`, `INC`, `ROR` absolute
 with `X`; `STA` absolute with `Y`), as `PipeWrites.wTarget` computes it on the machine -/
@@ -163,7 +198,7 @@ def searchSide (sy : Syms) (m0 : Machine) (b : Nat) (starts : List AS) : PrevKee
   let E := { PipeEntryRule.envOf m0 with rkI := b }
   let key := PrevKeep.keyP S G []
   let X := (starts.map rkOn).foldl (PrevKeep.routeP S G [] key) {}
-  searchS S G E key (aRows E).toArray (CollideKeep.rkOff E) (finS (ScrollRule.places sy m0).sideB) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0)
+  searchS S G E key (aRows E).toArray (CollideKeep.rkOff E) (finS (ScrollRule.places sy m0).sideB (pushT sy m0)) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0)
     (okS sy m0 E) (sideP sy m0) (EdgeStep.rPc sy) { X }
 
 /-- **The walk's table** for the byte `b`, from the states after the scroll handler's call `starts` -/
@@ -174,7 +209,7 @@ def sCfg (sy : Syms) (m0 : Machine) (b : Nat) (starts : List AS) : FrameKeep.Cfg
   let key := PrevKeep.keyP S G []
   let q := FrameKeep.tableOfKW key (searchSide sy m0 b starts).X
   { E, ops := (aRows E).toArray, S, G, W := [], t := q.1, kl := q.1.map PipeWrites.knownOf, idx := q.2.1, cut := q.2.2, key,
-    fin := finS (ScrollRule.places sy m0).sideB }
+    fin := finS (ScrollRule.places sy m0).sideB (pushT sy m0) }
 
 /-- what the middle walk asks after the scroll handler's call: the walk succeeds for each byte -/
 def atRS (sy : Syms) (m0 : Machine) (C2 : List FrameKeep.CfgK) (B : AS) : Bool :=
@@ -198,8 +233,8 @@ def sCheck (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
   let C1 := AfterKeep.q1Cfg sy m0 v P
   let Ps := EdgeStep.qsSearch sy m0 v P.stops.toList
   let Cs := EdgeStep.qsCfg sy m0 v Ps
-  let C2 := (pixI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList
-  sy.PlayerCtrlRoutine != sy.PlayerSubs && sy.PlayerSubs != sy.EndlessLoop && EdgeStep.rPc sy != sy.EndlessLoop &&
+  let C2 := (pvI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList
+  decide (2 ≤ pushT sy m0) && decide (256 ≤ (ScrollRule.places sy m0).sideB) && sy.PlayerCtrlRoutine != sy.PlayerSubs && sy.PlayerSubs != sy.EndlessLoop && EdgeStep.rPc sy != sy.EndlessLoop &&
     CtrlKeep.ctrlCheck1 (cfgPS sy m0 v q C1 Cs C2) && C1.t.all (walkQ1 C1 (FrameKeep.ctlI sy) sy.PlayerSubs (atSS sy m0 Cs C2) FrameKeep.fuelK) &&
     Cs.t.all (walkQ1 Cs (FrameKeep.ctlI sy) (EdgeStep.rPc sy) (atRS sy m0 C2) FrameKeep.fuelK) &&
     C2.all fun C => C.t.all (walkKS C (CollideKeep.rkOff C.E) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) (okS sy m0 C.E) (sideP sy m0) (EdgeStep.rPc sy) FrameKeep.fuelK)
@@ -210,7 +245,7 @@ def sFails (sy : Syms) (m0 : Machine) (v : UInt8) : List (Nat × Nat × List Nat
   let cuts := CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q)
   let P := AfterKeep.q1Search sy m0 v cuts
   let Ps := EdgeStep.qsSearch sy m0 v P.stops.toList
-  (pixI sy m0).map fun b =>
+  (pvI sy m0).map fun b =>
     let R := searchSide sy m0 b Ps.stops.toList
     (b, R.X.fails, R.X.failPcs.toList.map (·.1))
 
@@ -540,6 +575,57 @@ theorem okS_spec {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E
   rw [hs.nmi, hs.pc]
   exact ⟨h1, h2, h3, h4, h5⟩
 
+/-- **`SideW` away from the stores that may reach the timer** (round 33): a store through `X` to the zero page stays below the timer (the timer is not in the zero
+page or the stack's page); a store to an absolute address plus an index, from whose base no index reaches the timer, misses it; a store through a pointer is near -/
+theorem sideW_far {m : Machine} (h256 : 256 ≤ (ScrollRule.places sy m0).sideB) (hp1 : 0x8000 ≤ m.pc + 1) (hp2 : 0x8000 ≤ m.pc + 1 + 1)
+    (hn : nearWB sy m0 m = false) : SideW sy m0 m := by
+  intro t ht hlt heq
+  have hn' := Bool.or_eq_false_iff.1 hn
+  have hfar : PipeWrites.opAt m ∈ absWOps →
+      PositionKeep.farB [(ScrollRule.places sy m0).sideB] (PositionKeep.operandAt m.prg m.prgMask m.pc) = true := by
+    intro hm
+    have h1 := hn'.1
+    rw [List.contains_iff_mem.2 hm] at h1
+    simpa using h1
+  have hmiss : ∀ r : UInt8, PositionKeep.operandAt m.prg m.prgMask m.pc + r.toUInt16 = t → PipeWrites.opAt m ∈ absWOps → False := by
+    intro r e hm
+    have hi : (t &&& 0x7FF).toNat ∈ StepWrites.ramIdx (PositionKeep.operandAt m.prg m.prgMask m.pc + r.toUInt16) := by
+      rw [e]; simp [StepWrites.ramIdx, hlt]
+    exact PositionKeep.farB_spec (hfar hm) r _ hi (by rw [heq]; exact List.mem_singleton_self _)
+  have h91 := hn'.2
+  unfold PipeWrites.wTarget at ht
+  generalize hop : PipeWrites.opAt m = op at ht hmiss h91
+  by_cases c1 : (op == 0x95 || op == 0x94 || op == 0xD6 || op == 0xF6) = true
+  · rw [if_pos c1, zpx_t hp1] at ht
+    have e := Option.some.inj ht
+    have h1 : t.toNat < 256 := by rw [← e, UInt8.toNat_toUInt16]; exact UInt8.toNat_lt _
+    have h2 : (t &&& 0x7FF).toNat ≤ t.toNat := by rw [UInt16.toNat_and]; exact Nat.and_le_left
+    omega
+  · rw [if_neg c1] at ht
+    by_cases c2 : (op == 0x9D || op == 0xDE || op == 0xFE || op == 0x7E) = true
+    · rw [if_pos c2, abx_t hp1 hp2] at ht
+      refine hmiss m.x (Option.some.inj ht) ?_
+      simp only [Bool.or_eq_true, beq_iff_eq] at c2
+      simp only [absWOps, List.mem_cons, List.not_mem_nil, or_false]
+      rcases c2 with ((h | h) | h) | h <;> simp [h]
+    · rw [if_neg c2] at ht
+      by_cases c3 : (op == 0x99) = true
+      · rw [if_pos c3, aby_t hp1 hp2] at ht
+        refine hmiss m.y (Option.some.inj ht) ?_
+        simp only [beq_iff_eq] at c3
+        simp [absWOps, c3]
+      · rw [if_neg c3, if_neg (by simp [h91])] at ht
+        cases ht
+
+/-- **`SideW` from the field** (round 33): at a state of the walk that meets `okS`, `SideW` holds when it holds at the stores that may reach the timer -/
+theorem sideW_of_near {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (h256 : 256 ≤ (ScrollRule.places sy m0).sideB) (hs : Sim E F A m)
+    (hok : okS sy m0 E A = true) (hn : NearW sy m0 m → SideW sy m0 m) : SideW sy m0 m := by
+  intro t ht hlt
+  obtain ⟨_, _, p1, p2, _⟩ := okS_spec hs hok (wTarget_ops ht)
+  cases e : nearWB sy m0 m with
+  | true => exact hn e t ht hlt
+  | false => exact sideW_far h256 p1 p2 e t ht hlt
+
 end
 
 /-! ## On the ROM: one frame -/
@@ -558,9 +644,13 @@ theorem cleanS_of {q : UInt16} {m : Machine} (hc : FrameKeep.CleanK (FrameKeep.g
   rcases hc.store t ht hq with ⟨h1, h2⟩ | h1
   · refine Or.inl ⟨h1, fun h3 => ?_⟩
     simp only [guardS, sideP, List.mem_append, List.mem_cons] at h3
-    rcases h3 with (h3 | h3) | h3
+    rcases h3 with ((h3 | h3) | h3) | h3
     · exact hw t ht h1 h3
     · exact hpx t ht h1 h3
+    · rcases h3 with h3 | h3
+      · exact h2 (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ h3)))
+      · exact h2 (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
+          (List.mem_append_left _ (List.mem_append_right _ (List.mem_append_right _ h3))))))))
     · exact h2 (List.mem_append_right _ h3)
   · exact Or.inr h1
 
@@ -575,20 +665,38 @@ theorem sideWL_of {m : Machine} (hw : SideW sy m0 m)
 
 theorem pixI_x : (ScrollRule.places sy m0).x ∈ pixI sy m0 := List.mem_cons_self
 
-/-- **His pixel and his page at the frame's end, when the frame ends with the side collision's timer at most 1** (`OnFrames.nearStepAt`): with the hypotheses of
+/-- round 33: the push's value for the timer is at least 2 (a part of `sCheck`), so a frame that ends with the timer at most 1 does not end with it -/
+theorem pushT_ne {v : UInt8} (hr : sCheck sy m0 v = true) {t : UInt8} (ht : t ≤ 1) : t ≠ pushT sy m0 := by
+  simp only [sCheck, Bool.and_eq_true, decide_eq_true_eq] at hr
+  have h2 := hr.1.1.1.1.1.1.1.1
+  intro e
+  rw [e] at ht
+  have t1 := UInt8.le_iff_toNat_le.1 h2
+  have t2 := UInt8.le_iff_toNat_le.1 ht
+  have : (2 : UInt8).toNat = 2 := rfl
+  have : (1 : UInt8).toNat = 1 := rfl
+  omega
+
+theorem pvI_x : (ScrollRule.places sy m0).x ∈ pvI sy m0 := List.mem_cons_self
+theorem pvI_page : (ScrollRule.places sy m0).page ∈ pvI sy m0 := List.mem_cons_of_mem _ List.mem_cons_self
+theorem pvI_speed : (sy.Player_X_Speed &&& 0x7FF).toNat ∈ pvI sy m0 := List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
+
+/-- **His pixel, his page and (round 33) his speed at the frame's end, when the frame does not end with the side collision's timer at the push's value**
+(`OnFrames.nearStepAt`,
+`OnFrames.stopRight`): with the hypotheses of
 `EdgeStep.keep_r`, the frame comes to the scroll handler at `kq`; if from there each instruction of the frame meets `PositionKeep.PosW` (the field `posW`) and
-`SideW` (the field `sideW`), then at the instruction after the scroll handler's call his pixel and his page are those of the frame's end, when the frame ends with
-the timer at most 1. `hc`, `hr`, `hst` are checks on the ROM. -/
+`SideW` at the stores that may reach the timer (`NearW`; the field `sideW`; round 33: elsewhere a theorem, `sideW_far`), then at the instruction after the scroll handler's call his pixel, his page and his speed are those of the frame's end, when the frame does not end with
+the timer at `pushT` (round 32: at most 1). `hc`, `hr`, `hst` are checks on the ROM. -/
 theorem pix_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : sCheck sy m0 v = true) (hst : PositionWriters.offStack sy = true) {m : Machine}
     {i : UInt8} (h0 : FrameKeep.StartK sy m0 m) (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
     (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
     (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine) :
     ∃ kq, n₀ < kq ∧ (trace m i kq).pc = sy.PlayerSubs ∧ (trace m i kq).frame = m.frame ∧ (∀ j, n₀ < j → j < kq → (trace m i j).pc ≠ sy.PlayerSubs) ∧
-      ((∀ j, kq ≤ j → (trace m i j).frame = m.frame → PositionKeep.PosW sy m0 (trace m i j) ∧ SideW sy m0 (trace m i j)) →
-        ∀ n, kq < n → (trace m i n).pc = EdgeStep.rPc sy → (frame m i).ram.get! (ScrollRule.places sy m0).sideB ≤ 1 →
-          ∀ b ∈ pixI sy m0, (frame m i).ram.get! b = (trace m i n).ram.get! b) := by
-  simp only [sCheck, Bool.and_eq_true, bne_iff_ne, ne_eq] at hr
-  obtain ⟨⟨⟨⟨⟨⟨_, _⟩, hne3⟩, hp1⟩, hp2⟩, hp3⟩, hp4⟩ := hr
+      ((∀ j, kq ≤ j → (trace m i j).frame = m.frame → PositionKeep.PosW sy m0 (trace m i j) ∧ (NearW sy m0 (trace m i j) → SideW sy m0 (trace m i j))) →
+        ∀ n, kq < n → (trace m i n).pc = EdgeStep.rPc sy → (frame m i).ram.get! (ScrollRule.places sy m0).sideB ≠ pushT sy m0 →
+          ∀ b ∈ pvI sy m0, (frame m i).ram.get! b = (trace m i n).ram.get! b) := by
+  simp only [sCheck, Bool.and_eq_true, bne_iff_ne, ne_eq, decide_eq_true_eq] at hr
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨_, h256⟩, _⟩, _⟩, hne3⟩, hp1⟩, hp2⟩, hp3⟩, hp4⟩ := hr
   have hclF : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_of_E (hcl n)
   have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_of_F (hclF n)
   have hx' : ∀ j, FrameKeep.storesTo (FrameKeep.ctlI sy) (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false := hx
@@ -596,7 +704,7 @@ theorem pix_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : sCheck 
   generalize CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q) = cuts at hp1 hp2 hp3 hp4
   generalize AfterKeep.q1Search sy m0 v cuts = P at hp1 hp2 hp3 hp4
   generalize EdgeStep.qsSearch sy m0 v P.stops.toList = Ps at hp1 hp2 hp3 hp4
-  rcases CtrlKeep.cut_or_end2 (C := cfgPS sy m0 v q (AfterKeep.q1Cfg sy m0 v P) (EdgeStep.qsCfg sy m0 v Ps) ((pixI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList))
+  rcases CtrlKeep.cut_or_end2 (C := cfgPS sy m0 v q (AfterKeep.q1Cfg sy m0 v P) (EdgeStep.qsCfg sy m0 v Ps) ((pvI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList))
       hp1 rfl rfl rfl (CtrlKeep.cfg_start q _ true h0) hclK with ⟨k₀, a1, a2, _, a4, a5, B, _, hB2, hs⟩ | ⟨hno, _⟩
   · have hk0 : k₀ = n₀ := by
       rcases Nat.lt_trichotomy k₀ n₀ with h | h | h
@@ -607,7 +715,7 @@ theorem pix_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : sCheck 
     have hV := EdgeStep.watched_at hc h0 hclK hv a1 a2 a4
     have hsA := CtrlKeep.sim_toA (W := CtrlKeep.watchA sy m0 v) hs (CtrlKeep.watchA_lt v) hV
     have hw : walkQ1 (AfterKeep.q1Cfg sy m0 v P) (FrameKeep.ctlI sy) sy.PlayerSubs
-        (atSS sy m0 (EdgeStep.qsCfg sy m0 v Ps) ((pixI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList)) FrameKeep.fuelK
+        (atSS sy m0 (EdgeStep.qsCfg sy m0 v Ps) ((pvI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList)) FrameKeep.fuelK
         (CtrlKeep.toA (CtrlKeep.watchA sy m0 v) (CtrlKeep.valA sy v) B) = true := hB2
     obtain ⟨kq, hkq, hqq, hfq, hdq, hbq, Bq, hatq, hsq⟩ :=
       AfterKeep.q1_run (C := AfterKeep.q1Cfg sy m0 v P) hp2 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw hsA a2 a5 hclF hx'
@@ -624,14 +732,14 @@ theorem pix_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : sCheck 
       | false => rfl
       | true => rw [W hs]; rfl
     have hw1 : walkQ1 (EdgeStep.qsCfg sy m0 v Ps) (FrameKeep.ctlI sy) (EdgeStep.rPc sy)
-        (atRS sy m0 ((pixI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList)) FrameKeep.fuelK Bq = true := hatq
+        (atRS sy m0 ((pvI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList)) FrameKeep.fuelK Bq = true := hatq
     obtain ⟨k₁, hk1, hq1, hf1, hd1, hb1, B₁, hat1, hs1⟩ :=
       AfterKeep.q1_run (C := EdgeStep.qsCfg sy m0 v Ps) hp3 rfl rfl (by show 2 ≤ (2 : UInt8).toNat; decide) hw1 hsq hfq hdq hclF hx'
-    have hend : ∀ x ∈ pixI sy m0, (∃ B₂, (sCfg sy m0 x Ps.stops.toList).fin B₂ = true ∧
+    have hend : ∀ x ∈ pvI sy m0, (∃ B₂, (sCfg sy m0 x Ps.stops.toList).fin B₂ = true ∧
         Sim (sCfg sy m0 x Ps.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) B₂ (frame m i)) ∧
         ∀ d, 1 ≤ d → (trace m i (k₁ + d)).pc ≠ EdgeStep.rPc sy := by
       intro x hxI
-      have hmem : sCfg sy m0 x Ps.stops.toList ∈ (pixI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList := List.mem_map.2 ⟨x, hxI, rfl⟩
+      have hmem : sCfg sy m0 x Ps.stops.toList ∈ (pvI sy m0).map fun b => sCfg sy m0 b Ps.stops.toList := List.mem_map.2 ⟨x, hxI, rfl⟩
       have hw2 := List.all_eq_true.1 hat1 _ hmem
       have ht2 := List.all_eq_true.1 hp4 _ hmem
       have hs2 : Sim (sCfg sy m0 x Ps.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) (rkOn B₁) (trace m i k₁) := AfterKeep.sim_rkOn hs1
@@ -642,35 +750,32 @@ theorem pix_end (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hr : sCheck 
         intro t ht hlt
         obtain ⟨n1, p1, p2, p3, i1⟩ := okS_spec hsA' hokA (wTarget_ops ht)
         exact posW_plain W.1 hst n1 hsA'.halted p1 p2 p3 i1 ht hlt
-      exact ⟨cleanS_of (hcl j) W.2 hpx, sideWL_of W.2 hpx⟩
+      have hW := sideW_of_near h256 hsA' hokA W.2
+      exact ⟨cleanS_of (hcl j) hW hpx, sideWL_of hW hpx⟩
     intro n hn hrp hside b hb
     have hnn : n = k₁ := by
       rcases Nat.lt_trichotomy n k₁ with h | h | h
       · exact absurd hrp (hb1 n hn h)
       · exact h
       · exfalso
-        have := (hend _ pixI_x).2 (n - k₁) (by omega)
+        have := (hend _ pvI_x).2 (n - k₁) (by omega)
         rw [show k₁ + (n - k₁) = n by omega] at this
         exact this hrp
     subst hnn
     obtain ⟨B₂, hfin, hs₂⟩ := (hend b hb).1
-    change ((B₂.rk && !B₂.spent) || highAt (ScrollRule.places sy m0).sideB B₂) = true at hfin
+    change ((B₂.rk && !B₂.spent) || eqAt (ScrollRule.places sy m0).sideB (pushT sy m0) B₂) = true at hfin
     simp only [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at hfin
     rcases hfin with ⟨hr1, hr2⟩ | hh
     · have e := hs₂.rkv hr1
       rw [if_neg (by simp [hr2])] at e
       exact e
     · exfalso
-      simp only [highAt, Bool.and_eq_true, decide_eq_true_eq] at hh
+      simp only [eqAt, Bool.and_eq_true, beq_iff_eq] at hh
       have hlt : (ScrollRule.places sy m0).sideB < 2048 := FrameModel.I_lt _
       have hm := hs₂.ram _ hlt
       have e0 := isK_eq hh.1 hm
-      have t1 := UInt8.le_iff_toNat_le.1 hh.2
-      have t2 := UInt8.le_iff_toNat_le.1 hside
-      rw [e0] at t2
-      have : (2 : UInt8).toNat = 2 := rfl
-      have : (1 : UInt8).toNat = 1 := rfl
-      omega
+      rw [hh.2] at e0
+      exact hside e0
   · exact absurd harr (hno n₀ hf0)
 
 end Frames

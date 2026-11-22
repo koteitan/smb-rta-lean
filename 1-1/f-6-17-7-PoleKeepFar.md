@@ -58,7 +58,7 @@ What a walk would have to know there, measured (the largest index seen, over the
 ## What is not proved
 
 * `keepB` at its 66 places: no store there writes the block objects' offset or the player's number.
-* `bufAll` at its 7 places: the area parser draws the pole's tiles only in the pole's column, and the other six stores do not reach the block buffers.
+* `bufAll` at its 7 places: the area parser draws the pole's tiles only in the pole's column, and the other six stores do not reach the block buffers. Round 33: at the same stores `bufAll` also asks that a pole's tile goes into the block buffers only once the parser's column at the frame's start has come to the pole's (`PoleSlot.BufVS`, [the slot of the area parser is a theorem](f-6-17-14-PoleSlot.md)).
 * `tilesCol` is unchanged.
 
 **Files.** `Theorems/PoleKeepFar.lean`; `Theorems/PoleJoin.lean` (the two fields); `pole-keep check` in `Main.lean`.

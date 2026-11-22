@@ -74,7 +74,7 @@ ab_run（フィールド。いまは RoomRun のもの。狭めた）:
 
 ## 残ること（証明していない）
 
-- `ab_run` のうち、フレーム `n` がモデルに従う（`CleanW`）か、古い保存された速さか隠された向きでプレイヤーのルーチンに来るフレーム。モデルに従うフレームでも `stored_path` は移動の終わりで `xa = |v|` をくれるはずですが、そこでの当たりのビットが `TopSpeed.collBits` のどれかであることが要り、それをくれるのは `ReadW` だけです。古いか隠されたフレーム `n` では、`ImposeFriction` のあとの速さは `hstep` のものではありません。`FrameModel.frame_readQL` はそれを `|V(n − 1)|` と摩擦の足し算 1 回で抑えますが、それを `safeFrom` は抑えません。
+- `ab_run` のうち、フレーム `n` がモデルに従う（`CleanW`）か、古い保存された速さか隠された向きでプレイヤーのルーチンに来るフレーム。モデルに従うフレームでも `stored_path` は移動の終わりで `xa = |v|` をくれるはずですが、そこでの当たりのビットが `TopSpeed.collBits` のどれかであることが要り、それをくれるのは `ReadW` だけです。古いか隠されたフレーム `n` では、`ImposeFriction` のあとの速さは `hstep` のものではありません。`FrameModel.frame_readQL` はそれを `|V(n − 1)|` と摩擦の足し算 1 回で抑えますが、それを `safeFrom` は抑えません。ラウンド 33（[モデルに従うフレームのあとの保存された速さ](c-7-4-4-StoredClean-ja.md)）が、1 つ目の場合と、空中で左も右も押していないとき以外の古い保存された速さの場合を証明します。残りはそちらに書きます。
 - `wall`、`late`（変えていない）。
 
 **ファイル。** 新しい `Theorems/RoomAbsKeep.lean`（`mayWriteX`、`phX`、`apartX`、`checkX`、`searchX`、`keepX_step`、`after_QX`、`abs_frame`）。`Theorems/RoomVert.lean`: `vKeepA` が保存された速さを持つ。`Theorems/RoomJoin.lean`: `InRoom.absBefore`、`InRoom.absKeep`、`InRoom.absAfter`（新しい事実）、`Checks.stored`、`NumFacts.hit_two`、`RoomFields.ab_run` はなくした、`RoomRun.ab_run`（狭めたフィールド）、`RoomCore.stop_run`（前提が 1 つ増えた）、`rs_of_safe3`、`safe_v`、`RoomRun.ab_fresh`。`stop_run_of`、`rs_of_safe`、`no_wall_back`、`toCore`。`Theorems/Route.lean`: `Run.roomAbsBefore`、`Run.roomAbs`。`Run.inRoom` は 2 つのチェックを取る。非公開の `Proof/RoomAbsKeep.lean`: `room_abs_keep`、`room_abs_apart`。プログラム: `room-abs-check`、`room-approach-check`（数え 73 から 81）。

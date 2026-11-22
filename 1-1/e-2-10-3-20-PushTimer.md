@@ -6,6 +6,8 @@ Round 30 asked, in the field `endKeep`, that on a frame that ends with the side 
 
 The reason in the game's code: the push (ImpedePlayerMove) moves him by 1 px only on its path that first stores 16 to the side collision's timer (and 0 to his speed). The timer falls only in the timers' routine, at the start of a frame, before the player's routine. The clamp at the screen's edge is inside the scroll handler, before its return. So when a frame ends with the timer at most 1, no push after the scroll handler has moved him.
 
+**Round 33.** The walks follow his speed too (a third walk, `PushTimer.pvI`), and their guard protects his speed and his state (`guardS`; `FrameKeep.guardE` protects them, so `cleanS_of` still holds): so `pix_end` also says that such a frame ends with the speed of R. The walks' end asks that the byte is still followed or the timer is known to be the value the push stores (`pushT`, read from the push's code; 16), in place of at least 2: so `pix_end` holds on every frame that does not end with the timer at that value (round 32: at most 1). [A frame that the clamp stops ends at the screen's left edge](e-2-10-3-23-StopClamp.md) uses it. And `pix_end` asks `SideW` only at a store that may reach the timer (`NearW`); elsewhere it is the theorem `sideW_far` ([A store that may reach the side timer](e-2-10-3-22-SideNear.md)). `sCheck` asks 256 ≤ the timer's index too. The claim below is that of round 32; with round 33 it holds for the three bytes of `pvI`.
+
 **Claim (round 32).** Write
 
 ```

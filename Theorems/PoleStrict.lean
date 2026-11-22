@@ -1,4 +1,4 @@
-import Theorems.PoleLate
+import Theorems.PoleLag
 /-!
 # The pole's tiles: the strict rule of each frame, and the scroll counter on the run
 
@@ -23,7 +23,9 @@ Here the strict rule is proved on real frames, from two conditions on one state 
 What is not proved here: that the control byte is not 6 at `UpdScrollVar` (the code sets it to 6 when he takes a coin, `RemoveCoin_Axe`), and that the scroll's
 amount is at most 3 when it is in 1 ‥ 128. The first is the new field `PoleJoin.Run.ctlU`; the second is the theorem `PoleParserRun.amount_run`, from part e's
 reading of each counted frame. Measured by `pole-keep parser`. Round 32 (`PoleLate`): `step_strict` and `invJ_onFrames` ask the control byte not 6 only where
-the parser is late at `UpdScrollVar` (`S + 3·N ≥ 32`); else a frame with the control byte 6 keeps `JV` too (`PoleLate.jv_weak`).
+the parser is late at `UpdScrollVar` (`S + 3·N ≥ 32`); else a frame with the control byte 6 keeps `JV` too (`PoleLate.jv_weak`). Round 33 (`PoleLag`):
+`step_strict`, `invJ_onFrames` and `ruleW_onFrames` carry the weaker `PoleLag.JY` (`N ≤ 7 ∧ S + 3·N < 157`), which is all that no wrap and the strict walks need
+(`noWrap_of_jy`), so the control byte is asked not 6 only where `S + 3·N ≥ 157` at `UpdScrollVar`.
 
 There is no game data in this file. Page: `1-1/f-6-17-12-PoleStrict.md`.
 -/
@@ -54,6 +56,17 @@ theorem noWrap_of_jv {m u : Machine} (hJ : JV (valsOf (places sy m0) m))
   intro Y hY
   have h1 := hy Y hY
   have h2 := s_lt hJ
+  have es : (valsOf (places sy m0) m).s = (m.ram.get! (placesS sy m0).frac).toNat := rfl
+  have el : edgeOf (places sy m0) m = ScrollRule.left16 (placesS sy m0) m := rfl
+  exact ⟨by omega, by omega⟩
+
+/-- **`NoWrap` from `JY` at the frame's start** (round 33, `PoleLag`): the counter below 157, the edge moved by at most 3 px, the edge below 65,280 px -/
+theorem noWrap_of_jy {m u : Machine} (hJ : PoleLag.JY (valsOf (places sy m0) m))
+    (hy : ∀ Y : UInt8, ScrollRule.left16 (placesS sy m0) u = (ScrollRule.left16 (placesS sy m0) m + Y.toNat) % 65536 → Y.toNat ≤ 3)
+    (he : edgeOf (places sy m0) m < 65280) : NoWrap sy m0 m u := by
+  intro Y hY
+  have h1 := hy Y hY
+  have h2 := PoleLag.s_lt hJ
   have es : (valsOf (places sy m0) m).s = (m.ram.get! (placesS sy m0).frac).toNat := rfl
   have el : edgeOf (places sy m0) m = ScrollRule.left16 (placesS sy m0) m := rfl
   exact ⟨by omega, by omega⟩
@@ -143,7 +156,8 @@ theorem strict_frame (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qC
 `UpdScrollVar` the control byte not 6 or the counter of 32 px plus 3·N below 32 (`hk6`, round 32: before, the control byte not 6), and at the player's subroutines'
 call the scroll's amount, when it is in 1 ‥ 128, at most 3 (`hA`); with the
 invariant, the column below 16, the edge below `65280 − L` px and `JV` at its start, the frame follows the weak rule, keeps the column below 16 and keeps `JV`.
-No wrap is needed only at the `UpdScrollVar` after the scroll handler, where the edge moved by 0 or by at most the amount (`PoleParser.frame_sixA`). -/
+No wrap is needed only at the `UpdScrollVar` after the scroll handler, where the edge moved by 0 or by at most the amount (`PoleParser.frame_sixA`). Round 33
+(`PoleLag`): `PoleLag.JY` (`N ≤ 7 ∧ S + 3·N < 157`) in place of `JV` at the start and at the end, and `hk6` with 157 in place of 32 -/
 theorem step_strict (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheckP sy m0 v = true) (hqe : EdgeStep.qCheck sy m0 v = true)
     (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
@@ -154,12 +168,12 @@ theorem step_strict (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCh
     (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
     (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
     (hk6 : ∀ k, (trace m i k).pc = sy.UpdScrollVar → (trace m i k).frame = m.frame → (trace m i k).ram.get! (kIdx sy m0) ≠ 6 ∨
-      ((trace m i k).ram.get! (sIdx sy m0)).toNat + 3 * ((trace m i k).ram.get! (nI sy m0)).toNat < 32)
+      ((trace m i k).ram.get! (sIdx sy m0)).toNat + 3 * ((trace m i k).ram.get! (nI sy m0)).toNat < 157)
     (hA : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → (trace m i k).frame = m.frame →
       ScrollRule.xOK (ScrollRule.amountOf (ScrollRule.places sy m0) (trace m i k)) = true →
       (ScrollRule.amountOf (ScrollRule.places sy m0) (trace m i k)).toNat ≤ 3)
-    {L : Nat} (hI : Inv (places sy m0) L m) (hC : ColOK sy m0 m) (hE : edgeOf (places sy m0) m + L < 65280) (hJ : JV (valsOf (places sy m0) m)) :
-    (RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) ∧ ColOK sy m0 (frame m i)) ∧ JV (valsOf (places sy m0) (frame m i)) := by
+    {L : Nat} (hI : Inv (places sy m0) L m) (hC : ColOK sy m0 m) (hE : edgeOf (places sy m0) m + L < 65280) (hJ : PoleLag.JY (valsOf (places sy m0) m)) :
+    (RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) ∧ ColOK sy m0 (frame m i)) ∧ PoleLag.JY (valsOf (places sy m0) (frame m i)) := by
   have hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_weak (hP n)
   have hH : ∀ x ∈ pU sy m0, ∀ j, FrameKeep.CleanK (AfterKeep.guardH sy m0 x) (FrameKeep.spotOf sy m0).store (trace m i j) := fun x hx j => cleanH_of_par hx (hP j)
   have hN : ∀ x ∈ pE sy m0, ∀ j, FrameKeep.CleanK (guardN sy m0 x) (FrameKeep.spotOf sy m0).store (trace m i j) := fun x hx j => cleanN_of_par hx (hP j)
@@ -171,7 +185,7 @@ theorem step_strict (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCh
     · omega
     · have := hA kq (Nat.le_of_lt hkq0) hkq1 hkq2 hx1
       omega
-  have hw : NoWrap sy m0 m (trace m i k₂) := noWrap_of_jv hJ hY3 (by omega)
+  have hw : NoWrap sy m0 m (trace m i k₂) := noWrap_of_jy hJ hY3 (by omega)
   have h8 : (m.ram.get! (nI sy m0)).toNat ≤ 8 := hI.1
   have hp255 := page_of_inv hI hE
   have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hK _ nI_memK
@@ -216,8 +230,8 @@ theorem step_strict (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCh
       have : (m.ram.get! (sIdx sy m0)).toNat + Y.toNat < 256 := by omega
       rw [Nat.mod_eq_of_lt this]
       omega
-  have hs8 : ((frame m i).ram.get! (nI sy m0)).toNat ≤ 7 → ((frame m i).ram.get! (sIdx sy m0)).toNat + 3 * ((frame m i).ram.get! (nI sy m0)).toNat < 32 →
-      JV (valsOf (places sy m0) (frame m i)) := fun a b => ⟨by rw [hn]; exact a, by rw [hn, hsv]; exact b⟩
+  have hs8 : ((frame m i).ram.get! (nI sy m0)).toNat ≤ 7 → ((frame m i).ram.get! (sIdx sy m0)).toNat + 3 * ((frame m i).ram.get! (nI sy m0)).toNat < 157 →
+      PoleLag.JY (valsOf (places sy m0) (frame m i)) := fun a b => ⟨by rw [hn]; exact a, by rw [hn, hsv]; exact b⟩
   rcases hk6 k₂ hq2 hf2 with h6 | hlate
   · -- the control byte is not 6: the strict forms
     rcases n_cases (w := m.ram.get! (nI sy m0)) (by omega) with hz | hcol | hsix
@@ -252,34 +266,38 @@ theorem step_strict (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCh
       refine hs8 ?_ ?_
       · rw [a1, f2]; omega
       · rw [a1, f2, a2]; omega
-  · -- the counter at `UpdScrollVar` plus 3·N below 32 (round 32, `PoleLate`): the weak forms keep `N` or take one off and keep the counter, or start a new
-    -- column, which needs the counter at 32 or more
+  · -- the lag at `UpdScrollVar` below 157 (round 33, `PoleLag`; round 32 had 32, `PoleLate`): the weak forms keep `N` or take one off and keep the counter,
+    -- or start a new column, which sets `N` to 7 and takes 32 off the counter
     rw [hn2] at hlate
-    have hw : ((frame m i).ram.get! (nI sy m0)).toNat ≤ (m.ram.get! (nI sy m0)).toNat ∧
-        (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) := by
-      rcases n_cases (w := m.ram.get! (nI sy m0)) (by omega) with hz | hcol | hsix
-      · have hz' : (m.ram.get! (nI sy m0)).toNat = 0 := by rw [hz]; rfl
-        rcases (hZero hz).2 with ⟨a1, a2⟩ | ⟨a1, _⟩
-        · rw [a1, hz]
-          exact ⟨Nat.le_refl _, a2⟩
-        · omega
-      · obtain ⟨_, f2, _⟩ := col_facts hcol
-        have hcu : ((trace m i k₂).ram.get! (cIdx sy m0)).toNat < 16 := by rw [hcK]; exact hC'
-        refine ⟨?_, (hCol hcol).1 _ (by rw [pE_eq]; simp) (Ne.symm n1) s1 s2⟩
-        rcases PoleLate.colEnd_n ((hCol hcol).2 hC' hp255) hcu with e | e <;> rw [e, hn2]
-        · exact Nat.le_refl _
-        · rw [f2]; omega
-      · obtain ⟨_, f2, _⟩ := six_facts hsix
-        refine ⟨?_, (hSix hsix).1 _ (by rw [pE_eq]; simp) (Ne.symm n1)⟩
-        rcases (hSix hsix).2 with e | e <;> rw [e]
-        · exact Nat.le_refl _
-        · rw [f2]; omega
-    obtain ⟨a1, a2⟩ := PoleLate.jv_weak hJ1 hlate hw.1 (congrArg UInt8.toNat hw.2)
-    exact hs8 a1 a2
+    by_cases hz0 : m.ram.get! (nI sy m0) = 0
+    · rcases (hZero hz0).2 with ⟨a1, a2⟩ | ⟨b1, b2, b3, b4⟩
+      · obtain ⟨c1, c2⟩ := PoleLag.jy_weak (n' := ((frame m i).ram.get! (nI sy m0)).toNat) hJ1 hlate (Nat.le_of_eq (by rw [a1, hz0])) (congrArg UInt8.toNat a2)
+        exact hs8 c1 c2
+      · have a3 : ((trace m i k₂).ram.get! (sIdx sy m0) - 32).toNat = ((trace m i k₂).ram.get! (sIdx sy m0)).toNat - 32 :=
+          UInt8.toNat_sub_of_le _ _ (UInt8.le_iff_toNat_le.2 (by have : (32 : UInt8).toNat = 32 := rfl; rw [this]; exact b1))
+        obtain ⟨c1, c2⟩ := PoleLag.jy_col (n' := ((frame m i).ram.get! (nI sy m0)).toNat) (s' := ((frame m i).ram.get! (sIdx sy m0)).toNat) b1 b2 (congrArg UInt8.toNat b3) (by rw [b4, a3])
+        exact hs8 c1 c2
+    · have hw : ((frame m i).ram.get! (nI sy m0)).toNat ≤ (m.ram.get! (nI sy m0)).toNat ∧
+          (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) := by
+        rcases n_cases (w := m.ram.get! (nI sy m0)) (by omega) with hz | hcol | hsix
+        · exact absurd hz hz0
+        · obtain ⟨_, f2, _⟩ := col_facts hcol
+          have hcu : ((trace m i k₂).ram.get! (cIdx sy m0)).toNat < 16 := by rw [hcK]; exact hC'
+          refine ⟨?_, (hCol hcol).1 _ (by rw [pE_eq]; simp) (Ne.symm n1) s1 s2⟩
+          rcases PoleLate.colEnd_n ((hCol hcol).2 hC' hp255) hcu with e | e <;> rw [e, hn2]
+          · exact Nat.le_refl _
+          · rw [f2]; omega
+        · obtain ⟨_, f2, _⟩ := six_facts hsix
+          refine ⟨?_, (hSix hsix).1 _ (by rw [pE_eq]; simp) (Ne.symm n1)⟩
+          rcases (hSix hsix).2 with e | e <;> rw [e]
+          · exact Nat.le_refl _
+          · rw [f2]; omega
+      obtain ⟨a1, a2⟩ := PoleLag.jy_weak hJ1 hlate hw.1 (congrArg UInt8.toNat hw.2)
+      exact hs8 a1 a2
 
 /-! ## On the frames of a run -/
 
-/-- **The invariant, the column and `JV` at every frame's start up to the touch's frame**, on the frames of a run: as `PoleParser.inv_onFrames`, with `JV` at
+/-- **The invariant, the column and `JV` (round 33: `PoleLag.JY`) at every frame's start up to the touch's frame**, on the frames of a run: as `PoleParser.inv_onFrames`, with `JV` at
 the first frame (`hJ0`), the check of the scroll's rule (`hsc`), and in place of no wrap on each frame that comes to the player's routine: at `UpdScrollVar` the
 control byte not 6 or the counter of 32 px plus 3·N below 32 (`hk6`, round 32), and at the player's subroutines' call the scroll's amount at most 3 when it is in
 1 ‥ 128 (`hA`) (`step_strict`) -/
@@ -288,7 +306,7 @@ theorem invJ_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine
     (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheckP sy m0 v = true) (hqe : EdgeStep.qCheck sy m0 v = true)
     (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) {L : Nat}
-    (h0 : Inv (places sy m0) L (K.all 0) ∧ ColOK sy m0 (K.all 0)) (hJ0 : JV (valsOf (places sy m0) (K.all 0)))
+    (h0 : Inv (places sy m0) L (K.all 0) ∧ ColOK sy m0 (K.all 0)) (hJ0 : PoleLag.JY (valsOf (places sy m0) (K.all 0)))
     (hI : ∀ n, n + 1 < K.ix g → ∀ k, FrameKeep.CleanK (guardPI sy m0) (FrameKeep.spotOf sy m0).store (trace (K.all n) (K.inp n) k))
     (hv : ∀ n, n + 1 < K.ix g → CtrlKeep.AreaOK sy v (K.all n))
     (hp : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
@@ -298,13 +316,13 @@ theorem invJ_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine
     (hk6 : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
       ∀ k, (trace (K.all n) (K.inp n) k).pc = sy.UpdScrollVar → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
       (trace (K.all n) (K.inp n) k).ram.get! (kIdx sy m0) ≠ 6 ∨
-        ((trace (K.all n) (K.inp n) k).ram.get! (sIdx sy m0)).toNat + 3 * ((trace (K.all n) (K.inp n) k).ram.get! (nI sy m0)).toNat < 32)
+        ((trace (K.all n) (K.inp n) k).ram.get! (sIdx sy m0)).toNat + 3 * ((trace (K.all n) (K.inp n) k).ram.get! (nI sy m0)).toNat < 157)
     (hA : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
       ∀ k, n₀ ≤ k → (trace (K.all n) (K.inp n) k).pc = sy.PlayerSubs → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
       ScrollRule.xOK (ScrollRule.amountOf (ScrollRule.places sy m0) (trace (K.all n) (K.inp n) k)) = true →
       (ScrollRule.amountOf (ScrollRule.places sy m0) (trace (K.all n) (K.inp n) k)).toNat ≤ 3)
     (hE : ∀ n, n + 1 < K.ix g → edgeOf (places sy m0) (K.all n) + L < 65280) :
-    ∀ n, n < K.ix g → (Inv (places sy m0) L (K.all n) ∧ ColOK sy m0 (K.all n)) ∧ JV (valsOf (places sy m0) (K.all n)) := by
+    ∀ n, n < K.ix g → (Inv (places sy m0) L (K.all n) ∧ ColOK sy m0 (K.all n)) ∧ PoleLag.JY (valsOf (places sy m0) (K.all n)) := by
   intro n
   induction n with
   | zero => exact fun _ => ⟨h0, hJ0⟩
@@ -343,6 +361,59 @@ theorem invJ_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine
         · exact B _ (List.mem_cons_of_mem _ List.mem_cons_self)
       rw [e]
       exact hJn
+
+/-- the parser's column does not go back over a frame that follows the weak rule -/
+theorem col_of_ruleW {a b : Vals} (h : RuleW a b) : a.col ≤ b.col := by
+  obtain ⟨c, ⟨y, _, e2, _, _⟩, _, hp⟩ := h
+  rcases hp with ⟨_, _, h3⟩ | hst
+  · omega
+  · unfold Step at hst
+    split at hst
+    · obtain ⟨_, _, _, _, h3⟩ := hst
+      omega
+    · obtain ⟨_, _, h3⟩ := hst
+      split at h3 <;> omega
+
+/-- **The weak rule on every frame up to the touch's frame** (round 33), under the conditions of `invJ_onFrames`: its frame step, with the invariant, the column
+and `JV` of the frame's start that `invJ_onFrames` gives (`step_strict` on a frame that comes to the player's routine, `PoleParser.step_noCut` on the others) -/
+theorem ruleW_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (K : FrameKeep.Frames sy m0 S a g seq)
+    (hkc : FrameKeep.keepCheckOf sy m0 = true) (hs0 : FrameKeep.StartK sy m0 (seq 0)) (hw0 : FrameKeep.Watched (FrameKeep.watchOf sy) (seq 0))
+    (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheckP sy m0 v = true) (hqe : EdgeStep.qCheck sy m0 v = true)
+    (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
+    (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true) {L : Nat}
+    (h0 : Inv (places sy m0) L (K.all 0) ∧ ColOK sy m0 (K.all 0)) (hJ0 : PoleLag.JY (valsOf (places sy m0) (K.all 0)))
+    (hI : ∀ n, n + 1 < K.ix g → ∀ k, FrameKeep.CleanK (guardPI sy m0) (FrameKeep.spotOf sy m0).store (trace (K.all n) (K.inp n) k))
+    (hv : ∀ n, n + 1 < K.ix g → CtrlKeep.AreaOK sy v (K.all n))
+    (hp : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
+      (∀ j, j < n₀ → (trace (K.all n) (K.inp n) j).pc ≠ sy.PlayerCtrlRoutine) →
+      ∀ k, n₀ ≤ k → (trace (K.all n) (K.inp n) k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace (K.all n) (K.inp n) j).frame = (K.all n).frame →
+      EdgeStep.cutPos sy m0 (trace (K.all n) (K.inp n) j).pc = false)
+    (hk6 : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
+      ∀ k, (trace (K.all n) (K.inp n) k).pc = sy.UpdScrollVar → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
+      (trace (K.all n) (K.inp n) k).ram.get! (kIdx sy m0) ≠ 6 ∨
+        ((trace (K.all n) (K.inp n) k).ram.get! (sIdx sy m0)).toNat + 3 * ((trace (K.all n) (K.inp n) k).ram.get! (nI sy m0)).toNat < 157)
+    (hA : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
+      ∀ k, n₀ ≤ k → (trace (K.all n) (K.inp n) k).pc = sy.PlayerSubs → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
+      ScrollRule.xOK (ScrollRule.amountOf (ScrollRule.places sy m0) (trace (K.all n) (K.inp n) k)) = true →
+      (ScrollRule.amountOf (ScrollRule.places sy m0) (trace (K.all n) (K.inp n) k)).toNat ≤ 3)
+    (hE : ∀ n, n + 1 < K.ix g → edgeOf (places sy m0) (K.all n) + L < 65280) :
+    ∀ n, n + 1 < K.ix g → RuleW (valsOf (places sy m0) (K.all n)) (valsOf (places sy m0) (K.all (n + 1))) := by
+  intro n hn
+  obtain ⟨⟨hIn, hCn⟩, hJn⟩ := invJ_onFrames K hkc hs0 hw0 hc hq hqe he hs hsc hidle h0 hJ0 hI hv hp hk6 hA hE n (by omega)
+  have hst := (K.all_start hkc hs0 hw0 n (by omega)).1
+  have hix : K.ix g = FrameKeep.ixOf sy m0 S a K.top g := rfl
+  have hcE := K.cleanE n (by omega)
+  have hclF : ∀ k, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace (K.all n) (K.inp n) k) :=
+    fun k => FrameKeep.cleanK_of_E (hcE k)
+  have hclK : ∀ k, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace (K.all n) (K.inp n) k) :=
+    fun k => FrameKeep.cleanK_of_F (hclF k)
+  have hP : ∀ k, FrameKeep.CleanK (guardPar sy m0) (FrameKeep.spotOf sy m0).store (trace (K.all n) (K.inp n) k) := fun k => cleanPar_of (hcE k) (hI n hn k)
+  have ht : ∀ k, (trace (K.all n) (K.inp n) k).pc ≠ sy.EndlessLoop → (trace (K.all n) (K.inp n) k).fdot ≤ dotsPerFrame - 64 := fun k hk => (hcE k).time hk
+  rw [K.next n]
+  rcases arrival_cases hq hst hclK with ⟨n₀, a1, a2, a3⟩ | hno
+  · exact (step_strict hc hq hqe he hs hsc hidle hst hP (K.noStore n hn) (hv n hn) a1 a2 a3 ht (hp n hn n₀ a1 a2 a3) (hk6 n hn n₀ a1 a2)
+      (hA n hn n₀ a1 a2) hIn hCn (hE n hn) hJn).1.1
+  · exact (step_noCut hq hqe hst hclK hno hCn).1
 
 /-- **The statement of the old field `parWrap`** on the frames of a run: `JV` at each frame's start (`invJ_onFrames`) and the edge's move of at most 3 px give
 `PoleJoin.NoWrapP` (`PoleWrap.noWrapP_of`) -/
