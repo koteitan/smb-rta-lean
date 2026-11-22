@@ -17,7 +17,8 @@ the left edge and not left of it, counted modulo 2¹⁶ (`left_after`): it clamp
 it; to the right edge minus the clamp's amount when he is in the last pixels before the right edge; and else leaves him where he is. This is the fact
 "the clamp keeps him at or right of the screen's left edge" that the old field `SurfaceFrames.OnFrames.nearStep` needs: round 30 makes `nearStep` the theorem
 `SurfaceFrames.OnFrames.nearStepAt`, with the right edge's relation and the rest of the frame after the return instruction as the new fields `rightRel` and
-`endKeep`. `Moves.stop` needs it too, with the edge at the frame's start.
+`endKeep`. Round 31: `rightRel` is gone (`RightEdge`: `SurfaceFrames.OnFrames.relAll`, `SurfaceFrames.OnFrames.pageAll`), and the pieces keep his speed too
+(`W0`), for the field `clampR` at the clamp's entry. `Moves.stop` needs it too, with the edge at the frame's start.
 
 The proof is by pieces of the ROM's code with known values (as `ScreenClamp`, `ScrollRule`): the check `check` walks each piece for every value of the bytes it
 compares (the low bytes and the pages of the two differences, the low difference in the divide, the stack byte at the calls). The addresses come from the ROM:
@@ -58,6 +59,8 @@ structure Places where
   x : Nat
   page : Nat
   frac : Nat
+  /-- round 31: his speed, which the routine of the offscreen bits keeps (for the field `clampR` at the clamp's entry) -/
+  speed : Nat
   deriving Inhabited
 
 /-- the places: the offscreen bits' routine is the target of the call at the routine's start; the rest are fixed offsets in it, which the pieces check -/
@@ -73,7 +76,7 @@ def places (sy : Syms) (m0 : Machine) : Places :=
   { chk := S.chk, gx, loop, pgL := loop + 8, div, ld, entry := C.entry, ret := C.ret,
     z04 := (E.b (gx + 1)).toNat, z07 := (E.b (loop + 7)).toNat, dxo := E.w (loop + 14), tbl := E.w (ld + 1),
     thr := E.b (div + 1), add := E.b (div + 5), msk := E.b (dv + 12), m20 := E.b (S.chk + 16),
-    edgeX := C.edgeX, edgeP := C.edgeP, table := C.table, x := C.x, page := C.page, frac := C.frac }
+    edgeX := C.edgeX, edgeP := C.edgeP, table := C.table, x := C.x, page := C.page, frac := C.frac, speed := I sy.Player_X_Speed }
 
 /-- the edge's pixel and page for `Y = y` (0: left, 1: right) -/
 def eX (P : Places) (y : UInt8) : Nat := I (P.edgeX + y.toUInt16)
@@ -82,8 +85,8 @@ def eP (P : Places) (y : UInt8) : Nat := I (P.edgeP + y.toUInt16)
 theorem eX_zero (P : Places) : eX P 0 = I P.edgeX := by unfold eX; simp
 theorem eP_zero (P : Places) : eP P 0 = I P.edgeP := by unfold eP; simp
 
-/-- the bytes every piece keeps: the position and the two edges -/
-def W0 (P : Places) : List Nat := [P.x, P.page, P.frac, eX P 0, eX P 1, eP P 0, eP P 1]
+/-- the bytes every piece keeps: the position and the two edges (round 31: and his speed) -/
+def W0 (P : Places) : List Nat := [P.x, P.page, P.frac, eX P 0, eX P 1, eP P 0, eP P 1, P.speed]
 
 /-- the return address of the call at the routine's start -/
 def retLo (P : Places) : UInt8 := (P.chk + 4).toUInt8
@@ -180,7 +183,7 @@ def xBound (E : Rom) (P : Places) : Bool :=
     (List.range 256).all fun d => decide (divX P y d.toUInt8 (E.b (P.dxo + 1 + y.toUInt16)) < 16)
 
 def checkParts (E : Rom) (P : Places) : Bool :=
-  [P.x, P.page, P.frac, P.z04, P.z07].all (fun i => decide (i < 2048)) && xBound E P &&
+  [P.x, P.page, P.frac, P.z04, P.z07, P.speed].all (fun i => decide (i < 2048)) && xBound E P &&
   (List.range 256).all (fun s => jCheck E P s.toUInt8) &&
   [(0 : UInt8), 1].all (fun y => (List.range 256).all fun e => (List.range 256).all fun v => s1Check E P y e.toUInt8 v.toUInt8) &&
   [(0 : UInt8), 1].all (fun y => (List.range 256).all fun ep => (List.range 256).all fun p => [false, true].all fun c => s2Check E P y ep.toUInt8 p.toUInt8 c) &&
@@ -193,7 +196,7 @@ def check (sy : Syms) (m0 : Machine) : Bool := checkParts (Rom.of m0) (places sy
 /-! ## What the check says -/
 
 structure Facts (E : Rom) (P : Places) : Prop where
-  lt : ∀ i ∈ [P.x, P.page, P.frac, P.z04, P.z07], i < 2048
+  lt : ∀ i ∈ [P.x, P.page, P.frac, P.z04, P.z07, P.speed], i < 2048
   xb : xBound E P = true
   j : ∀ s, jCheck E P s = true
   s1 : ∀ y, y ∈ [(0 : UInt8), 1] → ∀ e v, s1Check E P y e v = true
@@ -237,11 +240,11 @@ theorem lt_z07 (F : Facts E P) : P.z07 < 2048 := F.lt _ (by simp)
 
 theorem lt_W0 (F : Facts E P) {i : Nat} (h : i ∈ W0 P) : i < 2048 := by
   simp only [W0, List.mem_cons, List.not_mem_nil, or_false] at h
-  rcases h with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases h with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact lt_x F
   · exact lt_page F
   · exact lt_frac F
-  all_goals exact I_lt _
+  all_goals first | exact I_lt _ | exact F.lt _ (by simp)
 
 theorem lt_stk4 {s : UInt8} {i : Nat} (h : i ∈ stk4 s) : i < 2048 := by
   simp only [stk4, List.mem_cons, List.not_mem_nil, or_false] at h

@@ -13,6 +13,8 @@ At those few instructions the bound is 9,000, not `L`. So `roomLateU` asks more 
 
 **Also the coin's erase.** At the `STA (zp),Y` that erases a coin the walks know the pointer's high byte: the block buffers' page. So the erase writes in the RAM, at or past the block buffers' start; this is proved. The field `roomErase` now asks only the rest: the erase writes before the block buffers' end (`EraseEnd`). It was `Erase`: in the RAM, at or past the start, and before the end.
 
+Round 31: the walks split the state before the add of the pointer's low byte, so an erase through a pointer into the first block buffer is proved to write before the end too. `roomErase` now asks `EraseEnd` only of an erase whose pointer is at or past the second block buffer's start (`EraseTwo`): [The coin's erase in the first block buffer](d-2-4-2-5-EraseSplit.md).
+
 `tr_n(j)` is the machine after `j` instructions of frame `n`. `pc`, `dot` are its program counter and its dot in the frame. `idle` is the idle loop. `snd`, `rep`, `upd` are the addresses of `SoundEngine`, `RepeatByte`, `UpdateScreen`. `rom(p)` is the ROM's byte at `p`. `A.hi` is the last dot that an abstract state allows. `U(n)`, `InPat`, `RestS`, `timeOK` are as in [The screen buffers' records](d-2-4-2-2-BufferRecords.md) and [The time of the room's frames](d-2-4-2-3-RoomLate.md).
 
 ## The statement

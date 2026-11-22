@@ -1,8 +1,8 @@
-import Theorems.PoleParserRun
+import Theorems.PoleParserEnd
 /-!
 # The pole's tiles: the scroll counter of 32 px under the strict rule
 
-The field `PoleJoin.Run.parWrap` asks, on each frame before the touch's frame, at `UpdScrollVar`: if the screen's left edge moved by `Y` since the frame's start,
+The field `PoleJoin.Run.parWrap` (until round 30; since round 31 it is gone, see `PoleStrict`) asked, on each frame before the touch's frame, at `UpdScrollVar`: if the screen's left edge moved by `Y` since the frame's start,
 then `S + Y < 256` (`PoleJoin.NoWrapP`), with `S` the scroll counter of 32 px at the frame's start. The parser's invariant (`PoleParser.Inv`) is an equation and
 does not bound `S`. The weak rule that `PoleParserEnd` proves of each frame (`RuleW`) does not bound it either: it allows a frame that keeps the parser's bytes
 while the edge moves (the control byte of the screen's buffers 6 at `UpdScrollVar`, so the parser skips its task), and `S` then grows.
@@ -13,7 +13,8 @@ A frame that does not come to `UpdScrollVar` keeps the bytes, and so `JV` (`Stri
 the edge moves at most 3 px (`noWrapP_of`, `parWrap_of_strict`).
 
 What is not proved here: `JV` at control, that each frame before the touch follows `Strict` (the end walks of `PoleParserEnd` do not tell the path of the control
-byte, so they give only `RuleW`), and that the edge moves at most 3 px a frame. Measured by `pole-keep parser`.
+byte, so they give only `RuleW`), and that the edge moves at most 3 px a frame. Measured by `pole-keep parser`. Since round 31 all three are proved in `PoleStrict`
+(with the one-state field `ctlU`: the control byte is not 6 at `UpdScrollVar`).
 
 There is no game data in this file. Page: `1-1/f-6-17-11-PoleWrap.md`.
 -/

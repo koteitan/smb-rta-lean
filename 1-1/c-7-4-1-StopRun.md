@@ -38,6 +38,6 @@ stop_run (field, narrowed):
 
 - `wall`: a frame before `C + 37` that does not follow `hstep` is stopped at the left wall. A proof needs the reason why a frame does not follow `hstep` (a side push or a stand at the wall, a stale stored speed after one, a masked side) and the position at each.
 - `late` (narrowed): the same from `C + 37` to `C + 41` after a wall hit, or at the corner.
-- `stop_run` (narrowed): `RunningSpeed` is written only by `GetPlayerAnimSpeed`, on the ground, from the stored speed. A proof needs a walk of the frame that follows `RunningSpeed`, and the stored speed below the running threshold at the frame's start.
+- `stop_run` (narrowed): `RunningSpeed` is written only by `GetPlayerAnimSpeed`, on the ground, from the stored speed. A proof needs a walk of the frame that follows `RunningSpeed`, and the stored speed below the running threshold at the frame's start. Round 31 did this: `stop_run` is proved and no longer a field; what is left is the smaller field `ab_run` ([`RunningSpeed` on the frames of the room: `stop_run` proved](c-7-4-2-RunWalk.md), item 1-1-c-7-4-2).
 
 **Files.** `Theorems/RoomJoin.lean`: `RoomFields.stop_run`, `RoomFields.late`, `RoomCore.rs_of_safe`, `RoomCore.no_wall_back`, `RoomCore.anchor_at`, `RoomRun.anchor_atR`. Program `room-approach-check` (counters 46 to 51, 55 to 58).

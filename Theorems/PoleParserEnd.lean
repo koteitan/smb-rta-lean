@@ -26,7 +26,7 @@ frames by `pole-keep parser`, 0 hits). The checks on the ROM are `eCheckP` and `
 
 What is not proved here: `CleanK` of `guardN` and `AfterKeep.guardH` for the parser's bytes on the frames of the run, no wrap of the scroll (`NoWrap`), the edge below
 `65280 − L` px, and the rest of `tilesCol` (`hslot`, `hnear`, `hread`). Round 29: `PoleParserRun` takes `inv_onFrames` to the route's frames (`guardE` protects the
-parser's four bytes, so `cleanE` gives `CleanK` of `guardPI`; no wrap is the field `PoleJoin.Run.parWrap`, the edge's bound the theorem `PoleParserRun.edgeLow_run`), and the old field
+parser's four bytes, so `cleanE` gives `CleanK` of `guardPI`; no wrap is the field `PoleJoin.Run.parWrap` (round 31: gone, see `PoleStrict`), the edge's bound the theorem `PoleParserRun.edgeLow_run`), and the old field
 `tilesCol` is a theorem from the narrower field (`PoleTileFar.TileSlot`).
 There is no game data in this file. Page: `1-1/f-6-17-9-PoleParserEnd.md`.
 -/
@@ -200,6 +200,8 @@ structure Cfgs where
   p : UInt8 → UInt8 → FrameKeep.CfgK
   /-- after the task handler's call, for `N` = 0 -/
   tail : FrameKeep.CfgK
+  /-- round 31: the strict walks from `qN` for `N` in `vTask` -/
+  s : UInt8 → FrameKeep.CfgK
 
 /-- the part for `vCol` at `UpdScrollVar`, of a state of the walk for the byte `b`, split by `N`: for the column and its page nothing (the walk of the page knows
 them), for the others the walk with `finE`; for the page, split by the column: for `c` < 15 the walk with `finC`, for 15 split by the page: for `p` < 255 the
@@ -429,13 +431,81 @@ def ctOf (sy : Syms) (m0 : Machine) (Ps' : List AS) : FrameKeep.CfgK :=
     (fun A => A.pc == qR sy) st
   qfCfg sy m0 (sIdx sy m0) (finT sy m0) (H.stops.toList.map AfterKeep.rkOn)
 
+/-! ### Round 31: the strict end, with the control byte not 6
+
+`UpdScrollVar` first compares the screen buffers' control byte with 6 and leaves when it is 6. The walks above do not know that byte at `UpdScrollVar`, so they
+take both ways, and they give only the weak rule: the bytes kept, or one task. Here the states at `UpdScrollVar` are split by that byte into pieces where it
+is not 6 (`ctlPats`: 8 pieces with one bit known that differs from 6's). From such a piece the comparison is decided, and the walk to the instruction
+after the branch (`qN`) cannot end the frame. From there, for `N` in `vTask`, the walk to the frame's end asks `N` known as `N − 1` (`finS`); for `N` = 0 and the
+counter `s` in 32 ‥ 159 the head's walk must come to the task handler's call (`atSZ`), where `at0` asks the rest. -/
+
+/-- the index of the screen buffers' control byte -/
+def kIdx (sy : Syms) (m0 : Machine) : Nat := ((places sy m0).ctrl &&& 0x7FF).toNat
+
+/-- the 8 pieces of a byte that is not 6: one bit known, with the value opposite to that of 6 -/
+def pats6 : List TaintRun.AB := [⟨1, 1⟩, ⟨0, 2⟩, ⟨0, 4⟩, ⟨8, 8⟩, ⟨16, 16⟩, ⟨32, 32⟩, ⟨64, 64⟩, ⟨128, 128⟩]
+
+/-- **The pieces of a state where the control byte is not 6**: when no bit of it is known, the 8 pieces `pats6`; otherwise its known values but 6
+(`SideFrame.fillB`) -/
+def ctlPats (sy : Syms) (m0 : Machine) (B : AS) : List AS :=
+  if (B.getK (kIdx sy m0)).k == 0 then pats6.map fun p => B.setK (kIdx sy m0) p
+  else (SideFrame.fillB (kIdx sy m0) B).filter fun B' => (B'.getK (kIdx sy m0)).v != 6
+
+/-- the values of `N` with a task: a task runs and `N` falls by one -/
+def vTask : List UInt8 := vSix ++ vCol
+
+/-- the instruction after the branch on the control byte in `UpdScrollVar`: its load (3 bytes), its compare (2) and its branch (2). As for `qR`, no check reads the
+instruction here; the walks only compare the pc with it. -/
+def qN (sy : Syms) : UInt16 := sy.UpdScrollVar + 7
+
+/-- what the strict walk asks at the frame's end for `N` = `w` at `UpdScrollVar`: `N` known as `w − 1` -/
+def finS (sy : Syms) (m0 : Machine) (w : UInt8) (B : AS) : Bool := (B.getK (nI sy m0)).isK && (B.getK (nI sy m0)).v == w - 1
+
+/-- the head's walk from `UpdScrollVar` with the control byte not 6: no table, and it may not end the frame -/
+def headN (sy : Syms) (m0 : Machine) : FrameKeep.CfgK := emptyCfg sy m0 (nI sy m0) (fun _ => false)
+
+/-- the starts of the strict walk at `qN` (no part of the proof): from the states of `startsE` for `N`, each piece of `ctlPats` searched alone to `qN` -/
+def startsN (sy : Syms) (m0 : Machine) (w : UInt8) (U : List AS) : List AS :=
+  (startsE sy m0 (nI sy m0) w U).flatMap fun B => (ctlPats sy m0 B).flatMap fun B' =>
+    (PrevKeep.searchFrom sy m0 (envE sy m0 (nI sy m0)) (nI sy m0 :: cIdx sy m0 :: gIdx sy m0 :: CtrlKeep.spareI sy m0) [] [] (FrameKeep.ctlI sy)
+      (fun A => A.pc == qN sy) [B']).stops.toList
+
+/-- the table of the strict walk for `N` = `w`, from `qN` to the frame's end -/
+def csOf (sy : Syms) (m0 : Machine) (Ps' : List AS) (w : UInt8) : FrameKeep.CfgK :=
+  qfCfg sy m0 (nI sy m0) (finS sy m0 w) (startsN sy m0 w (quSearch sy m0 (nI sy m0) Ps').stops.toList)
+
+/-- the strict part for `N` at `UpdScrollVar`, split by `N`: for `N` in `vTask`, each piece of `ctlPats` comes to `qN` and from there the strict walk succeeds -/
+def atSN (sy : Syms) (m0 : Machine) (Cs : UInt8 → FrameKeep.CfgK) (B : AS) : Bool :=
+  (SideFrame.fillB (nI sy m0) (startE sy m0 (nI sy m0) B)).all fun B' =>
+    !((B'.getK (nI sy m0)).isK && vTask.contains (B'.getK (nI sy m0)).v) ||
+      (ctlPats sy m0 B').all fun B'' =>
+        walkEQ (headN sy m0) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) (qN sy) (fun A => walkE sy m0 (Cs (B'.getK (nI sy m0)).v) A) FrameKeep.fuelK B''
+
+/-- the strict part for the counter at `UpdScrollVar`, for `N` = 0: split by the counter `s`, for `s` in 32 ‥ 159 each piece of `ctlPats` comes to the task
+handler's call, where `at0` asks the rest (as in `atRkZ`) -/
+def atSZ (sy : Syms) (m0 : Machine) (Ct : FrameKeep.CfgK) (B : AS) : Bool :=
+  (SideFrame.fillB (nI sy m0) (startE sy m0 (sIdx sy m0) B)).all fun B' =>
+    !((B'.getK (nI sy m0)).isK && (B'.getK (nI sy m0)).v == 0) ||
+      (SideFrame.fillB (sIdx sy m0) { B' with rk := false }).all fun B'' =>
+        !((B''.getK (sIdx sy m0)).isK && decide (32 ≤ (B''.getK (sIdx sy m0)).v.toNat) && decide ((B''.getK (sIdx sy m0)).v.toNat < 160)) ||
+          (ctlPats sy m0 B'').all fun B3 =>
+            walkEQ (headN sy m0) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) (qR sy) (at0 sy m0 Ct (B''.getK (sIdx sy m0)).v) FrameKeep.fuelK B3
+
+/-- the strict part at `UpdScrollVar` for the byte `b`: for `N` `atSN`, for the counter `atSZ`, nothing for the others -/
+def atS (sy : Syms) (m0 : Machine) (Cs : UInt8 → FrameKeep.CfgK) (Ct : FrameKeep.CfgK) (b : Nat) (B : AS) : Bool :=
+  if b == nI sy m0 then atSN sy m0 Cs B else if b == sIdx sy m0 then atSZ sy m0 Ct B else true
+
 /-- what the walk to `UpdScrollVar` asks there, for each byte of `pU`: for the bytes of `pE` `atRkE`, for the platforms' force `atRkU` -/
 def atE (sy : Syms) (m0 : Machine) (Ce : Cfgs) (b : Nat) (B : AS) : Bool :=
   if (pE sy m0).contains b then atRkE sy m0 b (Ce.e b) B && atRkV sy m0 b Ce B && atRkZ sy m0 b Ce Ce.tail B else atRkU B
 
+/-- round 31: `atE`, and the strict part `atS` with the tables of `Ce` -/
+def atES (sy : Syms) (m0 : Machine) (Ce : Cfgs) (b : Nat) (B : AS) : Bool := atE sy m0 Ce b B && atS sy m0 Ce.s Ce.tail b B
+
+
 /-- what the middle walk asks after the scroll handler's call: for each byte the walk to `UpdScrollVar` with `atE`, and the walk of `EdgeStep` to the frame's end -/
 def atRE (sy : Syms) (m0 : Machine) (Ps' : List AS) (Ce : Cfgs) (Cn : List FrameKeep.CfgK) (B : AS) : Bool :=
-  ((pU sy m0).all fun b => walkQP (quCfg sy m0 b Ps') (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) sy.UpdScrollVar (atE sy m0 Ce b) FrameKeep.fuelK (AfterKeep.rkOn B)) &&
+  ((pU sy m0).all fun b => walkQP (quCfg sy m0 b Ps') (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) sy.UpdScrollVar (atES sy m0 Ce b) FrameKeep.fuelK (AfterKeep.rkOn B)) &&
     Cn.all fun C => EdgeStep.walkKP C (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) (EdgeStep.rPc sy) FrameKeep.fuelK (AfterKeep.rkOn B)
 
 /-- what the first walk asks at the scroll handler: the middle walk succeeds, and for each of `pK` the middle walk with the byte followed -/
@@ -459,7 +529,7 @@ def ceOf (sy : Syms) (m0 : Machine) (Ps' : List AS) (b : Nat) (w : UInt8) : Fram
 def cfgsOf (sy : Syms) (m0 : Machine) (Ps' : List AS) : Cfgs :=
   let U := (quSearch sy m0 (gIdx sy m0) Ps').stops.toList
   { e := ceOf sy m0 Ps', c := fun w c => qfCfg sy m0 (gIdx sy m0) (finC sy m0 w c) (startsC sy m0 w c U),
-    p := fun w p => qfCfg sy m0 (nI sy m0) (finP sy m0 w p) (startsP sy m0 w p U), tail := ctOf sy m0 Ps' }
+    p := fun w p => qfCfg sy m0 (nI sy m0) (finP sy m0 w p) (startsP sy m0 w p U), tail := ctOf sy m0 Ps', s := csOf sy m0 Ps' }
 
 /-- the values of the column below 15, and of the page below 255 -/
 def cols : List UInt8 := (List.range 15).map Nat.toUInt8
@@ -484,15 +554,27 @@ def eCheckP (sy : Syms) (m0 : Machine) (v : UInt8) : Bool :=
     Cs.t.all (AfterKeep.walkQ1 Cs (FrameKeep.ctlI sy) (EdgeStep.rPc sy) (atRE sy m0 Ps.stops.toList Ce Cn) FrameKeep.fuelK) &&
     (Cm.all fun C => C.t.all (EdgeStep.walkQR C (FrameKeep.ctlI sy) (EdgeStep.rPc sy) atRkU FrameKeep.fuelK)) &&
     ((pU sy m0).all fun b => (quCfg sy m0 b Ps.stops.toList).t.all
-      (walkQP (quCfg sy m0 b Ps.stops.toList) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) sy.UpdScrollVar (atE sy m0 Ce b) FrameKeep.fuelK)) &&
+      (walkQP (quCfg sy m0 b Ps.stops.toList) (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) sy.UpdScrollVar (atES sy m0 Ce b) FrameKeep.fuelK)) &&
     ((pE sy m0).all fun b => vSix.all fun w => (Ce.e b w).t.all (walkE sy m0 (Ce.e b w))) &&
     (Cn.all fun C => C.t.all (EdgeStep.walkKP C (FrameKeep.ctlI sy) (EdgeStep.cutPos sy m0) (EdgeStep.rPc sy) FrameKeep.fuelK)) &&
     ((pE sy m0).all fun b => b == cIdx sy m0 || b == gIdx sy m0 || vCol.all fun w => (Ce.e b w).t.all (walkE sy m0 (Ce.e b w))) &&
     (vCol.all fun w => cols.all fun c => (Ce.c w c).t.all (walkE sy m0 (Ce.c w c))) &&
     (vCol.all fun w => pages.all fun p => (Ce.p w p).t.all (walkE sy m0 (Ce.p w p))) &&
     ((pE sy m0).all fun b => b == nI sy m0 || b == sIdx sy m0 || (Ce.e b 0).t.all (walkE sy m0 (Ce.e b 0))) &&
-    Ce.tail.t.all (walkE sy m0 Ce.tail)
+    Ce.tail.t.all (walkE sy m0 Ce.tail) &&
+    (vTask.all fun w => (Ce.s w).t.all (walkE sy m0 (Ce.s w)))
 
+/-- (experiment, round 31) the strict parts on the search's stops at `UpdScrollVar`, and the strict tables: no part of the proof -/
+def strictProbe (sy : Syms) (m0 : Machine) (v : UInt8) : Bool × Bool × Bool × Nat :=
+  let q := CtrlKeep.cutTable sy m0 true
+  let cuts := CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q)
+  let P := AfterKeep.q1Search sy m0 v cuts
+  let Ps := EdgeStep.qsSearch sy m0 v P.stops.toList
+  let Ce := cfgsOf sy m0 Ps.stops.toList
+  let Cs := csOf sy m0 Ps.stops.toList
+  let Un := (quSearch sy m0 (nI sy m0) Ps.stops.toList).stops.toList
+  let Us := (quSearch sy m0 (sIdx sy m0) Ps.stops.toList).stops.toList
+  (Un.all (atSN sy m0 Cs), Us.all (atSZ sy m0 Ce.tail), vTask.all fun w => (Cs w).t.all (walkE sy m0 (Cs w)), vTask.foldl (fun n w => n + (Cs w).t.size) 0)
 
 
 /-! ## The proofs -/
@@ -750,7 +832,7 @@ theorem end_walkG {Ps' : List AS} (hn : nI sy m0 < 2048) (hgn : gIdx sy m0 ≠ n
 
 theorem nodup_of_check {v : UInt8} (he : eCheckP sy m0 v = true) : (pE sy m0).Nodup := by
   simp only [eCheckP, Bool.and_eq_true, bne_iff_ne, ne_eq, decide_eq_true_eq] at he
-  exact he.1.1.1.1.1.1.1.1.1.1.1.1.2
+  exact he.1.1.1.1.1.1.1.1.1.1.1.1.1.2
 
 
 /-- **The walk to the end for `N` = 0, a byte other than `N` and the counter** -/
@@ -853,6 +935,135 @@ theorem end_walkZS {Ce : Cfgs} (hn : nI sy m0 < 2048) (hsn : sIdx sy m0 ≠ nI s
     refine Or.inr ⟨b1, b2, by rw [en, h7], ?_⟩
     rw [es, esQ, b4, hvs]
 
+/-! ### Round 31: the strict end -/
+
+/-- **The pieces of `ctlPats` cover a machine whose control byte is not 6** -/
+theorem pats6_all : (List.range 256).all (fun n => n.toUInt8 == 6 || pats6.any fun p => SideFrame.memB p n.toUInt8) = true := by decide +kernel
+
+/-- a byte that is not 6 is in one of the pieces `pats6` -/
+theorem pats6_cover {x : UInt8} (h : x ≠ 6) : ∃ p ∈ pats6, p.mem x := by
+  have h1 := ScrollRule.all256 (f := fun x => x == 6 || pats6.any fun p => SideFrame.memB p x) pats6_all x
+  simp only [Bool.or_eq_true, beq_iff_eq, List.any_eq_true] at h1
+  rcases h1 with h1 | ⟨p, hp, hm⟩
+  · exact absurd h1 h
+  · exact ⟨p, hp, SideFrame.memB_iff.1 hm⟩
+
+theorem cov_ctl {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E F A m) (h6 : m.ram.get! (kIdx sy m0) ≠ 6) :
+    ∃ B ∈ ctlPats sy m0 A, Sim E F B m := by
+  have hk : kIdx sy m0 < 2048 := idx_lt _
+  unfold ctlPats
+  by_cases h0 : (A.getK (kIdx sy m0)).k = 0
+  · rw [if_pos (by simp [h0])]
+    obtain ⟨p, hp, hm⟩ := pats6_cover h6
+    exact ⟨A.setK (kIdx sy m0) p, List.mem_map.2 ⟨p, hp, rfl⟩, PipeEntryRule.sim_setK' hs hm⟩
+  · rw [if_neg (by simp [h0])]
+    obtain ⟨B, hB, hsB, hkB⟩ := cov_fillK hk hs
+    have e := PipeEntryRule.known_eq hkB (hsB.ram _ hk)
+    refine ⟨B, List.mem_filter.2 ⟨hB, ?_⟩, hsB⟩
+    rw [← e]
+    simpa using h6
+
+/-- **The strict walk for `N`**: from a state of the walk to `UpdScrollVar` for `N` that meets `atSN`, with `N` at `UpdScrollVar` in `vTask` and the control byte
+not 6 there, the frame ends with `N` one less -/
+theorem end_walkS {Ps' : List AS} (hn : nI sy m0 < 2048)
+    (ht : ∀ w ∈ vTask, (csOf sy m0 Ps' w).t.all (walkE sy m0 (csOf sy m0 Ps' w)) = true) (hQ : EdgeStep.rPc sy ≠ sy.EndlessLoop)
+    {m : Machine} {i : UInt8} {k : Nat} {F : Nat × UInt8} {B : AS}
+    (hat : atSN sy m0 (csOf sy m0 Ps') B = true) (hs : Sim { PipeEntryRule.envOf m0 with rkI := nI sy m0 } F B (trace m i k))
+    (hf : (trace m i k).frame = m.frame) (hd : m.fdot + 3 * k ≤ (trace m i k).fdot)
+    (hcl : ∀ j, FrameKeep.CleanK (guardN sy m0 (nI sy m0)) (FrameKeep.spotOf sy m0).store (trace m i j))
+    (hx : ∀ j, FrameKeep.storesTo (FrameKeep.ctlI sy) (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false)
+    (hp : ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hv : vTask.contains ((trace m i k).ram.get! (nI sy m0)) = true) (h6 : (trace m i k).ram.get! (kIdx sy m0) ≠ 6) :
+    (frame m i).ram.get! (nI sy m0) = (trace m i k).ram.get! (nI sy m0) - 1 := by
+  simp only [atSN, List.all_eq_true] at hat
+  have hs1 := sim_startE (sy := sy) hs
+  obtain ⟨B', hB', hs', hk'⟩ := cov_fillK hn hs1
+  have hval : (trace m i k).ram.get! (nI sy m0) = (B'.getK (nI sy m0)).v := PipeEntryRule.known_eq hk' (hs'.ram _ hn)
+  have hw := hat B' hB'
+  rw [← hval, hk', hv] at hw
+  simp only [Bool.and_self, Bool.not_true, Bool.false_or, List.all_eq_true] at hw
+  obtain ⟨B'', hB'', hs''⟩ := cov_ctl hs' h6
+  have hw2 := hw B'' hB''
+  rcases endEQ (C := headN sy m0) (Fu := FrameKeep.fuelK) (by simp [headN, emptyCfg]) (by simp [headN, emptyCfg]) rfl hw2 hs'' hf hd hcl hx hp with
+    ⟨Be, h1, _⟩ | ⟨k', hk', _, hf', hd', BQ, hatQ, hsQ⟩
+  · simp [headN, emptyCfg] at h1
+  · have htab := ht _ (List.mem_of_elem_eq_true hv)
+    obtain ⟨⟨Be, h1, h2⟩, _⟩ := EdgeStep.endKP (C := csOf sy m0 Ps' ((trace m i k).ram.get! (nI sy m0))) htab rfl rfl hQ hatQ hsQ hf' hd' hcl hx
+      (fun j hj hfj => hp j (by omega) hfj)
+    have h1' : finS sy m0 ((trace m i k).ram.get! (nI sy m0)) Be = true := h1
+    have h2' : Sim (envE sy m0 (nI sy m0)) F Be (frame m i) := h2
+    simp only [finS, Bool.and_eq_true, beq_iff_eq] at h1'
+    obtain ⟨hk1, hv1⟩ := h1'
+    rw [PipeEntryRule.known_eq hk1 (h2'.ram _ hn), hv1]
+
+/-- **The strict walk of the counter for `N` = 0**: from a state of the walk to `UpdScrollVar` for the counter that meets `atSZ`, with `N` 0, the control byte not
+6 and the counter in 32 ‥ 159 at `UpdScrollVar`, the frame ends with `N` 7 and the counter less 32 -/
+theorem end_walkST {Ce : Cfgs} (hn : nI sy m0 < 2048) (hsn : sIdx sy m0 ≠ nI sy m0)
+    (htT : Ce.tail.t.all (walkE sy m0 Ce.tail) = true) (hQ : EdgeStep.rPc sy ≠ sy.EndlessLoop)
+    (hT : Ce.tail.E = envE sy m0 (sIdx sy m0) ∧ Ce.tail.G = guardN sy m0 (sIdx sy m0) ∧ Ce.tail.S = FrameKeep.spotOf sy m0 ∧ Ce.tail.fin = finT sy m0 ∧
+      Ce.tail.kl = Ce.tail.t.map PipeWrites.knownOf ∧ Ce.tail.ops = (TaintRun.aRows Ce.tail.E).toArray)
+    {m : Machine} {i : UInt8} {k : Nat} {F : Nat × UInt8} {B : AS}
+    (hat : atSZ sy m0 Ce.tail B = true) (hs : Sim { PipeEntryRule.envOf m0 with rkI := sIdx sy m0 } F B (trace m i k))
+    (hf : (trace m i k).frame = m.frame) (hd : m.fdot + 3 * k ≤ (trace m i k).fdot)
+    (hcls : ∀ j, FrameKeep.CleanK (guardN sy m0 (sIdx sy m0)) (FrameKeep.spotOf sy m0).store (trace m i j))
+    (hcln : ∀ j, FrameKeep.CleanK (guardN sy m0 (nI sy m0)) (FrameKeep.spotOf sy m0).store (trace m i j))
+    (hx : ∀ j, FrameKeep.storesTo (FrameKeep.ctlI sy) (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false)
+    (hp : ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false)
+    (hv : (trace m i k).ram.get! (nI sy m0) = 0) (h6 : (trace m i k).ram.get! (kIdx sy m0) ≠ 6)
+    (h32 : 32 ≤ ((trace m i k).ram.get! (sIdx sy m0)).toNat) (h160 : ((trace m i k).ram.get! (sIdx sy m0)).toNat < 160) :
+    (frame m i).ram.get! (nI sy m0) = 7 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k).ram.get! (sIdx sy m0) - 32 := by
+  have hsl : sIdx sy m0 < 2048 := idx_lt _
+  unfold atSZ at hat
+  simp only [List.all_eq_true] at hat
+  have hs1 := sim_startE (sy := sy) hs
+  obtain ⟨B', hB', hs', hk'⟩ := cov_fillK hn hs1
+  have hval : (trace m i k).ram.get! (nI sy m0) = (B'.getK (nI sy m0)).v := PipeEntryRule.known_eq hk' (hs'.ram _ hn)
+  have hw := hat B' hB'
+  rw [← hval, hk', hv] at hw
+  simp only [beq_self_eq_true, Bool.and_self, Bool.not_true, Bool.false_or, List.all_eq_true] at hw
+  have hsn' : (sIdx sy m0 == nI sy m0) = false := by simpa using hsn
+  have hsd : Sim (envE sy m0 (nI sy m0)) F { B' with rk := false } (trace m i k) := by
+    unfold envE
+    unfold envE at hs'
+    exact sim_drop hs'
+  obtain ⟨B'', hB'', hs'', hk''⟩ := cov_fillK hsl hsd
+  have hvs : (trace m i k).ram.get! (sIdx sy m0) = (B''.getK (sIdx sy m0)).v := PipeEntryRule.known_eq hk'' (hs''.ram _ hsl)
+  have hw2 := hw B'' hB''
+  rw [← hvs, hk''] at hw2
+  have e32 : decide (32 ≤ ((trace m i k).ram.get! (sIdx sy m0)).toNat) = true := decide_eq_true h32
+  have e160 : decide (((trace m i k).ram.get! (sIdx sy m0)).toNat < 160) = true := decide_eq_true h160
+  rw [e32, e160] at hw2
+  simp only [Bool.and_self, Bool.not_true, Bool.false_or, List.all_eq_true] at hw2
+  obtain ⟨B3, hB3, hs3⟩ := cov_ctl hs'' h6
+  have hw3 := hw2 B3 hB3
+  have hrs : rkOf sy m0 (sIdx sy m0) = sIdx sy m0 := by unfold rkOf; rw [hsn']; rfl
+  rcases endEQ (C := headN sy m0) (Fu := FrameKeep.fuelK) (by simp [headN, emptyCfg]) (by simp [headN, emptyCfg]) rfl hw3 hs3 hf hd hcln hx hp with
+    ⟨Be, h1, _⟩ | ⟨k', hk', hq', hf', hd', BQ, hat0, hsQ⟩
+  · simp [headN, emptyCfg] at h1
+  · simp only [at0, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hat0
+    obtain ⟨⟨⟨⟨b1, b2⟩, b3⟩, b4⟩, b5⟩ := hat0
+    have esQ := PipeEntryRule.known_eq b3 (hsQ.ram _ hsl)
+    have hsR := AfterKeep.sim_rkOn (b := sIdx sy m0) hsQ
+    obtain ⟨e1, e2, e3, e4, e5, e6⟩ := hT
+    have hsR' : Sim Ce.tail.E (F.1, (trace m i k').ram.get! (sIdx sy m0)) (AfterKeep.rkOn BQ) (trace m i k') := by
+      rw [e1]
+      unfold envE
+      rw [hrs]
+      simpa using hsR
+    have hcl' : ∀ j, FrameKeep.CleanK Ce.tail.G Ce.tail.S.store (trace m i j) := by rw [e2, e3]; exact hcls
+    have hQ' : EdgeStep.rPc sy ≠ Ce.tail.G.idle := by rw [e2]; exact hQ
+    obtain ⟨⟨Be, h1, h2⟩, _⟩ := EdgeStep.endKP (C := Ce.tail) htT e5 e6 hQ' b5 hsR' hf' hd' hcl' hx (fun j hj hfj => hp j (by omega) hfj)
+    rw [e4] at h1
+    simp only [finT, Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq] at h1
+    obtain ⟨⟨⟨hrk, hsp⟩, hkn⟩, h7⟩ := h1
+    have en := PipeEntryRule.known_eq hkn (h2.ram _ hn)
+    have es := h2.rkv hrk
+    rw [if_neg (by simp [hsp])] at es
+    have er : Ce.tail.E.rkI = sIdx sy m0 := by rw [e1]; exact hrs
+    rw [er] at es
+    refine ⟨by rw [en, h7], ?_⟩
+    rw [es, esQ, b4]
+
 /-- **A frame in control from the scroll handler to `UpdScrollVar`, and on to its end.** The conclusions of `keep_uP` (by the same walks, with `atE` at
 `UpdScrollVar`), and with `N` at that `UpdScrollVar` (`k₂`): for `vSix`, at the frame's end the bytes of `pE` but `N` are those at `k₂`, and `N` is that at `k₂` or
 one less; for `vCol`, the counter and the edge are those at `k₂`, and `ColEnd` (for the column below 16 and the page not 255); for 0, the column, the page and the
@@ -882,19 +1093,24 @@ theorem keep_eP (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (he : eCheckP
             (∀ x ∈ pE sy m0, x ≠ nI sy m0 → x ≠ sIdx sy m0 → (frame m i).ram.get! x = (trace m i k₂).ram.get! x) ∧
             (((frame m i).ram.get! (nI sy m0) = 0 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0)) ∨
               (32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat ∧ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 ∧ (frame m i).ram.get! (nI sy m0) = 7 ∧
-                (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32)))) := by
+                (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32))) ∧
+          ((trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → vTask.contains ((trace m i k₂).ram.get! (nI sy m0)) = true →
+            (frame m i).ram.get! (nI sy m0) = (trace m i k₂).ram.get! (nI sy m0) - 1) ∧
+          ((trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → (trace m i k₂).ram.get! (nI sy m0) = 0 → 32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat →
+            ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 →
+            (frame m i).ram.get! (nI sy m0) = 7 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32)) := by
   have hnd := nodup_of_check he
   rw [pE_eq] at hnd
   simp only [List.nodup_cons, List.mem_cons, List.not_mem_nil, or_false, not_or] at hnd
   obtain ⟨⟨nns, _, ngn, _, _⟩, ⟨_, _, _, _⟩, ⟨ncg, _, _⟩, _⟩ := hnd
   simp only [eCheckP, Bool.and_eq_true, bne_iff_ne, ne_eq, decide_eq_true_eq] at he
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨_, _⟩, hne3⟩, _⟩, hn⟩, _⟩, hp1⟩, hp2⟩, hp3⟩, hp4⟩, hp5⟩, hp6⟩, hp7⟩, hp8⟩, hp9⟩, hp10⟩, hp11⟩, hp12⟩ := he
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨_, _⟩, hne3⟩, _⟩, hn⟩, _⟩, hp1⟩, hp2⟩, hp3⟩, hp4⟩, hp5⟩, hp6⟩, hp7⟩, hp8⟩, hp9⟩, hp10⟩, hp11⟩, hp12⟩, hp13⟩ := he
   have hclK : ∀ n, FrameKeep.CleanK (FrameKeep.guardK sy m0) (FrameKeep.spotOf sy m0).store (trace m i n) := fun n => FrameKeep.cleanK_of_F (hcl n)
   have hx' : ∀ j, FrameKeep.storesTo (FrameKeep.ctlI sy) (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false := hx
-  generalize CtrlKeep.cutTable sy m0 true = q at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12
-  generalize CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q) = cuts at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12
-  generalize AfterKeep.q1Search sy m0 v cuts = P at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12
-  generalize EdgeStep.qsSearch sy m0 v P.stops.toList = Ps at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12
+  generalize CtrlKeep.cutTable sy m0 true = q at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12 hp13
+  generalize CtrlKeep.cutsOf (CtrlKeep.cfgPz sy m0 q) = cuts at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12 hp13
+  generalize AfterKeep.q1Search sy m0 v cuts = P at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12 hp13
+  generalize EdgeStep.qsSearch sy m0 v P.stops.toList = Ps at hp1 hp2 hp3 hp4 hp5 hp6 hp7 hp8 hp9 hp10 hp11 hp12 hp13
   rcases CtrlKeep.cut_or_end2 (C := cfgPE sy m0 v q (AfterKeep.q1Cfg sy m0 v P) (EdgeStep.qsCfg sy m0 v Ps) ((pK sy m0).map fun b => qmCfg sy m0 v b P.stops.toList)
       Ps.stops.toList (cfgsOf sy m0 Ps.stops.toList) [EdgeStep.q2CfgR sy m0 (e0 sy m0) Ps.stops.toList]) hp1 rfl rfl rfl (CtrlKeep.cfg_start q _ true h0) hclK with
     ⟨k₀, a1, a2, _, a4, a5, B, _, hB2, hs⟩ | ⟨hno, _⟩
@@ -975,6 +1191,8 @@ theorem keep_eP (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (he : eCheckP
           AfterKeep.sim_rkOn hs1
         obtain ⟨k₂, hk2, hq2, hf2, hd2, hb2, B₂, hat2, hs₂⟩ := qP_run (C := quCfg sy m0 x Ps.stops.toList) ht2 rfl rfl hw2 hs2 hf1 hd1 (hH x hxI) hx'
           (fun j hj hfj => hp j (by omega) hfj)
+        simp only [atES, Bool.and_eq_true] at hat2
+        obtain ⟨hat2, _⟩ := hat2
         have hat2' := atE_rkU hat2
         simp only [atRkU, Bool.and_eq_true, Bool.not_eq_true'] at hat2'
         have e := hs₂.rkv hat2'.1
@@ -1037,12 +1255,44 @@ theorem keep_eP (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (he : eCheckP
         refine ⟨fun hne => fin_rk hne hfin hse, fun heq => ?_⟩
         subst heq
         exact fin_n hn hfin hse
+      have hsE : sIdx sy m0 ∈ pE sy m0 := by rw [pE_eq]; simp
+      -- round 31: the strict parts for `N` and for the counter
+      have runS : ∀ x ∈ pU sy m0, ∃ k₂, k₁ < k₂ ∧ (trace m i k₂).pc = sy.UpdScrollVar ∧ (∀ j, k₁ < j → j < k₂ → (trace m i j).pc ≠ sy.UpdScrollVar) ∧
+          (x = nI sy m0 → (trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → vTask.contains ((trace m i k₂).ram.get! (nI sy m0)) = true →
+            (frame m i).ram.get! (nI sy m0) = (trace m i k₂).ram.get! (nI sy m0) - 1) ∧
+          (x = sIdx sy m0 → (trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → (trace m i k₂).ram.get! (nI sy m0) = 0 →
+            32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat → ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 →
+            (frame m i).ram.get! (nI sy m0) = 7 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32) := by
+        intro x hxI
+        have hw2 := hatU x hxI
+        have ht2 := List.all_eq_true.1 hp5 x hxI
+        have hs2 : TaintRun.Sim (quCfg sy m0 x Ps.stops.toList).E ((m.frame, (2 : UInt8)).1, (trace m i k₁).ram.get! x) (AfterKeep.rkOn B₁) (trace m i k₁) :=
+          AfterKeep.sim_rkOn hs1
+        obtain ⟨k₂, hk2, hq2, hf2, hd2, hb2, B₂, hat2, hs₂⟩ := qP_run (C := quCfg sy m0 x Ps.stops.toList) ht2 rfl rfl hw2 hs2 hf1 hd1 (hH x hxI) hx'
+          (fun j hj hfj => hp j (by omega) hfj)
+        simp only [atES, Bool.and_eq_true] at hat2
+        obtain ⟨_, hatS⟩ := hat2
+        refine ⟨k₂, hk2, hq2, hb2, fun hx h6 hv => ?_, fun hx h6 hz h32 h160 => ?_⟩
+        · subst hx
+          have hatN : atSN sy m0 (cfgsOf sy m0 Ps.stops.toList).s B₂ = true := by
+            unfold atS at hatS
+            simpa using hatS
+          have htS : ∀ w ∈ vTask, ((cfgsOf sy m0 Ps.stops.toList).s w).t.all (walkE sy m0 ((cfgsOf sy m0 Ps.stops.toList).s w)) = true :=
+            fun w hw => List.all_eq_true.1 hp13 w hw
+          exact end_walkS hn htS hne3 hatN hs₂ hf2 (by omega) (hN _ nI_memE) hx' (fun j hj hfj => hp j (by omega) hfj) hv h6
+        · subst hx
+          have hsn' : (sIdx sy m0 == nI sy m0) = false := by simpa using Ne.symm nns
+          have hatZ : atSZ sy m0 (cfgsOf sy m0 Ps.stops.toList).tail B₂ = true := by
+            unfold atS at hatS
+            simpa [hsn'] using hatS
+          exact end_walkST hn (Ne.symm nns) hp12 hne3 ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ hatZ hs₂ hf2 (by omega) (hN _ hsE) (hN _ nI_memE) hx'
+            (fun j hj hfj => hp j (by omega) hfj) hz h6 h32 h160
       have h0x : e0 sy m0 ∈ pU sy m0 := e0_mem
       obtain ⟨k₂, hk2, hq2, hf2, hb2, _, _, _⟩ := run _ h0x
       have same : ∀ x ∈ pU sy m0, ∀ k₂', k₁ < k₂' → (trace m i k₂').pc = sy.UpdScrollVar → (∀ j, k₁ < j → j < k₂' → (trace m i j).pc ≠ sy.UpdScrollVar) →
           k₂' = k₂ := fun _ _ k₂' a b c => first_eq a b c hk2 hq2 hb2
       refine ⟨k₂, hk2, hq2, hf2, hb2, fun x hxI => ?_, fun hsix => ⟨fun x hxP hne => ?_, ?_⟩, fun hcol => ⟨fun x hxP hne hnc hng => ?_, ?_⟩,
-        fun hz => ⟨fun x hxP hne hns => ?_, ?_⟩⟩
+        fun hz => ⟨fun x hxP hne hns => ?_, ?_⟩, fun h6 hv => ?_, fun h6 hz h32 h160 => ?_⟩
       · obtain ⟨k₂', hk2', hq2', _, hb2', e, _⟩ := run x hxI
         rw [← same x hxI k₂' hk2' hq2' hb2']
         exact e
@@ -1072,6 +1322,14 @@ theorem keep_eP (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (he : eCheckP
         have e2 := same _ (pE_sub hsE) k₂' hk2' hq2' hb2'
         subst e2
         exact (hend hsE hz).2 rfl
+      · obtain ⟨k₂', hk2', hq2', hb2', hS1, _⟩ := runS _ (pU_sub nI_mem)
+        have e2 := same _ (pU_sub nI_mem) k₂' hk2' hq2' hb2'
+        subst e2
+        exact hS1 rfl h6 hv
+      · obtain ⟨k₂', hk2', hq2', hb2', _, hS2⟩ := runS _ (pE_sub hsE)
+        have e2 := same _ (pE_sub hsE) k₂' hk2' hq2' hb2'
+        subst e2
+        exact hS2 rfl h6 hz h32 h160
   · exact absurd harr (hno n₀ hf0)
 
 
@@ -1106,7 +1364,12 @@ theorem frame_six (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
         (∀ x ∈ pE sy m0, x ≠ nI sy m0 → x ≠ sIdx sy m0 → (frame m i).ram.get! x = (trace m i k₂).ram.get! x) ∧
         (((frame m i).ram.get! (nI sy m0) = 0 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0)) ∨
           (32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat ∧ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 ∧ (frame m i).ram.get! (nI sy m0) = 7 ∧
-            (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32))) := by
+            (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32))) ∧
+      ((trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → vTask.contains (m.ram.get! (nI sy m0)) = true →
+        (frame m i).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) - 1) ∧
+      ((trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → m.ram.get! (nI sy m0) = 0 → 32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat →
+        ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 →
+        (frame m i).ram.get! (nI sy m0) = 7 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32) := by
   obtain ⟨kq, hkq, hqq, hfq, hbq, k₁, hk1, hq1, hf1, hb1, hK, HU⟩ := keep_eP hc he h0 hcl hH hN hx hv harr hf0 hfirst
   have HQ := keep_qP hc hq h0 hcl (fun x hx j => hH x (pU_sub hx) j) hx hv harr hf0 hfirst (Nat.le_of_lt hkq) hqq hbq
   have HE := EdgeStep.keep_q hc hqe h0 hcl (fun x hx j => hH x (List.mem_append_right _ hx) j) hx hv harr hf0 hfirst (Nat.le_of_lt hkq) hqq hbq
@@ -1137,7 +1400,7 @@ theorem frame_six (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     hKm _ (List.mem_map.2 ⟨(places sy m0).col, List.mem_cons_of_mem _ List.mem_cons_self, rfl⟩)
   have hgK : (trace m i k₂).ram.get! (gIdx sy m0) = m.ram.get! (gIdx sy m0) :=
     hKm _ (List.mem_map.2 ⟨(places sy m0).page, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self), rfl⟩)
-  refine ⟨k₂, hq2, hf2, hKm, ?_, fun hsix => ?_, fun hcol => ?_, fun hz => ?_⟩
+  refine ⟨k₂, hq2, hf2, hKm, ?_, fun hsix => ?_, fun hcol => ?_, fun hz => ?_, fun h6 hvt => ?_, fun h6 hz h32 h160 => ?_⟩
   · have lx2 : (trace m i k₂).ram.get! (placesS sy m0).lx = (trace m i k₁).ram.get! (placesS sy m0).lx := hU _ lx_mem
     have lp2 : (trace m i k₂).ram.get! (placesS sy m0).lp = (trace m i k₁).ram.get! (placesS sy m0).lp := hU _ lp_mem
     have s2 : (trace m i k₂).ram.get! (placesS sy m0).frac = (trace m i k₁).ram.get! (placesS sy m0).frac := hU _ (pU_sub s_memI)
@@ -1162,7 +1425,157 @@ theorem frame_six (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     exact ⟨c1, fun a b => c2 (by rw [hcK]; exact a) (by rw [hgK]; exact b)⟩
   · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
     rw [← hn2] at hz
-    exact hEnd.2.2 hz
+    exact hEnd.2.2.1 hz
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hvt ⊢
+    exact hEnd.2.2.2.1 h6 hvt
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hz
+    exact hEnd.2.2.2.2 h6 hz h32 h160
+
+/-- **`frame_six`, and the edge's move at `UpdScrollVar` from the scroll's amount** (round 31): with the check of the scroll's rule (`hsc`, `ScrollRule.scroll_call`),
+the frame comes to the player's subroutines' call at `kq`, and at `k₂` the edge moved by 0, or the scroll's amount at `kq` is in 1 ‥ 128 and the edge moved by at
+most that amount -/
+theorem frame_sixA (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qCheckP sy m0 v = true) (hqe : EdgeStep.qCheck sy m0 v = true)
+    (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (hidle : FrameModel.idleAt (FrameModel.Rom.of m0) sy.EndlessLoop = true)
+    {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+    (hcl : ∀ n, FrameKeep.CleanK (FrameKeep.guardF sy m0) (FrameKeep.spotOf sy m0).store (trace m i n))
+    (hH : ∀ x ∈ pU sy m0, ∀ j, FrameKeep.CleanK (guardH sy m0 x) (FrameKeep.spotOf sy m0).store (trace m i j))
+    (hN : ∀ x ∈ pE sy m0, ∀ j, FrameKeep.CleanK (guardN sy m0 x) (FrameKeep.spotOf sy m0).store (trace m i j))
+    (hx : ∀ n, FrameKeep.CtlStore sy (trace m i n) = false) (hv : CtrlKeep.AreaOK sy v m) {n₀ : Nat}
+    (harr : (trace m i n₀).pc = sy.PlayerCtrlRoutine) (hf0 : (trace m i n₀).frame = m.frame) (hfirst : ∀ j, j < n₀ → (trace m i j).pc ≠ sy.PlayerCtrlRoutine)
+    (ht : ∀ n, (trace m i n).pc ≠ sy.EndlessLoop → (trace m i n).fdot ≤ dotsPerFrame - 64)
+    (hp : ∀ k, n₀ ≤ k → (trace m i k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace m i j).frame = m.frame → EdgeStep.cutPos sy m0 (trace m i j).pc = false) :
+    ∃ k₂, (trace m i k₂).pc = sy.UpdScrollVar ∧ (trace m i k₂).frame = m.frame ∧
+      (∀ x ∈ pK sy m0, (trace m i k₂).ram.get! x = m.ram.get! x) ∧
+      ((ScrollRule.left16 (placesS sy m0) (trace m i k₂) = ScrollRule.left16 (placesS sy m0) m ∧
+          (trace m i k₂).ram.get! (placesS sy m0).frac = m.ram.get! (placesS sy m0).frac) ∨
+        (∃ Y : UInt8, ScrollRule.left16 (placesS sy m0) (trace m i k₂) = (ScrollRule.left16 (placesS sy m0) m + Y.toNat) % 65536 ∧
+          ((trace m i k₂).ram.get! (placesS sy m0).frac).toNat = ((m.ram.get! (placesS sy m0).frac).toNat + Y.toNat) % 256)) ∧
+      (vSix.contains (m.ram.get! (nI sy m0)) = true →
+        (∀ x ∈ pE sy m0, x ≠ nI sy m0 → (frame m i).ram.get! x = (trace m i k₂).ram.get! x) ∧
+        ((frame m i).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) ∨ (frame m i).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) - 1)) ∧
+      (vCol.contains (m.ram.get! (nI sy m0)) = true →
+        (∀ x ∈ pE sy m0, x ≠ nI sy m0 → x ≠ cIdx sy m0 → x ≠ gIdx sy m0 → (frame m i).ram.get! x = (trace m i k₂).ram.get! x) ∧
+        ((m.ram.get! (cIdx sy m0)).toNat < 16 → m.ram.get! (gIdx sy m0) ≠ 255 → ColEnd sy m0 (trace m i k₂) (frame m i))) ∧
+      (m.ram.get! (nI sy m0) = 0 →
+        (∀ x ∈ pE sy m0, x ≠ nI sy m0 → x ≠ sIdx sy m0 → (frame m i).ram.get! x = (trace m i k₂).ram.get! x) ∧
+        (((frame m i).ram.get! (nI sy m0) = 0 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0)) ∨
+          (32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat ∧ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 ∧ (frame m i).ram.get! (nI sy m0) = 7 ∧
+            (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32))) ∧
+      ((trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → vTask.contains (m.ram.get! (nI sy m0)) = true →
+        (frame m i).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) - 1) ∧
+      ((trace m i k₂).ram.get! (kIdx sy m0) ≠ 6 → m.ram.get! (nI sy m0) = 0 → 32 ≤ ((trace m i k₂).ram.get! (sIdx sy m0)).toNat →
+        ((trace m i k₂).ram.get! (sIdx sy m0)).toNat < 160 →
+        (frame m i).ram.get! (nI sy m0) = 7 ∧ (frame m i).ram.get! (sIdx sy m0) = (trace m i k₂).ram.get! (sIdx sy m0) - 32) ∧
+      ∃ kq, n₀ < kq ∧ (trace m i kq).pc = sy.PlayerSubs ∧ (trace m i kq).frame = m.frame ∧
+        ∀ Y : UInt8, ScrollRule.left16 (ScrollRule.places sy m0) (trace m i k₂) = (ScrollRule.left16 (ScrollRule.places sy m0) m + Y.toNat) % 65536 →
+          Y.toNat = 0 ∨ (ScrollRule.xOK (ScrollRule.amountOf (ScrollRule.places sy m0) (trace m i kq)) = true ∧
+            Y.toNat ≤ (ScrollRule.amountOf (ScrollRule.places sy m0) (trace m i kq)).toNat) := by
+  obtain ⟨kq, hkq, hqq, hfq, hbq, k₁, hk1, hq1, hf1, hb1, hK, HU⟩ := keep_eP hc he h0 hcl hH hN hx hv harr hf0 hfirst
+  have HQ := keep_qP hc hq h0 hcl (fun x hx j => hH x (pU_sub hx) j) hx hv harr hf0 hfirst (Nat.le_of_lt hkq) hqq hbq
+  have HE := EdgeStep.keep_q hc hqe h0 hcl (fun x hx j => hH x (List.mem_append_right _ hx) j) hx hv harr hf0 hfirst (Nat.le_of_lt hkq) hqq hbq
+  have hgQ := (HQ _ s_memI).1
+  obtain ⟨k, _, pcR, _, L, ifr⟩ := scroll_callS hs hgQ hqq
+  have eq := FrameModel.trace_inFrame hidle hfq ifr ht k (Nat.le_refl _)
+  have hk0 : 0 < k := by
+    rcases Nat.eq_zero_or_pos k with e | e
+    · exfalso
+      subst e
+      have e2 : (FrameModel.stepN 0 (trace m i kq)).pc = sy.PlayerSubs := hqq
+      rw [pcR] at e2
+      have e3 := congrArg UInt16.toNat e2
+      simp only [UInt16.toNat_add] at e3
+      have e4 : (3 : UInt16).toNat = 3 := rfl
+      rw [e4] at e3
+      have := sy.PlayerSubs.toNat_lt
+      omega
+    · exact e
+  obtain ⟨huniq, k₂, _, hq2, hf2, _, hU, hEnd⟩ := HU (fun j hj hfj => hp kq (Nat.le_of_lt hkq) hqq j hj hfj)
+  have e1 : kq + k = k₁ := huniq (kq + k) (by omega) (by rw [eq.1]; exact pcR)
+  have hk₁ : trace m i k₁ = FrameModel.stepN k (trace m i kq) := by rw [← e1]; exact eq.1
+  -- round 31: the scroll's rule with its amount, at the same call
+  obtain ⟨k', _, pcR', _, L', ifr'⟩ := ScrollRule.scroll_call hsc hgQ hqq
+  have eq' := FrameModel.trace_inFrame hidle hfq ifr' ht k' (Nat.le_refl _)
+  have hk0' : 0 < k' := by
+    rcases Nat.eq_zero_or_pos k' with e | e
+    · exfalso
+      subst e
+      have e2 : (FrameModel.stepN 0 (trace m i kq)).pc = sy.PlayerSubs := hqq
+      rw [pcR'] at e2
+      have e3 := congrArg UInt16.toNat e2
+      simp only [UInt16.toNat_add] at e3
+      have e4 : (3 : UInt16).toNat = 3 := rfl
+      rw [e4] at e3
+      have := sy.PlayerSubs.toNat_lt
+      omega
+    · exact e
+  have e1' : kq + k' = k₁ := huniq (kq + k') (by omega) (by rw [eq'.1]; exact pcR')
+  have ekk : k' = k := by omega
+  have hKm : ∀ x ∈ pK sy m0, (trace m i k₂).ram.get! x = m.ram.get! x := by
+    intro x hx
+    rw [hU x (pU_sub (pK_sub hx)), hK x hx]
+    exact (HQ x (pK_sub hx)).2
+  have hcK : (trace m i k₂).ram.get! (cIdx sy m0) = m.ram.get! (cIdx sy m0) :=
+    hKm _ (List.mem_map.2 ⟨(places sy m0).col, List.mem_cons_of_mem _ List.mem_cons_self, rfl⟩)
+  have hgK : (trace m i k₂).ram.get! (gIdx sy m0) = m.ram.get! (gIdx sy m0) :=
+    hKm _ (List.mem_map.2 ⟨(places sy m0).page, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self), rfl⟩)
+  refine ⟨k₂, hq2, hf2, hKm, ?_, fun hsix => ?_, fun hcol => ?_, fun hz => ?_, fun h6 hvt => ?_, fun h6 hz h32 h160 => ?_, kq, hkq, hqq, hfq, fun Y hY => ?_⟩
+  · have lx2 : (trace m i k₂).ram.get! (placesS sy m0).lx = (trace m i k₁).ram.get! (placesS sy m0).lx := hU _ lx_mem
+    have lp2 : (trace m i k₂).ram.get! (placesS sy m0).lp = (trace m i k₁).ram.get! (placesS sy m0).lp := hU _ lp_mem
+    have s2 : (trace m i k₂).ram.get! (placesS sy m0).frac = (trace m i k₁).ram.get! (placesS sy m0).frac := hU _ (pU_sub s_memI)
+    have lxq : (trace m i kq).ram.get! (placesS sy m0).lx = m.ram.get! (placesS sy m0).lx := (HE _ List.mem_cons_self).2
+    have lpq : (trace m i kq).ram.get! (placesS sy m0).lp = m.ram.get! (placesS sy m0).lp := (HE _ (List.mem_cons_of_mem _ List.mem_cons_self)).2
+    have sq : (trace m i kq).ram.get! (placesS sy m0).frac = m.ram.get! (placesS sy m0).frac := (HQ _ s_memI).2
+    have L2 : ScrollRule.left16 (placesS sy m0) (trace m i k₂) = ScrollRule.left16 (placesS sy m0) (FrameModel.stepN k (trace m i kq)) := by
+      unfold ScrollRule.left16
+      rw [lx2, lp2, hk₁]
+    have Lq : ScrollRule.left16 (placesS sy m0) (trace m i kq) = ScrollRule.left16 (placesS sy m0) m := by
+      unfold ScrollRule.left16
+      rw [lxq, lpq]
+    rw [L2, s2, hk₁, ← Lq, ← sq]
+    exact L
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hsix ⊢
+    exact hEnd.1 hsix
+
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hcol
+    obtain ⟨c1, c2⟩ := hEnd.2.1 hcol
+    exact ⟨c1, fun a b => c2 (by rw [hcK]; exact a) (by rw [hgK]; exact b)⟩
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hz
+    exact hEnd.2.2.1 hz
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hvt ⊢
+    exact hEnd.2.2.2.1 h6 hvt
+  · have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hKm _ nI_memK
+    rw [← hn2] at hz
+    exact hEnd.2.2.2.2 h6 hz h32 h160
+  · have lx2 : (trace m i k₂).ram.get! (ScrollRule.places sy m0).lx = (trace m i k₁).ram.get! (ScrollRule.places sy m0).lx := hU _ lx_mem
+    have lp2 : (trace m i k₂).ram.get! (ScrollRule.places sy m0).lp = (trace m i k₁).ram.get! (ScrollRule.places sy m0).lp := hU _ lp_mem
+    have lxq : (trace m i kq).ram.get! (ScrollRule.places sy m0).lx = m.ram.get! (ScrollRule.places sy m0).lx := (HE _ List.mem_cons_self).2
+    have lpq : (trace m i kq).ram.get! (ScrollRule.places sy m0).lp = m.ram.get! (ScrollRule.places sy m0).lp := (HE _ (List.mem_cons_of_mem _ List.mem_cons_self)).2
+    have L2 : ScrollRule.left16 (ScrollRule.places sy m0) (trace m i k₂) =
+        ScrollRule.left16 (ScrollRule.places sy m0) (FrameModel.stepN k' (trace m i kq)) := by
+      unfold ScrollRule.left16
+      rw [lx2, lp2, hk₁, ekk]
+    have Lq : ScrollRule.left16 (ScrollRule.places sy m0) (trace m i kq) = ScrollRule.left16 (ScrollRule.places sy m0) m := by
+      unfold ScrollRule.left16
+      rw [lxq, lpq]
+    have hb1 := (m.ram.get! (ScrollRule.places sy m0).lx).toNat_lt
+    have hb2 := (m.ram.get! (ScrollRule.places sy m0).lp).toNat_lt
+    have hlm : ScrollRule.left16 (ScrollRule.places sy m0) m < 65536 := by unfold ScrollRule.left16; omega
+    have hYl := Y.toNat_lt
+    rw [L2] at hY
+    rcases L' with h1 | ⟨hal, Y', hY', h1⟩
+    · rw [h1, Lq] at hY
+      left
+      omega
+    · rw [h1, Lq] at hY
+      have hY'l := Y'.toNat_lt
+      right
+      exact ⟨hal.2.2.2, by omega⟩
 
 /-! ## The rule of a frame -/
 
@@ -1409,7 +1822,7 @@ theorem rule_zero (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
     (hz : m.ram.get! (nI sy m0) = 0) :
     RuleW (valsOf (places sy m0) m) (valsOf (places sy m0) (frame m i)) := by
   obtain ⟨k₂, hq2, hf2, hK, hS, hE⟩ := frame_six hc hq hqe he hs hidle h0 hcl hH hN hx hv harr hf0 hfirst ht hp
-  obtain ⟨hE1, hE2⟩ := hE.2.2 hz
+  obtain ⟨hE1, hE2⟩ := hE.2.2.1 hz
   have hn2 : (trace m i k₂).ram.get! (nI sy m0) = m.ram.get! (nI sy m0) := hK _ nI_memK
   exact ⟨valsOf (places sy m0) (trace m i k₂), scroll_of hK hS (hw k₂ hq2 hf2), parseW_zero (nodup_of_check he) (by rw [hn2]; exact hz) hE1 hE2⟩
 
@@ -1543,7 +1956,7 @@ theorem col_frame (hc : CtrlKeep.ctrlCheck sy m0 = true) {v : UInt8} (hq : qChec
   have hmem : cIdx sy m0 ∈ pE sy m0 := by rw [pE_eq]; simp
   unfold ColOK at hc16 ⊢
   rcases n_cases h8 with hz | hcol | hsix
-  · rw [(hE.2.2 hz).1 _ hmem (Ne.symm n2) (Ne.symm s1), hcK]
+  · rw [(hE.2.2.1 hz).1 _ hmem (Ne.symm n2) (Ne.symm s1), hcK]
     exact hc16
   · obtain ⟨C1, C2⟩ := (hE.2.1 hcol).2 hc16 hp255
     rw [← hcK] at hc16

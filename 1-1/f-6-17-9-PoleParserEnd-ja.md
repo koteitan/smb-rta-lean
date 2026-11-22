@@ -91,4 +91,6 @@ Inv(L, ms 0) ∧ ColOK(ms 0)  ∧  ∀ n, (フレーム n の条件、edge(ms n)
 
 29 回目: ルートがこれらの条件を与え、`tilesCol` は `TileSlot` だけを求めます（[ルートのフレームの上のエリアの解析](f-6-17-10-PoleParserRun-ja.md)）。歩きは、プレイヤーのルーチンに最初に来たところからだけ `posW` を求めます。
 
+31 回目: `UpdScrollVar` での歩きを、画面のバッファの制御バイトが 6 でない 8 つの切れにも分けます（`ctlPats`）。各切れから厳しい歩きがフレームの終わりで `N − 1` を求めます（`N` = 0 でカウンタが 32 ‥ 159 なら、タスクの処理の呼び出し）。`keep_eP` と `frame_six` は最後にこの 2 つの事実を持ちます（[各フレームの厳しい規則](f-6-17-12-PoleStrict-ja.md)）。
+
 **ファイル。** `Theorems/PoleParserEnd.lean`。`Main.lean` の `genPoleParserEnd` と `pole-keep parser`（28 回目の行）。

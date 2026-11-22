@@ -24,6 +24,8 @@ and `FrameKeep.guardE` protects two more bytes: the pixel and the page of the sc
 
 **Round 27.** The same walks follow a third byte, the platforms' force on the scroll, and `rCheck` also asks that it is 0 after the scroll handler's call. So it is 0 at each scroll handler, and the field `near` asks `NearX(Q) := Allows(Q) → left16(Q) + xs(Q) + 2 ≤ pixel16(Q)`, with the byte the move stores in place of `X` (`EdgeStep.near_of_x`): [The platforms' force on the scroll](e-2-10-3-14-PlatformForce.md). `guardE` protects that byte too.
 
+**Round 31.** The same walks follow the screen's right edge's two bytes too (`eI` has 5 bytes), and `guardE` protects them. With them the right edge's relation to the left edge holds at the end of every counted frame (`OnFrames.relAll`): [The screen's right edge in the scroll handler](e-2-10-3-19-RightEdge.md).
+
 **Proof.** One counted frame `j`, from `M = seq (j − 1)` to `b = seq j`. `Q` is the machine at the scroll handler (the first time after the player's routine) and `R` the machine at the instruction after its call (`PlayerSubs + 3`).
 
 1. edge(start of frame j) = edge(M). The frames not counted end paused and do not come to the player's routine. A walk of `CtrlKeep` follows each byte of the edge, and on every path that does not come to the routine no instruction writes it (`EdgeStep.keep_noCut`, `OnFrames.edgeLag`).

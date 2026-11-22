@@ -91,4 +91,6 @@ So `tilesCol` stays.
 
 Round 29: the route supplies these conditions, and `tilesCol` asks only `TileSlot` ([The area parser on the route's frames](f-6-17-10-PoleParserRun.md)). The walks ask `posW` only from the first arrival at the player's routine on.
 
+Round 31: the walks at `UpdScrollVar` are also split by the screen buffers' control byte into 8 pieces where it is not 6 (`ctlPats`), and from each piece a strict walk asks `N − 1` at the frame's end (for `N` = 0 with the counter in 32 ‥ 159: the task handler's call); `keep_eP` and `frame_six` have these two facts at their end ([the strict rule of each frame](f-6-17-12-PoleStrict.md)).
+
 **Files.** `Theorems/PoleParserEnd.lean`; `genPoleParserEnd` and `pole-keep parser` (the round 28 line) in `Main.lean`.

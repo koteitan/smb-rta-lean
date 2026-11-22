@@ -51,7 +51,7 @@ parWrap_of_strict : JV(all 0) ∧ (∀ n + 1 < ix(g), StrictF(all n, all (n+1)))
 
 `StrictF(a, b) := Strict(a, b) ∨ b = a`: a frame that does not come to `UpdScrollVar` (it ends paused) keeps the bytes. Why `JV` is kept: with `N = 0` and `S + y ≥ 32` the parser starts a new column with `S + y − 32 < 3` and `N = 7`, and `3 + 21 < 32`; with `N ≥ 1` it runs a task, `N` falls by 1 and `S` grows by at most 3. So `S < 32` at every frame's start.
 
-These theorems are proved. The route does not use them: `parWrap` stays a field. What they leave is stated below.
+These theorems are proved. The route does not use them: `parWrap` stays a field. What they leave is stated below. (Round 31: the strict rule is proved and `parWrap` is gone; the route uses `JV` and `s_lt` from here: [the strict rule of each frame](f-6-17-12-PoleStrict.md).)
 
 ## Measured
 

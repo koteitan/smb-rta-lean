@@ -38,6 +38,6 @@ stop_run（フィールド、狭めた）:
 
 - `wall`: `C + 37` より前で `hstep` に従わないフレームは、左の壁に止められている。証明には、フレームが `hstep` に従わないわけ（壁での横の押し戻しや立ち、そのあとの古い保存された速さ、隠された向き）と、それぞれでの位置が要ります。
 - `late`（狭めた）: 壁に当たったあと、`C + 37` から `C + 41` で同じこと、または角にいること。
-- `stop_run`（狭めた）: `RunningSpeed` を書くのは地面での `GetPlayerAnimSpeed` だけで、保存された速さから書きます。証明には、`RunningSpeed` を追うフレームの歩きと、フレームの始めで保存された速さが走りのしきい値より下であることが要ります。
+- `stop_run`（狭めた）: `RunningSpeed` を書くのは地面での `GetPlayerAnimSpeed` だけで、保存された速さから書きます。証明には、`RunningSpeed` を追うフレームの歩きと、フレームの始めで保存された速さが走りのしきい値より下であることが要ります。ラウンド 31 でこれをしました: `stop_run` は証明されフィールドではなくなり、残るのはもっと小さいフィールド `ab_run` です（[部屋のフレームの `RunningSpeed`: `stop_run` を証明する](c-7-4-2-RunWalk-ja.md)、項目 1-1-c-7-4-2）。
 
 **ファイル。** `Theorems/RoomJoin.lean`: `RoomFields.stop_run`、`RoomFields.late`、`RoomCore.rs_of_safe`、`RoomCore.no_wall_back`、`RoomCore.anchor_at`、`RoomRun.anchor_atR`。プログラム `room-approach-check`（数え 46 から 51、55 から 58）。

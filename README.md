@@ -210,10 +210,11 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       </details>
     - ✅ 1-1-c-7-2 The state at first control (`start`, `startP0`, `startP1`, `v_start`, `ab_start`): from the change's rows
     - ✅ 1-1-c-7-3 The entry on real frames: one pass of the side check
-    - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `stop_run`)
-      <details><summary>1 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-c-7-4 How the left wall stops him (`wall`, `late`, `ab_run`)
+      <details><summary>2 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-4-1 Measured; `stop_run`, `late` narrowed
+      - ✅ 1-1-c-7-4-2 `RunningSpeed` on the room's frames (`stop_run` gone; new field `ab_run`)
 
       </details>
     - 🚨 1-1-c-7-5 The fall and the height of the feet (`stand_wall`, `read_stop`)
@@ -295,13 +296,14 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
   - ✅ 1-1-d-2-3 The last 122 frames (under the condition at the exit, no Start on the game core's frames)
   - 🚨 1-1-d-2-4 The screen stays on the first page, the entry has the long timer
     - ✅ 1-1-d-2-4-1 `Room` at the first control in the room: from the change's rows of the time (`chg.roomRest` removed)
-    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (round 30: left: `roomLateU` (back jumps of the screen loop and the sound routine) and `roomReads` on the first frame and after a frame from control 6, `roomLateS` (the sound routine's back jumps) on the others, `roomRead`, `roomErase` (only the block buffers' end), `roomXbit`, `roomOff₆` on a frame from 6 after a frame from 6)
-      <details><summary>4 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-d-2-4-2 Each instruction in the room meets `SiteOK` (round 31: left: `roomLateU` (back jumps of the screen loop and the sound routine) and `roomReads` on the first frame and after a frame from control 6, `roomLateS` (the sound routine's back jumps) on the others, `roomRead`, `roomErase` (only an erase through a pointer into the second block buffer), `roomXbit`, `roomOff₆` on a frame from 6 after a frame from 6)
+      <details><summary>5 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-d-2-4-2-1 The parts of `SiteOK`: the offset from control 0 and the reads but the screen pointer's proved (`SiteParts`; `roomSites` gone)
       - ✅ 1-1-d-2-4-2-2 The screen buffers' records: the screen update's reads and the offset after a frame from control 0 proved (`BufferRecords`)
       - ✅ 1-1-d-2-4-2-3 The time of the room's frames: proved after a frame from control 0, but in the sound routine (`RoomLate`; new field `roomLateS`)
       - ✅ 1-1-d-2-4-2-4 The time from the loops' back jumps: proved on every room frame but at the back jumps (`LoopTime`; `roomLate` gone, new `roomLateU`)
+      - ✅ 1-1-d-2-4-2-5 The coin's erase in the first block buffer: proved (`EraseSplit`; `roomErase` narrowed to the second block buffer)
 
       </details>
     - ✅ 1-1-d-2-4-3 Each frame up to the entry starts in the player's routine (from the definition of `a₂`)
@@ -399,8 +401,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `fr` gone; `fr` is the definition `frOf`)
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
-      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.rightRel`, `OnFrames.endKeep`)
-        <details><summary>17 lines of proved parts (the parent's own assumptions remain)</summary>
+      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.endKeep`)
+        <details><summary>18 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; `spareV` is a part of `keep.cleanE`)
         - ✅ 1-1-e-2-10-3-2 The subspeed on the other frames (a walk that follows it)
@@ -419,6 +421,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - ✅ 1-1-e-2-10-3-16 The byte the move stores for the scroll (`near` is gone; new `nearA`)
         - ✅ 1-1-e-2-10-3-17 The scroll's bytes from the frame's start to the player's routine (`nearA` is gone; new `nearStep`)
         - ✅ 1-1-e-2-10-3-18 The side of the clamp at the screen's edge (`nearStep` is gone; new `rightRel`, `endKeep`)
+        - ✅ 1-1-e-2-10-3-19 The screen's right edge in the scroll handler (`rightRel` is gone; `endKeep` narrowed)
 
         </details>
         - 🚨 1-1-e-2-10-3-10 The push's bound from the screen's left edge (`collide` fixed in round 24 after it was found false, assumed; `edge₀` is a theorem since round 25 and `OnFrames.edge` since round 26)
@@ -454,8 +457,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-14 No enemy near the flag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
-    - 🚨 1-1-f-6-17 The pole's tiles: stores and reads (`bufAll`, `keepB`, `tilesCol`, `parWrap`; `tiles`, `tilesRead`, `ySide`, `tilesFar`, `yKeep` gone)
-      <details><summary>11 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-f-6-17 The pole's tiles: stores and reads (`bufAll`, `keepB`, `tilesCol`, `ctlU`; `tiles`, `tilesRead`, `ySide`, `tilesFar`, `yKeep`, `parWrap` gone)
+      <details><summary>12 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-f-6-17-1 `TileRead` at an actual load from a frame-start tile condition (`PoleTiles`; the write checks and the read range remain)
       - ✅ 1-1-f-6-17-2 `TileRead` from the map at control (`PoleTileWalk`; `tiles` gone; new fields `bufAll`, `tilesRead`)
@@ -468,6 +471,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-f-6-17-9 The area parser, the second half of a frame (`PoleParserEnd`; the weak rule on every frame, the invariant on a run)
       - ✅ 1-1-f-6-17-10 The area parser on the route's frames (`PoleParserRun`; `tilesCol` asks `TileSlot`, new field `parWrap`)
       - ✅ 1-1-f-6-17-11 `TileSlot` on one page, the scroll counter under the strict rule (`PoleWrap`; `tilesCol` and `parWrap` narrowed)
+      - ✅ 1-1-f-6-17-12 The strict rule of each frame (`PoleStrict`; `parWrap` gone, new field `ctlU`)
 
       </details>
     - 🚨 1-1-f-6-18 The edge store does not bring him into the range (`edge`); `P₂(g)` is the position at the end of the move (`moved` removed: 1-1-f-6-18-2)

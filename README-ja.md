@@ -210,10 +210,11 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
       </details>
     - ✅ 1-1-c-7-2 最初の操作の状態（`start`、`startP0`、`startP1`、`v_start`、`ab_start`）: 切り替えの段から
     - ✅ 1-1-c-7-3 本物のフレームで入る: 横の判定の 1 回の通過
-    - 🚨 1-1-c-7-4 左の壁の当たり方（`wall`、`late`、`stop_run`）
-      <details><summary>証明済みの部分 1 行（親の仮定は残る）</summary>
+    - 🚨 1-1-c-7-4 左の壁の当たり方（`wall`、`late`、`ab_run`）
+      <details><summary>証明済みの部分 2 行（親の仮定は残る）</summary>
 
       - ✅ 1-1-c-7-4-1 測った。`stop_run`、`late` を狭めた
+      - ✅ 1-1-c-7-4-2 部屋のフレームの `RunningSpeed`（`stop_run` はなくなった。新しいフィールド `ab_run`）
 
       </details>
     - 🚨 1-1-c-7-5 落下と足の高さ（`stand_wall`、`read_stop`）
@@ -295,13 +296,14 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
   - ✅ 1-1-d-2-3 最後の 122 フレーム（出口の条件のもと、ゲームコアで Start なし）
   - 🚨 1-1-d-2-4 画面は最初のページのまま、入るときのタイマーは長い値
     - ✅ 1-1-d-2-4-1 部屋で最初に操作できる状態の `Room`: 切り替えの時間の段から（`chg.roomRest` をなくした）
-    - 🚨 1-1-d-2-4-2 部屋の各命令が `SiteOK` を満たす（30 回目: 残り: 最初のフレームと制御 6 からのフレームの次の `roomLateU`（画面のループと音のルーチンの後ろへのジャンプ）と `roomReads`、ほかのフレームの `roomLateS`（音のルーチンの後ろへのジャンプ）、`roomRead`、`roomErase`（ブロックのバッファの終わりだけ）、`roomXbit`、制御 6 からのフレームの次の制御 6 からのフレームの `roomOff₆`）
-      <details><summary>証明済みの部分 4 行（親の仮定は残る）</summary>
+    - 🚨 1-1-d-2-4-2 部屋の各命令が `SiteOK` を満たす（31 回目: 残り: 最初のフレームと制御 6 からのフレームの次の `roomLateU`（画面のループと音のルーチンの後ろへのジャンプ）と `roomReads`、ほかのフレームの `roomLateS`（音のルーチンの後ろへのジャンプ）、`roomRead`、`roomErase`（2 つめのブロックのバッファへのポインタを通る消去だけ）、`roomXbit`、制御 6 からのフレームの次の制御 6 からのフレームの `roomOff₆`）
+      <details><summary>証明済みの部分 5 行（親の仮定は残る）</summary>
 
       - ✅ 1-1-d-2-4-2-1 `SiteOK` の部分。制御 0 からのオフセットと画面のポインタ以外の読みは証明（`SiteParts`。`roomSites` はなくなった）
       - ✅ 1-1-d-2-4-2-2 画面のバッファのレコード。制御 0 からのフレームの次の、画面の更新の読みとオフセットは証明（`BufferRecords`）
       - ✅ 1-1-d-2-4-2-3 部屋のフレームの時間。制御 0 からのフレームの次では音のルーチンのほかは証明（`RoomLate`。新しいフィールド `roomLateS`）
       - ✅ 1-1-d-2-4-2-4 ループの後ろへのジャンプからの時間。後ろへのジャンプのほかは部屋のすべてのフレームで証明（`LoopTime`。`roomLate` はなくなり、新しい `roomLateU`）
+      - ✅ 1-1-d-2-4-2-5 最初のブロックのバッファでのコインの消去。証明（`EraseSplit`。`roomErase` を 2 つめのブロックのバッファに狭めた）
 
       </details>
     - ✅ 1-1-d-2-4-3 入るまで各フレームはプレイヤーのルーチンで始まる（`a₂` の定義から）
@@ -399,8 +401,8 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
     - 🚨 1-1-e-2-10 フレームを機械から読む（`reads`、`fr` をなくした。`fr` は定義 `frOf`）
       - ✅ 1-1-e-2-10-1 各フレームは `TopSpeed.Frame`（`frame_readE`）
       - ✅ 1-1-e-2-10-2 当たり判定のビットは 4 つの値（`coll` をなくした。`ImpedePlayerMove` で `X` を分ける歩き。新しいフィールド `spareC`）
-      - 🚨 1-1-e-2-10-3 スクロールの処理からあとの位置と、速さ 0 とサブ速さ 0 で終わるフレームのサブ速さ（`collide`、`CollideS`、`posW`、`clampR`、`OnFrames.rightRel`、`OnFrames.endKeep`）
-        <details><summary>証明済みの部分 17 行（親の仮定は残る）</summary>
+      - 🚨 1-1-e-2-10-3 スクロールの処理からあとの位置と、速さ 0 とサブ速さ 0 で終わるフレームのサブ速さ（`collide`、`CollideS`、`posW`、`clampR`、`OnFrames.endKeep`）
+        <details><summary>証明済みの部分 18 行（親の仮定は残る）</summary>
 
         - ✅ 1-1-e-2-10-3-1 スクロールの処理からあとの速さ（速さを追う歩き。`spareV` は `keep.cleanE` の一部）
         - ✅ 1-1-e-2-10-3-2 ほかのフレームのサブ速さ（サブ速さを追う歩き）
@@ -419,6 +421,7 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
         - ✅ 1-1-e-2-10-3-16 動きがスクロールのために書くバイト（`near` はなくなった。新しい `nearA`）
         - ✅ 1-1-e-2-10-3-17 フレームの始めからプレイヤーのルーチンまでのスクロールのバイト（`nearA` はなくなった。新しい `nearStep`）
         - ✅ 1-1-e-2-10-3-18 画面の端での補正の向き（`nearStep` はなくなった。新しい `rightRel`、`endKeep`）
+        - ✅ 1-1-e-2-10-3-19 スクロールの処理での画面の右端（`rightRel` はなくなった。`endKeep` を狭めた）
 
         </details>
         - 🚨 1-1-e-2-10-3-10 画面の左端を基点に入れた押し戻しの上限（偽と分かった `collide` を 24 回目に直した。仮定。`edge₀` は 25 回目から、`OnFrames.edge` は 26 回目から定理）
@@ -454,8 +457,8 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
     - 🚨 1-1-f-6-14 旗の近くに敵がいない
     - 🚨 1-1-f-6-15 旗を越えて戻らない
     - ✅ 1-1-f-6-16 そのルーチンを書くのはその命令だけで、通過の終わり（`pass` をなくした。触るフレーム全部の歩き `PoleFrame`）
-    - 🚨 1-1-f-6-17 旗のタイルの書き込みと読み（`bufAll`、`keepB`、`tilesCol`、`parWrap`。`tiles`、`tilesRead`、`ySide`、`tilesFar`、`yKeep` をなくした）
-      <details><summary>証明済みの部分 11 行（親の仮定は残る）</summary>
+    - 🚨 1-1-f-6-17 旗のタイルの書き込みと読み（`bufAll`、`keepB`、`tilesCol`、`ctlU`。`tiles`、`tilesRead`、`ySide`、`tilesFar`、`yKeep`、`parWrap` をなくした）
+      <details><summary>証明済みの部分 12 行（親の仮定は残る）</summary>
 
       - ✅ 1-1-f-6-17-1 フレームの始まりのタイルの条件から実際の読みの `TileRead`（`PoleTiles`。書き込みの確認と読みの範囲は残る）
       - ✅ 1-1-f-6-17-2 操作の始まりの地図から `TileRead`（`PoleTileWalk`。`tiles` をなくした。新しいフィールド `bufAll`、`tilesRead`）
@@ -468,6 +471,7 @@ prove.py     smbrta.json から、定理の確認まで全部を実行する
       - ✅ 1-1-f-6-17-9 エリアの解析、フレームの後半（`PoleParserEnd`。どのフレームも弱い決まり、ランの上の不変式）
       - ✅ 1-1-f-6-17-10 ルートのフレームの上のエリアの解析（`PoleParserRun`。`tilesCol` は `TileSlot` を求める。新しいフィールド `parWrap`）
       - ✅ 1-1-f-6-17-11 `TileSlot` を 1 つのページで、厳しい規則のもとのスクロールのカウンタ（`PoleWrap`。`tilesCol` と `parWrap` を狭めた）
+      - ✅ 1-1-f-6-17-12 各フレームの厳しい規則（`PoleStrict`。`parWrap` をなくした。新しいフィールド `ctlU`）
 
       </details>
     - 🚨 1-1-f-6-18 端の書き込みで範囲に入らない（`edge`）。`P₂(g)` は移動の終わりの位置（`moved` をなくした: 1-1-f-6-18-2）

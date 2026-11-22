@@ -32,7 +32,7 @@ walk stops (`cutPos`, excluded by the field `posW`). So at each scroll handler i
 byte the move stores in place of `X` (`near_of_x`). Page: `1-1/e-2-10-3-14-PlatformForce.md`. Round 28: `NearX` at the scroll handler is a theorem
 (`SurfaceFrames.OnFrames.nearAt`) from the field `nearA` at the player's routine (`MoveScroll`). Round 29: `nearA` is a theorem too (`SideTimer`), from `NearM`
 at the frame's start and the field `nearStep` (round 30: a theorem, `SurfaceFrames.OnFrames.nearStepAt`, with the clamp's choice of `ClampSide` and the
-fields `rightRel`, `endKeep`).
+fields `rightRel`, `endKeep`). Round 31: the walks follow the right edge's two bytes too (`eI`), and `rightRel` is gone (`RightEdge`).
 -/
 
 namespace Smbrta.EdgeStep
@@ -389,9 +389,11 @@ open AfterKeep (walkQ1 tableBut rkOn guardH)
 def platI (sy : Syms) : Nat := (sy.Platform_X_Scroll &&& 0x7FF).toNat
 
 /-- **The edge's two bytes**, as indices of RAM: the screen's left edge, its pixel and its page (`ScreenClamp.places`: the operands of the clamp's two loads); round 27:
-and the platforms' force on the scroll (`platI`) -/
+and the platforms' force on the scroll (`platI`); round 31: and the screen's right edge, its pixel and its page (one byte after the left edge's: `ClampSide.eX P 1`,
+`ClampSide.eP P 1`), which the routine of the offscreen bits reads (`RightEdge`) -/
 def eI (sy : Syms) (m0 : Machine) : List Nat :=
-  [((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat, ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat, platI sy]
+  [((ScreenClamp.places sy m0).edgeX &&& 0x7FF).toNat, ((ScreenClamp.places sy m0).edgeP &&& 0x7FF).toNat, platI sy,
+    ((ScreenClamp.places sy m0).edgeX + 1 &&& 0x7FF).toNat, ((ScreenClamp.places sy m0).edgeP + 1 &&& 0x7FF).toNat]
 
 theorem platI_mem {m0 : Machine} : platI sy ∈ eI sy m0 := List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
 
