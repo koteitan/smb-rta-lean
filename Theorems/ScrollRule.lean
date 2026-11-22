@@ -17,7 +17,7 @@ position (`SurfaceRead.edgeOf`) the edge is kept, or it is at most `256·Y` furt
 bits do not write the edge. Round 26: with the walks of `EdgeStep` (the edge kept before the call and after it) and the one-state field `near` (the scroll is
 allowed only when he is far enough right of the edge) this gives the old field `edge` of `SurfaceFrames.OnFrames` (`OnFrames.edgeAt`). Round 28: `near` is a theorem
 (`OnFrames.nearAt`, from the field `nearA` at the player's routine and `MoveScroll.move_xs`; round 29: `nearA` is a theorem, `OnFrames.nearAAt`, from the
-field `nearStep`).
+field `nearStep`; round 30: `nearStep` is a theorem, `OnFrames.nearStepAt`, with the clamp's choice of `ClampSide`).
 
 The proof is by pieces of the ROM's code with known values (as `ScreenClamp`): the check `check` walks each piece for every value of the byte it branches on.
 The addresses come from the ROM: the operands of the scroll handler's instructions, found from the call at the player's routine's end. No game data.

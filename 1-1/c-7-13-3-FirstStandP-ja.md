@@ -30,6 +30,8 @@ stand_P（フィールド、狭めた）:
 
 ## 残ること
 
+ラウンド 30（[最初の立ちの前の位置を証明する](c-7-13-4-StandHit-ja.md)）: `stand_P` はなくなりました。`wall_turn` の場合は証明しました（`RoomCore.stand_hit`）。`stand_first` は `RoomRun.fall_left` と `InRoom.wall` の歩き（`WallX`、`WallF`）から位置を得ます。以下はラウンド 29 の状態です。
+
 最初の立ちの 1 つ前のフレームでのフィールド。証明には次が要ります。壁での立ちは移動の終わりで `x ≤ 12`（`RoomWall` と同じような移動の終わりからの歩きで、`x` が 13 から先）。そしてそのフレームの左への移動は多くて 24/16 px（止めるフレームでの移動の終わりの移動のモデル）。
 
 **ファイル。** `Theorems/RoomJoin.lean`: `RoomFields.stand_P`、`stand_first`、`wall_turn`。

@@ -26,6 +26,9 @@ On the ROM (`recCheckT`) the walks (ii) and (iii) of `BufferRecords`, from the p
 at the screen update, whose loop over the records then has no count the walk knows. So `late_sites_of_rows` asks `Late` on the frames `BufferRecords.U` and
 `LateS` on the others.
 
+Round 30: the clamp and `LateS` take a predicate `sq` on the program counter in place of the address `lo` (`sndAll` is round 29's `lo ≤ pc`), so that
+`LoopTime` can clamp only at the loops' back jumps.
+
 There is no game data in this file. Page: `1-1/d-2-4-2-3-RoomLate.md`.
 -/
 
@@ -53,59 +56,60 @@ theorem late_of_time {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {m : Mac
 
 /-! ## The sound routine's time -/
 
-/-- **The sound routine's time**: an instruction of the sound routine's code (from `lo` on in the ROM) runs at dot `D` or earlier -/
-def LateS (lo : UInt16) (D : Nat) (m : Machine) : Prop := lo ≤ m.pc → m.fdot ≤ D
+/-- **The sound routine's time**: an instruction at a program counter that `sq` picks runs at dot `D` or earlier. Round 29 took `sq` = `sndAll` (the sound
+routine's code, from `SoundEngine` on in the ROM); round 30 (`LoopTime`) takes the loops' back jumps -/
+def LateS (sq : UInt16 → Bool) (D : Nat) (m : Machine) : Prop := sq m.pc = true → m.fdot ≤ D
 
-/-- the clamp of the last dot to `D` in the sound routine's code -/
-def sclamp (lo : UInt16) (D : Nat) (A : AS) : AS := if decide (lo ≤ A.pc) && decide (D < A.hi) then { A with hi := D } else A
+/-- the clamp of the last dot to `D` at the program counters that `sq` picks -/
+def sclamp (sq : UInt16 → Bool) (D : Nat) (A : AS) : AS := if sq A.pc && decide (D < A.hi) then { A with hi := D } else A
 
-theorem sim_sclamp {E : Env} {F : Nat × UInt8} {lo : UInt16} {D : Nat} (hD : D < dotsPerFrame) {A : AS} {m : Machine} (hs : Sim E F A m) (hh : LateS lo D m) :
-    Sim E F (sclamp lo D A) m := by
+theorem sim_sclamp {E : Env} {F : Nat × UInt8} {sq : UInt16 → Bool} {D : Nat} (hD : D < dotsPerFrame) {A : AS} {m : Machine} (hs : Sim E F A m) (hh : LateS sq D m) :
+    Sim E F (sclamp sq D A) m := by
   unfold sclamp
   split
   · rename_i hc
     simp only [Bool.and_eq_true, decide_eq_true_eq] at hc
-    have h1 : lo ≤ m.pc := by rw [hs.pc]; exact hc.1
+    have h1 : sq m.pc = true := by rw [hs.pc]; exact hc.1
     exact { hs with hi := hh h1, lim := hD }
   · exact hs
 
-theorem sclamp_k (lo : UInt16) (D : Nat) (A : AS) : (sclamp lo D A).k = A.k := by
+theorem sclamp_k (sq : UInt16 → Bool) (D : Nat) (A : AS) : (sclamp sq D A).k = A.k := by
   unfold sclamp
   split <;> rfl
 
-theorem sclamp_spent (lo : UInt16) (D : Nat) (A : AS) : (sclamp lo D A).spent = A.spent := by
+theorem sclamp_spent (sq : UInt16 → Bool) (D : Nat) (A : AS) : (sclamp sq D A).spent = A.spent := by
   unfold sclamp
   split <;> rfl
 
 /-! ## The walk: no clamp to `late`, the clamp to `D` in the sound routine's code -/
 
 section
-variable {G : Reg} {C : CfgS} {chk : AS → Bool} {Fu : Nat} {F : Nat × UInt8} {lo : UInt16} {D : Nat}
+variable {G : Reg} {C : CfgS} {chk : AS → Bool} {Fu : Nat} {F : Nat × UInt8} {sq : UInt16 → Bool} {D : Nat}
 
 /-- from `A`, step by step with `RoomPause.pstep`, as `SiteParts.walkPC`, and `chk` holds at every state of the way and at the frame's end; the last dot is clamped
 to `D` in the sound routine's code (`sclamp`), and nowhere else -/
-def walkST (G : Reg) (C : CfgS) (chk : AS → Bool) (lo : UInt16) (D : Nat) : Nat → AS → Bool
+def walkST (G : Reg) (C : CfgS) (chk : AS → Bool) (sq : UInt16 → Bool) (D : Nat) : Nat → AS → Bool
   | 0, _ => false
-  | n + 1, A => chk (sclamp lo D A) && (pstep C.P C.E C.ops G (sclamp lo D A)).all fun r =>
+  | n + 1, A => chk (sclamp sq D A) && (pstep C.P C.E C.ops G (sclamp sq D A)).all fun r =>
     match r with
     | none => false
     | some B =>
-      if B.k == A.k then (C.cut.get! (weaken C B).pc.toNat != 0 && coverS C (sclamp lo D (weaken C B))) || walkST G C chk lo D n (weaken C B)
+      if B.k == A.k then (C.cut.get! (weaken C B).pc.toNat != 0 && coverS C (sclamp sq D (weaken C B))) || walkST G C chk sq D n (weaken C B)
       else B.k == A.k + 1 && C.fin B && chk B
 
 /-- `A` covers `m` with `Ph`, and a walk from `A` succeeds -/
-def LiveST (G : Reg) (C : CfgS) (chk : AS → Bool) (lo : UInt16) (D : Nat) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
-  Sim C.E F A m ∧ Ph G A m ∧ ∃ n, walkST G C chk lo D n A = true
+def LiveST (G : Reg) (C : CfgS) (chk : AS → Bool) (sq : UInt16 → Bool) (D : Nat) (F : Nat × UInt8) (A : AS) (m : Machine) : Prop :=
+  Sim C.E F A m ∧ Ph G A m ∧ ∃ n, walkST G C chk sq D n A = true
 
-theorem chkS_of_walk {n : Nat} {A : AS} (h : walkST G C chk lo D n A = true) : chk (sclamp lo D A) = true := by
+theorem chkS_of_walk {n : Nat} {A : AS} (h : walkST G C chk sq D n A = true) : chk (sclamp sq D A) = true := by
   cases n with
   | zero => simp [walkST] at h
   | succ n =>
     simp only [walkST, Bool.and_eq_true] at h
     exact h.1
 
-theorem cover_liveST (ht : C.t.all (walkST G C chk lo D Fu) = true) {B : AS} {m : Machine} (hs : Sim C.E F B m) (hp : Ph G B m) (h : coverS C B = true) :
-    ∃ D', LiveST G C chk lo D F D' m ∧ D'.k = B.k := by
+theorem cover_liveST (ht : C.t.all (walkST G C chk sq D Fu) = true) {B : AS} {m : Machine} (hs : Sim C.E F B m) (hp : Ph G B m) (h : coverS C B = true) :
+    ∃ D', LiveST G C chk sq D F D' m ∧ D'.k = B.k := by
   unfold coverS at h
   obtain ⟨i, _, h2⟩ := List.any_eq_true.1 h
   split at h2
@@ -123,18 +127,18 @@ theorem cover_liveST (ht : C.t.all (walkST G C chk lo D Fu) = true) {B : AS} {m 
 /-- **One step of the walk**, as `SiteParts.live_stepPC`, with `SiteOK` at the machine from `R` and the check at the clamped state (`hQ`), and `LateS` at both
 machines (`hS`, `hl2`) -/
 theorem live_stepST {R : Machine → Prop} (hQ : ∀ {A : AS} {m : Machine}, Sim C.E F A m → chk A = true → R m → SiteOK C.P m)
-    (hS : ∀ {m : Machine}, R m → LateS lo D m) (hD : D < dotsPerFrame)
-    (hO : PlacesOK C.E C.P) (ht : C.t.all (walkST G C chk lo D Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
-    (h0 : StepWrites.tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine} (hl : LiveST G C chk lo D F A m)
-    (hr : R m) (hl2 : LateS lo D (go step m).2) :
-    (∃ A', LiveST G C chk lo D F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
+    (hS : ∀ {m : Machine}, R m → LateS sq D m) (hD : D < dotsPerFrame)
+    (hO : PlacesOK C.E C.P) (ht : C.t.all (walkST G C chk sq D Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
+    (h0 : StepWrites.tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine} (hl : LiveST G C chk sq D F A m)
+    (hr : R m) (hl2 : LateS sq D (go step m).2) :
+    (∃ A', LiveST G C chk sq D F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
     ((go step m).2.frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ chk B = true ∧ B.k = A.k + 1 ∧ Sim C.E F B (go step m).2 ∧ Ph G B (go step m).2) := by
   obtain ⟨hs, hp, n, hw⟩ := hl
   cases n with
   | zero => simp [walkST] at hw
   | succ n =>
-    have hs1 : Sim C.E F (sclamp lo D A) m := sim_sclamp hD hs (hS hr)
-    have hp1 : Ph G (sclamp lo D A) m := RoomPause.ph_of_spent (sclamp_spent lo D A).symm hp
+    have hs1 : Sim C.E F (sclamp sq D A) m := sim_sclamp hD hs (hS hr)
+    have hp1 : Ph G (sclamp sq D A) m := RoomPause.ph_of_spent (sclamp_spent sq D A).symm hp
     have hh : SiteOK C.P m := hQ hs1 (chkS_of_walk hw) hr
     obtain ⟨r, hr', hB⟩ := RoomPause.s_pstep hO hops hT h0 hg hkb hs1 hh hp1
     simp only [walkST, Bool.and_eq_true, List.all_eq_true] at hw
@@ -152,7 +156,7 @@ theorem live_stepST {R : Machine → Prop} (hQ : ∀ {A : AS} {m : Machine}, Sim
         obtain ⟨n1, n2, n3⟩ := RoomPause.weaken_of (C := C) g1
         have hpW : Ph G (weaken C B) (go step m).2 := RoomPause.ph_of_spent n3.symm g3
         rcases hw2 with ⟨_, h3⟩ | h3
-        · have hpC : Ph G (sclamp lo D (weaken C B)) (go step m).2 := RoomPause.ph_of_spent (sclamp_spent lo D _).symm hpW
+        · have hpC : Ph G (sclamp sq D (weaken C B)) (go step m).2 := RoomPause.ph_of_spent (sclamp_spent sq D _).symm hpW
           obtain ⟨D', hD', hk⟩ := cover_liveST ht (sim_sclamp hD n1 hl2) hpC h3
           exact ⟨D', hD', by rw [hk, sclamp_k, n2, k1], k2, k3⟩
         · exact ⟨_, ⟨n1, hpW, n, h3⟩, by rw [n2, k1], k2, k3⟩
@@ -165,14 +169,14 @@ theorem live_stepST {R : Machine → Prop} (hQ : ∀ {A : AS} {m : Machine}, Sim
 /-- **One frame.** A walk from `S` that succeeds, with `Ph` at the start, covers the frame of every machine of `S`, if each instruction meets `R`; then each
 instruction meets `SiteOK`, and the frame ends in a state that `C.fin` accepts. Unlike `BufferRecords.frame_of_walkPCE`, `R` need give only `LateS`, not `Late`. -/
 theorem frame_of_walkST {R : Machine → Prop} (hQ : ∀ {A : AS} {m : Machine}, Sim C.E F A m → chk A = true → R m → SiteOK C.P m)
-    (hS : ∀ {m : Machine}, R m → LateS lo D m) (hD : D < dotsPerFrame)
-    (hO : PlacesOK C.E C.P) (ht : C.t.all (walkST G C chk lo D Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
+    (hS : ∀ {m : Machine}, R m → LateS sq D m) (hD : D < dotsPerFrame)
+    (hO : PlacesOK C.E C.P) (ht : C.t.all (walkST G C chk sq D Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top)
     (h0 : StepWrites.tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048)
-    {S : AS} {m : Machine} {i : UInt8} (hw : walkST G C chk lo D Fu S = true) (hs : Sim C.E F S m) (hph : Ph G S m) (hk : ∀ j, R (trace m i j)) :
+    {S : AS} {m : Machine} {i : UInt8} (hw : walkST G C chk sq D Fu S = true) (hs : Sim C.E F S m) (hph : Ph G S m) (hk : ∀ j, R (trace m i j)) :
     (∀ j, SiteOK C.P (trace m i j)) ∧ ∃ B, C.fin B = true ∧ Sim C.E F B (frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have hph0 : Ph G S { m with pad := smbToPad i } := hph
-  have key : ∀ j, (∃ A, LiveST G C chk lo D F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
+  have key : ∀ j, (∃ A, LiveST G C chk sq D F A (trace m i j) ∧ A.k = S.k ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
       ((trace m i j).frame = m.frame + 1 ∧ ∃ B, C.fin B = true ∧ chk B = true ∧ B.k = S.k + 1 ∧ Sim C.E F B (trace m i j) ∧ Ph G B (trace m i j)) := by
     intro j
     induction j with
@@ -219,8 +223,8 @@ section
 open ScreenPage (SearchS)
 
 /-- `RoomPause.routeP` with the clamp to `D` in the sound routine's code, and the time widened only there (to `D`, at the third join of a key) -/
-def routeST (P : Places) (Z : Aids) (E : Env) (lo : UInt16) (D : Nat) (X : SearchS) (B0 : AS) : SearchS :=
-  let B := sclamp lo D (clampS P (Z.norm B0))
+def routeST (P : Places) (Z : Aids) (E : Env) (sq : UInt16 → Bool) (D : Nat) (X : SearchS) (B0 : AS) : SearchS :=
+  let B := sclamp sq D (clampS P (Z.norm B0))
   let K := RoomPause.keyP Z E B
   let X := { X with arr := X.arr.insert K (X.arr.getD K 0 + 1) }
   match X.done[K]? with
@@ -228,17 +232,17 @@ def routeST (P : Places) (Z : Aids) (E : Env) (lo : UInt16) (D : Nat) (X : Searc
     if B.le D' then X else
     let J := D'.join B
     let n := X.vis.getD K 1 + 1
-    let J := if n ≥ 3 && decide (lo ≤ J.pc) then { J with hi := D } else J
+    let J := if n ≥ 3 && sq J.pc then { J with hi := D } else J
     RoomPause.putP { X with done := X.done.insert K J, vis := X.vis.insert K n, joins := X.joins + 1 } K J
   | none => RoomPause.putP { X with done := X.done.insert K B, vis := X.vis.insert K 1 } K B
 
 /-- `RoomPause.runP` with `routeST` and the clamp to `D` before each step -/
-partial def runST (P : Places) (Z : Aids) (E : Env) (ops : Array (AM Unit)) (G : Reg) (lo : UInt16) (D : Nat) (X0 : SearchS) (A0 : AS) : SearchS := Id.run do
+partial def runST (P : Places) (Z : Aids) (E : Env) (ops : Array (AM Unit)) (G : Reg) (sq : UInt16 → Bool) (D : Nat) (X0 : SearchS) (A0 : AS) : SearchS := Id.run do
   let mut X := X0
   let mut cur := A0
   let mut run := 0
   while true do
-    let rs := pstep P E ops G (sclamp lo D cur)
+    let rs := pstep P E ops G (sclamp sq D cur)
     X := { X with steps := X.steps + rs.length, forks := X.forks + (rs.length - 1) }
     if rs.any (·.isNone) then
       X := { X with fails := X.fails + 1, firstFail := X.firstFail <|> some cur }
@@ -256,12 +260,12 @@ partial def runST (P : Places) (Z : Aids) (E : Env) (ops : Array (AM Unit)) (G :
       if b.k != cur.k then X := { X with ends := X.ends.push b }
       else
         X := { X with leaders := X.leaders.insert b.pc.toNat () }
-        X := routeST P Z E lo D X b
+        X := routeST P Z E sq D X b
     break
   return X
 
 /-- `RoomPause.searchP` with `runST` -/
-partial def searchST (P : Places) (Z : Aids) (E : Env) (ops : Array (AM Unit)) (G : Reg) (lo : UInt16) (D : Nat) (X0 : SearchS) : SearchS := Id.run do
+partial def searchST (P : Places) (Z : Aids) (E : Env) (ops : Array (AM Unit)) (G : Reg) (sq : UInt16 → Bool) (D : Nat) (X0 : SearchS) : SearchS := Id.run do
   let mut X := X0
   while true do
     match X.pending.minEntry? with
@@ -269,11 +273,11 @@ partial def searchST (P : Places) (Z : Aids) (E : Env) (ops : Array (AM Unit)) (
     | some (q, A) =>
       let K := RoomPause.keyP Z E A
       X := { X with pending := X.pending.erase q, pendKey := X.pendKey.erase K }
-      X := runST P Z E ops G lo D X A
+      X := runST P Z E ops G sq D X A
   return X
 
 /-- `BufferRecords.searchB` with `searchST` -/
-def searchBT (P : Places) (Z : Aids) (E : Env) (G : Reg) (pre : Option UInt16) (fz : List Nat) (RK : List (Machine × List (Nat × UInt8))) (lo : UInt16) (D : Nat) :
+def searchBT (P : Places) (Z : Aids) (E : Env) (G : Reg) (pre : Option UInt16) (fz : List Nat) (RK : List (Machine × List (Nat × UInt8))) (sq : UInt16 → Bool) (D : Nat) :
     SearchS :=
   let Z := RoomPause.aidsP Z G
   let ops := (aRows E).toArray
@@ -281,13 +285,13 @@ def searchBT (P : Places) (Z : Aids) (E : Env) (G : Reg) (pre : Option UInt16) (
   let S := match pre with
     | some fpc => (S0.flatMap (BufferRecords.preWalk P E ops G fpc)).map (BufferRecords.forgetL fz)
     | none => S0
-  searchST P Z E ops G lo D (S.foldl (routeST P Z E lo D) {})
+  searchST P Z E ops G sq D (S.foldl (routeST P Z E sq D) {})
 
 /-- the table of `searchBT`, as `BufferRecords.cfgB` -/
 def cfgBT (P : Places) (Z0 : Aids) (E : Env) (G : Reg) (pre : Option UInt16) (fz : List Nat) (RK : List (Machine × List (Nat × UInt8))) (fin : AS → Bool)
-    (lo : UInt16) (D : Nat) : CfgS :=
+    (sq : UInt16 → Bool) (D : Nat) : CfgS :=
   let Z := RoomPause.aidsP Z0 G
-  let X := searchBT P Z0 E G pre fz RK lo D
+  let X := searchBT P Z0 E G pre fz RK sq D
   let tab := X.done.toList.filter fun q => X.arr.getD q.1 0 ≥ 2
   let q := tab.foldl (fun (acc : Array AS × Std.HashMap Nat (List Nat) × ByteArray) e =>
       match acc with
@@ -302,14 +306,14 @@ def cfgBT (P : Places) (Z0 : Aids) (E : Env) (G : Reg) (pre : Option UInt16) (fz
 
 /-- **The check of the walk with the time, from several references**, as `BufferRecords.walkCheckB` -/
 def walkCheckST (P : Places) (Z : Aids) (E : Env) (G : Reg) (pre : Option UInt16) (fz : List Nat) (RK : List (Machine × List (Nat × UInt8))) (fin chk : AS → Bool)
-    (lo : UInt16) (D : Nat) : Bool :=
-  let C := cfgBT P Z E G pre fz RK fin lo D
+    (sq : UInt16 → Bool) (D : Nat) : Bool :=
+  let C := cfgBT P Z E G pre fz RK fin sq D
   ScreenPage.placesOK E P && E.pad.v == 0 && E.pad.k == 0 && StepWrites.tabOK G.SB G.T && decide (G.gI < 2048) &&
-    G.keepB.all (fun p => decide (p.1 < 2048)) && decide (D < dotsPerFrame) && C.t.all (walkST G C chk lo D ScreenPage.fuelS) &&
-    RK.all (fun q => ScreenPage.maskOK q.1 q.2 && (startsR q.1 q.2).all (walkST G C chk lo D ScreenPage.fuelS))
+    G.keepB.all (fun p => decide (p.1 < 2048)) && decide (D < dotsPerFrame) && C.t.all (walkST G C chk sq D ScreenPage.fuelS) &&
+    RK.all (fun q => ScreenPage.maskOK q.1 q.2 && (startsR q.1 q.2).all (walkST G C chk sq D ScreenPage.fuelS))
 
 /-- what the check says -/
-structure STOK (E : Env) (P : Places) (G : Reg) (RK : List (Machine × List (Nat × UInt8))) (C : CfgS) (fin chk : AS → Bool) (lo : UInt16) (D : Nat) : Prop where
+structure STOK (E : Env) (P : Places) (G : Reg) (RK : List (Machine × List (Nat × UInt8))) (C : CfgS) (fin chk : AS → Bool) (sq : UInt16 → Bool) (D : Nat) : Prop where
   places : PlacesOK E P
   pad : E.pad = AB.top
   env : C.E = E
@@ -320,12 +324,12 @@ structure STOK (E : Env) (P : Places) (G : Reg) (RK : List (Machine × List (Nat
   gI : G.gI < 2048
   keepI : ∀ p ∈ G.keepB, p.1 < 2048
   dD : D < dotsPerFrame
-  table : C.t.all (walkST G C chk lo D ScreenPage.fuelS) = true
-  starts : ∀ q ∈ RK, ScreenPage.MaskOK q.1 q.2 ∧ ∀ S ∈ startsR q.1 q.2, walkST G C chk lo D ScreenPage.fuelS S = true
+  table : C.t.all (walkST G C chk sq D ScreenPage.fuelS) = true
+  starts : ∀ q ∈ RK, ScreenPage.MaskOK q.1 q.2 ∧ ∀ S ∈ startsR q.1 q.2, walkST G C chk sq D ScreenPage.fuelS S = true
 
 theorem stok_of_check {P : Places} {Z : Aids} {E : Env} {G : Reg} {pre : Option UInt16} {fz : List Nat} {RK : List (Machine × List (Nat × UInt8))}
-    {fin chk : AS → Bool} {lo : UInt16} {D : Nat} (h : walkCheckST P Z E G pre fz RK fin chk lo D = true) :
-    STOK E P G RK (cfgBT P Z E G pre fz RK fin lo D) fin chk lo D := by
+    {fin chk : AS → Bool} {sq : UInt16 → Bool} {D : Nat} (h : walkCheckST P Z E G pre fz RK fin chk sq D = true) :
+    STOK E P G RK (cfgBT P Z E G pre fz RK fin sq D) fin chk sq D := by
   simp only [walkCheckST, Bool.and_eq_true, List.all_eq_true, beq_iff_eq, decide_eq_true_eq] at h
   obtain ⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h2'⟩, h4⟩, h5⟩, hkb⟩, hD⟩, h6⟩, h7⟩ := h
   have hp : E.pad = AB.top := by
@@ -343,9 +347,9 @@ end
 
 /-- **One frame of the room from a reference of `RK`**, with the music bytes in a class, as `BufferRecords.frameB`: with `R` on each instruction (which gives
 `LateS`), `SiteOK` on each instruction, and the frame ends in a state that `fin` accepts -/
-theorem frameST {E : Env} {P : Places} {G : Reg} {RK : List (Machine × List (Nat × UInt8))} {C : CfgS} {fin chk : AS → Bool} {lo : UInt16} {D : Nat}
-    {R : Machine → Prop} (h : STOK E P G RK C fin chk lo D) (hQ : ∀ {F : Nat × UInt8} {A : AS} {m : Machine}, Sim E F A m → chk A = true → R m → SiteOK P m)
-    (hS : ∀ {m : Machine}, R m → LateS lo D m) {r : Machine} {K : List (Nat × UInt8)} (hq : (r, K) ∈ RK)
+theorem frameST {E : Env} {P : Places} {G : Reg} {RK : List (Machine × List (Nat × UInt8))} {C : CfgS} {fin chk : AS → Bool} {sq : UInt16 → Bool} {D : Nat}
+    {R : Machine → Prop} (h : STOK E P G RK C fin chk sq D) (hQ : ∀ {F : Nat × UInt8} {A : AS} {m : Machine}, Sim E F A m → chk A = true → R m → SiteOK P m)
+    (hS : ∀ {m : Machine}, R m → LateS sq D m) {r : Machine} {K : List (Nat × UInt8)} (hq : (r, K) ∈ RK)
     {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hc : InCls G m) (hk : ∀ j, R (trace m i j)) :
     (∀ j, SiteOK P (trace m i j)) ∧ ∃ B, fin B = true ∧ Sim E (m.frame, 2) B (frame m i) := by
   obtain ⟨hM, hw0⟩ := h.starts _ hq
@@ -374,12 +378,15 @@ variable {sy : Syms} {nmS : Names} {m0 : Machine} {T : List StepWrites.SState}
 /-- the sound routine's code: from the symbol `SoundEngine` on in the ROM -/
 def sndLo (sy : Syms) : UInt16 := sy.SoundEngine
 
+/-- every instruction of the sound routine's code (round 29's clamp) -/
+def sndAll (sy : Syms) (pc : UInt16) : Bool := decide (sndLo sy ≤ pc)
+
 /-- the dot by which the sound routine's instructions are asked to run -/
 def sndDot : Nat := 9000
 
 /-- what the route asks on each instruction of a frame that the walks with the time follow: `LateS` and three parts of `SiteOK` -/
-structure RestS (P : Places) (lo : UInt16) (D : Nat) (m : Machine) : Prop where
-  lateS : LateS lo D m
+structure RestS (P : Places) (sq : UInt16 → Bool) (D : Nat) (m : Machine) : Prop where
+  lateS : LateS sq D m
   read : SiteParts.Read P m
   erase : SiteParts.Erase P m
   xbit : SiteParts.Xbit P m
@@ -396,12 +403,12 @@ def chkT (P : Places) (E : Env) (A : AS) : Bool := SiteParts.chk0 P E [] A && ti
 /-- (ii) with the time: from the patterns of `L`, the control at 0 -/
 def walk2T (sy : Syms) (nm : Names) (m0 : Machine) (T : List StepWrites.SState) (L L6 : List (List (Nat × UInt8))) : Bool :=
   walkCheckST (placesR sy nm m0) (fixCuts m0 (noRegs (zO sy nm m0))) (envR sy nm m0) (RoomMusic.regM sy m0 nm T) (some (fpcOf sy m0)) (ptrBytes sy m0) (starts0 nm m0 L)
-    (fin0 (ctlI nm) L L6) (chkT (placesR sy nm m0) (envR sy nm m0)) (sndLo sy) sndDot
+    (fin0 (ctlI nm) L L6) (chkT (placesR sy nm m0) (envR sy nm m0)) (sndAll sy) sndDot
 
 /-- (iii) with the time: from the patterns of `L6`, the control at 6 -/
 def walk3T (sy : Syms) (nm : Names) (m0 : Machine) (T : List StepWrites.SState) (L6 : List (List (Nat × UInt8))) : Bool :=
   walkCheckST (placesR sy nm m0) (fixCuts m0 (noRegs (zOC sy nm m0))) (envR sy nm m0) (RoomMusic.regM sy m0 nm T) (some (fpcOf sy m0)) (ptrBytes sy m0) (starts6 nm m0 L6)
-    (fun _ => true) (chkT (placesR sy nm m0) (envR sy nm m0)) (sndLo sy) sndDot
+    (fun _ => true) (chkT (placesR sy nm m0) (envR sy nm m0)) (sndAll sy) sndDot
 
 /-- **The check on the ROM**: `BufferRecords.recCheck` with the walks (ii) and (iii) replaced by the walks with the time -/
 def recCheckT (sy : Syms) (nm : Names) (m0 : Machine) (T : List StepWrites.SState) (L L6 : List (List (Nat × UInt8))) : Bool :=
@@ -425,7 +432,7 @@ theorem rec_of_T {L L6 : List (List (Nat × UInt8))} (h : recCheckT sy nmS m0 T 
 
 /-- the check with the time at a state gives `SiteOK` from `RestS` -/
 theorem siteOK_of_T {F : Nat × UInt8} {A : AS} {m : Machine} (hI : (placesR sy nmS m0).offI < 2048) (hs : Sim (envR sy nmS m0) F A m)
-    (hc : chkT (placesR sy nmS m0) (envR sy nmS m0) A = true) {lo : UInt16} {D : Nat} (hr : RestS (placesR sy nmS m0) lo D m) : SiteOK (placesR sy nmS m0) m := by
+    (hc : chkT (placesR sy nmS m0) (envR sy nmS m0) A = true) {sq : UInt16 → Bool} {D : Nat} (hr : RestS (placesR sy nmS m0) sq D m) : SiteOK (placesR sy nmS m0) m := by
   simp only [chkT, SiteParts.chk0, Bool.and_eq_true] at hc
   exact SiteParts.siteOK_of (late_of_time hs hc.2) (reads_all hs hc.1.2) hr.read hr.erase (SiteParts.off_of_ok hI hs hc.1.1) hr.xbit
 
@@ -433,7 +440,7 @@ theorem siteOK_of_T {F : Nat × UInt8} {A : AS} {m : Machine} (hI : (placesR sy 
 class of `L` or of `L6` -/
 theorem rec_frame2T (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List (List (Nat × UInt8))} (hO : recCheckT sy nmS m0 T L L6 = true)
     {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) m) (hc : InCls (RoomMusic.regM sy m0 nmS T) m)
-    (hp : InPat (ctlI nmS) 0 L m) (hk : ∀ j, RestS (placesR sy nmS m0) (sndLo sy) sndDot (trace m i j)) :
+    (hp : InPat (ctlI nmS) 0 L m) (hk : ∀ j, RestS (placesR sy nmS m0) (sndAll sy) sndDot (trace m i j)) :
     (∀ j, SiteOK (placesR sy nmS m0) (trace m i j)) ∧ (InPat (ctlI nmS) 0 L (frame m i) ∨ InPat (ctlI nmS) 6 L6 (frame m i)) := by
   obtain ⟨_, h2, _, _, _⟩ := BufferControl.keep_parts hK
   obtain ⟨_, hc6, hL, hL6, w1, w2, _, _⟩ := recT_parts hO
@@ -443,14 +450,14 @@ theorem rec_frame2T (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List
   obtain ⟨hv, s, hs1, hs2⟩ := hp
   have hm1 := BufferControl.cond0 hm (hv.trans h2.symm)
   have hm2 := cond_pat s hm1 hsz (hL s hs1) hs2
-  obtain ⟨h1, B, hf, hs⟩ := frameST (R := RestS (placesR sy nmS m0) (sndLo sy) sndDot) w (fun hs hc2 hr => siteOK_of_T hI hs hc2 hr) (fun hr => hr.lateS)
+  obtain ⟨h1, B, hf, hs⟩ := frameST (R := RestS (placesR sy nmS m0) (sndAll sy) sndDot) w (fun hs hc2 hr => siteOK_of_T hI hs hc2 hr) (fun hr => hr.lateS)
     (List.mem_map_of_mem (f := fun s => (BufferRecords.refPat (refR m0) s, BufferRecords.knownPat (SiteParts.knownMC nmS) s)) hs1) hm2 hc hk
   exact ⟨h1, end0 hc6 (idx_of_all hL) (idx_of_all hL6) hf hs⟩
 
 /-- **(iii) with the time: a frame from the control at 6 in a pattern of `L6`**: from `RestS` (no `Late`), `SiteOK` on each instruction -/
 theorem rec_frame3T (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List (List (Nat × UInt8))} (hO : recCheckT sy nmS m0 T L L6 = true)
     {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) m) (hc : InCls (RoomMusic.regM sy m0 nmS T) m)
-    (hp : InPat (ctlI nmS) 6 L6 m) (hk : ∀ j, RestS (placesR sy nmS m0) (sndLo sy) sndDot (trace m i j)) :
+    (hp : InPat (ctlI nmS) 6 L6 m) (hk : ∀ j, RestS (placesR sy nmS m0) (sndAll sy) sndDot (trace m i j)) :
     ∀ j, SiteOK (placesR sy nmS m0) (trace m i j) := by
   obtain ⟨_, _, h3, _, _⟩ := BufferControl.keep_parts hK
   obtain ⟨hk1, _, _, hL6, w1, _, w3, _⟩ := recT_parts hO
@@ -463,7 +470,7 @@ theorem rec_frame3T (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List
     show ((refR m0).ram.set! (ctlI nmS) 6).size = 2048
     rw [PipeTransitionAll.ba_size_set, hsz0]
   have hm2 := cond_pat s hm1 hsz (hL6 s hs1) hs2
-  exact (frameST (R := RestS (placesR sy nmS m0) (sndLo sy) sndDot) w (fun hs hc2 hr => siteOK_of_T hI hs hc2 hr) (fun hr => hr.lateS)
+  exact (frameST (R := RestS (placesR sy nmS m0) (sndAll sy) sndDot) w (fun hs hc2 hr => siteOK_of_T hI hs hc2 hr) (fun hr => hr.lateS)
     (List.mem_map_of_mem (f := fun s => (BufferRecords.refPat (ref6 nmS m0) s, BufferRecords.knownPat (SiteParts.knownMC nmS) s)) hs1) hm2 hc hk).1
 
 /-- **(i) A frame from the control at 0** with nothing known of the buffers, as `BufferRecords.rec_frame1` under `recCheckT`: from `Rest` (with `Late`) and
@@ -524,7 +531,7 @@ theorem late_sites_of_rows {V : List (Machine × List Nat)} {T : List StepWrites
     (rest : ∀ n, b ≤ n → n < a → ∀ j, SiteParts.Read (placesR sy nmS m0) (trace (seq n) (inp n) j) ∧ SiteParts.Erase (placesR sy nmS m0) (trace (seq n) (inp n) j) ∧
       SiteParts.Xbit (placesR sy nmS m0) (trace (seq n) (inp n) j))
     (late : ∀ n, b ≤ n → n < a → U (ctlI nmS) seq b n → ∀ j, Late (placesR sy nmS m0) (trace (seq n) (inp n) j))
-    (lateS : ∀ n, b ≤ n → n < a → ¬ U (ctlI nmS) seq b n → ∀ j, LateS (sndLo sy) sndDot (trace (seq n) (inp n) j))
+    (lateS : ∀ n, b ≤ n → n < a → ¬ U (ctlI nmS) seq b n → ∀ j, LateS (sndAll sy) sndDot (trace (seq n) (inp n) j))
     (reads : ∀ n, b ≤ n → n < a → U (ctlI nmS) seq b n → ∀ j, SiteParts.ReadsAt (SiteParts.ptrS sy m0) (trace (seq n) (inp n) j))
     (off6 : ∀ n, b < n → n < a → (seq n).ram.get! (ctlI nmS) = 6 → (seq (n - 1)).ram.get! (ctlI nmS) = 6 → ∀ j, Off (placesR sy nmS m0) (trace (seq n) (inp n) j))
     (stay : ∀ n, b ≤ n → n < a → (seq n).ram.get! (placesR sy nmS m0).rtI = (refR m0).ram.get! (placesR sy nmS m0).rtI) :
@@ -549,7 +556,7 @@ theorem late_sites_of_rows {V : List (Machine × List Nat)} {T : List StepWrites
       have hR := rest (b + k) (by omega) (by omega)
       have hRS : U (ctlI nmS) seq b (b + k) → ∀ j, SiteParts.Rest (placesR sy nmS m0) (SiteParts.ptrS sy m0) (trace (seq (b + k)) (inp (b + k)) j) := fun hu j =>
         ⟨late (b + k) (by omega) (by omega) hu j, reads (b + k) (by omega) (by omega) hu j, (hR j).1, (hR j).2.1, (hR j).2.2⟩
-      have hRT : ¬ U (ctlI nmS) seq b (b + k) → ∀ j, RestS (placesR sy nmS m0) (sndLo sy) sndDot (trace (seq (b + k)) (inp (b + k)) j) := fun hu j =>
+      have hRT : ¬ U (ctlI nmS) seq b (b + k) → ∀ j, RestS (placesR sy nmS m0) (sndAll sy) sndDot (trace (seq (b + k)) (inp (b + k)) j) := fun hu j =>
         ⟨lateS (b + k) (by omega) (by omega) hu j, (hR j).1, (hR j).2.1, (hR j).2.2⟩
       -- the frame `b + k`: `SiteOK`, and, if it starts with the control at 0, the class of the next frame
       have hnow : (∀ j, SiteOK (placesR sy nmS m0) (trace (seq (b + k)) (inp (b + k)) j)) ∧

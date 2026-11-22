@@ -60,4 +60,6 @@ frameCheckF ∧ FrameStart(s₀) ∧ ColMap(s₀) ∧ (∀ j ≤ n, s_j で Clea
 
 29 回目: フィールド `tilesCol` は `TileCol` のかわりに `TileSlot` を求め、`TileCol` はそれと触るフレームの始まりのエリアの解析の不変式からの定理です（`tileCol_of_slot`。[ルートのフレームの上のエリアの解析](f-6-17-10-PoleParserRun-ja.md)）。
 
+30 回目: `TileSlot` は読みの列を、マリオのページが旗のページのちょうど 2 つ前のときだけ求めます（[`TileSlot` を 1 つのページだけで、厳しい規則のもとのスクロールのカウンタ](f-6-17-11-PoleWrap-ja.md)）。
+
 **ファイル:** `Theorems/PoleTileFar.lean`。非公開の `Proof/PoleTiles.lean`（`pole_check_h` の代わりに `pole_check_f`。第 25 回からは `PoleTileKeep` の `pole_check_z` に代わった: `poleCheckF` は探索も含めてネイティブで 135〜148 秒。ファイル全体は、ほかの場所も機械で構築している中の最後の全体の構築で 162 秒、最大約 4.3 GB。`pole_check_h` のときは負荷の中で 196 秒、静かな機械で 127 秒）。プログラム `pole-far-search`（探索と確認）と `pole-far-check FM2 [N]`（上の実際のフレーム）。

@@ -81,6 +81,10 @@ On a real run the song's data end these loops. In the walk they do not end, so a
 
 So `LateS` (9,000) holds on every measured frame; the margin is 1,841 dots on the big runs. The frames `U`, where `Late` is still asked, are 14 of the movie's 111 frames (round 28's count: the first frame and 13 after a frame from the control at 6).
 
+## Round 30
+
+`roomLate` is gone, and `roomLateS` asks only the back jumps of the sound routine's code ([The time from the loops' back jumps](d-2-4-2-4-LoopTime.md), item 1-1-d-2-4-2-4). The walk's clamp and `LateS` now take a predicate on the program counter: round 29's is `sndAll` (`SoundEngine ≤ pc`), round 30's are `LoopTime.sndQ` and `LoopTime.scrQ` (the loops' back jumps). With the clamp only at the back jumps, all four walks pass with the time, also (i) and (iv) from buffers that the walk does not know. The assumptions below are those of round 29.
+
 ## Assumptions (not proved in Lean)
 
 * **`roomLate`** on the frames `U`: walks (i) and (iv) start from buffers that the walk does not know, and the screen update's loop over the records then has no count the walk knows. Measured with the time (`timecheck 3`): walk (i) has 11 failing states of 91,263, walk (iv) 26 of 222,570, all in the screen update.

@@ -243,7 +243,7 @@ theorem inv_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFram
   refine inv_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs Nm.idle (by rw [e0]; exact h0)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
-    (fun n hn k hk hf => noWrap_of (R.parWrap n (by omega) k hk hf) (hE n hn))
+    (fun n hn n₀ a1 a2 k hk hf => noWrap_of (R.parWrap n (by omega) n₀ a1 a2 k hk hf) (hE n hn))
     (fun n hn => by rw [← edge_eq]; exact hE n hn)
 
 /-- **`TileCol` on the touch's frame up to the write** (the old field `tilesCol`): the parser's invariant at the start of the touch's frame (`inv_run`) puts its column at

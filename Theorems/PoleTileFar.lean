@@ -52,20 +52,40 @@ theorem tileCol_of_far {Q : Spots} {m : Machine} (h : PoleTileRead.TileFar Q m) 
 the pole's column, (`slot`) if the byte read is one of the pole's tiles, the parser's column had come to the pole's; (`near`) his pixel is at most 112 px left of
 `e₀`; (`read`) the read is in the column of his pixel plus less than 16 px, counted mod 32. With the parser's invariant at the frame's start (`16·c₀ ≤ e₀ + 384`) it
 gives `TileCol` (`tileCol_of_slot`): the parser is at most 24 columns past the edge, so it has not come to the pole's column while he reads 32
-columns or more before it. -/
+columns or more before it. Round 30 (`1-1/f-6-17-11-PoleWrap.md`): (`read`) is asked only when his page is exactly two before the pole's. Three pages or more
+before it, his pixel is at least 513 px before the pole's page, and (`near`) alone puts the parser's column before the pole's (`tileCol_of_slot`). -/
 def TileSlot (Q : Spots) (c₀ e₀ : Nat) (m : Machine) : Prop :=
+  m.pc = Q.read + 2 → m.ram.get! Q.saveI ∈ Q.idx → (m.ram.get! Q.pI).toNat + 1 < Q.pg → onCol Q (readAt Q m) = true →
+    ((m.a = Q.ball ∨ m.a = Q.shaft) → 16 * Q.pg + Q.col.toNat ≤ c₀) ∧
+    e₀ ≤ (m.ram.get! Q.pI).toNat * 256 + (m.ram.get! Q.xI).toNat + 112 ∧
+    ((m.ram.get! Q.pI).toNat + 2 = Q.pg →
+      ∃ a, a < 16 ∧ ((m.ram.get! Q.pI).toNat * 256 + (m.ram.get! Q.xI).toNat + a) / 16 % 32 = (16 * Q.pg + Q.col.toNat) % 32)
+
+/-- **The old `TileSlot`** (round 29), which asked (`read`) on every page two or more before the pole's: it gives the new one (round 30 asks less) -/
+def TileSlotR (Q : Spots) (c₀ e₀ : Nat) (m : Machine) : Prop :=
   m.pc = Q.read + 2 → m.ram.get! Q.saveI ∈ Q.idx → (m.ram.get! Q.pI).toNat + 1 < Q.pg → onCol Q (readAt Q m) = true →
     ((m.a = Q.ball ∨ m.a = Q.shaft) → 16 * Q.pg + Q.col.toNat ≤ c₀) ∧
     e₀ ≤ (m.ram.get! Q.pI).toNat * 256 + (m.ram.get! Q.xI).toNat + 112 ∧
     ∃ a, a < 16 ∧ ((m.ram.get! Q.pI).toNat * 256 + (m.ram.get! Q.xI).toNat + a) / 16 % 32 = (16 * Q.pg + Q.col.toNat) % 32
 
-/-- **`TileCol` from `TileSlot`** and the parser's column at most 384 px past the edge: pure arithmetic -/
+/-- the round 29 condition gives the round 30 one -/
+theorem tileSlot_of_R {Q : Spots} {c₀ e₀ : Nat} {m : Machine} (h : TileSlotR Q c₀ e₀ m) : TileSlot Q c₀ e₀ m := by
+  intro h1 h2 hpg hon
+  obtain ⟨hs, hn, hr⟩ := h h1 h2 hpg hon
+  exact ⟨hs, hn, fun _ => hr⟩
+
+/-- **`TileCol` from `TileSlot`** and the parser's column at most 384 px past the edge: pure arithmetic. His page `p ≤ pg − 2`. If `p = pg − 2`, (`read`) puts
+his pixel 32 columns or more before the pole's column: `pix ≤ 16·colPole − 497`. If `p ≤ pg − 3`, `pix ≤ 256·pg − 513` already. In both cases
+`16·c₀ ≤ e₀ + 384 ≤ pix + 496 < 16·colPole`, so by (`slot`) the byte read is not a pole's tile. -/
 theorem tileCol_of_slot {Q : Spots} {c₀ e₀ : Nat} {m : Machine} (h : TileSlot Q c₀ e₀ m) (hc : 16 * c₀ ≤ e₀ + 384) : TileCol Q m := by
   intro h1 h2 hpg hon ht
-  obtain ⟨hs, hn, a, ha, hm⟩ := h h1 h2 hpg hon
+  obtain ⟨hs, hn, hr⟩ := h h1 h2 hpg hon
   have h3 := hs ht
   have hx : (m.ram.get! Q.xI).toNat < 256 := (m.ram.get! Q.xI).toNat_lt
-  omega
+  by_cases h2p : (m.ram.get! Q.pI).toNat + 2 = Q.pg
+  · obtain ⟨a, ha, hm⟩ := hr h2p
+    omega
+  · omega
 
 /-! ## The pieces -/
 

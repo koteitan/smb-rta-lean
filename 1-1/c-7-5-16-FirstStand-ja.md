@@ -32,13 +32,13 @@ InRoom.wall（本物の機械の上で証明: Route.Run.roomWall）:
 1. `Follow(n)` のもとでは、フレームの終わりの速さは `hstep(hs(n), inp(n + 1))` の速さです。フィールド `stand_fast` から `V(hs(n)) ≤ −standV`（速さ −14 以下）です。`hstep` の確認（`negCheckJ`、`negJ_of_check`）は、`V ≤ −standV` の定義域のすべての状態とすべての入力で、1 フレームあとの速さのバイトが 129 以上であることを確かめます。負で、−128 でなく、0 でもありません。
 2. フィールド `clean` から、フレームの終わりの速さは `Q` での速さか 0 です。0 ではないので、`Q` での速さはそのバイトです。
 3. 最初の操作から立っていないので、`vs(n)` は最初の落下の状態です（`fall_mem`）。状態は 2 です。なのでフレームは空中で始まり、`InRoom.wall` は `vstepR` の縦のバイトをもつ `Q` を与えます。最初の落下の確認から、`Q` で次が分かります。状態は 2（`fallCheck`）、`vy ≥ 0` で移動のあとの縦のページは 1（`highCheck`）、高さは 32〜206（新しい確認 `wallYCheck`）です。フレームの始めの縦のページは 1 です（`high_upto`: フレーム `n` までの `high_fall`）。
-4. `Q` での位置: フィールド `stand_P` から `P(n) ≤ standP = 3712`（14.5 ピクセル）です。`Follow` のもとでは `P(n + 1) = P(n) + 16 · v < P(n)` です。`Q` はフレームの終わりから右に 1 ピクセル以内です（`q_le_end`: フィールド `clean`、または `FrameModel.Collide`）。なので `P(Q) < 3712 + 256 < 4096` で、ページは 0、`x < 16` です（`page_x_of`）。
+4. `Q` での位置（ラウンド 30: `stand_P` はなくなりました。`RoomRun.fall_left` でフレームの終わりは角より 1 ピクセルより多く左で、x が 13 からなら `Q` は `WallF` を満たしフレームは空中で終わるので、x は 12 まで。ページ [最初の立ちの前の位置を証明する](c-7-13-4-StandHit-ja.md)。ラウンド 29 まで:）フィールド `stand_P` から `P(n) ≤ standP = 3712`（14.5 ピクセル）です。`Follow` のもとでは `P(n + 1) = P(n) + 16 · v < P(n)` です。`Q` はフレームの終わりから右に 1 ピクセル以内です（`q_le_end`: フィールド `clean`、または `FrameModel.Collide`）。なので `P(Q) < 3712 + 256 < 4096` で、ページは 0、`x < 16` です（`page_x_of`）。
 5. なので `Q` は `WallQ` を満たし、`InRoom.wall` から、フレームの終わりで `st ≠ 0` か、床の高さで `st = 0` か、`v = 0` です。1 つ目は偽（`st(n + 1) = 0`）、2 つ目も偽（床の上ではない）、3 つ目も偽（1 の手順）です。
 6. `Route.Run.roomWall` は、`Run.roomLand` が `InRoom.land` を証明するのと同じように `InRoom.wall` を証明します。`RoomFall.land_frame` が、`Good` で、プレイヤーのルーチンのスタックで、`vstepR` の縦のバイトをもつ `Q` を与えます。`RoomBlocks.blocks_run_trace` が `Q` での `Solid` を与えます。`RoomWall.wall_frame`（[部屋で床のほかに立つフレーム](c-7-5-15-RoomWall-ja.md)）が `Q` からフレームの終わりまで進みます。フレームはプレイヤーのルーチンの中で終わります（`roomStay`）。
 7. `stand_off_of` は、それより前に状態 0 で終わるフレームがあるかで場合分けします。あればフィールドです。なければフレームは `C + 34` より前で、`stand_first` です。`RoomRun.toCore` はこれを `stand_off` として `RoomCore` に入れ、`st_ne`、`stand_gap`、`wall_turn` が使います。`st_ne` もいまは同じ条件を求めます。`fall_air`、`wall_right`、`stand_gap` が使うのは `C + 34` より前のフレームで、`wall_turn` が使うのは壁の上の立ちのあとのフレームです。`stand_late`、`land_end_of`、`floor_at_of`、`no_stand_before_land` は `C + 34` より前で `stand_off_of` を使います。
 8. 前のフィールドは `C + 50` までのすべてのフレームを求めていました。`C + 34` から `C + 50` までで、それより前に状態 0 のフレームがないものは、どの定理も使わないので、もう求めません。
 
-`stand_first` が使うのは、フィールド `stand_fast`、`stand_P`、`clean` と、`far_inD` と `t0_far` が使うフィールドです。`stand_wall`、`fall_long`、`fall_any`、`stand_late`、`land_at_of`、`floor_at_of` は使いません。
+`stand_first` が使うのは、フィールド `stand_fast`、`clean`（ラウンド 30 から `fall_left` を通して `wall` と `late`。`stand_P` はもう使わない） と、`far_inD` と `t0_far` が使うフィールドです。`stand_wall`、`fall_long`、`fall_any`、`stand_late`、`land_at_of`、`floor_at_of` は使いません。
 
 ROM の確認は非公開の `Proof/RoomJoin.lean`（`room_stand_w`: 3 つの向きでの `hstep` の確認、`wallYCheck`、`standP + 256 < 4096`、床の高さが 256 より小さいこと）と `Proof/RoomWall.lean`（`room_wall`、`room_wall_after`、`room_wall_apart`。非公開の道筋がいまはこれを `Route.Run.inRoom` に渡します）にあります。
 

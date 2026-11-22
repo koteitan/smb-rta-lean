@@ -60,4 +60,6 @@ The walk's search (`pole-far-search`): 9,680,248 steps, 434,249 states in the ta
 
 Round 29: the field `tilesCol` asks `TileSlot` in place of `TileCol`, and `TileCol` is a theorem from it and the area parser's invariant at the start of the touch's frame (`tileCol_of_slot`; [The area parser on the route's frames](f-6-17-10-PoleParserRun.md)).
 
+Round 30: `TileSlot` asks the column of the read only when his page is exactly two before the pole's ([`TileSlot` on one page, and the scroll counter under the strict rule](f-6-17-11-PoleWrap.md)).
+
 **Files:** `Theorems/PoleTileFar.lean`; private `Proof/PoleTiles.lean` (`pole_check_f` in place of `pole_check_h`, since round 25 replaced by `pole_check_z` of `PoleTileKeep`: `poleCheckF`, its search included, 135 to 148 s natively; the whole file 162 s in the last full build, with other places building on the machine, and a peak of about 4.3 GB; with `pole_check_h` it took 196 s under load and 127 s on a quieter machine). The programs `pole-far-search` (the search and the check) and `pole-far-check FM2 [N]` (the real frames above).

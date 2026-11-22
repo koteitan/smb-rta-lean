@@ -47,6 +47,8 @@ pixel16 = 256·ページ + ピクセル、left16 = 画面の左端（ページ�
 | `edge-real FM2 256` | `Moves.stop`（1-1-e-2-10-3）のために: 0 < v(Q)、v(b) = 0、P(b) = P(Q) のフレーム | 6 フレーム。どれも画面の端での補正が 1 回で、押し戻しはない。そこでの P(Q) − P(a) は高々 32（1/8 px） |
 | 探索（証明の一部でない） | ここでのプレイヤーのルーチンより前と同じように、スクロールの処理からフレームの終わりまで横のタイマーを追う | 歩きは 95 の命令でタイマーを見失う: 77 は `PlaceKeep.farRk` のように追い続けられ、18 は、歩きが行き先を知らず、行き先がタイマーでありうる、添字かポインタでの書き込み |
 
+**第 30 回.** `nearStep` は定理です（`OnFrames.nearStepAt`）: 補正の選び方を証明し（[1-1-e-2-10-3-18](e-2-10-3-18-ClampSide-ja.md)）、残りは新しいフィールド `rightRel` と `endKeep` が持ちます。以下は第 29 回の状態です。
+
 **証明していないこと.** `nearStep` と `Moves.stop`。`nearStep` にはスクロールの処理のあとのフレームが要ります: 描画が画面での彼の場所を (pixel − left) mod 256 として書き、画面の端での補正が彼を端かその右に保ち、押し戻しが横のタイマーを 16 にし、描画のあとの書き込みが彼も端も動かさないこと。けがのタイマーが動いている間は、1 つおきのフレームで描画が飛ばされるので、そこではフレームの始めの場所のバイトが残ります。スクロールの処理のあとのタイマーの歩きには、上の探索の 18 の書き込みについての新しい条件が要ります（位置についての `posW` のように）。
 
 **ファイル:** `Theorems/SideTimer.lean`（`decTarget`、`isRkDecX`、`decFlags`、`arkOpX`、`s_rkOpX`、`gsuccX`、`s_gsuccX`、`walkX`、`check1X`、`at_cutX`、`end_noCutX`、`searchX`、`sideTable`、`sideCheck`、`startI`、`keepCheck`、`side_at`、`side_le`、`keep_at`、`side_noCut`、`keep_noCut`、`NearM`、`nearA_of_M`、`nearM_congr`、`nearM_of_edge`）。`Theorems/SurfaceFrames.lean`（`near_zero`、`AreaRun.near₀`、`OnFrames.nearLag`、`OnFrames.nearMAll`、`OnFrames.nearAAt`）が使います。

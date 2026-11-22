@@ -304,6 +304,73 @@ def refCheckW (sy : Syms) (m0 : Machine) : Bool :=
 def xsW : List UInt8 := (List.range 16).map Nat.toUInt8
 def ysW : List UInt8 := (List.range 175).map fun k => (32 + k).toUInt8
 
+/-! ### No stand from x 13 to 16 (round 30)
+
+A stand away from the floor needs a foot in a solid cell. With x from 13 to 16 at the end of the move in the air (the state 1 or 2), the walk `check1X` from the cut at
+`Q` comes back to `retBG` with the state known and not 0 (`endX`): so a stand in the air comes from x at most 12 at the end of the move (`wall_atX`, `wall_frameX`). -/
+
+/-- what the walk `check1X` asks back at `retBG`, with the stack pointer `s0` of `Q`: the state is known and not 0 -/
+def endX (sy : Syms) (s0 : UInt8) (T : TS) : Bool :=
+  T.s == some s0 && knNe0 (T.ram (I sy.Player_State))
+
+/-- the walk from the cut at `Q` to `retBG`, asking `endX` there -/
+def check1X (sy : Syms) (E : Rom) (B : ScreenPage.Places) (P : RoomCollision.Places) (screen : List Nat) (M Q : Machine) (fuel : Nat) : Bool :=
+  walkT E (fun T => T.pc == retBG sy E) (endX sy Q.s) fuel (startQ (cutW sy E B P screen M Q))
+
+/-- the horizontal coordinates of `check1X`: 13 to 16; the heights: from 32 to one above the floor's -/
+def xsX : List UInt8 := [13, 14, 15, 16]
+def ysX (sy : Syms) : List UInt8 := (List.range (Jump.groundY sy - 32)).map fun k => (32 + k).toUInt8
+
+theorem mem_xsX {x : UInt8} (h1 : 13 ≤ x.toNat) (h2 : x.toNat < 17) : x ∈ xsX := by
+  have e : x = 13 ∨ x = 14 ∨ x = 15 ∨ x = 16 := by
+    rcases Nat.lt_or_ge x.toNat 14 with h | h
+    · left; exact UInt8.toNat_inj.mp (by simp; omega)
+    · rcases Nat.lt_or_ge x.toNat 15 with h' | h'
+      · right; left; exact UInt8.toNat_inj.mp (by simp; omega)
+      · rcases Nat.lt_or_ge x.toNat 16 with h'' | h''
+        · right; right; left; exact UInt8.toNat_inj.mp (by simp; omega)
+        · right; right; right; exact UInt8.toNat_inj.mp (by simp; omega)
+  rcases e with e | e | e | e <;> simp [e, xsX]
+
+theorem mem_ysX {sy : Syms} {y : UInt8} (h1 : 32 ≤ y.toNat) (h2 : y.toNat < Jump.groundY sy) : y ∈ ysX sy :=
+  List.mem_map.2 ⟨y.toNat - 32, List.mem_range.2 (by omega), by rw [show 32 + (y.toNat - 32) = y.toNat by omega]; simp⟩
+
+/-- the walk `check1X` for every horizontal coordinate of `xs`, every height of `ys` and the states 1 and 2 -/
+def familyX (sy : Syms) (E : Rom) (B : ScreenPage.Places) (P : RoomCollision.Places) (screen : List Nat) (M Q : Machine)
+    (xs ys : List UInt8) (fuel : Nat) : Bool :=
+  ys.all fun y => xs.all fun x => ([1, 2] : List UInt8).all fun st => check1X sy E B P screen M (variantW sy P Q x y st) fuel
+
+theorem endX_spec {sy : Syms} {E : Rom} {s0 : UInt8} {T : TS} {m₀ n₀ m n : Machine} (h : endX sy s0 T = true) (hl : Lk E m₀ n₀ T m n) :
+    m.s = s0 ∧ m.ram.get! (I sy.Player_State) ≠ 0 := by
+  simp only [endX, Bool.and_eq_true, beq_iff_eq] at h
+  obtain ⟨hs, h⟩ := h
+  refine ⟨(hl.s _ hs).1, ?_⟩
+  unfold knNe0 at h
+  cases hm : (T.ram (I sy.Player_State)).same with
+  | none => rw [hm] at h; cases h
+  | some v =>
+    rw [hm] at h
+    have e := (Tag.same_spec hm (hl.ram _ (I_lt _))).1
+    rw [e]
+    simpa using h
+
+/-- the walk `check1X` for every horizontal coordinate of `xs` and every height of `ys`, in the state 2 (round 30: the first fall, `familyF` of `FChecks`) -/
+def familyF (sy : Syms) (E : Rom) (B : ScreenPage.Places) (P : RoomCollision.Places) (screen : List Nat) (M Q : Machine)
+    (xs ys : List UInt8) (fuel : Nat) : Bool :=
+  ys.all fun y => xs.all fun x => check1X sy E B P screen M (variantW sy P Q x y 2) fuel
+
+/-- the horizontal coordinates from 13 to the one before `RoomJoin.cornerX` (his right side check left of the block's left column) -/
+def xsF (sy : Syms) : List UInt8 := (List.range (RoomJoin.cornerX sy - 13)).map fun k => (13 + k).toUInt8
+
+theorem mem_xsF {sy : Syms} {x : UInt8} (h1 : 13 ≤ x.toNat) (h2 : x.toNat < RoomJoin.cornerX sy) : x ∈ xsF sy :=
+  List.mem_map.2 ⟨x.toNat - 13, List.mem_range.2 (by omega), by rw [show 13 + (x.toNat - 13) = x.toNat by omega]; simp⟩
+
+theorem check1X_eq {sy : Syms} {E : Rom} {B : ScreenPage.Places} {P : RoomCollision.Places} {screen : List Nat} {M Q R : Machine} {fuel : Nat}
+    (sp : Q.s = R.s) (same : ∀ j ∈ keysW sy E P screen, Q.ram.get! j = R.ram.get! j) :
+    check1X sy E B P screen M Q fuel = check1X sy E B P screen M R fuel := by
+  unfold check1X
+  rw [cutW_eq sp same, sp]
+
 /-- **The checks on the ROM**: the first walk for every coordinate of `xsW`, height of `ysW` and state 0, 1, 2 from the reference machine; the second for every speed of
 `speeds`; the cells; the room's walk that knows the control bytes at `PlayerSubs`; the reference -/
 structure Checks (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) : Prop where
@@ -314,6 +381,19 @@ structure Checks (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) : Pro
     (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) xsW ysW = true
   control : RoomLand.controlCheck sy nm m0 = true
   ref : refCheckW sy m0 = true
+  /-- round 30: the walk `check1X` for x from 13 to 16, every height of `ysX` (below the floor's) and the states 1 and 2, and its cells -/
+  familyX : familyX sy (Rom.of m0) (ScreenPage.placesR sy nm m0) (RoomCollision.places sy m0) (SideFrame.screenI sy m0) (RoomMap.mapRef m0) (RoomLand.refQ sy m0 0)
+    xsX (ysX sy) 3000 = true
+  cellsX : cellsOKW sy (Rom.of m0) (ScreenPage.placesR sy nm m0) (RoomCollision.places sy m0) (RoomMap.mapRef m0) (RoomLand.refQ sy m0 0)
+    (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) xsX (ysX sy) = true
+
+/-- **The walks of round 30 for the first fall** (`wall_frameF`): `check1X` in the state 2 for the coordinates of `xs` and the heights of `ys`, and its cells. The
+route takes `xsF` and the heights of the first fall at the end of the move (`RoomJoin.ysFall`) -/
+structure FChecks (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) (xs ys : List UInt8) : Prop where
+  familyF : familyF sy (Rom.of m0) (ScreenPage.placesR sy nm m0) (RoomCollision.places sy m0) (SideFrame.screenI sy m0) (RoomMap.mapRef m0) (RoomLand.refQ sy m0 0)
+    xs ys 3000 = true
+  cellsF : cellsOKW sy (Rom.of m0) (ScreenPage.placesR sy nm m0) (RoomCollision.places sy m0) (RoomMap.mapRef m0) (RoomLand.refQ sy m0 0)
+    (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) xs ys = true
 
 theorem mem_xsW {x : UInt8} (h : x.toNat < 16) : x ∈ xsW := List.mem_map.2 ⟨x.toNat, List.mem_range.2 h, by simp⟩
 
@@ -451,6 +531,244 @@ theorem wall_at {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} (H :
   have hat : At (Rom.of m0) (cutW sy (Rom.of m0) (ScreenPage.placesR sy nm m0) P (SideFrame.screenI sy m0) (RoomMap.mapRef m0) R) R :=
     at_cutW hg pc hsolid (fun j hj => (hcell j hj).1) (fun j hj => (hcell j hj).2) hv
   exact wall_end h1 h2 hat hxs
+
+/-- **At the end of the move of a frame of the room, with the vertical page 1, the page 0, x from 13 to 16, the height from 32 to one above the floor's, the state 1 or 2
+and the vertical speed not negative, the collision routine returns to `PlayerSubs`, and there the state is not 0** (round 30): no foot is in a solid cell. `wall_at` with the walk
+`check1X` of `familyX`; the speed is free. -/
+theorem wall_atX {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} (H : Checks sy nm m0)
+    (hM : RoomMap.MapFacts sy nm m0) {input : UInt8} {n : Nat}
+    (hm : ScreenPage.RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) m)
+    (sites : ∀ j, ScreenPage.SiteOK (ScreenPage.placesR sy nm m0) (PipeEntryRule.trace m input j))
+    (hf : (PipeEntryRule.trace m input n).frame = m.frame) (pc : (PipeEntryRule.trace m input n).pc = sy.PlayerSubs)
+    (hg : Good (Rom.of m0) (PipeEntryRule.trace m input n)) (hs : (PipeEntryRule.trace m input n).s = ctrlStack sy m0)
+    (hsolid : RoomBlocks.Solid (ScreenPage.placesR sy nm m0) (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) (RoomMap.mapRef m0) (PipeEntryRule.trace m input n))
+    (hhi : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_HighPos) = 1)
+    (hpg : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_PageLoc) = 0)
+    (hx : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_X_Position) ∈ xsX)
+    (hy1 : 32 ≤ ((PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Position)).toNat)
+    (hy2 : ((PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Position)).toNat < Jump.groundY sy)
+    (hst : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_State) = 1 ∨ (PipeEntryRule.trace m input n).ram.get! (I sy.Player_State) = 2)
+    (hv : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Speed) &&& 0x80 = 0) :
+    ∃ k, k ≤ 3000 ∧ (stepN k (PipeEntryRule.trace m input n)).pc = retBG sy (Rom.of m0) ∧
+      (stepN k (PipeEntryRule.trace m input n)).s = (PipeEntryRule.trace m input n).s ∧ InFrameN (Rom.of m0) (PipeEntryRule.trace m input n) k ∧
+      (stepN k (PipeEntryRule.trace m input n)).ram.get! (I sy.Player_State) ≠ 0 := by
+  have hr := H.ref
+  simp only [refCheckW, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, decide_eq_true_eq] at hr
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hsz, ePx⟩, ePg⟩, ePy⟩, r1⟩, r2⟩, rc⟩, rx⟩, nxy⟩, nxs⟩, nys⟩, rs⟩ := hr
+  let R := PipeEntryRule.trace m input n
+  let Q := RoomLand.refQ sy m0 0
+  let P := RoomCollision.places sy m0
+  let x := R.ram.get! (I sy.Player_X_Position)
+  let y := R.ram.get! (I sy.Player_Y_Position)
+  let st := R.ram.get! (I sy.Player_State)
+  let V := variantW sy P Q x y st
+  have hlt : ∀ j, j < 2048 → j < Q.ram.size := fun j hj => by rw [hsz]; exact hj
+  have hPx : P.x < 2048 := by rw [ePx]; exact I_lt _
+  have hPy : P.y < 2048 := by rw [ePy]; exact I_lt _
+  have hvar : ∀ j, j ≠ P.x → j ≠ P.y → j ≠ I sy.Player_State → V.ram.get! j = Q.ram.get! j := fun j h1 h2 h3 => by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! j = Q.ram.get! j
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => h3 e.symm), PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => h2 e.symm),
+      PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => h1 e.symm)]
+  have hvst : V.ram.get! (I sy.Player_State) = st := by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! (I sy.Player_State) = st
+    apply PipeTransitionAll.ba_get_set_self
+    rw [PipeTransitionAll.ba_size_set, PipeTransitionAll.ba_size_set]
+    exact hlt _ (I_lt _)
+  have hvy : V.ram.get! P.y = y := by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! P.y = y
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => nys e.symm)]
+    apply PipeTransitionAll.ba_get_set_self
+    rw [PipeTransitionAll.ba_size_set]
+    exact hlt _ hPy
+  have hvx : V.ram.get! P.x = x := by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! P.x = x
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => nxs e.symm), PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => nxy e.symm)]
+    exact PipeTransitionAll.ba_get_set_self _ _ _ (hlt _ hPx)
+  have ctl := RoomLand.controls_at_subs hM H.control hm sites hf pc
+  have hc : ∀ j ∈ RoomLand.controlKeys sy m0, R.ram.get! j = V.ram.get! j := by
+    intro j hj
+    have ne := rx j (List.mem_append_right _ hj)
+    rw [hvar j ne.1.1 ne.1.2 ne.2, (rc j hj).2, ctl j hj (rc j hj).1]
+  have hk : ∀ j ∈ keysW sy (Rom.of m0) P (SideFrame.screenI sy m0), R.ram.get! j = V.ram.get! j := by
+    intro j hj
+    rcases List.mem_append.mp hj with hj | hj
+    · unfold RoomLand.keys at hj
+      rcases List.mem_append.mp hj with hj | hj
+      · rcases List.mem_append.mp hj with hj | hj
+        · simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+          rcases hj with e | e | e | e | e | e
+          · exact hc j (by rw [e]; simp [RoomLand.controlKeys])
+          · subst e
+            have ne := rx (I sy.Player_Y_HighPos) (by simp)
+            rw [hvar _ ne.1.1 ne.1.2 ne.2, r1]
+            exact hhi
+          · exact hc j (by rw [e]; simp [RoomLand.controlKeys])
+          · subst e
+            rw [hvx]
+            exact congrArg R.ram.get! ePx
+          · subst e
+            have ne := rx P.pg (by simp [P])
+            rw [hvar _ ne.1.1 ne.1.2 ne.2, r2, ePg]
+            exact hpg
+          · subst e
+            rw [hvy]
+            exact congrArg R.ram.get! ePy
+        · apply hc j
+          unfold RoomLand.controlKeys
+          exact List.mem_cons_of_mem _ (List.mem_append_left _ hj)
+      · apply hc j
+        rw [List.mem_singleton.mp hj]
+        simp [RoomLand.controlKeys]
+    · simp only [List.mem_singleton] at hj
+      subst hj
+      rw [hvst]
+  have hVs : V.s = Q.s := variantW_s
+  have hsQ : R.s = V.s := hs.trans (rs.symm.trans hVs.symm)
+  have hys' : y ∈ ysX sy := mem_ysX hy1 hy2
+  have hsts : st ∈ ([1, 2] : List UInt8) := by
+    rcases hst with e | e
+    · show R.ram.get! (I sy.Player_State) ∈ ([1, 2] : List UInt8)
+      rw [e]; simp
+    · show R.ram.get! (I sy.Player_State) ∈ ([1, 2] : List UInt8)
+      rw [e]; simp
+  have h1 : check1X sy (Rom.of m0) (ScreenPage.placesR sy nm m0) P (SideFrame.screenI sy m0) (RoomMap.mapRef m0) R 3000 = true := by
+    rw [check1X_eq hsQ hk]
+    exact List.all_eq_true.mp (List.all_eq_true.mp (List.all_eq_true.mp H.familyX y hys') x hx) st hsts
+  have hcoords : ∀ j ∈ RoomCollision.coords P, R.ram.get! j = (variantW sy P Q x y 0).ram.get! j := by
+    intro j hj
+    have e := hk j (coords_sub_keys j hj)
+    rw [e]
+    simp only [RoomCollision.coords, List.mem_cons, List.not_mem_nil, or_false] at hj
+    have hne : j ≠ I sy.Player_State := by
+      rcases hj with rfl | rfl | rfl
+      · exact nxs
+      · exact (rx P.pg (by simp [P])).2
+      · exact nys
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! j = (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) 0).get! j
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => hne e.symm), PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => hne e.symm)]
+  have hcell := cells_of_familyW H.cellsX hx hys' hcoords
+  have hat : At (Rom.of m0) (cutW sy (Rom.of m0) (ScreenPage.placesR sy nm m0) P (SideFrame.screenI sy m0) (RoomMap.mapRef m0) R) R :=
+    at_cutW hg pc hsolid (fun j hj => (hcell j hj).1) (fun j hj => (hcell j hj).2) hv
+  obtain ⟨k, T, hk', hst', hg', hl, hj⟩ := walkT_spec 3000 _ R R h1 (lk_self hat)
+  have hin : InFrameN (Rom.of m0) R k := fun j hj' => by obtain ⟨_, _, _, _, hi, _⟩ := hj j hj'; exact hi
+  obtain ⟨e1, e2⟩ := endX_spec hg' hl
+  exact ⟨k, hk', by rw [hl.pcl]; simpa using hst', e1, hin, e2⟩
+
+/-- **`wall_atX` for the coordinates and heights of `FChecks`, in the state 2** (round 30): the collision routine returns to `PlayerSubs`, and there the state is not 0 -/
+theorem wall_atF {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} (H : Checks sy nm m0) {xs ys : List UInt8} (HF : FChecks sy nm m0 xs ys)
+    (hM : RoomMap.MapFacts sy nm m0) {input : UInt8} {n : Nat}
+    (hm : ScreenPage.RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) m)
+    (sites : ∀ j, ScreenPage.SiteOK (ScreenPage.placesR sy nm m0) (PipeEntryRule.trace m input j))
+    (hf : (PipeEntryRule.trace m input n).frame = m.frame) (pc : (PipeEntryRule.trace m input n).pc = sy.PlayerSubs)
+    (hg : Good (Rom.of m0) (PipeEntryRule.trace m input n)) (hs : (PipeEntryRule.trace m input n).s = ctrlStack sy m0)
+    (hsolid : RoomBlocks.Solid (ScreenPage.placesR sy nm m0) (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) (RoomMap.mapRef m0) (PipeEntryRule.trace m input n))
+    (hhi : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_HighPos) = 1)
+    (hpg : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_PageLoc) = 0)
+    (hx : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_X_Position) ∈ xs)
+    (hy : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Position) ∈ ys)
+    (hst : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_State) = 2)
+    (hv : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Speed) &&& 0x80 = 0) :
+    ∃ k, k ≤ 3000 ∧ (stepN k (PipeEntryRule.trace m input n)).pc = retBG sy (Rom.of m0) ∧
+      (stepN k (PipeEntryRule.trace m input n)).s = (PipeEntryRule.trace m input n).s ∧ InFrameN (Rom.of m0) (PipeEntryRule.trace m input n) k ∧
+      (stepN k (PipeEntryRule.trace m input n)).ram.get! (I sy.Player_State) ≠ 0 := by
+  have hr := H.ref
+  simp only [refCheckW, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, decide_eq_true_eq] at hr
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hsz, ePx⟩, ePg⟩, ePy⟩, r1⟩, r2⟩, rc⟩, rx⟩, nxy⟩, nxs⟩, nys⟩, rs⟩ := hr
+  let R := PipeEntryRule.trace m input n
+  let Q := RoomLand.refQ sy m0 0
+  let P := RoomCollision.places sy m0
+  let x := R.ram.get! (I sy.Player_X_Position)
+  let y := R.ram.get! (I sy.Player_Y_Position)
+  let st := R.ram.get! (I sy.Player_State)
+  let V := variantW sy P Q x y st
+  have hlt : ∀ j, j < 2048 → j < Q.ram.size := fun j hj => by rw [hsz]; exact hj
+  have hPx : P.x < 2048 := by rw [ePx]; exact I_lt _
+  have hPy : P.y < 2048 := by rw [ePy]; exact I_lt _
+  have hvar : ∀ j, j ≠ P.x → j ≠ P.y → j ≠ I sy.Player_State → V.ram.get! j = Q.ram.get! j := fun j h1 h2 h3 => by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! j = Q.ram.get! j
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => h3 e.symm), PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => h2 e.symm),
+      PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => h1 e.symm)]
+  have hvst : V.ram.get! (I sy.Player_State) = st := by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! (I sy.Player_State) = st
+    apply PipeTransitionAll.ba_get_set_self
+    rw [PipeTransitionAll.ba_size_set, PipeTransitionAll.ba_size_set]
+    exact hlt _ (I_lt _)
+  have hvy : V.ram.get! P.y = y := by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! P.y = y
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => nys e.symm)]
+    apply PipeTransitionAll.ba_get_set_self
+    rw [PipeTransitionAll.ba_size_set]
+    exact hlt _ hPy
+  have hvx : V.ram.get! P.x = x := by
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! P.x = x
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => nxs e.symm), PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => nxy e.symm)]
+    exact PipeTransitionAll.ba_get_set_self _ _ _ (hlt _ hPx)
+  have ctl := RoomLand.controls_at_subs hM H.control hm sites hf pc
+  have hc : ∀ j ∈ RoomLand.controlKeys sy m0, R.ram.get! j = V.ram.get! j := by
+    intro j hj
+    have ne := rx j (List.mem_append_right _ hj)
+    rw [hvar j ne.1.1 ne.1.2 ne.2, (rc j hj).2, ctl j hj (rc j hj).1]
+  have hk : ∀ j ∈ keysW sy (Rom.of m0) P (SideFrame.screenI sy m0), R.ram.get! j = V.ram.get! j := by
+    intro j hj
+    rcases List.mem_append.mp hj with hj | hj
+    · unfold RoomLand.keys at hj
+      rcases List.mem_append.mp hj with hj | hj
+      · rcases List.mem_append.mp hj with hj | hj
+        · simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+          rcases hj with e | e | e | e | e | e
+          · exact hc j (by rw [e]; simp [RoomLand.controlKeys])
+          · subst e
+            have ne := rx (I sy.Player_Y_HighPos) (by simp)
+            rw [hvar _ ne.1.1 ne.1.2 ne.2, r1]
+            exact hhi
+          · exact hc j (by rw [e]; simp [RoomLand.controlKeys])
+          · subst e
+            rw [hvx]
+            exact congrArg R.ram.get! ePx
+          · subst e
+            have ne := rx P.pg (by simp [P])
+            rw [hvar _ ne.1.1 ne.1.2 ne.2, r2, ePg]
+            exact hpg
+          · subst e
+            rw [hvy]
+            exact congrArg R.ram.get! ePy
+        · apply hc j
+          unfold RoomLand.controlKeys
+          exact List.mem_cons_of_mem _ (List.mem_append_left _ hj)
+      · apply hc j
+        rw [List.mem_singleton.mp hj]
+        simp [RoomLand.controlKeys]
+    · simp only [List.mem_singleton] at hj
+      subst hj
+      rw [hvst]
+  have hVs : V.s = Q.s := variantW_s
+  have hsQ : R.s = V.s := hs.trans (rs.symm.trans hVs.symm)
+  have hys' : y ∈ ys := hy
+  have hstE : st = 2 := hst
+  have h1 : check1X sy (Rom.of m0) (ScreenPage.placesR sy nm m0) P (SideFrame.screenI sy m0) (RoomMap.mapRef m0) R 3000 = true := by
+    rw [check1X_eq hsQ hk]
+    have e : V = variantW sy P Q x y 2 := by rw [← hstE]
+    rw [e]
+    exact List.all_eq_true.mp (List.all_eq_true.mp HF.familyF y hys') x hx
+  have hcoords : ∀ j ∈ RoomCollision.coords P, R.ram.get! j = (variantW sy P Q x y 0).ram.get! j := by
+    intro j hj
+    have e := hk j (coords_sub_keys j hj)
+    rw [e]
+    simp only [RoomCollision.coords, List.mem_cons, List.not_mem_nil, or_false] at hj
+    have hne : j ≠ I sy.Player_State := by
+      rcases hj with rfl | rfl | rfl
+      · exact nxs
+      · exact (rx P.pg (by simp [P])).2
+      · exact nys
+    show (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) st).get! j = (((Q.ram.set! P.x x).set! P.y y).set! (I sy.Player_State) 0).get! j
+    rw [PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => hne e.symm), PipeTransitionAll.ba_get_set_ne _ _ _ _ (fun e => hne e.symm)]
+  have hcell := cells_of_familyW HF.cellsF hx hys' hcoords
+  have hat : At (Rom.of m0) (cutW sy (Rom.of m0) (ScreenPage.placesR sy nm m0) P (SideFrame.screenI sy m0) (RoomMap.mapRef m0) R) R :=
+    at_cutW hg pc hsolid (fun j hj => (hcell j hj).1) (fun j hj => (hcell j hj).2) hv
+  obtain ⟨k, T, hk', hst', hg', hl, hj⟩ := walkT_spec 3000 _ R R h1 (lk_self hat)
+  have hin : InFrameN (Rom.of m0) R k := fun j hj' => by obtain ⟨_, _, _, _, hi, _⟩ := hj j hj'; exact hi
+  obtain ⟨e1, e2⟩ := endX_spec hg' hl
+  exact ⟨k, hk', by rw [hl.pcl]; simpa using hst', e1, hin, e2⟩
 
 /-! ## From `retBG` to the frame's end: a walk of the whole frame of the room -/
 
@@ -651,6 +969,58 @@ theorem wall_frame {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} (
   rw [e _ (by simp [hW]), e _ (by simp [hW]), e _ (by simp [hW])]
   exact hend
 
+/-- **A frame of the room whose end of the move meets the conditions of `wall_atX` (x from 13 to 16, in the air), and that ends in the player's routine, ends with the
+state not 0** (round 30). `wall_atX` up to `retBG`, and the walk of the whole frame from there (`after_G`) to the frame's end. -/
+theorem wall_frameX {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} (H : Checks sy nm m0) (hcw : checkW sy nm m0 = true)
+    (hap : apartW sy (ScreenPage.placesR sy nm m0) = true) (hM : RoomMap.MapFacts sy nm m0) {input : UInt8} {n : Nat}
+    (hm : ScreenPage.RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) m)
+    (sites : ∀ j, ScreenPage.SiteOK (ScreenPage.placesR sy nm m0) (PipeEntryRule.trace m input j))
+    {idle : UInt16} (hidle : idleAt (Rom.of m0) idle = true)
+    (htime : ∀ j, (PipeEntryRule.trace m input j).pc ≠ idle → (PipeEntryRule.trace m input j).fdot ≤ dotsPerFrame - 64)
+    (hf : (PipeEntryRule.trace m input n).frame = m.frame) (pc : (PipeEntryRule.trace m input n).pc = sy.PlayerSubs)
+    (hg : Good (Rom.of m0) (PipeEntryRule.trace m input n)) (hs : (PipeEntryRule.trace m input n).s = ctrlStack sy m0)
+    (hsolid : RoomBlocks.Solid (ScreenPage.placesR sy nm m0) (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) (RoomMap.mapRef m0) (PipeEntryRule.trace m input n))
+    (hhi : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_HighPos) = 1)
+    (hpg : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_PageLoc) = 0)
+    (hx : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_X_Position) ∈ xsX)
+    (hy1 : 32 ≤ ((PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Position)).toNat)
+    (hy2 : ((PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Position)).toNat < Jump.groundY sy)
+    (hst : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_State) = 1 ∨ (PipeEntryRule.trace m input n).ram.get! (I sy.Player_State) = 2)
+    (hv : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Speed) &&& 0x80 = 0)
+    (hrt : (PipeTransition.frame m input).ram.get! (ScreenPage.placesR sy nm m0).rtI = (ScreenPage.refR m0).ram.get! (ScreenPage.placesR sy nm m0).rtI) :
+    (PipeTransition.frame m input).ram.get! (I sy.Player_State) ≠ 0 := by
+  obtain ⟨k, _, hpc, _, hin, hend⟩ := wall_atX H hM hm sites hf pc hg hs hsolid hhi hpg hx hy1 hy2 hst hv
+  obtain ⟨htr, hfr⟩ := FrameModel.trace_inFrame hidle hf hin htime k (Nat.le_refl k)
+  have hO := RoomVert.okV_of_check hcw
+  have hkeep := after_G hO RoomVert.cfgOfV_fin hap hm sites (n + k) (by rw [htr]; exact hpc) hfr hrt
+  rw [hkeep _ (by simp [hW]), htr]
+  exact hend
+
+/-- **`wall_frameX` for the coordinates and heights of `FChecks`, in the state 2** (round 30): such a frame ends with the state not 0 -/
+theorem wall_frameF {sy : Syms} {nm : PipeTransitionAll.Names} {m0 m : Machine} (H : Checks sy nm m0) {xs ys : List UInt8} (HF : FChecks sy nm m0 xs ys) (hcw : checkW sy nm m0 = true)
+    (hap : apartW sy (ScreenPage.placesR sy nm m0) = true) (hM : RoomMap.MapFacts sy nm m0) {input : UInt8} {n : Nat}
+    (hm : ScreenPage.RoomCond (ScreenPage.envR sy nm m0) (ScreenPage.refR m0) (RoomMap.knownT sy nm m0) m)
+    (sites : ∀ j, ScreenPage.SiteOK (ScreenPage.placesR sy nm m0) (PipeEntryRule.trace m input j))
+    {idle : UInt16} (hidle : idleAt (Rom.of m0) idle = true)
+    (htime : ∀ j, (PipeEntryRule.trace m input j).pc ≠ idle → (PipeEntryRule.trace m input j).fdot ≤ dotsPerFrame - 64)
+    (hf : (PipeEntryRule.trace m input n).frame = m.frame) (pc : (PipeEntryRule.trace m input n).pc = sy.PlayerSubs)
+    (hg : Good (Rom.of m0) (PipeEntryRule.trace m input n)) (hs : (PipeEntryRule.trace m input n).s = ctrlStack sy m0)
+    (hsolid : RoomBlocks.Solid (ScreenPage.placesR sy nm m0) (RoomBlocks.coinsOf (ScreenPage.placesR sy nm m0)) (RoomMap.mapRef m0) (PipeEntryRule.trace m input n))
+    (hhi : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_HighPos) = 1)
+    (hpg : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_PageLoc) = 0)
+    (hx : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_X_Position) ∈ xs)
+    (hy : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Position) ∈ ys)
+    (hst : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_State) = 2)
+    (hv : (PipeEntryRule.trace m input n).ram.get! (I sy.Player_Y_Speed) &&& 0x80 = 0)
+    (hrt : (PipeTransition.frame m input).ram.get! (ScreenPage.placesR sy nm m0).rtI = (ScreenPage.refR m0).ram.get! (ScreenPage.placesR sy nm m0).rtI) :
+    (PipeTransition.frame m input).ram.get! (I sy.Player_State) ≠ 0 := by
+  obtain ⟨k, _, hpc, _, hin, hend⟩ := wall_atF H HF hM hm sites hf pc hg hs hsolid hhi hpg hx hy hst hv
+  obtain ⟨htr, hfr⟩ := FrameModel.trace_inFrame hidle hf hin htime k (Nat.le_refl k)
+  have hO := RoomVert.okV_of_check hcw
+  have hkeep := after_G hO RoomVert.cfgOfV_fin hap hm sites (n + k) (by rw [htr]; exact hpc) hfr hrt
+  rw [hkeep _ (by simp [hW]), htr]
+  exact hend
+
 /-! ## One frame of `hstep` from a state that moves left fast -/
 
 section
@@ -729,7 +1099,7 @@ theorem not_follow_of {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRu
   have hfar := r.t0_far H hr st
   have hE := r.t0_le_E H hr
   have ht : n < r.t0 := by omega
-  have hsf := r.stand_fast n hC h1 h0
+  have hsf := r.stand_fast n hC h1 (Or.inl hf) h0
   have hD : Potential.inD sy (r.fr.hs n) = true := by
     have h := (r.far_inD H hr st (n - r.C) (by omega)).2
     rwa [show r.C + (n - r.C) = n by omega] at h

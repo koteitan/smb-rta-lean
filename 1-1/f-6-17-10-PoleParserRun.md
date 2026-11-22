@@ -52,6 +52,8 @@ The old field `tilesCol` asked `TileCol` up to the routine's write: right after 
 
 So the parser is at most 24 columns ahead of the edge, and it has not come to the pole's column while he reads 32 columns or more before it.
 
+Round 30: (`read`) is asked only when his page is exactly two before the pole's; three pages or more before it, (`near`) alone is enough ([`TileSlot` on one page, and the scroll counter under the strict rule](f-6-17-11-PoleWrap.md)).
+
 ## The fields
 
 | field | was | now |
@@ -84,7 +86,7 @@ Round 28's measure with `N = 400` also found no store through an index or a poin
 ## What is not proved
 
 * `TileSlot` itself: (`slot`) the parser draws a pole's tile only once it has come to the pole's column; (`near`) he is not far left of the edge; (`read`) the read's column is that of his pixel plus the adder. On real runs no far read at the pole's column reads a pole's tile, so (`slot`) is never used there.
-* `parWrap` (measured above). The parser may skip its tasks on a frame (the control byte 6), so the weak rule does not bound `S`.
+* `parWrap` (measured above). The parser may skip its tasks on a frame (the control byte 6), so the weak rule does not bound `S`. Round 30: it is asked only of a frame that comes to the player's routine, and it follows from the strict rule of each frame, which is not proved ([f-6-17-11](f-6-17-11-PoleWrap.md)).
 * `bufAll` (7 places) and `keepB` (66 places): not attempted in this round.
 
 **Files.** `Theorems/PoleParserRun.lean` (`edgeLow_run`, `lag_edge`, `surf_edge` too); `FrameKeep.parRt`, `FrameKeep.parE` and `guardE` in `Theorems/FrameKeep.lean`; `TileSlot`, `tileCol_of_slot` in `Theorems/PoleTileFar.lean`; the fields and `parColOf`, `parSOf`, `NoWrapP`, `Run.TileColAll` in `Theorems/PoleJoin.lean`; `hp` from the first arrival in `PoleParser.lean` and `PoleParserEnd.lean`; the private Route block and the round 29 line of `pole-keep parser` in `Main.lean`.

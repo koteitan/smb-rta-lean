@@ -30,6 +30,8 @@ stand_P (field, narrowed):
 
 ## What remains
 
+Round 30 ([The position before the first stand, proved](c-7-13-4-StandHit.md)): `stand_P` is gone. `wall_turn`'s case is proved (`RoomCore.stand_hit`), and `stand_first` takes the position from `RoomRun.fall_left` and the walks of `InRoom.wall` (`WallX`, `WallF`). The text below is the state of round 29.
+
 The field on the frame before the first stand. A proof needs: a stand at the wall has `x ≤ 12` at the end of its move (a walk from the end of the move as `RoomWall`'s, for `x` from 13 on), and the frame's move left is at most 24/16 px (the model of the movement at the end of the move for a frame that stops).
 
 **Files.** `Theorems/RoomJoin.lean`: `RoomFields.stand_P`, `stand_first`, `wall_turn`.

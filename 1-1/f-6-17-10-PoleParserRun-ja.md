@@ -52,6 +52,8 @@ inv_run :  ∀ n < ix(g),  Inv(384, all n) ∧ col_in_page(all n) < 16
 
 つまり解析は左の端より高々 24 列先にあり、マリオが旗より 32 列以上前を読むあいだ、旗の列には来ていません。
 
+30 回目のラウンド: (`read`) は、マリオのページが旗のページのちょうど 2 つ前のときだけ求めます。3 つ以上前なら (`near`) だけで足ります（[`TileSlot` を 1 つのページだけで、厳しい規則のもとのスクロールのカウンタ](f-6-17-11-PoleWrap-ja.md)）。
+
 ## フィールド
 
 | フィールド | 前 | いま |
@@ -83,7 +85,7 @@ inv_run :  ∀ n < ix(g),  Inv(384, all n) ∧ col_in_page(all n) < 16
 ## 証明していないこと
 
 * `TileSlot` そのもの: (`slot`) 解析は旗の列に来てから旗のタイルを書く。(`near`) マリオは左の端よりずっと左にはいない。(`read`) 読み込みの列はマリオの画素に足す数を足した列。本物のランでは、旗の列での遠い読み込みが旗のタイルを読むことはないので、(`slot`) はそこでは使われません。
-* `parWrap`（上で測った）。解析はフレームによってはタスクをとばすので（制御バイト 6）、弱い決まりは `S` を押さえません。
+* `parWrap`（上で測った）。解析はフレームによってはタスクをとばすので（制御バイト 6）、弱い決まりは `S` を押さえません。30 回目のラウンド: プレイヤーのルーチンに来るフレームにだけ求めます。各フレームの厳しい規則から出ますが、それは証明していません（[f-6-17-11](f-6-17-11-PoleWrap-ja.md)）。
 * `bufAll`（7 か所）と `keepB`（66 か所）: このラウンドでは手をつけていません。
 
 **ファイル.** `Theorems/PoleParserRun.lean`（`edgeLow_run`、`lag_edge`、`surf_edge` も）。`Theorems/FrameKeep.lean` の `FrameKeep.parRt`、`FrameKeep.parE`、`guardE`。`Theorems/PoleTileFar.lean` の `TileSlot`、`tileCol_of_slot`。`Theorems/PoleJoin.lean` のフィールドと `parColOf`、`parSOf`、`NoWrapP`、`Run.TileColAll`。`PoleParser.lean` と `PoleParserEnd.lean` の最初に来たところからの `hp`。`Main.lean` の非公開の Route の部分と `pole-keep parser` の 29 回目の行。

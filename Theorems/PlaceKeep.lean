@@ -11,7 +11,8 @@ is done, and the move is not. This file proves that a counted frame keeps the th
 with `PlaceAt` there and `AmountAt` at the scroll handler the edge moves only behind him, without `collide` (`edge_step_place`). `PlaceAt` held on every real
 frame measured, but it fails on 8,640 overwritten states of `surface-frames-check` (his position is overwritten there and his place byte is not), where the field
 `near` holds; so `edge_step_place` is not used by the route. Round 28: the route uses `keep_place` (`MoveScroll.nearX_of_a`, `SurfaceFrames.OnFrames.nearAt`), with
-the field `nearA`, which asks 2 px in place of the threshold (round 29: a theorem, `SurfaceFrames.OnFrames.nearAAt`, from the field `nearStep`).
+the field `nearA`, which asks 2 px in place of the threshold (round 29: a theorem, `SurfaceFrames.OnFrames.nearAAt`, from the field `nearStep`;
+round 30: `nearStep` is a theorem too, `SurfaceFrames.OnFrames.nearStepAt`).
 
 The walks of `EdgeStep` follow a byte that `FrameKeep.guardE` protects. These three bytes are not protected: the timer part of the frame decrements the timer
 through an index, and `CleanK` asks every such store to miss the protected bytes. A walk may still follow a byte that is not protected: a store with a target not

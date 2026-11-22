@@ -1387,13 +1387,18 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   of the pole's tiles then the area parser's column of the frame's start had come to the pole's; he is at most 112 px left of the screen's left edge of the frame's
   start; and the read is in the column of his pixel plus less than 16 px, mod 32 (`PoleTileFar.TileSlot`). With the parser's invariant at the start of the touch's
   frame (`PoleParserRun.inv_run`: the parser's column is at most 384 px past the edge) this gives `TileCol` (`PoleParserRun.tilesCol_run`). It is not weaker than the old field: at every such read it also asks the last two parts, where
-  the old field asked nothing unless a pole's tile was read -/
+  the old field asked nothing unless a pole's tile was read. Round 30: the last part (the column of the read) is asked only when his page is exactly two before the
+  pole's (`PoleTileFar.tileSlot_of_R`: the round 29 form gives this one; `1-1/f-6-17-11-PoleWrap.md`) -/
   tilesCol : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n →
     PoleTileFar.TileSlot (PoleFrame.spotsF sy m0) (parColOf sy m0 (keep.fm g)) (ScrollRule.left16 (ScrollRule.places sy m0) (keep.fm g))
       (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
   /-- round 29: on each frame before the touch's frame, counted or not, at `UpdScrollVar`: the scroll counter of 32 px does not pass 255 (`NoWrapP`). The parser's
-  invariant on the frames (`PoleParserRun.inv_run`) asks it -/
-  parWrap : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k).pc = sy.UpdScrollVar →
+  invariant on the frames (`PoleParserRun.inv_run`) asks it. Round 30: asked only of a frame that comes to the player's routine (the others keep the parser's
+  bytes, `PoleParser.step_noCut`); it follows from the strict rule of each frame (`PoleWrap.parWrap_of_strict`), which is not proved: the field stays -/
+  parWrap : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g →
+    ∀ n₀, (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) n₀).pc = sy.PlayerCtrlRoutine →
+      (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) n₀).frame = (S.seq (a + n)).frame →
+    ∀ k, (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k).pc = sy.UpdScrollVar →
     (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k).frame = (S.seq (a + n)).frame →
     NoWrapP sy m0 (S.seq (a + n)) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- up to the write, a store through an index or a pointer that writes the position's pixel or page is one of the move routine's stores of them, with the index 0 -/

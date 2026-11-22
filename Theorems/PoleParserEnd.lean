@@ -1675,7 +1675,7 @@ end NoCut
 `inv_onFrames`: on the frames of a run up to the touch's frame (`FrameKeep.Frames`, from the machine at control on), the invariant and the column below 16 hold at
 every frame's start, from their values at the first and, for each frame before the touch's frame, the area's type `v`, the field `posW` from the scroll handler on
 (round 29: only on a frame that comes to the player's routine, from its first arrival there), no
-wrap of the scroll, the edge below `65280 − L` px and `CleanK` of `guardPI` (no store through an index or a pointer writes the parser's four bytes). The rest comes from
+wrap of the scroll (round 30: only on a frame that comes to the player's routine), the edge below `65280 − L` px and `CleanK` of `guardPI` (no store through an index or a pointer writes the parser's four bytes). The rest comes from
 the frames: each starts in the idle loop in control (`Frames.all_start`), `cleanE` (with `cleanPar_of`), `noStore`, and the time. A frame that comes to the player's
 routine takes `step_frame`, one that does not `step_noCut` (`arrival_cases`). -/
 
@@ -1711,7 +1711,8 @@ theorem inv_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine}
       (∀ j, j < n₀ → (trace (K.all n) (K.inp n) j).pc ≠ sy.PlayerCtrlRoutine) →
       ∀ k, n₀ ≤ k → (trace (K.all n) (K.inp n) k).pc = sy.PlayerSubs → ∀ j, k ≤ j → (trace (K.all n) (K.inp n) j).frame = (K.all n).frame →
       EdgeStep.cutPos sy m0 (trace (K.all n) (K.inp n) j).pc = false)
-    (hw : ∀ n, n + 1 < K.ix g → ∀ k, (trace (K.all n) (K.inp n) k).pc = sy.UpdScrollVar → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
+    (hw : ∀ n, n + 1 < K.ix g → ∀ n₀, (trace (K.all n) (K.inp n) n₀).pc = sy.PlayerCtrlRoutine → (trace (K.all n) (K.inp n) n₀).frame = (K.all n).frame →
+      ∀ k, (trace (K.all n) (K.inp n) k).pc = sy.UpdScrollVar → (trace (K.all n) (K.inp n) k).frame = (K.all n).frame →
       NoWrap sy m0 (K.all n) (trace (K.all n) (K.inp n) k))
     (hE : ∀ n, n + 1 < K.ix g → edgeOf (places sy m0) (K.all n) + L < 65280) :
     ∀ n, n < K.ix g → Inv (places sy m0) L (K.all n) ∧ ColOK sy m0 (K.all n) := by
@@ -1732,7 +1733,7 @@ theorem inv_onFrames {S : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine}
     have ht : ∀ k, (trace (K.all n) (K.inp n) k).pc ≠ sy.EndlessLoop → (trace (K.all n) (K.inp n) k).fdot ≤ dotsPerFrame - 64 := fun k hk => (hcE k).time hk
     rw [K.next n]
     rcases arrival_cases hq hst hclK with ⟨n₀, a1, a2, a3⟩ | hno
-    · have r := step_frame hc hq hqe he hs hidle hst hP (K.noStore n hn) (hv n hn) a1 a2 a3 ht (hp n hn n₀ a1 a2 a3) (hw n hn) hIn hCn (hE n hn)
+    · have r := step_frame hc hq hqe he hs hidle hst hP (K.noStore n hn) (hv n hn) a1 a2 a3 ht (hp n hn n₀ a1 a2 a3) (hw n hn n₀ a1 a2) hIn hCn (hE n hn)
       exact ⟨(invV_iff (P := places sy m0) (m := frame (K.all n) (K.inp n))).2 (inv_ruleW ((invV_iff (P := places sy m0) (m := K.all n)).1 hIn) r.1), r.2⟩
     · have r := step_noCut hq hqe hst hclK hno hCn
       exact ⟨(invV_iff (P := places sy m0) (m := frame (K.all n) (K.inp n))).2 (inv_ruleW ((invV_iff (P := places sy m0) (m := K.all n)).1 hIn) r.1), r.2⟩
