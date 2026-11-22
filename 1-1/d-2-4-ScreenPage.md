@@ -175,6 +175,8 @@ So no part can be split off by the walks as they are. Every theorem that uses th
 
 **Round 31.** `erase` is narrowed again: the walks split the state before the add of the pointer's low byte, so they know which of the two block buffers the pointer is in, and an erase through a pointer into the first block buffer is below the block buffers' end for every row's offset. The field asks the end only of an erase whose pointer is at or past the second block buffer's start ([The coin's erase in the first block buffer](d-2-4-2-5-EraseSplit.md), item 1-1-d-2-4-2-5). `read`, `xbit` and that case stay fields.
 
+**Round 32.** `erase` is proved on every instruction of the room's frames: the walks split the player's height in the collision routine, the size's bit 0 and the crouch byte, and start each frame knowing bits 1 to 7 of the size, so they know the row's offset at every erase ([The row of the coin's erase](d-2-4-2-6-EraseRow.md), item 1-1-d-2-4-2-6). `read` and `xbit` stay fields.
+
 ## Assumptions (not proved in Lean)
 
 * **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5. The route now asks 11 of them: five music bytes follow from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).

@@ -79,4 +79,6 @@ endKeep : … → EndKeep(Calls(Q) ∧ ¬(0 < v(Q) ∧ v(seq j) = v(Q)), Rt, seq
 
 **ここで証明していないこと.** `endKeep`。そのピクセルの部分（いまは押し戻しか補正を呼び、右への速さを保たないフレームだけ）には、呼び出しのあとで彼を動かすのは押し戻しだけであること、横の当たりのタイマーが 1 以下で終わるフレームには呼び出しのあとの押し戻しがないことが要ります。場所のバイトの部分（タイマー 1 以下、ロック 0、場所のバイトがしきい値以上で終わるすべてのフレームで）には、描画が画面での彼の場所を pixel − 左端 mod 256 として書くことが要ります。`Moves.stop`: `NearM` の条件のもとだけでなく、すべてのフレームの始めでの、左端に対する彼の場所が要ります。
 
+**第 32 回.** `endKeep` のピクセルの部分は、横のタイマーが高々 1 で終わるすべてのフレームで定理になりました。1 つの命令についての新しいフィールド `sideW` を使います（[彼を動かす押し戻しは横のタイマーを 16 にする](e-2-10-3-20-PushTimer-ja.md)）。
+
 **ファイル:** `Theorems/RightEdge.lean`。`Theorems/SurfaceFrames.lean` がそれを使います（`rel_zero`、`rel_congr`、`OnFrames.relStep`、`OnFrames.relAll`、`PageOK`、`page_of_base`、`OnFrames.readAllP`、`OnFrames.pageAll`、`OnFrames.nearStepAt`）。`Theorems/EdgeStep.lean`（`eI`）と `Theorems/FrameKeep.lean`（`edgeE`）は右端の 2 バイトを、`Theorems/ClampSide.lean`（`Places.speed`、`W0` の中）は彼の速さを持ちます。`Main.lean`: `edge-real` のフィルターの確認の名前だけ。

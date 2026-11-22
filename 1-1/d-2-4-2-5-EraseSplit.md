@@ -59,6 +59,8 @@ The times are with three other jobs running. At the erase the walks (i) and (ii)
 
 ## Assumptions (not proved in Lean)
 
+Round 32: the case left here is proved and `roomErase` is gone. The walks split the player's height in the collision routine, know bits 1 to 7 of the size at each frame's start, and so know the row's offset at every erase ([The row of the coin's erase](d-2-4-2-6-EraseRow.md)). The text below is round 31's.
+
 * **`roomErase`** only for an erase whose pointer is at or past the second block buffer's start: that it writes below the block buffers' end. A proof needs the row's offset at most 192 (from the code's tests of the player's height before each call of the block buffer routine), so the player's height in the walk, or that the second block buffer is never used in the room (the player stays on page 0 at most 242 px from the left edge, a bound over frames). Measured (`buffer-ctl-check FM2 4 splitcheck`): the tables of walks (i) and (ii) have 5,302 states in the player's collision code (65 places), and none knows the player's height. Split into its values (up to 207 below the code's first test), that would be up to about 1.1 million more states per walk, which this round did not try.
 * `roomRead` and `roomXbit` are unchanged. The split does not help them: `roomRead` needs the block buffers' contents (a bound over frames), and `roomXbit` needs x at most 207 px when the side pipe's code reads it (the player is not inside the pipe: a bound over frames).
 

@@ -81,6 +81,8 @@ ctlU :  その各 UpdScrollVar k で、  ctl(trace(all n, k)) ≠ 6
 
 これは前のフィールドより弱くはありません: 前のフィールドが求めなかったことを求めます。ただし、1 つの状態についての条件です: ランを通して持ち越すカウンタはフィールドから消えました。コードは、マリオがブロックのバッファからコインを取ると `ctl` を 6 にします。
 
+32 回目のラウンド（[解析が遅れていないフレームの制御バイト 6](f-6-17-13-PoleLate-ja.md)）: `ctlU` は、`UpdScrollVar` で解析が遅れているとき（`S + 3·N ≥ 32`）だけ求めます。ほかのフレームでは、`ctl = 6` のフレームも `JV` を保ちます（`PoleLate.jv_weak`）。
+
 シグネチャ: `PoleParserRun.invJ_run`、`inv_run`、`tilesCol_run` は `hs` のあとに `(hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)` を、`h0` のあとに `(hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))` を取ります。`tilesCol_route` は `hs` のあとに `hsc` と `htop` を、`hmC` のあとに `(hmJ : PoleStrict.jvCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)` を取ります。`frame_six` と `keep_eP` は、上の 2 つの事実を最後の 2 つの連言として持ちます。`frame_sixA` は新しい。`PoleWrap` は `PoleParserEnd` を import します（前は `PoleParserRun`）。`route_1_1` はいまも `1748 + j ≤ L` を結論にします。
 
 ## 測ったこと

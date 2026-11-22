@@ -232,10 +232,11 @@ def vKeep (sy : Syms) : List Nat :=
    I sy.JumpOrigin_Y_Position, I sy.Player_State, I sy.A_B_Buttons]
 
 /-- with A and B of the frame before, and the jump's halt value: what the movement routine reads besides; the change of size and the collision bits, which the
-player's routine reads; the vertical page, which the movement routine adds the carry of the height to; and the horizontal bytes (`FrameModel.hBytes`) -/
+player's routine reads; the vertical page, which the movement routine adds the carry of the height to; the stored speed, which the player's routine reads (round 32,
+`RoomJoin.RoomRun.InRoom.absBefore`); and the horizontal bytes (`FrameModel.hBytes`) -/
 def vKeepA (sy : Syms) : List Nat :=
-  vKeep sy ++ ([I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump, I sy.PlayerChangeSizeFlag, I sy.Player_CollisionBits, I sy.Player_Y_HighPos] ++
-    (FrameModel.hBytes sy).map I)
+  vKeep sy ++ ([I sy.PreviousA_B_Buttons, I sy.DiffToHaltJump, I sy.PlayerChangeSizeFlag, I sy.Player_CollisionBits, I sy.Player_Y_HighPos,
+    I sy.Player_XSpeedAbsolute] ++ (FrameModel.hBytes sy).map I)
 
 /-- the bytes of `vKeep`, and the vertical page: what the walk from the scroll handler keeps (`after_QP`) -/
 def vKeepH (sy : Syms) : List Nat := vKeep sy ++ [I sy.Player_Y_HighPos]

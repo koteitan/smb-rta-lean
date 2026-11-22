@@ -75,7 +75,7 @@ ab_run（新しいフィールド）:
 
 ## 残ること（証明していない）
 
-- `ab_run`: `C + 37` から `C + 40` で、地面でジャンプがないとき、古い保存された速さ（`|v(n)|` でないもの。止まる前に書かれたもの）が `R` より下であること。証明には、止まるフレームを通した保存された速さの上限が要ります。それは `ImposeFriction` を呼んだ最後のフレームでのそのあとの速さの大きさで、前のフレームのこともあります。
+- `ab_run`: `C + 37` から `C + 40` で、地面でジャンプがないとき、古い保存された速さ（`|v(n)|` でないもの。止まる前に書かれたもの）が `R` より下であること。証明には、止まるフレームを通した保存された速さの上限が要ります。それは `ImposeFriction` を呼んだ最後のフレームでのそのあとの速さの大きさで、前のフレームのこともあります。ラウンド 32（[止まったあとの保存された速さ](c-7-4-3-AbsKeep-ja.md)）は、1 つ前のフレームが止まり、そのプレイヤーのルーチンに `AtCtrl` の状態で来るときにこれを証明し、フィールドをほかのフレームに狭めます。
 - `wall` と `late`（変えていない）。測ったフレームはすべて、古い、隠された、押し戻しのどれかで、`C + 37` より前の押し戻しは左の壁だけです（上の表）。証明には、この 3 つのわけをフレームを通してたどることが要ります: 押し戻しは壁の近くだけ（壁から離れたところでは押し戻しがないことを示す、移動の終わりからの歩き）、古い保存された速さと隠された向きは押し戻しのあとだけ。
 
 **ファイル。** 新しい `Theorems/RoomRunSpeed.lean`（`lowB`、`highB`、`blocksCheck`、`RunIn`、`piecesR`、`phR`、`finRS`、`apartR`、`checkR`、`piecesR_class`、`piecesR_cover`、`after_RS`、`run_frame`）。`Theorems/RoomJoin.lean`: `InRoom.run`（新しい）、`RoomFields.ab_run`（新しいフィールド）、`RoomFields.stop_run` はなくした、`RoomCore.stop_run`（新しい。`toCore` で `RoomRun.stop_run_of` から）、`Checks.runMin`。`rs_of_safe` と `no_wall_back` は `|v| < R` を渡す。`Theorems/Route.lean`: `Run.roomRun`。`Run.inRoom` は 2 つのチェックを取る。非公開の `Proof/RoomRunSpeed.lean`: `room_run_speed`、`room_run_apart`。プログラム: `room-run-check`、`room-approach-check`（数え 59 から 72）。

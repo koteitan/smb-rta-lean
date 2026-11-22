@@ -1340,6 +1340,9 @@ def parSOf (sy : Syms) (m0 : Machine) (m : Machine) : Nat := (peek m (FrameKeep.
 /-- **The screen buffers' control byte** (round 31): the operand of the first load of `UpdScrollVar` (`PoleParser.places`) -/
 def parCtlOf (sy : Syms) (m0 : Machine) (m : Machine) : UInt8 := peek m (FrameKeep.romWE m0 (sy.UpdScrollVar + 1))
 
+/-- **The area parser's tasks left** (round 32): the operand of the load of the task count in `UpdScrollVar` (`PoleParser.places`) -/
+def parNOf (sy : Syms) (m0 : Machine) (m : Machine) : Nat := (peek m (FrameKeep.romWE m0 (sy.UpdScrollVar + 8))).toNat
+
 /-- **No wrap of the scroll counter** from the frame's start `m` to `UpdScrollVar` (`u`), round 29: if the screen's left edge moved by `Y`, the counter of 32 px plus `Y` is
 below 256. With the edge below 65,280 − 384 px it gives `PoleParser.NoWrap` (`PoleParserRun.noWrap_of`). -/
 def NoWrapP (sy : Syms) (m0 : Machine) (m u : Machine) : Prop :=
@@ -1400,13 +1403,15 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   it to 6 when he takes a coin. With the scroll's amount at most 3 (`PoleParserRun.amount_run`, from part e's reading of each counted frame) and `JV` at control
   (`PoleStrict.jv₀`, from the rows of the change) the frames follow the strict rule and keep
   `JV` (`PoleStrict.invJ_onFrames`), which is what the parser's invariant used the old field for. It is not weaker than the old field: it asks something the old
-  field did not ask (`1-1/f-6-17-12-PoleStrict.md`) -/
+  field did not ask (`1-1/f-6-17-12-PoleStrict.md`). Round 32 (`1-1/f-6-17-13-PoleLate.md`): asked only when the parser is late there, that is, when the counter
+  of 32 px plus 3 times the tasks left is 32 or more: else a frame with the control byte 6 keeps `JV` too (`PoleStrict.step_strict`) -/
   ctlU : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g →
     ∀ n₀, (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) n₀).pc = sy.PlayerCtrlRoutine →
       (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) n₀).frame = (S.seq (a + n)).frame →
     ∀ k, (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k).pc = sy.UpdScrollVar →
     (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k).frame = (S.seq (a + n)).frame →
-    parCtlOf sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) ≠ 6
+    parCtlOf sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) ≠ 6 ∨
+      parSOf sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) + 3 * parNOf sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) < 32
   /-- up to the write, a store through an index or a pointer that writes the position's pixel or page is one of the move routine's stores of them, with the index 0 -/
   posKeep : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n → PoleFrame.PosKeep sy m0 (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
   /-- up to the write, the scroll handler's store of the position at the screen's edges does not bring him into the pole's range: if he is in it right after that store

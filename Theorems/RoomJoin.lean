@@ -933,12 +933,6 @@ structure RoomFields (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) where
   not follow `hstep` before `hitF`: `anchor_at`, the only user, has one (the first hit) -/
   late : ∀ n, C + N.hitF ≤ n + 1 → n ≤ C + N.runF → (∃ h, C ≤ h ∧ h < n ∧ h + 1 < C + N.hitF ∧ ¬Follow sy m fr h) → ¬Follow sy m fr n →
     WallAt N fr n ∨ cornerP sy ≤ fr.P n + 16 * (top sy : Int)
-  /-- from `hitF` to `runF`, a frame on the ground with no jump that does not follow `hstep`, with `RunningSpeed` 0 at its start, and whose stored speed is not the size
-  of its speed at the start (it was stored before a stop), reads a stored speed below the running threshold. Since round 31 (page `1-1/c-7-4-2-RunWalk.md`) in place of
-  the field `stop_run`, which `RoomRun.stop_run_of` now proves from it, from `ab_early` before `hitF`, and from the walk of `InRoom.run`. On such a frame
-  `GetPlayerAnimSpeed` stores a stored speed from the threshold on into `RunningSpeed`, so by this reading of the code (not proved) the old `stop_run` gave this too -/
-  ab_run : ∀ n, C + N.hitF ≤ n + 1 → n < C + N.runF → (fr.hs n).rs = 0 → ¬Follow sy m fr n → (fr.vs n).st = 0 → (fr.inp (n + 1)).jump = false →
-    fr.ab n ≠ (sbyte (fr.hs n).v).natAbs → fr.ab n < sy.RunSpeedMin.toNat
   /-- he stands away from the floor only at the end of a frame that does not follow `hstep`: a side stops him on that frame. Asked only after an earlier frame that ends
   in the state 0: the first stand of the fall is proved (`RoomRun.stand_first`), and the theorems use no other frame (`RoomRun.stand_off_of`, `RoomCore.stand_off`). Since
   round 29 asked from the end of the fall on only with no jump since such a frame (page `1-1/c-7-5-22-StandNoJump.md`): `wall_turn`, the only user there, has none, and a
@@ -958,8 +952,11 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) extends Roo
   `RunningSpeed` 0. Once a field of `RoomFields` (since round 30 from the end of the fall on, with `RunningSpeed` 0 at the start); since round 31 (page
   `1-1/c-7-4-2-RunWalk.md`) `RoomRun.stop_run_of` proves it: the stored speed it reads is the size of the speed at its start, or below the air threshold (`ab_early`),
   or the field `ab_run`; then the walk of `InRoom.run` says that the frame leaves `RunningSpeed` 0. `rs_of_safe` and `no_wall_back`, the only users, know the speed
-  below the threshold (`safeFrom`) -/
-  stop_run : ∀ n, C + N.fall ≤ n → n < C + N.runF → (fr.hs n).rs = 0 → (sbyte (fr.hs n).v).natAbs < sy.RunSpeedMin.toNat → ¬Follow sy m fr n →
+  below the threshold (`safeFrom`). Since round 32 (page `1-1/c-7-4-3-AbsKeep.md`) it asks also, after the first frame after the fall, that every input of the model from
+  the state at the end of the frame before keeps the speed below the threshold: `safeFrom` there gives it (`safe_step`), and on a stop after a stop that comes to the
+  player's routine in the state `AtCtrl` it bounds the stored speed (`RoomRun.ab_fresh`) -/
+  stop_run : ∀ n, C + N.fall ≤ n → n < C + N.runF → (fr.hs n).rs = 0 → (sbyte (fr.hs n).v).natAbs < sy.RunSpeedMin.toNat →
+    (n = C + N.fall ∨ ∀ i ∈ inputs, (sbyte (hstep sy m (fr.hs (n - 1)) i).v).natAbs < sy.RunSpeedMin.toNat) → ¬Follow sy m fr n →
     (fr.hs (n + 1)).rs = 0
   /-- he stands away from the floor before `standF`, before the end of the fall or after an earlier frame that ends in the state 0, only at the end of a frame that does
   not follow `hstep`. `RoomRun.stand_off_of` proves it from the field `stand_wall` and the first stand of the fall (`RoomRun.stand_first`) -/
@@ -1027,9 +1024,13 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) extends Roo
   move_top : ∀ n, C ≤ n → n < t0 → fr.P (n + 1) ≤ fr.P n + 16 * (top sy : Int)
   /-- on the entry frame he is at the mouth, or past its left end -/
   mouth : SidePipe.mouthP sy 0 ≤ fr.P E
-  /-- the stored speed that frame `n + 1` reads is `|v|`; or that frame leaves him stopped, and before `hitF` the stored speed is below the threshold -/
+  /-- the stored speed that frame `n + 1` reads is `|v|`; or that frame leaves him stopped, and from the end of the fall to `hitF` the stored speed is below the threshold,
+  or after the first frame after the fall it is the size of `hstep`'s speed from the state before frame `n` (round 32, page `1-1/c-7-6-1-EarlyFall.md`: the field
+  `ab_early` is asked only from the end of the fall on, and on the frame after it only when frame `n` follows the model or does not come to its player's routine in the state
+  `AtCtrl`; `RoomRun.ab_fresh` gives the other case). The theorems use it only at a takeoff after the fall, with no wall hit (then frame `n` follows `hstep`) -/
   ab_of : ∀ n, C ≤ n → n < t0 → fr.ab n = (sbyte (fr.hs n).v).natAbs ∨
-    (Stop sy m N fr (n + 1) ∧ (n + 1 < C + N.hitF → fr.ab n < sy.AirFastSpeed.toNat))
+    (Stop sy m N fr (n + 1) ∧ (C + N.fall ≤ n → n + 1 < C + N.hitF →
+      fr.ab n < sy.AirFastSpeed.toNat ∨ (C < n ∧ fr.ab n = (sbyte (hstep sy m (fr.hs (n - 1)) (fr.inp n)).v).natAbs)))
 
 /-- **The state at first control**, on the machine: the horizontal state of the room's start, the position of its pixel, in the air with the start's height and fall, and the stored speed 0.
 `RoomStart.PipeRun.start` proves it from the change into the room. -/
@@ -1114,10 +1115,31 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (
   further right end there by the bound on one frame's move (`RoomRun.far_inD`). The old field `far` (every frame starts at 8 px or more) -/
   farNear : ∀ n, C ≤ n → n + 1 < t0 → 2048 ≤ posP sy (startAt sy m S b lim C n) → posP sy (startAt sy m S b lim C n) < 2048 + 16 * (top sy : Int) + 256 →
     2048 ≤ posP sy (PipeTransition.frame (startAt sy m S b lim C n) (inpAt sy m S b lim C n))
-  /-- a frame before `hitF` that does not follow the model reads a stored speed below the air threshold -/
-  ab_early : ∀ n, C ≤ n → n + 1 < C + N.hitF → n < t0 →
+  /-- a frame before `hitF` that does not follow the model reads a stored speed below the air threshold. Since round 32 (page `1-1/c-7-6-1-EarlyFall.md`) asked only from the
+  end of the fall on (frames `C + fall + 1` and `C + fall + 2`): `RoomCore.ab_of` and `stop_run_of`, the only users, ask no other frame; and on the second of them only
+  when the frame before follows the model (`CleanW`) or does not come to its player's routine in the state `AtCtrl`: when it stops him and comes there in the state
+  `AtCtrl`, the stored speed is the size of `hstep`'s speed from the state before it (`RoomRun.ab_fresh`) -/
+  ab_early : ∀ n, C + N.fall ≤ n → n + 1 < C + N.hitF → n < t0 →
     ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (startAt sy m S b lim C n) (inpAt sy m S b lim C n)
-      (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)) → fr.ab n < sy.AirFastSpeed.toNat
+      (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)) →
+    (n = C + N.fall ∨
+      CleanW sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))) ∨
+      ¬FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))
+        (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))))) →
+    fr.ab n < sy.AirFastSpeed.toNat
+  /-- from `hitF` to `runF`, a frame on the ground with no jump that does not follow `hstep`, with `RunningSpeed` 0 at its start, and whose stored speed is not the size
+  of its speed at the start (it was stored before a stop), reads a stored speed below the running threshold, when the frame before follows the model (`CleanW`) or does
+  not come to its player's routine in the state `FrameModel.AtCtrl` (there the stored speed is not `|v|`, or the side he presses is masked). Since round 31 (page
+  `1-1/c-7-4-2-RunWalk.md`) in place of the field `stop_run`, which `RoomRun.stop_run_of` proves from it, from `ab_early` before `hitF`, and from the walk of `InRoom.run`.
+  Since round 32 (page `1-1/c-7-4-3-AbsKeep.md`) a field of `RoomRun`, and not asked when the frame before stops him (`ReadW`) and comes to its player's routine in the
+  state `AtCtrl`: there the stored speed is the size of `hstep`'s speed from the state before (`RoomRun.ab_fresh`). On a frame of the field `GetPlayerAnimSpeed` stores
+  a stored speed from the threshold on into `RunningSpeed`, so by this reading of the code (not proved) the old `stop_run` gave this too -/
+  ab_run : ∀ n, C + N.hitF ≤ n + 1 → n < C + N.runF → (fr.hs n).rs = 0 → ¬Follow sy m fr n → (fr.vs n).st = 0 → (fr.inp (n + 1)).jump = false →
+    fr.ab n ≠ (sbyte (fr.hs n).v).natAbs →
+    (CleanW sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))) ∨
+      ¬FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))
+        (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))))) →
+    fr.ab n < sy.RunSpeedMin.toNat
   /-- frame `E` enters the side pipe: an instruction of it, from the machine where it begins with its input, writes the side pipe's routine -/
   enters : SideEntryRule.Enters sy (startAt sy m S b lim C (E - 1)) (inpAt sy m S b lim C (E - 1))
   /-- `P(E)` is read at the end of frame `E`, as the other frames are read (`read_P`): the position of the machine when the frame that enters ends -/
@@ -1651,6 +1673,8 @@ structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   stop_nonneg : 0 ≤ N.stopPhi
   low_nonneg : 0 ≤ N.lowSlack
   hit_ge : N.fall + 1 ≤ N.hitF
+  /-- the first frame after the fall is before `hitF` (round 32, `rs_of_safe`) -/
+  hit_two : N.fall + 2 ≤ N.hitF
   hit_rise : N.hitF ≤ N.fall + 2 + N.rise
   run_le : N.runF ≤ N.fall + 1 + N.rise
   /-- the slow pairs, with the frame on the block and the air speed, then `capDist`, are short of the goal -/
@@ -1855,6 +1879,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   fricLow : FrameModel.frictionLowCheck sy m = true
   /-- the running threshold is a byte that is not 0 (round 31, `RoomRun.stop_run_of`) -/
   runMin : sy.RunSpeedMin.toUInt8 ≠ 0 ∧ sy.RunSpeedMin.toNat < 256
+  /-- the walks of the stored speed up to the scroll handler (`FrameModel.storedOK`, for `FrameModel.stored_path`; round 32, `RoomRun.ab_fresh`) -/
+  stored : FrameModel.storedOK sy m (FrameModel.ctrlStack sy m) = true
   nums : NumFacts sy m N
   /-- the first fall: `vstepR` from the states at first control -/
   first : fallCheck sy m N = true
@@ -3057,7 +3083,13 @@ theorem low_by (H : Checks sy m N) (hE : r.t0 < r.E) {n : Nat} (h1 : r.C ≤ n) 
               rcases r.ab_of T' (by omega) (by omega) with h5 | ⟨_, h5⟩
               · rw [h5, hT0]
                 exact hcap
-              · exact h5 (by have := hF.fall2; omega)
+              · rcases h5 (by omega) (by have := hF.fall2; omega) with h6 | ⟨h6, h7⟩
+                · exact h6
+                · -- round 32: with no wall hit frame `T'` follows `hstep`, so `hstep`'s speed is that at its end
+                  have hfw := (hw (T' - 1) (by omega) (by have := hF.fall2; omega)).2.1
+                  rw [show T' - 1 + 1 = T' by omega] at hfw
+                  rw [h7, ← hfw, hT0]
+                  exact hcap
             have hrc := hF.rise
             simp only [riseCheck, List.all_eq_true] at hrc
             have h0' := hrc (r.fr.ab T') (List.mem_range.2 hab256)
@@ -3191,35 +3223,62 @@ theorem rs_step (F : Facts sy m) {s : HS} (hD : inD sy s = true) (hrs : s.rs = 0
   · exact absurd hrs h5
   · omega
 
-/-- from a state that passes `safeFrom` at the end of the fall, `RunningSpeed` stays 0 through `runF` -/
-theorem rs_of_safe (H : Checks sy m N) (h0 : (r.fr.hs (r.C + N.fall)).rs = 0)
+/-- a state that passes `safeFrom` moves below the running threshold -/
+theorem safe_v {k : Nat} {s : HS} (h : safeFrom sy m k s = true) : (sbyte s.v).natAbs < sy.RunSpeedMin.toNat := by
+  cases k with
+  | zero => simpa only [safeFrom, decide_eq_true_eq] using h
+  | succ k =>
+    simp only [safeFrom, Bool.and_eq_true, decide_eq_true_eq] at h
+    exact h.1
+
+/-- `rs_of_safe`, with the step of the model from the state before (round 32): every input of the model from the state at the end of frame `C + fall + d − 1` keeps the
+speed below the running threshold (`safe_step`), which `RoomCore.stop_run` asks from `hitF` on -/
+theorem rs_of_safe3 (H : Checks sy m N) (h0 : (r.fr.hs (r.C + N.fall)).rs = 0)
     (hs : safeFrom sy m (N.runF - N.fall - 1) (r.fr.hs (r.C + N.fall)) = true) :
     ∀ d, d ≤ N.runF - N.fall - 1 → r.C + N.fall + d ≤ r.t0 →
-      (r.fr.hs (r.C + N.fall + d)).rs = 0 ∧ safeFrom sy m (N.runF - N.fall - 1 - d) (r.fr.hs (r.C + N.fall + d)) = true
-  | 0, _, _ => ⟨h0, hs⟩
+      (r.fr.hs (r.C + N.fall + d)).rs = 0 ∧ safeFrom sy m (N.runF - N.fall - 1 - d) (r.fr.hs (r.C + N.fall + d)) = true ∧
+      (1 ≤ d → ∀ i ∈ inputs, (sbyte (hstep sy m (r.fr.hs (r.C + N.fall + d - 1)) i).v).natAbs < sy.RunSpeedMin.toNat)
+  | 0, _, _ => ⟨h0, hs, fun h => absurd h (by omega)⟩
   | d + 1, h1, h2 => by
-    obtain ⟨h3, h4⟩ := rs_of_safe H h0 hs d (by omega) (by omega)
+    obtain ⟨h3, h4, h3p⟩ := rs_of_safe3 H h0 hs d (by omega) (by omega)
     have hN := H.nums
     have hge := hN.run_ge
+    have htwo := hN.hit_two
     rw [show r.C + N.fall + (d + 1) = r.C + N.fall + d + 1 by omega]
     rw [show N.runF - N.fall - 1 - d = (N.runF - N.fall - 1 - (d + 1)) + 1 by omega] at h4
+    have hD := inD_at r H (n := r.C + N.fall + d) (by omega) (by omega)
+    have hnext : 1 ≤ d + 1 → ∀ i ∈ inputs, (sbyte (hstep sy m (r.fr.hs (r.C + N.fall + d + 1 - 1)) i).v).natAbs < sy.RunSpeedMin.toNat := by
+      intro _ i hi
+      rw [show r.C + N.fall + d + 1 - 1 = r.C + N.fall + d by omega]
+      exact safe_v (safe_step H.air.pot hN.gs_le H.normI hD h3 h4 hi).1
     by_cases hf : Follow sy m r.fr (r.C + N.fall + d)
     · rw [hf.2.1]
-      have hD := inD_at r H (n := r.C + N.fall + d) (by omega) (by omega)
       have h5 := safe_step H.air.pot hN.gs_le H.normI hD h3 h4 hf.1
-      exact ⟨h5.2, h5.1⟩
+      exact ⟨h5.2, h5.1, hnext⟩
     · have hs2 := (r.frames (r.C + N.fall + d) (by omega) (by omega)).resolve_left hf
       have hv : (sbyte (r.fr.hs (r.C + N.fall + d)).v).natAbs < sy.RunSpeedMin.toNat := by
         have h5 := h4
         simp only [safeFrom, Bool.and_eq_true, decide_eq_true_eq] at h5
         exact h5.1
-      refine ⟨r.stop_run _ (by omega) (by omega) h3 hv hf, ?_⟩
+      have hpre : r.C + N.fall + d = r.C + N.fall ∨
+          ∀ i ∈ inputs, (sbyte (hstep sy m (r.fr.hs (r.C + N.fall + d - 1)) i).v).natAbs < sy.RunSpeedMin.toNat := by
+        rcases Nat.eq_zero_or_pos d with e | e
+        · left; omega
+        · right; exact h3p e
+      refine ⟨r.stop_run _ (by omega) (by omega) h3 hv hpre hf, ?_, hnext⟩
       refine safe_of_bound H.air.pot hN.gs_le _ hs2.2.1 ?_
       obtain ⟨k, hk⟩ : ∃ k, N.runF - N.fall - 1 = (N.runF - N.fall - 1 - (d + 1)) + k := ⟨d + 1, by omega⟩
       have h5 := iterN_count H.air.pot (N.runF - N.fall - 1 - (d + 1)) k N.stopPhi
       rw [← hk] at h5
       have h6 := hN.stop_safe
       omega
+
+/-- from a state that passes `safeFrom` at the end of the fall, `RunningSpeed` stays 0 through `runF` -/
+theorem rs_of_safe (H : Checks sy m N) (h0 : (r.fr.hs (r.C + N.fall)).rs = 0)
+    (hs : safeFrom sy m (N.runF - N.fall - 1) (r.fr.hs (r.C + N.fall)) = true) :
+    ∀ d, d ≤ N.runF - N.fall - 1 → r.C + N.fall + d ≤ r.t0 →
+      (r.fr.hs (r.C + N.fall + d)).rs = 0 ∧ safeFrom sy m (N.runF - N.fall - 1 - d) (r.fr.hs (r.C + N.fall + d)) = true := fun d h1 h2 =>
+  ⟨(rs_of_safe3 r H h0 hs d h1 h2).1, (rs_of_safe3 r H h0 hs d h1 h2).2.1⟩
 
 /-- **`RunningSpeed` not 0 at a stop by `runF`, with no wall**: he moved left fast at the end of the fall, so he is far back. Moving right, or
 slower, `safeFrom` shows `RunningSpeed` is 0 -/
@@ -3242,7 +3301,7 @@ theorem no_wall_back (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) {h' : Nat
       rw [show r.C + N.fall + (h' - (r.C + N.fall)) = h' by omega] at h1
       exact hrs h1
     · have hh : h' = r.C + N.fall + (N.runF - N.fall - 1) + 1 := by omega
-      obtain ⟨h1, h2⟩ := rs_of_safe r H hst.rs hs (N.runF - N.fall - 1) (Nat.le_refl _) (by omega)
+      obtain ⟨h1, h2, h3p⟩ := rs_of_safe3 r H hst.rs hs (N.runF - N.fall - 1) (Nat.le_refl _) (by omega)
       rw [show N.runF - N.fall - 1 - (N.runF - N.fall - 1) = 0 by omega] at h2
       simp only [safeFrom, decide_eq_true_eq] at h2
       apply hrs
@@ -3250,7 +3309,9 @@ theorem no_wall_back (H : Checks sy m N) (hw : NoWall sy m N r.fr r.C) {h' : Nat
       by_cases hf : Follow sy m r.fr (r.C + N.fall + (N.runF - N.fall - 1))
       · rw [hf.2.1]
         exact rs_step F (inD_at r H (by omega) (by omega)) h1 h2 hf.1
-      · exact r.stop_run _ (by omega) (by omega) h1 h2 hf
+      · have htwo := hN.hit_two
+        have hhr := hN.hit_run
+        exact r.stop_run _ (by omega) (by omega) h1 h2 (Or.inr (h3p (by omega))) hf
   by_cases hV : 0 ≤ V (r.fr.hs (r.C + N.fall))
   · exfalso
     apply hno
@@ -4164,8 +4225,13 @@ theorem fast_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r.f
     · omega
     · -- a stop right after the takeoff: before `hitF`, so the stored speed is below the threshold
       by_cases h5 : a.T1 + 1 < r.C + N.hitF
-      · have := h4 h5
-        omega
+      · rcases h4 a.T1_ge h5 with h6 | ⟨h6, h7⟩
+        · omega
+        · -- round 32: with no wall hit frame `T1` follows `hstep`, so `hstep`'s speed is that at its end
+          have hfw := (hw (a.T1 - 1) (by omega) (by omega)).2.1
+          rw [show a.T1 - 1 + 1 = a.T1 by omega] at hfw
+          rw [h7, ← hfw] at h2
+          exact h2
       · exact absurd h3 (hs (a.T1 + 1) (by omega) (by omega))
   have E := early_of r H (Nat.le_of_lt hE) hw a hearly
   have hF : ∀ j, r.C ≤ j → j < r.t0 → Follow sy m r.fr j := fun j h1 h2 => by
@@ -5240,6 +5306,20 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
           ((PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.SavedJoypadBits) &&& 0x80 = 0x80 ∧
             (PipeEntryRule.trace (r.fm n) (r.inAt n) k).ram.get! (FrameModel.I sy.PreviousA_B_Buttons) &&& 0x80 = 0)))) →
     peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.RunningSpeed = 0
+  /-- in each frame of the room before the entry, at the player's routine the stored speed is that of the frame's start (round 32, `Route.Run.roomAbsBefore`: the walk
+  to the player's routine keeps the bytes of `RoomVert.vKeepA`, which hold the stored speed) -/
+  absBefore : ∀ n, r.C ≤ n → n < r.E → ∀ j, (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerCtrlRoutine →
+    peek (PipeEntryRule.trace (r.fm n) (r.inAt n) j) sy.Player_XSpeedAbsolute = peek (r.fm n) sy.Player_XSpeedAbsolute
+  /-- the frames between the end of the room's frame `n` and the start of its frame `n + 1` keep the stored speed (round 32, `Route.Run.roomKeepA`: the bytes of
+  `RoomVert.vKeepA`) -/
+  absKeep : ∀ n, r.C ≤ n → n < r.E → peek (r.fm n) sy.Player_XSpeedAbsolute = peek (r.fe n) sy.Player_XSpeedAbsolute
+  /-- a frame of the room before the entering frame comes to the end of its move `PlayerSubs` at most once, and from there to the frame's end no step writes the stored
+  speed (round 32, `Route.Run.roomAbs`: `RoomAbsKeep.abs_frame`, a walk of the room's whole frame from `PlayerSubs`; `ImposeFriction`, the only writer, comes before) -/
+  absAfter : ∀ n, r.C ≤ n → n + 1 < r.E →
+    (∀ j j', j < j' → (PipeEntryRule.trace (r.fm n) (r.inAt n) j).pc = sy.PlayerSubs → (PipeEntryRule.trace (r.fm n) (r.inAt n) j').frame = (r.fm n).frame →
+      (PipeEntryRule.trace (r.fm n) (r.inAt n) j').pc ≠ sy.PlayerSubs) ∧
+    ∀ k, (PipeEntryRule.trace (r.fm n) (r.inAt n) k).pc = sy.PlayerSubs → (PipeEntryRule.trace (r.fm n) (r.inAt n) k).frame = (r.fm n).frame →
+      peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_XSpeedAbsolute = peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.Player_XSpeedAbsolute
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `P(E)` is read at the frame's end (`read_PE`), and the walks of the room's frames put the position
 there (`InRoom.mouthE`) -/
@@ -5511,16 +5591,6 @@ theorem ab_clean (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) 
   have hE := r.t0_le_E H hr
   rw [r.read_ab n hC h2, e1, SurfaceFrames.absB_natAbs, r.hs_fm hr hC (by omega) (by omega)]
   rfl
-
-/-- the stored speed that each frame reads is `|v|`, or the frame leaves him stopped and, before `hitF`, the stored speed is below the threshold -/
-theorem ab_of_run (H : Checks sy m N) (hr : r.InRoom) : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.hs n).v).natAbs ∨
-    (Stop sy m N r.fr (n + 1) ∧ (n + 1 < r.C + N.hitF → r.fr.ab n < sy.AirFastSpeed.toNat)) := by
-  intro n h1 h2
-  by_cases hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)
-  · exact Or.inl (r.ab_clean H hr h1 h2 hc)
-  · rcases r.clean n h1 h2 with h3 | h3
-    · exact absurd (r.cleanR_of H hr h1 h2 h3) hc
-    · exact Or.inr ⟨h3.1, fun h4 => r.ab_early n h1 h4 h2 hc⟩
 
 /-- at each read of the block buffer routine before the write in frame `E`, the side pipe's tiles are only in the pipe's column. No longer a field of `RoomRun`: `RoomMap.map_of_rows` proves it
 on the frames of the room, and `Route.Run.roomTiles` joins frame `E` to them. -/
@@ -5822,13 +5892,88 @@ theorem facing_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r
   show peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.PlayerFacingDir = peek (r.fm n) sy.PlayerFacingDir
   rw [hface, hb]
 
+/-- **The stored speed after a stop that comes to the player's routine in the state `AtCtrl`** (round 32): the room's frame `n + 1` stops him (`ReadW`), and at its player's
+routine the stored speed is `|v|` and the side he presses is not masked. Then the stored speed that frame `n + 2` reads is the size of the speed of `hstep` from the state
+at the end of frame `n` with the input of frame `n + 1`. At the end of the move the stored speed is `|v|` (`FrameModel.stored_path`) and the speed is `hstep`'s
+(`FrameModel.move_model`), at the same instruction (`InRoom.absAfter`: the frame comes there once); from there to the frame's end no step writes the stored speed
+(`InRoom.absAfter`), and from the frame's end to the next player's routine neither (`InRoom.absKeep`, `InRoom.absBefore`) -/
+theorem ab_fresh (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) {n : Nat} (hC : r.C ≤ n) (ht : n + 1 < r.t0)
+    (hrw : ReadW sy (r.fm n) (r.inAt n) (r.arr n))
+    (hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n))) :
+    r.fr.ab (n + 1) = (sbyte (hstep sy m (r.fr.hs n) (r.fr.inp (n + 1))).v).natAbs := by
+  have hE := r.t0_le_E H hr
+  have hpc := r.arrive H hr hC (by omega)
+  obtain ⟨idle, hT⟩ := r.inTime_of H hr
+  have hTn := hT n hC (by omega) hpc
+  have hdn : inD sy (r.fr.hs n) = true := by
+    have h := r.inD_of H hr st (n - r.C) (by omega)
+    rwa [show r.C + (n - r.C) = n by omega] at h
+  have hF : FrameModel.AtFrame sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) :=
+    ⟨hat.good, hat.pc, hat.s, hat.eng, hat.area, hat.st, hat.spring, hat.swim, hat.size, hrw.coll, r.speed_of H hr hC (by omega) hdn⟩
+  -- the end of the move: the stored speed `|v|`, and the speed of `hstep`
+  obtain ⟨k₁, q1, q2, qC⟩ := FrameModel.stored_path H.model H.fric H.stored hF hat.abs
+  have f0 := FrameModel.trace_inFrame hTn.loop hTn.start qC hTn.time k₁ (Nat.le_refl k₁)
+  rw [← f0.1] at q1 q2
+  obtain ⟨k, _, _, hpc2, m1, _, hC2⟩ := FrameModel.move_model H.model hat
+  have f1 := FrameModel.trace_inFrame hTn.loop hTn.start hC2 hTn.time k (Nat.le_refl k)
+  rw [← f1.1] at hpc2 m1
+  obtain ⟨uniq, keepX⟩ := hr.absAfter n hC (by omega)
+  have ek : r.arr n + k₁ = r.arr n + k := by
+    rcases Nat.lt_trichotomy (r.arr n + k₁) (r.arr n + k) with h | h | h
+    · exact absurd hpc2 (uniq _ _ h q1 f1.2)
+    · exact h
+    · exact absurd q1 (uniq _ _ h hpc2 f0.2)
+  -- from the end of the move to the next player's routine
+  have hpc1 := r.arrive H hr (n := n + 1) (by omega) ht
+  have e2 := hr.absBefore (n + 1) (by omega) (by omega) _ hpc1
+  have e3 := hr.absKeep (n + 1) (by omega) (by omega)
+  have e4 := r.next hC (r.ups_lt hr hC (by omega))
+  have e5 := keepX (r.arr n + k₁) q1 f0.2
+  have e6 : FrameModel.readHS sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) = r.fr.hs n := by
+    rw [FrameModel.readHS_congr (r.before_of H hr hC (by omega) hpc), ← r.hs_fm hr hC (by omega) (by omega)]
+  have e7 := r.read_inp hC (by omega)
+  rw [r.read_ab (n + 1) (by omega) ht]
+  change (peek (PipeEntryRule.trace (r.fm (n + 1)) (r.inAt (n + 1)) (r.arr (n + 1))) sy.Player_XSpeedAbsolute).toNat = _
+  rw [e2, e3, e4, e5, q2, ek, SurfaceFrames.absB_natAbs]
+  have e8 : peek (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n + k)) sy.Player_X_Speed =
+      (FrameModel.readHS sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n + k))).v := rfl
+  rw [e8, m1, e6, ← e7]
+
+/-- the stored speed that each frame reads is `|v|`, or the frame leaves him stopped and, from the end of the fall to `hitF`, the stored speed is below the threshold
+(the field `ab_early`), or (round 32) after a frame that stops him and comes to its player's routine in the state `AtCtrl` it is the size of `hstep`'s speed from the state
+before that frame (`ab_fresh`) -/
+theorem ab_of_run (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.hs n).v).natAbs ∨
+    (Stop sy m N r.fr (n + 1) ∧ (r.C + N.fall ≤ n → n + 1 < r.C + N.hitF →
+      r.fr.ab n < sy.AirFastSpeed.toNat ∨ (r.C < n ∧ r.fr.ab n = (sbyte (hstep sy m (r.fr.hs (n - 1)) (r.fr.inp n)).v).natAbs))) := by
+  intro n h1 h2
+  have htwo := H.nums.hit_two
+  by_cases hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)
+  · exact Or.inl (r.ab_clean H hr h1 h2 hc)
+  · rcases r.clean n h1 h2 with h3 | h3
+    · exact absurd (r.cleanR_of H hr h1 h2 h3) hc
+    · refine Or.inr ⟨h3.1, fun h0 h4 => ?_⟩
+      by_cases he : n = r.C + N.fall
+      · exact Or.inl (r.ab_early n h0 h4 h2 hc (Or.inl he))
+      · obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+        rcases r.clean n' (by omega) (by omega) with hcw | ⟨_, hrw⟩
+        · exact Or.inl (r.ab_early (n' + 1) h0 h4 h2 hc (by rw [Nat.add_sub_cancel]; exact Or.inr (Or.inl hcw)))
+        · by_cases hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n'))
+          · refine Or.inr ⟨by omega, ?_⟩
+            rw [Nat.add_sub_cancel]
+            exact r.ab_fresh H hr st (by omega) h2 hrw hat
+          · exact Or.inl (r.ab_early (n' + 1) h0 h4 h2 hc (by rw [Nat.add_sub_cancel]; exact Or.inr (Or.inr hat)))
+
 /-- **`stop_run`** (round 31): from the end of the fall to `runF`, a frame that does not follow `hstep`, with `RunningSpeed` 0 and the speed below the running threshold
 at its start, leaves `RunningSpeed` 0. At the player's routine `RunningSpeed` is that of the frame's start (`InRoom.before`), so 0, and the state is 0, 1 or 2
 (`InRoom.cut`). In the air, and on the ground with a new press of A, that is `InRoom.run`'s condition. On the ground with no jump the stored speed it reads (`read_ab`)
 is the size of the speed at the start, or before `hitF` below the air threshold (`ab_early`: the frame is not `CleanR`, or it would follow `hstep`), or the field
-`ab_run`; so below the threshold, and `InRoom.run` says that the frame ends with `RunningSpeed` 0 -/
+`ab_run`; so below the threshold, and `InRoom.run` says that the frame ends with `RunningSpeed` 0. Since round 32, from the second frame after the fall, when the frame
+before stops him and comes to its player's routine in the state `AtCtrl`, the stored speed is the size of `hstep`'s speed from the state before (`ab_fresh`), below the
+threshold by the premise `hP`; the fields are asked only on the other frames -/
 theorem stop_run_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) {n : Nat} (h1 : r.C + N.fall ≤ n) (h2 : n < r.C + N.runF)
-    (hrs : (r.fr.hs n).rs = 0) (hv : (sbyte (r.fr.hs n).v).natAbs < sy.RunSpeedMin.toNat) (hf : ¬Follow sy m r.fr n) : (r.fr.hs (n + 1)).rs = 0 := by
+    (hrs : (r.fr.hs n).rs = 0) (hv : (sbyte (r.fr.hs n).v).natAbs < sy.RunSpeedMin.toNat)
+    (hP : n = r.C + N.fall ∨ ∀ i ∈ inputs, (sbyte (hstep sy m (r.fr.hs (n - 1)) i).v).natAbs < sy.RunSpeedMin.toNat)
+    (hf : ¬Follow sy m r.fr n) : (r.fr.hs (n + 1)).rs = 0 := by
   have hN := H.nums
   have hvf := hN.vf
   have hrl := hN.run_le
@@ -5883,15 +6028,42 @@ theorem stop_run_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe
         · by_cases hh : n + 1 < r.C + N.hitF
           · have hnc : ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n) := fun hc =>
               hf (r.follow_of_clean H hr st hC (by omega) hc)
-            have h3 := r.ab_early n hC hh (by omega) hnc
             have h4 := H.air.pot.air_le_run
-            omega
+            -- round 32: from the second frame after the fall, the frame before stops him and comes to its player's routine in the state `AtCtrl`, or the field `ab_early`
+            by_cases h0 : n = r.C + N.fall
+            · have h3 := r.ab_early n h1 hh (by omega) hnc (Or.inl h0)
+              omega
+            · have hP' := hP.resolve_left h0
+              obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+              rw [Nat.add_sub_cancel] at hP'
+              rcases r.clean n' (by omega) (by omega) with hcw | ⟨_, hrw⟩
+              · have h3 := r.ab_early (n' + 1) h1 hh (by omega) hnc (by rw [Nat.add_sub_cancel]; exact Or.inr (Or.inl hcw))
+                omega
+              · by_cases hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n'))
+                · rw [r.ab_fresh H hr st (by omega) (by omega) hrw hat]
+                  apply hP'
+                  rw [r.read_inp (n := n') (by omega) (by omega)]
+                  exact readIn_mem sy _
+                · have h3 := r.ab_early (n' + 1) h1 hh (by omega) hnc (by rw [Nat.add_sub_cancel]; exact Or.inr (Or.inr hat))
+                  omega
           · have hvs : (r.fr.vs n).st = 0 := by
               rw [r.vs_fm hr hC (by omega) (by omega)]
               show peek (r.fm n) sy.Player_State = 0
               rw [← hst]
               exact e
-            exact r.ab_run n (by omega) h2 hrs hf hvs hj' hs
+            -- round 32: the frame before stops him and comes to its player's routine in the state `AtCtrl`, or the field `ab_run`
+            have htwo := hN.hit_two
+            have hP' := hP.resolve_left (by omega)
+            obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+            rw [Nat.add_sub_cancel] at hP'
+            rcases r.clean n' (by omega) (by omega) with hcw | ⟨_, hrw⟩
+            · exact r.ab_run (n' + 1) (by omega) h2 hrs hf hvs hj' hs (by rw [Nat.add_sub_cancel]; exact Or.inl hcw)
+            · by_cases hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n'))
+              · rw [r.ab_fresh H hr st (by omega) (by omega) hrw hat]
+                apply hP'
+                rw [r.read_inp (n := n') (by omega) (by omega)]
+                exact readIn_mem sy _
+              · exact r.ab_run (n' + 1) (by omega) h2 hrs hf hvs hj' hs (by rw [Nat.add_sub_cancel]; exact Or.inr hat)
       have hread := r.read_ab n hC (by omega)
       show peek _ sy.Player_XSpeedAbsolute < sy.RunSpeedMin.toUInt8
       rw [UInt8.lt_iff_toNat_lt, UInt16.toNat_toUInt8, Nat.mod_eq_of_lt hm2]
@@ -7413,7 +7585,7 @@ def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : 
     varc := fun _ _ hC ht hE ha hk => r.varc_of H hr hC ht hE ha hk
     stand_row := r.stand_row_of H hr, stand_off := r.stand_off_of H hr st
     stand_hit := fun _ hC h1 hW hall hnf hns h0 => r.stand_hit_of H hr st hC h1 hW hall hnf hns h0
-    stop_run := fun _ h1 h2 hrs hv hf => r.stop_run_of H hr st h1 h2 hrs hv hf
+    stop_run := fun _ h1 h2 hrs hv hP hf => r.stop_run_of H hr st h1 h2 hrs hv hP hf
     facing := r.facing_of H hr st
     low_floor := fun hw _ h1 h2 h3 hall _ hs hl => r.low_floor_of H hr st hw h1 h2 h3 hall hs hl
     low_jump := fun hw _ _ h0 h1 h2 h3 hfl harc hylo _ hs hT => r.low_jump_of H hr st hw h0 h1 h2 h3 hfl harc hylo hs hT
@@ -7421,7 +7593,7 @@ def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : 
     off_ab := fun _ hC ht hE hj => r.off_ab_of H hr hC ht hE hj
     air_in := r.air_in_of H hr st, fall_long := r.fall_long_of H hr st, vfall := r.vfall_of H hr st, floor_at := r.floor_at_of H hr st
     start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
-    frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr }
+    frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr st }
 
 /-- **The entry comes at least `goalF + aboveF` frames after first control.** `st` is the state at first control on the machine, `hr` what the room's frames give about frame
 `E`. -/

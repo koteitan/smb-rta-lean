@@ -20,6 +20,8 @@
 
 **第 31 回.** フィールド `rightRel` はなくなりました。かわりのフィールドはありません（[スクロールの処理での画面の右端](e-2-10-3-19-RightEdge-ja.md)）。前半は定理 `OnFrames.relAll` です: 操作できるようになったときと、触れる前の数えるフレームのそれぞれの終わりで、右端は左端 + 255 px です（2¹⁶ を法として）。`EdgeStep` の歩きは右端の 2 バイトも追い、スクロールの処理のスクロールの部分はこの関係を保つか、作ります（`RightEdge.scroll_rel`）。後半は定理 `OnFrames.pageAll` です: 数えるフレームのそれぞれの終わりで左端のページは 255 でない。`readAllB` の限りと、`numbersCheck` のもう 1 つの数からです。そのために `nearStepAt`、`nearMAll`、`nearAAt`、`nearAt`、`edgeAt` は前のフレームの `PageOK` を仮定にとり、`readAllP` は限りと `PageOK` を一緒に帰納法で証明します。`numbersCheck` の確認は 3 つ、`Start` のバイトは 2 つ（右端のもの。横の土管から出る変化の行がそれを知っている）増え、`guardE` はもう 2 バイト（右端のもの）を守ります: `keep.cleanE` と `chg.upCleanU` は前より多くを求めます。フィールド `endKeep` は前より少なくを求めます: スクロールの処理で右へ動き、その速さで終わるフレームでは、そのピクセルの部分は定理です（`OnFrames.keepAt` と、補正の入口でのフィールド `clampR`。画面の外のビットのルーチンは彼の速さを保ったまま補正の入口に来ます: `ClampSide.W0` と `RightEdge.edges` が速さを持つ）。
 
+**第 32 回.** フィールド `endKeep` のピクセルの部分は定理になりました（[彼を動かす押し戻しは横のタイマーを 16 にする](e-2-10-3-20-PushTimer-ja.md)）: 横のタイマーが高々 1 で終わるフレームでは、フレームの終わりでの彼のピクセルとページは、スクロールの処理の呼び出しの次の命令でのものと同じです（`PushTimer.pix_end`）。押し戻しが彼を動かすのは、先にタイマーに 16 を書く道だけです。だから、そこからフレームの終わりまで 2 つのバイトを追い、タイマーを知ったままの歩きでこれが示せます。かわりに、1 つの命令についての新しいフィールド `sideW` を置きます: 横のタイマーが高々 1、ロックが 0、場所のバイトがしきい値以上で終わるフレームでは、スクロールの処理からフレームの終わりまで、添え字かポインタを通した書き込みは横のタイマーを書かない。`endKeep` はフレームの終わりの 1 つの状態についての条件になりました: 場所のバイトはピクセル − 左端 mod 256。`nearStepAt` は `stillAt`、`keepAt`、`clampR` をもう使いません。`numbersCheck` の確認が 1 つ増えました（`PushTimer.sCheck`）。`guardE` が守るバイトは増えません。フィールド `Moves.stop` を狭めました（[画面の左端で彼を止めるフレーム](e-2-10-3-21-StopEdge-ja.md)）: スクロールの処理で彼が画面の左端より右にいるか、フレームが左端より左で始まるときだけ求めます。それ以外のフレームでは、フレームはスクロールの処理まで左端を保つので、そこでの彼のピクセルは始めのもの以下です（`OnFrames.stopAt`、`StopEdge.stop_of_edge`）。古いフィールドは定義 `StopAt` で、`Moves.toAt` はそれを受け取ります。
+
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
 ## 1 フレームの形
@@ -88,12 +90,14 @@ AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ hChec
 
 Arrive(M, x, n₀)   : pc(trM(n₀)) = PlayerCtrlRoutine で M のフレームの中、n₀ より前の命令はそこにない
 
-Moves(a, M, x, n₀) : stop     スクロールの処理に来るどの Q でも 0 < v(Q) ∧ v(b) = 0 ∧ P(b) = P(Q) → P(Q) ≤ P(a) + 256     （第 28 回。前は 0 < v(Q) ∧ v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256 で、
-                                 それはいまは AfterP.stop、CollideE からの定理 Moves.stopP。state はいまは OnFrames のフィールド state）
+Moves(a, M, x, n₀) : stop     スクロールの処理に来るどの Q でも 0 < v(Q) ∧ v(b) = 0 ∧ P(b) = P(Q) ∧ (left16(Q) < pixel16(Q) ∨ pixel16(a) < left16(a)) → P(Q) ≤ P(a) + 256
+                                 （第 32 回: 狭めた。第 28 回は最後の前提なしで、それはいまは StopAt(a, M, x, n₀)、定理 OnFrames.stopAt。
+                                 第 28 回より前は 0 < v(Q) ∧ v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256 で、
+                                 それはいまは AfterP.stop、CollideE からの定理 StopAt.stopP。state はいまは OnFrames のフィールド state）
 far(a)             : 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
 
 Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Arrive(M, x, n₀) ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ AreaOK(v, a) ∧ v ∈ {1, 2, 3}
-                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ keep ∧ Moves  →  MovesAt      keep は各 Q で AfterP.keep（OnFrames.keepAt）
+                ∧ far(a) ∧ idleAt(idle) ∧ keepH ∧ once ∧ modelOK ∧ frictionCheck ∧ storedOK ∧ CtlState(a) ∧ keep ∧ StopAt  →  MovesAt      keep は各 Q で AfterP.keep（OnFrames.keepAt）。StopAt は OnFrames.stopAt（第 32 回）
 at_subs       : modelOK ∧ MovesAt ∧ ¬Masked  →  スクロールの処理に来る Q があって hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∧ P(Q) = P(a) + 16·v(Q) ∧ AfterK(a, Q, b)
 one_of_moves  : modelOK ∧ MovesAt ∧ ¬Masked  →  (Pre(inAt(M, x, n₀), a, b) ∧ Coll(inAt(M, x, n₀), a, b)) ∨ Hit(inAt(M, x, n₀), a, b)
 at_subsM      : modelOK ∧ maskOK ∧ MovesAt ∧ Clean(a) ∧ Masked  →  スクロールの処理に来る Q があって (hs(Q) = hstep(hs a, inAt(M, x, n₀)) ∨ v(Q) = 0)
@@ -119,11 +123,13 @@ collide  : 1 ≤ j < g、Q はスクロールの処理  →  CollideS(seq (j −
                                                   速さと、ほとんどのフレームのサブ速さは定理（OnFrames.collideAt）。右への速さを保つフレームと呼び出しのないフレームの位置も（OnFrames.keepAt、OnFrames.stillAt）
 （第 30 回の rightRel はなくなった。第 31 回: 画面の外のビットのルーチンでの RightRel(C) := right16(C) ≡ left16(C) + 255 (mod 2¹⁶) ∧ 左端のページ(C) ≠ 255
            は定理: OnFrames.relAll と RightEdge.scroll_rel、OnFrames.pageAll）
-endKeep  : 1 ≤ j, j + 1 < g、Q はスクロールの処理、Rt は Q のあとのその戻りの命令  →  EndKeep(Calls(Q) ∧ ¬(0 < v(Q) ∧ v(seq j) = v(Q)), Rt, seq j)   （第 31 回）
-           EndKeep(c, Rt, b) := side(b) ≤ 1 → lock(b) = 0 → thr ≤ pfs(b) → (c → pixel16(b) = pixel16(Rt)) ∧ pfs(b) = (pixel16(b) − left16(b)) mod 256
-           Calls(Q): Q からフレームが押し戻しか補正の入口に来る。呼び出しがなければ pixel16(seq j) = pixel16(Rt) は定理（OnFrames.stillAt、ClampSide.chk_run）。
-           右への速さを保つときも定理（第 31 回: OnFrames.keepAt と、補正の入口での clampR）
+endKeep  : 1 ≤ j, j + 1 < g  →  EndKeep(seq j)   （第 32 回: 1 つの状態、フレームの終わり）
+           EndKeep(b) := side(b) ≤ 1 → lock(b) = 0 → thr ≤ pfs(b) → pfs(b) = (pixel16(b) − left16(b)) mod 256
+           （第 32 回: side(seq j) ≤ 1 → pixel16(seq j) = pixel16(Rt)（Rt はスクロールの処理の戻りの命令）は定理: PushTimer.pix_end と posW、sideW。
+           第 30 回、第 31 回は、押し戻しか補正を呼び右への速さを保たないフレームで、これをここで求めていた）
            （left16(seq j) = left16(Rt) は定理: 呼び出しの次の命令からの EdgeStep.keep_r の歩き）
+sideW    : 1 ≤ j, j + 1 < g、side(seq j) ≤ 1、lock(seq j) = 0、thr ≤ pfs(seq j)、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  SideW(R)     （第 32 回）
+           SideW(R) := R での添え字かポインタを通した書き込みは横のタイマーを書かない
            ClampSide.left_after と合わせて NearM(seq j) を出す（OnFrames.nearStepAt、前のフィールド nearStep）。NearM(seq 0) と数えないフレームと合わせて、
            1 ≤ j < g で NearM(fm j)（OnFrames.nearMAll）、ルーチンに来たところでの NearA（OnFrames.nearAAt）、スクロールの処理での NearX（OnFrames.nearAt）を出す
            NearM(m) := side(m) ≤ 1 → lock(m) = 0 → thr ≤ pfs(m) → left16(m) + 2 ≤ pixel16(m)
@@ -197,6 +203,8 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `collide` の 3 番目の場合 P(b) ≤ P(M) + 256（本物のフレームで偽、第 23 回） | 第 24 回: 画面の左端を入れた P(b) ≤ base(M) + 256。新しい: フィールド `edge`（1 フレーム）と `edge₀`（操作の始めの状態） |
 | `edge`: 1 ≤ j < g → edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))（第 24 回） | 第 26 回: `EdgeStep` の歩き、スクロールの規則、`collide`、`posW` からの定理 `OnFrames.edgeAt`。新しいフィールドはスクロールの処理での `near`。`guardE` は端の 2 つのバイトを守る（[フレームの端の進み](e-2-10-3-13-EdgeStep-ja.md)） |
 | `rightRel`: 画面の外のビットのルーチンで、右端は左端 + 255 px（2¹⁶ を法として）で、左端のページは 255 でない（第 30 回） | 第 31 回: 定理 `OnFrames.relAll`（`RightEdge.scroll_rel`、右端の 2 バイトも追う `EdgeStep` の歩き、`Start.rightX`、`Start.rightP` から）と `OnFrames.pageAll`（`readAllP`: `PageOK` つきの `readAllB` の限り、`numbersCheck` のもう 1 つの数）。新しいフィールドはない。`guardE` が右端の 2 バイトを守る（[スクロールの処理での画面の右端](e-2-10-3-19-RightEdge-ja.md)） |
+| きれいな状態からのどのフレームでも `Moves.stop`（第 28 回） | 第 32 回: スクロールの処理で彼が画面の左端より右にいるか、フレームが左端より左で始まるときだけ求める。それ以外のフレームは定理 `OnFrames.stopAt`（フレームはスクロールの処理まで左端を保つ: `EdgeStep.keep_q`、`OnFrames.edgeLag`。`StopEdge.stop_of_edge`）。新しいフィールドはない（[画面の左端で彼を止めるフレーム](e-2-10-3-21-StopEdge-ja.md)） |
+| `endKeep` のピクセルの部分: 横のタイマーが高々 1 で終わり、右への速さを保たずに押し戻しか補正を呼ぶフレームでは、終わりでの彼のピクセルはスクロールの処理の戻りの命令でのもの（第 30 回、第 31 回） | 第 32 回: タイマーが高々 1 で終わるすべてのフレームで定理 `PushTimer.pix_end`（スクロールの処理の呼び出しの次の命令からの歩きで、ピクセルとページを追い、彼を動かす押し戻しのあとはタイマーを 16 と知る）。1 つの命令についての新しいフィールド `sideW`。`endKeep` は 1 つの状態での場所のバイト。`numbersCheck` の確認が 1 つ増えた（[彼を動かす押し戻しは横のタイマーを 16 にする](e-2-10-3-20-PushTimer-ja.md)） |
 | `nearStep`: 数えるフレームのそれぞれが始めから終わりまで `NearM` を保つ（第 29 回） | 第 30 回: 補正の選び方（`ClampSide.left_after`: 画面の外のビットのルーチンを、比べるバイトのすべての値で区切って確かめる）とスクロールの処理の区間からの定理 `OnFrames.nearStepAt`。新しいフィールド `rightRel`（画面の外のビットのルーチンでの 1 つの状態）と `endKeep`（スクロールの処理の戻りの命令から終わりまでのフレーム）。`numbersCheck` の確認が 2 つ増えた（[画面の端での補正の向き](e-2-10-3-18-ClampSide-ja.md)） |
 | プレイヤーのルーチンに最初に来たところでの `nearA`: NearA(R)（第 28 回） | 第 29 回: フレームの始めでの `NearM` からの定理 `OnFrames.nearAAt`。`DEC abs,X` を追う横のタイマーの歩き（`SideTimer.side_at`）と `SideTimer.keep_at` の歩きから。コントロールの始めと数えないフレームでの `NearM` は定理。新しいフィールド `nearStep`: 数えるフレームのそれぞれが `NearM` を保つ。`numbersCheck` の確認が 3 つ増えた（[フレームの始めからプレイヤーのルーチンまでのスクロールのバイト](e-2-10-3-17-SideTimer-ja.md)） |
 | スクロールの処理での `near`: NearX(Q)（第 27 回） | 第 28 回: 動きのルーチンの歩き（`MoveScroll.move_xs`）、`PlaceKeep.keep_place`、`GuardE.subs_onceE` からの定理 `OnFrames.nearAt`。新しいフィールドは、プレイヤーのルーチンに最初に来たところでの `nearA`。動きのバイトは言わない。`numbersCheck` の確認が 2 つ増えた（[動きがスクロールのために書くバイト](e-2-10-3-16-MoveScroll-ja.md)） |
