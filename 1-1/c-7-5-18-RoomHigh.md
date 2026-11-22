@@ -66,6 +66,7 @@ The walk of the block's left side passes for the state 1 moving up only from the
 
 ## What remains
 
+- Round 28: the field `low_at` is gone ([One pixel after a frame at the corner](c-7-5-21-PushOne.md)).
 - The field `low_at` for a frame that ends above 152 (from 136 to 151 px): the walk of the block's left side does not pass there with the size not known, and a big player is not pushed back there on measured frames. Since round 26 asked only after a frame at or past the corner ([A frame above 152 px after a frame left of the corner](c-7-5-19-BandStart.md)).
 - `Approach.low`: false on measured runs of a big player; `landed_short` would need another argument for the frames of a big player at the corner (done in round 25: [A big player at the block's corner](c-7-14-1-BigApproach.md); its field `Approach.slowBig` is proved in round 26: [A big player's slow takeoff on C + 35](c-7-14-2-LandDist.md)).
 - `stand_wall`: not touched.

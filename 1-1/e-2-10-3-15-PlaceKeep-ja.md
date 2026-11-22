@@ -2,7 +2,7 @@
 
 # プレイヤーのルーチンでの彼の場所
 
-**主張（第 27 回）.** 2 つの定理です。証明しましたが、ルートではまだ使いません（`Theorems/PlaceKeep.lean`）。
+**主張（第 27 回）.** 2 つの定理です。証明しました（`Theorems/PlaceKeep.lean`）。第 28 回: ルートは `keep_place` を使い（`OnFrames.nearAt` の中で、[動きがスクロールのために書くバイト](e-2-10-3-16-MoveScroll-ja.md)）、`placeCheck` は `numbersCheck` に入りました。`edge_step_place` は使いません。
 
 1. `PlaceKeep.keep_place`: 操作中のフレームは、プレイヤーのルーチンに最初に来たところ `n₀` から、そのあとの最初のスクロールの処理 `Q` まで、5 つのバイトを保ちます: 横の当たりのタイマー、画面での彼の場所、スクロールのロック、画面の左端のピクセルとページ（`placeI`、スクロールの処理の読み込みのオペランド）。条件は端の歩き（1-1-e-2-10-3-13）と同じです: フレームは操作中に始まり、どの命令も `guardF` の `CleanK` を満たし、ルーチン、モード、タスクを番地で書かず、エリアのバイトが分かっています。ROM での確認は `PlaceKeep.placeCheck` です（ネイティブで true、読み込みを入れて 3.4 秒。`numbersCheck` には入れていません。あとの回がそこに入れれば、`keep_place` はルートのフレームで成り立ちます）。
 
@@ -38,4 +38,4 @@ side = 横のタイマー、pfs = 画面での彼の場所、thr = スクロー�
 
 **証明していないこと.** `PlaceAt` と `AmountAt`。`PlaceAt` には、前のフレームのスクロールの処理から描画まで（補正、押し戻し）と、このフレームのタイマーの部分が要ります。`AmountAt` には、動きのモデル（`FrameModel`）が動きの書くバイトを知ることが要ります。
 
-**ファイル:** `Theorems/PlaceKeep.lean`（`zpIOps`、`miss_loc`、`farRk`、`kstepP`、`s_kstepP`、`walkQP`、`qP_run`、`placeI`、`pbCfg`、`placeCheck`、`keep_place`、`PlaceAt`、`AmountAt`、`edge_step_place`）。ほかのファイルはこれを使いません。
+**ファイル:** `Theorems/PlaceKeep.lean`（`zpIOps`、`miss_loc`、`farRk`、`kstepP`、`s_kstepP`、`walkQP`、`qP_run`、`placeI`、`pbCfg`、`placeCheck`、`keep_place`、`PlaceAt`、`AmountAt`、`edge_step_place`）。第 28 回: `Theorems/MoveScroll.lean` と `Theorems/SurfaceFrames.lean` が `placeI` と `keep_place` を使います。

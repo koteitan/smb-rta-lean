@@ -64,6 +64,7 @@ The checks take about 1.6 s natively (`room-corner-family 152`). The private pro
 
 ## What remains
 
+- Round 28: the field `low_at` is gone ([One pixel after a frame at the corner](c-7-5-21-PushOne.md)).
 - The field `low_at` for a frame that ends off the floor at or past the corner: a takeoff, or a frame of a jump. Narrowed further in [The vertical page through a jump](c-7-5-18-RoomHigh.md): the vertical page is followed through the takeoff and the rising frames, and the frames of a jump that end at 152 or below are proved.
 - The first walk passes only from the height 152 up. Higher, with the size not known, a cell holds a coin and the walk fails; on measured frames a big player is not pushed back there (above).
 

@@ -4,12 +4,14 @@ import Theorems.EdgeStep
 # Above ground: the scroll's three tests from the player's routine to the scroll handler
 
 The scroll handler (`ScrollRule`) moves the screen only when the scroll lock is 0, the byte of his place on the screen is at least a threshold and the side
-collision's timer is 0 (`ScrollRule.Allows`). The field `near` of the frames above ground relates these bytes, at the scroll handler, to his position. Round 27
+collision's timer is 0 (`ScrollRule.Allows`). The field `near` of the frames above ground (rounds 26, 27) related these bytes, at the scroll handler, to his
+position. Round 27
 tried a condition on the state where the frame first comes to the player's routine (`PlayerCtrlRoutine`) in its place (`PlaceAt`): there the timer part of the frame
 is done, and the move is not. This file proves that a counted frame keeps the three bytes and the edge's two from there to the scroll handler (`keep_place`), and that
-with `PlaceAt` there and `AmountAt` at the scroll handler the edge moves only behind him, without `collide` (`edge_step_place`). It is not used by the route:
-`PlaceAt` held on every real frame measured, but it fails on 8,640 overwritten states of `surface-frames-check` (his position is overwritten there and his place
-byte is not), where the field `near` holds.
+with `PlaceAt` there and `AmountAt` at the scroll handler the edge moves only behind him, without `collide` (`edge_step_place`). `PlaceAt` held on every real
+frame measured, but it fails on 8,640 overwritten states of `surface-frames-check` (his position is overwritten there and his place byte is not), where the field
+`near` holds; so `edge_step_place` is not used by the route. Round 28: the route uses `keep_place` (`MoveScroll.nearX_of_a`, `SurfaceFrames.OnFrames.nearAt`), with
+the field `nearA`, which asks 2 px in place of the threshold.
 
 The walks of `EdgeStep` follow a byte that `FrameKeep.guardE` protects. These three bytes are not protected: the timer part of the frame decrements the timer
 through an index, and `CleanK` asks every such store to miss the protected bytes. A walk may still follow a byte that is not protected: a store with a target not

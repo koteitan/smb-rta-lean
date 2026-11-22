@@ -43,6 +43,8 @@ roomLate  : Late(tr_n(j))          roomReads : ReadsAt(Z₁, tr_n(j))          r
 roomErase : Erase(tr_n(j))         roomXbit  : Xbit(tr_n(j))                 roomOff₆ : c(seq n) = 6  →  Off(tr_n(j))
 ```
 
+（ラウンド 27 の形。ラウンド 28 で `roomReads` は部屋の最初のフレームと制御 6 からのフレームの次のフレームだけに、`roomOff₆` は制御 6 からのフレームの次の制御 6 からのフレームだけに狭めた: [画面のバッファのレコード](d-2-4-2-2-BufferRecords-ja.md)。）
+
 Lean: `Theorems/SiteParts.lean`:
 
 * 部分、`Rest`、`ReadsAt`、`ptrS`。
@@ -51,7 +53,7 @@ Lean: `Theorems/SiteParts.lean`:
 * ROM で: `musicCheck`、`music_frame0`、`music_frame6`、`cond_at`、`music_sites_of_rows`。
 * `BufferControl` の歩きでの最初の版（`walkC`、`frame_of_walkC`、`siteCheck`、`sites_of_rows`）: 音楽のポインタ越しの読みを除いて同じことを証明します。ルートはこれを使いません。
 
-`Theorems/Route.lean`: 6 つのフィールド、`ChangesBase.roomRest`、`ChangesK.roomSites`、`Run.roomSites`、`lateL_of`。`Theorems/BufferEnd.lean`: `FactsE.music`。非公開の確認は `Proof/SiteMusic.lean` の `buffer_music_check` です。公開のファイルにゲームのデータはありません。ポインタは 1 つの記号の位置で ROM から読みます。
+`Theorems/Route.lean`: 6 つのフィールド、`ChangesBase.roomRest`、`ChangesK.roomSites`、`Run.roomSites`、`lateL_of`。`Theorems/BufferEnd.lean`: `FactsE.music`。非公開の確認は `Proof/SiteMusic.lean` の `buffer_music_check` でした（ラウンド 27）。ラウンド 28 からそのファイルは代わりに[画面のバッファのレコード](d-2-4-2-2-BufferRecords-ja.md)の `buffer_records_check` を持ちます。公開のファイルにゲームのデータはありません。ポインタは 1 つの記号の位置で ROM から読みます。
 
 ## しくみ
 

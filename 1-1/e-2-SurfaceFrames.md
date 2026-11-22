@@ -12,6 +12,8 @@
 
 **Round 27.** The scroll's amount `X` is the byte the move stores plus the platforms' force on the scroll. The force is 0 at the scroll handler of each counted frame (`OnFrames.platQ`, [The platforms' force on the scroll](e-2-10-3-14-PlatformForce.md)): the walks of `EdgeStep` follow it as a third byte, it is 0 at control (`Start.plat`, `numbersCheck`) and after each scroll handler's call (`rCheck`), and `posW` excludes the platforms' store. So the field `near` asks `NearX` (the byte the move stores in place of `X`). `FrameKeep.guardE` protects this byte too. No new field. A condition at the player's routine in place of `near` was proved enough for the edge's step, but it is false on overwritten states of `surface-frames-check`, so it is not used ([His place at the player's routine](e-2-10-3-15-PlaceKeep.md)).
 
+**Round 28.** The field `near` is a theorem (`OnFrames.nearAt`, [The byte the move stores for the scroll](e-2-10-3-16-MoveScroll.md)): at the scroll handler his pixel is that of the first arrival at the player's routine plus the byte the move stores (`MoveScroll.move_xs`, walks of the mover), and the walks of `PlaceKeep.keep_place` carry the scroll's three bytes and the edge from the arrival to the scroll handler. In its place is the new field `nearA` on the state at the arrival: when the side timer and the scroll lock are 0 and his place on the screen is at least the threshold, left16(R) + 2 ≤ pixel16(R). It does not mention the move. `numbersCheck` has two more checks (`PlaceKeep.placeCheck`, `MoveScroll.xsCheck`). `OnFrames.edgeAt` and `OnFrames.edge_behind` take the speed and the position of the frame before (from `OnFrames.readAll`). The field `Moves.stop` asks less: only a frame that moves right at the scroll handler, ends with the speed 0 and ends at P(Q) (P(Q) ≤ P(a) + 256 there). On every other such frame `CollideE` puts him 1 px behind P(Q), and that is the first case of `AfterP.stop` (`Moves.stopP`). What is left is a frame that sets the speed to 0 and leaves the position after the move as it is: two pushes that cancel (by the code the player's collision routine pushes at most once, and the platforms' routine can push again; not proved), or a call that sets the speed to 0 without a push.
+
 The unit is 1/256 px. `seq j` is the machine at the end of the counted frame `j`. `seq 0` is the machine at control. `B.m` is the machine at control that the private proof holds.
 
 ## One frame
@@ -80,7 +82,8 @@ AreaRun(v)         : v = AreaType(B.m) ∈ {1, 2, 3} ∧ afterCheck(v) ∧ hChec
 
 Arrive(M, x, n₀)   : pc(trM(n₀)) = PlayerCtrlRoutine, in the frame of M, and no instruction before n₀ is there
 
-Moves(a, M, x, n₀) : stop     at every Q at the scroll handler, 0 < v(Q) ∧ v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256    (AfterP.stop; state is the field state of OnFrames now)
+Moves(a, M, x, n₀) : stop     at every Q at the scroll handler, 0 < v(Q) ∧ v(b) = 0 ∧ P(b) = P(Q) → P(Q) ≤ P(a) + 256    (round 28; before: 0 < v(Q) ∧ v(b) = 0 → P(b) ≤ P(Q) − 256 ∨ P(b) ≤ P(a) + 256,
+                                 which is now AfterP.stop, the theorem Moves.stopP with CollideE; state is the field state of OnFrames now)
 far(a)             : 2048 ≤ P(a) ∧ P(a) + 2048 < 2²⁴
 
 Moves.toAt    : ctrlCheck ∧ StartK(M) ∧ (∀ n, CleanK(trM(n))) ∧ Clean(a) ∧ Arrive(M, x, n₀) ∧ (∀ y ∈ keepA, y(M) = y(a)) ∧ AreaOK(v, a) ∧ v ∈ {1, 2, 3}
@@ -108,9 +111,9 @@ state    : 1 ≤ j ≤ g   →  CtlState(seq (j − 1))                       (i
 collide  : 1 ≤ j < g, Q at the scroll handler  →  CollideS(seq (j − 1), Q, seq j, Calls)  Calls: from Q, in the frame, an instruction at the push's or the clamp's entry
            CollideS(M, Q, b, c) : (v(b) = 0 ∧ f(b) = 0 → f(Q) = 0) ∧ (c → ¬(0 < v(Q) ∧ v(b) = v(Q)) → P(b) = P(Q) ∨ P(b) = P(Q) − 256 ∨ (P(Q) ≤ P(b) ≤ base(M) + 256 ∧ v(Q) ≤ 0))
                                                   the speed and, on most frames, the subspeed are theorems (OnFrames.collideAt); so is the position on a frame that keeps a speed to the right or makes no call (OnFrames.keepAt, OnFrames.stillAt)
-near     : 1 ≤ j < g → arrAt ≤ k → pc(Q) = PlayerSubs → NearX(Q),  Q = trace(fm j, pad j, k)       (round 26 with Near; it replaces the field edge of round 24.
-           NearX(Q) := Allows(Q) → left16(Q) + xs(Q) + 2 ≤ pixel16(Q)      round 27: xs = the byte the move stores; X = xs + the platforms' force, which is 0 there (OnFrames.platQ))
-moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves is now AfterP.stop only
+nearA    : 1 ≤ j < g → NearA(R),  R = trace(fm j, pad j, arrAt)       (round 28, in place of near; it gives NearX at the scroll handler: OnFrames.nearAt)
+           NearA(R) := side(R) = 0 → lock(R) = 0 → thr ≤ pfs(R) → left16(R) + 2 ≤ pixel16(R)
+moves    : 1 ≤ j ≤ T, j < g, Clean(seq (j − 1))  →  Moves(seq (j − 1), fm j, pad j, arr j)     Moves is now stop only (round 28: on a frame that ends at P(Q))
 posW     : 1 ≤ j < g, Q at the scroll handler, R an instruction from Q to the frame's end  →  PosW(R)       the position is stored by its address only inside the push and the clamp; outside them a store through an index or a pointer writes no byte of it
            (round 23: not asked of a store through an absolute address and an index whose base no index takes to the position: PositionKeep.absFar)
 clampR   : 1 ≤ j < g, Q at the scroll handler, 0 < v(Q), v(seq j) = v(Q), R an instruction from Q to the frame's end  →  ClampR(R)     if R is the clamp's entry and 0 < v(R), the clamp's target is P(R)
@@ -179,6 +182,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `clampR` on every frame (round 23) | asked only on a frame that moves right at the scroll handler and ends with that speed: `PositionKeep.keep_frame` uses it only there. The field `collide` is false on a real frame (a frame that starts 1 px left of the screen's left edge): [The screen's left edge at the frame's start](e-2-10-3-10-ScreenEdge.md) |
 | `collide`'s third case P(b) ≤ P(M) + 256 (false on a real frame, round 23) | round 24: P(b) ≤ base(M) + 256 with the screen's left edge. New: the fields `edge` (one frame) and `edge₀` (the state at control) |
 | `edge`: 1 ≤ j < g → edge(seq j) ≤ max(base(seq (j − 1)), P(seq j)) (round 24) | round 26: theorem `OnFrames.edgeAt` from the walks of `EdgeStep`, the scroll's rule, `collide`, `posW`; new field `near` at the scroll handler, and `guardE` protects the edge's two bytes ([The edge's step of a frame](e-2-10-3-13-EdgeStep.md)) |
+| `near` at the scroll handler: NearX(Q) (round 27) | round 28: theorem `OnFrames.nearAt` from the walks of the mover (`MoveScroll.move_xs`), `PlaceKeep.keep_place` and `GuardE.subs_onceE`. New field `nearA` at the first arrival at the player's routine, without the move's byte; two more checks in `numbersCheck` ([The byte the move stores for the scroll](e-2-10-3-16-MoveScroll.md)) |
 | `near` with `Near`: the scroll's amount `X` (round 26) | round 27: `NearX`, with the byte the move stores in place of `X`: the platforms' force on the scroll is 0 at the scroll handler (theorem `OnFrames.platQ`, by the walks of `EdgeStep` with a third byte, `Start.plat`, `numbersCheck`). `guardE` protects the force too. No new field ([The platforms' force on the scroll](e-2-10-3-14-PlatformForce.md)) |
 | `edge₀`: at control edge(seq 0) ≤ P(seq 0) (round 24) | round 25: theorem `edge_zero` from the rows of the change out of the side pipe (`Start.edgeX`, `Start.edgeP`) and `numbersCheck` (`Numbers.edgeB`), inside `AreaRun.edge₀` ([At control the screen's left edge is behind him](e-2-10-3-11-EdgeStart.md)). `Surface.base₁` is asked when 1 ≤ g. No new field |
 | the subspeed's part of `collide` (`CollideR.f`): the subspeed stays | theorem `FaceKeep.keepZ_end` on every frame that does not end with the speed 0 and the subspeed 0. `collide` is now `CollideS`: the position, and the subspeed on the frames that end so |

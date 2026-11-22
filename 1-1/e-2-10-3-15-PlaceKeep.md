@@ -2,7 +2,7 @@
 
 # His place at the player's routine
 
-**Claim (round 27).** Two theorems, proved and not used by the route yet (`Theorems/PlaceKeep.lean`).
+**Claim (round 27).** Two theorems, proved (`Theorems/PlaceKeep.lean`). Round 28: the route uses `keep_place` (in `OnFrames.nearAt`, [The byte the move stores for the scroll](e-2-10-3-16-MoveScroll.md)), and `placeCheck` is in `numbersCheck`; `edge_step_place` is not used.
 
 1. `PlaceKeep.keep_place`: a frame in control keeps five bytes from its first arrival at the player's routine `n₀` to its first scroll handler `Q` after it: the side collision's timer, his place on the screen, the scroll lock, and the pixel and the page of the screen's left edge (`placeI`, the operands of the scroll handler's loads). The conditions are those of the edge's walks (1-1-e-2-10-3-13): the frame starts in control, each instruction meets `CleanK` of `guardF` and writes neither the routine, nor the mode, nor the task by its address, and the area's bytes are known. The check on the ROM is `PlaceKeep.placeCheck` (natively true, 3.4 s with the load; it is not in `numbersCheck`, so `keep_place` holds for the route's frames once a later round adds it there).
 
@@ -38,4 +38,4 @@ When the edge moves: edge(b) = edge(R) ≤ 256·(left16(n₀) + Y) + 255 ≤ 256
 
 **What is not proved.** `PlaceAt` and `AmountAt`. `PlaceAt` needs the frame before, from its scroll handler to its drawing (the clamp, the push), and the timer part of this frame. `AmountAt` needs the move's stored byte in the model of the move (`FrameModel`).
 
-**File:** `Theorems/PlaceKeep.lean` (`zpIOps`, `miss_loc`, `farRk`, `kstepP`, `s_kstepP`, `walkQP`, `qP_run`, `placeI`, `pbCfg`, `placeCheck`, `keep_place`, `PlaceAt`, `AmountAt`, `edge_step_place`). No other file uses it.
+**File:** `Theorems/PlaceKeep.lean` (`zpIOps`, `miss_loc`, `farRk`, `kstepP`, `s_kstepP`, `walkQP`, `qP_run`, `placeI`, `pbCfg`, `placeCheck`, `keep_place`, `PlaceAt`, `AmountAt`, `edge_step_place`). Round 28: `Theorems/MoveScroll.lean` and `Theorems/SurfaceFrames.lean` use `placeI` and `keep_place`.

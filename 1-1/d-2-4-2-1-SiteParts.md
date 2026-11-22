@@ -43,6 +43,8 @@ roomLate  : Late(tr_n(j))          roomReads : ReadsAt(Z₁, tr_n(j))          r
 roomErase : Erase(tr_n(j))         roomXbit  : Xbit(tr_n(j))                 roomOff₆ : c(seq n) = 6  →  Off(tr_n(j))
 ```
 
+(Round 27's forms. Round 28 narrowed `roomReads` to the room's first frame and the frames after a frame from the control at 6, and `roomOff₆` to a frame from 6 after a frame from 6: [The screen buffers' records](d-2-4-2-2-BufferRecords.md).)
+
 Lean: `Theorems/SiteParts.lean`:
 
 * the parts, `Rest`, `ReadsAt`, `ptrS`;
@@ -51,7 +53,7 @@ Lean: `Theorems/SiteParts.lean`:
 * on the ROM: `musicCheck`, `music_frame0`, `music_frame6`, `cond_at`, `music_sites_of_rows`;
 * a first version on the walk of `BufferControl` (`walkC`, `frame_of_walkC`, `siteCheck`, `sites_of_rows`): it proves the same but the reads through the music's pointer; the route does not use it.
 
-`Theorems/Route.lean`: the six fields, `ChangesBase.roomRest`, `ChangesK.roomSites`, `Run.roomSites`, `lateL_of`. `Theorems/BufferEnd.lean`: `FactsE.music`. The private check is `buffer_music_check` in `Proof/SiteMusic.lean`. There is no game data in the public files: the pointer is read from the ROM at a symbol.
+`Theorems/Route.lean`: the six fields, `ChangesBase.roomRest`, `ChangesK.roomSites`, `Run.roomSites`, `lateL_of`. `Theorems/BufferEnd.lean`: `FactsE.music`. The private check was `buffer_music_check` in `Proof/SiteMusic.lean` (round 27); since round 28 that file holds `buffer_records_check` of [The screen buffers' records](d-2-4-2-2-BufferRecords.md) in its place. There is no game data in the public files: the pointer is read from the ROM at a symbol.
 
 ## How it works
 

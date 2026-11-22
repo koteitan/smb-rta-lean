@@ -44,6 +44,7 @@ None of them is more than `16·top − 1` past the corner, and the old, stronger
 
 ## What remains
 
+- Round 28: the field `low_at` is gone ([One pixel after a frame at the corner](c-7-5-21-PushOne.md)).
 - `low_at` for a frame from 136 to 151 px whose frame before is also at or past the corner. Since round 27 only after `C + 40`, when every frame from `C + 40` on is at or past the corner ([A bound for each low frame](c-7-5-20-LowBound.md)). It needs the collision at the block's left side at those heights: the size byte at the end of the move (the walk of `SizeKeep` gives it only at the frame's start and end), cells that are a coin or empty, and the walk of `RoomCorner` there.
 
 **Files.** `Theorems/RoomJoin.lean`: `RoomFields.low_at` narrowed, `NumFacts.low_top` new, `hit_J`, `hit_F`, `hit_late` with `16·top − 1`, `low_by`'s conclusion, `stop_short`. Private: `low_top` in `room_nums` (`Proof/RoomJoin.lean`). Program `room-approach-check` (the counts above).

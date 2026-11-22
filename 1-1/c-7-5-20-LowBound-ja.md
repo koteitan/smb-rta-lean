@@ -67,6 +67,7 @@ NumFacts（ROM の数、room_nums の中で native_decide。どれも前は c_P 
 
 ## 残っていること
 
+- ラウンド 28: 下の場合は証明され、フィールド `low_at` はなくなりました（[角にいるフレームのあとは 1 ピクセルまで](c-7-5-21-PushOne-ja.md)）。
 - `C + 40` からのすべてのフレームが角かその先にあるときの、`C + 41` から `C + 43` までで 136 から 151 ピクセルで終わるフレームの `low_at`（測ったフレームは 0 個）。その高さでのブロックの左側の当たり判定が要ります。移動の終わりでの大きさのバイト、コインか空のセル、そこでの `RoomCorner` の歩きです。
 
 **ファイル。** `Theorems/RoomJoin.lean`: 新しい `lowB`、フレームごとの `NumFacts.hit_J`、`hit_F`、`hit_late`、`low_by` の結論、`stop_short`、`RoomFields.low_at` を狭めた。非公開: `room_nums`（`Proof/RoomJoin.lean`、文面は同じ）の `hit_J`、`hit_F`、`hit_late`。プログラム `room-approach-check`（上の数）。

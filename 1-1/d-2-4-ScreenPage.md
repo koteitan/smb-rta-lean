@@ -167,6 +167,8 @@ So no part can be split off by the walks as they are. Every theorem that uses th
 
 **Round 27.** The parts are now conditions of their own, and two of them are proved on most instructions by a walk that checks them at every state ([The parts of `SiteOK`](d-2-4-2-1-SiteParts.md), item 1-1-d-2-4-2-1): `off` on every frame that starts with the control at 0, and `reads` through every pointer but the screen update's. The field `chg.roomSites` is gone; the route asks the other parts as six fields.
 
+**Round 28.** `reads` through the screen update's pointer is proved on every frame of the room but the first one and those after a frame that starts with the control at 6 ([The screen buffers' records](d-2-4-2-2-BufferRecords.md), item 1-1-d-2-4-2-2): a frame from the control at 0 leaves records in the buffer that the walk knows, and the next frame's screen update reads them. `off` is proved also on the frames that start with the control at 6 after a frame at 0: the walk knows the offset that the frame before left.
+
 ## Assumptions (not proved in Lean)
 
 * **`EntryRest(seq(e))`.** The 16 bytes of `R` at the end of the entry frame have the values of a reference of `Entry2` (see (4)). The hurry-up music breaks it ([The runs with the hurry-up music](0-6-4-HurryMusic.md)). Item 1-1-d-2-5. The route now asks 11 of them: five music bytes follow from the room's frames ([The music bytes through the room's frames](d-2-5-1-RoomMusic.md)).

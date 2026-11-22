@@ -67,6 +67,7 @@ Why the field is not gone. At `C + 40` he can be past the corner: the largest `P
 
 ## What remains
 
+- Round 28: the case below is proved, and the field `low_at` is gone ([One pixel after a frame at the corner](c-7-5-21-PushOne.md)).
 - `low_at` for a frame from `C + 41` to `C + 43` that ends from 136 to 151 px when every frame from `C + 40` on is at or past the corner (0 measured frames). It needs the collision at the block's left side at those heights: the size byte at the end of the move, cells that are a coin or empty, and the walk of `RoomCorner` there.
 
 **Files.** `Theorems/RoomJoin.lean`: `lowB` new, `NumFacts.hit_J`, `hit_F`, `hit_late` for each frame, `low_by`'s conclusion, `stop_short`, `RoomFields.low_at` narrowed. Private: `hit_J`, `hit_F`, `hit_late` in `room_nums` (`Proof/RoomJoin.lean`, unchanged text). Program `room-approach-check` (the counts above).

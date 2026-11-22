@@ -61,6 +61,7 @@ The check takes about 44 s natively (33 s of it is the pass of `hstep`). It is t
 
 ## What remains
 
+- Round 28: the field `low_at` is gone ([One pixel after a frame at the corner](c-7-5-21-PushOne.md)).
 - `Approach.low` itself is still a field.
 - `low_at` for the frames that end at 136 to 151 px after a frame at or past the corner (the other band frames are proved: [A frame above 152 px after a frame left of the corner](c-7-5-19-BandStart.md)), and the second stand of `stand_wall`, are not done.
 

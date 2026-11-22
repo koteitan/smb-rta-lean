@@ -1,6 +1,6 @@
 import Theorems.BufferCoin
 import Theorems.EntryHeightBig
-import Theorems.SiteParts
+import Theorems.BufferRecords
 
 /-!
 # A frame that erases a coin ends at 16 to 180 px, on page 0
@@ -729,9 +729,9 @@ end
 structure FactsE (sy : Syms) (nm₁ : Names) (d₁ : PipeChangeEnd.Data) (nmS : Names) (m0 : Machine) (V : List (Machine × List Nat)) (L : List Nat) : Prop
     extends BufferCoin.FactsB sy nm₁ d₁ nmS m0 V L where
   ends : endCheck sy nmS m0 = true
-  /-- round 27: the facts of `RoomMusic` with a table `T`, and the walk of `RoomMusic` with that table, the control known, and the checks of `SiteParts` (from
-  the control at 0: the first buffer's offset below 64 wherever the code uses it; from 0 and from 6: the high byte of each pointer of an `LDA (zp),Y` but the
-  screen update's) -/
-  music : ∃ T, RoomMusic.Facts sy m0 nm₁ d₁ V nmS T ∧ SiteParts.musicCheck sy nmS m0 T = true
+  /-- round 27: the facts of `RoomMusic` with a table `T`, and the walk of `RoomMusic` with that table, the control known, and the checks of `SiteParts`;
+  round 28: the four walks of `BufferRecords` with that table and the patterns `L₀`, `L₆` of the screen buffers (from the control at 0: the first buffer's
+  offset below 64 wherever the code uses it; the high byte of each pointer of an `LDA (zp),Y`, at the screen update's pointer only from a pattern) -/
+  music : ∃ T L₀ L₆, RoomMusic.Facts sy m0 nm₁ d₁ V nmS T ∧ BufferRecords.recCheck sy nmS m0 T L₀ L₆ = true
 
 end Smbrta.BufferEnd
