@@ -54,4 +54,6 @@ sideW : ∀ j, 1 ≤ j → j < g → side(seq j) ≠ t₁₆ →
 - エリアの読み込みのバッファへの書き込み（メタタイルのバッファ、エリアの物の長さと位置、キノコの台の半分の長さ。26 の書き込みとポインタを通した 1 つ）。その添え字は、フレームをこえて残るバイトから来ます: たとえば RAM のバイト（階段の制御）を位置とする ROM の表から読む行や、エリアのデータの中の物の位置。1 フレームの歩きはそれを知りません。フレームをこえる不変な性質が要ります。
 - 彼がたたくブロックの、ポインタを通した 2 つの書き込み（`PlayerHeadCollision` の中と、ブロックの上を見るルーチンの中）。ポインタの上のバイトはゼロページにあり、フレームをこえて残るバイト（ブロックのスプライトの位置）からの X を通したゼロページへの書き込みが、歩きの知る限りでは、それを書きかえます。
 
+第 35 回は、細かい表と分けを 1 つ加えて、そのうち 4 つを除くすべてを証明します（[エリアの読み込みのループの、横のタイマーに届きうる書き込み](e-2-10-3-25-SideLoop-ja.md)）: フィールドは、ポインタを通した 3 つの書き込みと、城の行のループの書き込みでだけ求めます。`numbersCheck` は `rCheck` のかわりに `SideLoop.lCheck` を持つので、このファイルの `near_side` はもうルートでは使いません。`SideLoop` はその歩きを使います。
+
 **ファイル:** `Theorems/SideRange.lean`（`bnd`、`pieces`、`coverR`、`splitR`、`fixR`、`missK`、`missP`、`Resid`、`okR`、`okR_spec`、`izy_t`、`walkR`、`okR_all`、`near_side`、`searchR`、`rCheck`）。変えたもの: `Theorems/SurfaceFrames.lean`（フィールド `sideW`、`OnFrames.sideWAt`、`numbersCheck`、`Numbers.rangeC`、`AreaRun.rg`、`movesScan`）、`Smbrta/Syms.lean` と `tools/smb-symbols.txt`（4 つの記号）。

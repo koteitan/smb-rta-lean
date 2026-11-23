@@ -108,6 +108,7 @@ TAS で制御バイトが 6 の 13 のフレームは地下の部屋のフレー
 ## 証明していないこと
 
 * `ctlU`: 触る前の地上のフレームで、マリオがブロックのバッファからコインを取らないこと。`TileSlot` の (slot) と同じく、フレームをまたいだブロックのバッファの中身が要ります。
+  35 回目のラウンド: `ctlU` はなくなりました。各フレームの歩きが、コインのタイルのないブロックのバッファの地図から、コインのコードを切って制御バイトを追います。新しいフィールドは `coinBuf`、`readC`、`ctlKeep` です（[ブロックのバッファにコインがないので、制御バイトは 6 でない](f-6-17-17-PoleCoin-ja.md)）。
 * `TileSlot`（slot、near、旗のページの 2 つ前のページでの read）、`bufAll`（7 か所）、`keepB`（66 か所）: このラウンドでは変えていません。
 
 **ファイル.** `Theorems/PoleParserEnd.lean`（`kIdx`、`pats6`、`ctlPats`、`vTask`、`qN`、`finS`、`headN`、`startsN`、`csOf`、`atSN`、`atSZ`、`atS`、`atES`、`Cfgs.s`、`eCheckP`、`pats6_all`、`pats6_cover`、`cov_ctl`、`end_walkS`、`end_walkST`、`keep_eP`、`frame_six`、`frame_sixA`、`strictProbe`）。`Theorems/PoleStrict.lean`（新しい）。`Theorems/PoleParserRun.lean`（`amount_run`、`invJ_run`、`inv_run`、`tilesCol_run`、`tilesCol_route`）。`Theorems/PoleJoin.lean`（`parCtlOf`、`ctlU`。`parWrap` を消した）。`Theorems/PoleWrap.lean`（import）。`Main.lean`（非公開の `PoleParserEnd` の `pole_parser_jv`、`pole_top` と `Proof.ScrollRule` の import、ルートの `tilesCol_route` の行、`pole-keep ctl`、`pole-keep parser` の 31 回目の行）。

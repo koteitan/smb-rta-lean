@@ -75,6 +75,7 @@ So the new field asks the control byte at no measured visit. The 13 visits of th
 ## What is not proved
 
 * `ctlU`: that he takes no coin above ground while the parser is 157 px or more behind. A proof that removes it needs the block buffers' contents at his reads on every frame (no coin's tile there) and a walk of the frame that follows the control byte, as round 32 wrote; or a bound on the number of frames above ground with the control byte 6.
+  Round 35: `ctlU` is gone. A walk of each frame follows the control byte with the coin's code cut, from a map of the block buffers with no coin's tile; new fields `coinBuf`, `readC`, `ctlKeep` ([no coin in the block buffers, so the control byte is not 6](f-6-17-17-PoleCoin.md)).
 * `bufAll`, `keepB` and `tilesCol` ((near) and (read)): not changed by this step.
 
 **Files.** `Theorems/PoleLag.lean` (new); `Theorems/PoleStrict.lean` (`noWrap_of_jy`; `step_strict`, `invJ_onFrames`, `ruleW_onFrames` with `JY`); `Theorems/PoleParserRun.lean` (`invJ_run`, `colMono_run`); `Theorems/PoleJoin.lean` (`ctlU`); `Main.lean` (the round 33 (PoleLag) line of `pole-keep parser`).

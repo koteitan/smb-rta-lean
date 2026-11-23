@@ -17,7 +17,7 @@ What the parser's invariant and the walks need of the lag is less than `JV`:
 * with the control byte 6, when the lag at `UpdScrollVar` is below 157 (`jy_weak`): the weak forms keep `N` or take one off and keep `S`, or start a new
   column, which takes 32 off `S` and sets `N` to 7.
 
-So `ctlU` asks the control byte not 6 only where the lag at `UpdScrollVar` is 157 or more. At control `JV` holds (`PoleStrict.jv₀`), so `JY` does
+So `ctlU` asks the control byte not 6 only where the lag at `UpdScrollVar` is 157 or more (round 35: `ctlU` is gone, `PoleJoin.Run.ctl6`). At control `JV` holds (`PoleStrict.jv₀`), so `JY` does
 (`jy_of_jv`). On real runs the lag at `UpdScrollVar` stayed below 35 (`pole-keep parser`).
 
 There is no game data in this file. Page: `1-1/f-6-17-15-PoleLag.md`.

@@ -215,3 +215,14 @@ GetBlockBufferAddr
 # the head's collision with a block and the routines of the bumped block it calls: from its routine to the block objects' routine
 PlayerHeadCollision
 BlockObjectsCore
+# the castle's loop of rows in the area parser: from its first instruction to the check of its end
+CRendLoop
+ChkCFloor
+# two bytes that live across frames, measured only: the block buffer's column, and the control of the block objects' offset
+BlockBufferColumnPos
+SprDataOffset_Ctrl
+# the coin's check above a bumped block, and the second coin tile of the coin's check (round 35, part f)
+CheckTopOfBlock
+CoinTile2=byte:CheckForCoinMTiles+5
+# the loop command's step back of the pages (round 35, part f)
+ExecGameLoopback

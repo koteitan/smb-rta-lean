@@ -24,17 +24,17 @@ The proof has two cases, by the last frame `T` before `t0` that ends standing (t
 
 * `T + 1 < t0`: frame `T + 1` takes off. With no jump it would keep the height `y_top`, but it ends above the block's top. The takeoff is the first state of a jump from the block's top (`OffDrop.offAt`, the check `offT`). Up to `t0 − 1` the real frames are the jump's states: they do not land, since they end in the air, and `vstepR` is `vstep` on every state of these jumps (`VertAir.bridgeAll` from the block's top, the check `bridgeB`). From `t0 − 1`, where he is above the block's top, `descend_k` follows the jump to one of three ends:
   * the jump reaches the floor's height on a frame `F ≤ E`;
-  * he lands one row above the floor, on the side pipe;
+  * he lands one row above the floor, on the side pipe (since round 35: above the floor at any height, `land_bound`);
   * he is still on the jump at `E − 1`, and one more frame reaches the floor (the field `offNear`).
 
   Then:
   * a fast jump reaches the floor at least `aboveF` frames after `t0 − 1` (the check `drop`, `dropOk`: it counts the frames since he was above the block's top, `OffDrop.above_after`);
   * a slow jump reaches it at least `aboveS = 12` frames after `t0 − 1`;
-  * a landing one row above the floor comes at least `pipeA = 8` frames after `t0 − 1` (`pipeAOk`). From there no state is near the floor for `pipeB = 4` frames (`offB` on `pipeLands`), and `aboveF ≤ pipeA + pipeB + 1`;
+  * a landing one row above the floor comes at least `pipeA = 8` frames after `t0 − 1` (`pipeAOk`). From there no state is near the floor for `pipeB = 4` frames (`offB` on `pipeLands`), and `aboveF ≤ pipeA + pipeB + 1`. Since round 35 a landing at any height above the floor comes `n ≥ max(above, 1)` frames after `t0 − 1`, and from it no state is near the floor for `aboveF − 2 − max(above, 1)` frames (the check `landS`, [Past the block's right end: a landing at any height](c-7-8-4-OffLand.md));
   * if a slow jump entered exactly `aboveS` frames after `t0 − 1`, every frame from `t0 − 1` to `E − 1` would be a state of that slow jump: in the jump state, with the fall force of a slow takeoff (`OffDrop.slowArcs`, the check `slowB`). The field `offSlow` then moves him at most `A − 1` sixteenths of a pixel (1.5 px) a frame, and `P(E) ≤ P(t0 − 1) + 16·(A − 1)·aboveS < goal + 16·(A − 1)·aboveS ≤ mouth ≤ P(E)` (`slow_mouth`, `mouth`, `first`): impossible.
-* `T + 1 = t0`: frame `t0 − 1` ends standing on the block's top. The field `offStand` makes its state one of `standFam`, and the check `standB` goes `aboveF − 1` frames of `offNext` from those states with no state near the floor. Frame `t0` may walk off, jump, or stay standing (only on the floor or one row above it, by `offFloor`). So the frame before the entry is more than 12 frames after `t0 − 1` (`offB_path`, `offB_gap`).
+* `T + 1 = t0`: frame `t0 − 1` ends standing on the block's top. Until round 34 the field `offStand` made its state one of `standFam`. Since round 35 its state, with the jump force put to the fall force and the origin to the block's top, is one of `standFam`, and a stand or a fall does not read those two bytes (`SimV`, [A stand on the block's top: the bytes that a fall does not read](c-7-8-3-OffStand.md)). The check `standB` goes `aboveF − 1` frames of `offNext` from those states with no state near the floor. Frame `t0` may walk off, jump, or stay standing (until round 34 only on the floor or one row above it, by `offFloor`; since round 35 at any height). So the frame before the entry is more than 12 frames after `t0 − 1` (`offB_path_sim`, `offB_gap_sim`).
 
-`offNext` is `anyNext` past the block's right end: in the air `vstepR` with A or not, and its landing only on the floor or one row above it; standing, the states of `noJumpNext` that are in the air or stand at those heights, and the takeoffs of the row. `near(s)` (`OffDrop.nearB`) is: standing at `y_floor`, or in the air with one frame of `vstepR`, with A or not, falling to `y_floor` or below.
+`offNext` was `anyNext` past the block's right end with the landings only on the floor or one row above it: in the air `vstepR` with A or not, and its landing at those heights; standing, the states of `noJumpNext` that are in the air or stand at those heights, and the takeoffs of the row. Since round 35 `offNext` is `anyNext`, with a landing at any height. `near(s)` (`OffDrop.nearB`) is: standing at `y_floor`, or in the air with one frame of `vstepR`, with A or not, falling to `y_floor` or below.
 
 ## The fields
 
@@ -46,11 +46,13 @@ Added (fields of `RoomRun`, each about one frame or one state):
 
 ```
 offTop   :  ∃ T,  C ≤ T < t0  ∧  st(vE T) = 0  ∧  y(vE T) = y_top  ∧  ∀ j ∈ (T, t0),  st(vE j) ≠ 0  ∧  y(vE j) < y_top
-offFloor :  ∀ n ∈ [t0, E),  st(vE n) = 0  →  y(vE n) = y_floor  ∨  y(vE n) + 16 = y_floor
+offFloor :  ∀ n ∈ [t0, E),  st(vE n) = 0  →  y(vE n) = y_floor  ∨  y(vE n) + 16 = y_floor          (false on real runs; gone in round 35)
 offNear  :  near(vE(E − 1))
 offSlow  :  ∀ n ∈ [t0 − 1, E),  st(vE n) = 1  ∧  vfd(vE n) ∈ F_slow  →  P(n + 1) ≤ P(n) + 16·(A − 1)
-offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origin ∈ {y_top, y_floor, y_floor − 16, y_floor − 32}
+offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origin ∈ {y_top, y_floor, y_floor − 16, y_floor − 32}        (gone in round 35)
 ```
+
+`offStand` is gone since round 35 (item 1-1-c-7-8-3, [A stand on the block's top: the bytes that a fall does not read](c-7-8-3-OffStand.md)). `offFloor` is false on real runs: from `t0` on he can stand on the side pipe's top, two rows above the floor, and then enter. It is gone since round 35 (item 1-1-c-7-8-4, [Past the block's right end: a landing at any height](c-7-8-4-OffLand.md)). Three of these fields remain.
 
 That such a stand has no vertical speed is proved (`RoomRun.stand_ok`): every stand of the room before the entry has no vertical speed and is on a whole row. At first control he falls (the check `startAir`), a landing has no speed, a frame that starts standing with no jump keeps the height and the speed or lands (`StandNext`), and no takeoff from a whole row stands (`jumpAirCheck`, the check `jumpAir`).
 
@@ -58,7 +60,7 @@ That such a stand has no vertical speed is proved (`RoomRun.stand_ok`): every st
 
 These five are not weaker than `Off` in every way: `Off` asked only for a timing, and its frames after `t0` were free data. They ask facts of the real frames, and the timing is proved from them.
 
-New ROM checks (`native_decide` in the private `Proof/RoomJoin.lean`, `room_checks`): `bridgeB`, `offT`, `slowB`, `pipeAc`, `pipeBc`, `standB`, `startAir`, `jumpAir`. Together they add about 30 s to the private build (`Proof.RoomJoin` 145 s on a quiet machine, 193 s with other runs, was 116 s); `standB` takes 15 to 28 s natively. New numbers: `pipeA = 8`, `pipeB = 4`, with the facts `off_two : 2 ≤ aboveF` and `pipe_sum : aboveF ≤ pipeA + pipeB + 1`.
+New ROM checks (`native_decide` in the private `Proof/RoomJoin.lean`, `room_checks`): `bridgeB`, `offT`, `slowB`, `pipeAc`, `pipeBc`, `standB`, `startAir`, `jumpAir` (since round 35 `landC` in place of `pipeAc` and `pipeBc`). Together they add about 30 s to the private build (`Proof.RoomJoin` 145 s on a quiet machine, 193 s with other runs, was 116 s); `standB` takes 15 to 28 s natively. New numbers: `pipeA = 8`, `pipeB = 4`, with the facts `off_two : 2 ≤ aboveF` and `pipe_sum : aboveF ≤ pipeA + pipeB + 1` (since round 35 `pipeA`, `pipeB` and `pipe_sum` are gone; `off_two` stays; the checks `keepA` and `offVfd` are added: [A stand on the block's top](c-7-8-3-OffStand.md)).
 
 ## Measured
 
@@ -73,7 +75,7 @@ New ROM checks (`native_decide` in the private `Proof/RoomJoin.lean`, `room_chec
 | of them a jump on `T + 1`, every frame up to `t0 − 1` above the block's top (`offTop`) | 299 |
 | runs that enter | 65 |
 | stands from `t0` to `E − 1` | 216 |
-| of them neither on the floor nor one row above it (against `offFloor`) | 0 |
+| of them neither on the floor nor one row above it (against `offFloor`) | 0 (but 29 of 225 runs of `room-off-back` in round 35) |
 | of them one row above it (on the side pipe) | 2 |
 | state at `E − 1` near the floor (`offNear`) | 65 of 65 |
 | frames in the jump state with the fall force of a slow takeoff, in the whole room | 496,014 |
@@ -83,19 +85,19 @@ New ROM checks (`native_decide` in the private `Proof/RoomJoin.lean`, `room_chec
 
 The least `E − t0` was 12 (the TAS); after a stand at `t0 − 1` it was 19, after a slow jump 14. On the TAS the last stand before `t0` is at `C + 78` on the block's top, the jump is fast, and `t0 = C + 99`, `E = C + 111`.
 
-The first version of `offFloor` asked the floor's height only. It was false on 2 measured frames, where he stood one row above the floor on the side pipe at `t0 + 13` and `t0 + 14` (`E = t0 + 27`). So it allows that height, and the proof handles a landing there.
+The first version of `offFloor` asked the floor's height only. It was false on 2 measured frames, where he stood one row above the floor on the side pipe at `t0 + 13` and `t0 + 14` (`E = t0 + 27`). So it allows that height, and the proof handles a landing there. In round 35 the field was false at 144 px, two rows above the floor, on runs that climb onto the side pipe ([Past the block's right end: a landing at any height](c-7-8-4-OffLand.md)).
 
 ## What remains (not proved)
 
-* The five new fields. Ways to prove them later:
+* Three of the five new fields. Ways to prove them later:
   * `offTop`: the block's right column. At `t0 − 1` his left foot is over it, so he is on or above its top.
-  * `offFloor`: a walk of the frames past the block's end that knows the cells between the block and the side pipe, as `RoomWall.wall_frameX` does near the left wall.
+  * `offFloor`: false on real runs, gone in round 35 (item 1-1-c-7-8-4): the proof allows a landing at any height.
   * `offNear`: the entering frame. Its side check enters only in the state 0, which a walk of frame `E` would show.
   * `offSlow`: the air speed cap after `t0`, by the horizontal model on the frames after `t0`.
-  * `offStand`: the vertical bytes through the room. A walk that shows that `vstepR` keeps the fall force and the origin would give it, as `stand_ok` gives the vertical speed.
+  * `offStand`: proved in round 35 (item 1-1-c-7-8-3), no longer a field.
 * `Approach`, `Over` and the choice of the case of `way` (items 1-1-c-7-7, 1-1-c-7-9, 1-1-c-7-14) stay as they were.
 
-**Files.** `Theorems/OffDrop.lean` (`nearB`, `offAt`, `slowF`, `slowArcs`, the counter `above`, `allLayers`, paths). `Theorems/RoomJoin.lean` (`offNext`, `offB`, `standFam`, `pipeLands`, `pipeAOk`, `RoomRun.off_gap_of` and its lemmas, the five fields, `RoomCore.off_gap`). `Main.lean`: `room-off-ways`; the private `Proof/RoomJoin.lean` gets the eight checks, `pipeA`, `pipeB`, `off_two`, `pipe_sum`, `stop_cap`, `hit_three`.
+**Files.** `Theorems/OffDrop.lean` (`nearB`, `offAt`, `slowF`, `slowArcs`, the counter `above`, `allLayers`, paths). `Theorems/RoomJoin.lean` (`offNext`, `offB`, `standFam`, `pipeLands`, `pipeAOk`, `RoomRun.off_gap_of` and its lemmas, the five fields, `RoomCore.off_gap`). `Main.lean`: `room-off-ways`; the private `Proof/RoomJoin.lean` gets the eight checks, `pipeA`, `pipeB`, `off_two`, `pipe_sum`, `stop_cap`, `hit_three`. Since round 35 `pipeLands`, `pipeAOk`, `pipeA`, `pipeB`, `pipe_sum` and the checks `pipeAc`, `pipeBc` are gone, `landS` and `landC` replace them, and the checks `keepA` and `offVfd` are added.
 
 **Reproduce.**
 ```

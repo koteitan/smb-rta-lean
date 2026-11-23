@@ -24,17 +24,17 @@ entry_ge           :  C + goalF + aboveF ≤ E                  (past_late: C + 
 
 * `T + 1 < t0`: フレーム `T + 1` で踏み切ります。ジャンプがなければ高さ `y_top` のままですが、このフレームはかたまりの上より上で終わります。踏み切りは、かたまりの上からのジャンプの最初の状態です（`OffDrop.offAt`、チェック `offT`）。`t0 − 1` まで、本物のフレームはそのジャンプの状態です。空中で終わるので着地せず、`vstepR` はこのジャンプのどの状態でも `vstep` です（かたまりの上からの `VertAir.bridgeAll`、チェック `bridgeB`）。かたまりの上より上にいる `t0 − 1` から、`descend_k` がジャンプを 3 つの終わりのどれかまでたどります。
   * ジャンプが `F ≤ E` のフレームで床の高さに届く。
-  * 床の 1 段上、横の土管の上に着地する。
+  * 床の 1 段上、横の土管の上に着地する（ラウンド 35 からは床より上のどの高さでも、`land_bound`）。
   * `E − 1` でまだジャンプの上にいて、もう 1 フレームで床に届く（フィールド `offNear`）。
 
   そして:
   * 速いジャンプは、`t0 − 1` から `aboveF` フレーム以上あとに床に届きます（チェック `drop`、`dropOk`。かたまりの上より上にいたときからのフレームを数えます。`OffDrop.above_after`）。
   * 遅いジャンプは `t0 − 1` から `aboveS = 12` フレーム以上あとです。
-  * 床の 1 段上への着地は `t0 − 1` から `pipeA = 8` フレーム以上あとです（`pipeAOk`）。そこから `pipeB = 4` フレームのあいだ、床の近くの状態はありません（`pipeLands` での `offB`）。そして `aboveF ≤ pipeA + pipeB + 1` です。
+  * 床の 1 段上への着地は `t0 − 1` から `pipeA = 8` フレーム以上あとです（`pipeAOk`）。そこから `pipeB = 4` フレームのあいだ、床の近くの状態はありません（`pipeLands` での `offB`）。そして `aboveF ≤ pipeA + pipeB + 1` です。ラウンド 35 からは、床より上のどの高さへの着地も `t0 − 1` から `n ≥ max(above, 1)` フレームあとで、そこから `aboveF − 2 − max(above, 1)` フレームのあいだ床の近くの状態はありません（チェック `landS`、[かたまりの右端を越えたあと: どの高さへの着地も](c-7-8-4-OffLand-ja.md)）。
   * 遅いジャンプがちょうど `t0 − 1` から `aboveS` フレームあとに入るなら、`t0 − 1` から `E − 1` までのどのフレームもその遅いジャンプの状態です。ジャンプの状態で、遅い踏み切りの落ちる力です（`OffDrop.slowArcs`、チェック `slowB`）。するとフィールド `offSlow` で 1 フレームに `A − 1` 十六分の一ピクセル（1.5 px）しか動かず、`P(E) ≤ P(t0 − 1) + 16·(A − 1)·aboveS < goal + 16·(A − 1)·aboveS ≤ mouth ≤ P(E)` です（`slow_mouth`、`mouth`、`first`）。これはありえません。
-* `T + 1 = t0`: フレーム `t0 − 1` はかたまりの上に立って終わります。フィールド `offStand` でその状態は `standFam` の 1 つです。チェック `standB` はその状態から `offNext` を `aboveF − 1` フレーム進み、床の近くの状態はありません。フレーム `t0` は歩いて降りるか、跳ぶか、立ったままです（立つのは `offFloor` で床か床の 1 段上だけ）。それで入る 1 つ前のフレームは `t0 − 1` から 12 フレームより先です（`offB_path`、`offB_gap`）。
+* `T + 1 = t0`: フレーム `t0 − 1` はかたまりの上に立って終わります。ラウンド 34 まではフィールド `offStand` でその状態が `standFam` の 1 つでした。ラウンド 35 からは、ジャンプの力を落ちる力に、起点をかたまりの上に置いたその状態が `standFam` の 1 つで、立つときと落ちるときはその 2 つのバイトを読みません（`SimV`、[かたまりの上の立ち: 落ちるときに読まないバイト](c-7-8-3-OffStand-ja.md)）。チェック `standB` はその状態から `offNext` を `aboveF − 1` フレーム進み、床の近くの状態はありません。フレーム `t0` は歩いて降りるか、跳ぶか、立ったままです（ラウンド 34 までは `offFloor` で立つのは床か床の 1 段上だけ。ラウンド 35 からはどの高さでも）。それで入る 1 つ前のフレームは `t0 − 1` から 12 フレームより先です（`offB_path_sim`、`offB_gap_sim`）。
 
-`offNext` は、かたまりの右端を越えたあとの `anyNext` です。空中では A ありとなしの `vstepR` と、床か床の 1 段上だけへのその着地。立っているときは、`noJumpNext` のうち空中かその高さに立つ状態と、その段からの踏み切りです。`near(s)`（`OffDrop.nearB`）は、`y_floor` に立つか、空中で A ありかなしの `vstepR` 1 フレームで `y_floor` 以下に落ちることです。
+`offNext` は、かたまりの右端を越えたあとの、着地を床か床の 1 段上だけにした `anyNext` でした。空中では A ありとなしの `vstepR` と、その高さへのその着地。立っているときは、`noJumpNext` のうち空中かその高さに立つ状態と、その段からの踏み切りです。ラウンド 35 からは `offNext` は `anyNext` で、着地はどの高さでもかまいません。`near(s)`（`OffDrop.nearB`）は、`y_floor` に立つか、空中で A ありかなしの `vstepR` 1 フレームで `y_floor` 以下に落ちることです。
 
 ## フィールド
 
@@ -46,11 +46,13 @@ entry_ge           :  C + goalF + aboveF ≤ E                  (past_late: C + 
 
 ```
 offTop   :  ∃ T,  C ≤ T < t0  ∧  st(vE T) = 0  ∧  y(vE T) = y_top  ∧  ∀ j ∈ (T, t0),  st(vE j) ≠ 0  ∧  y(vE j) < y_top
-offFloor :  ∀ n ∈ [t0, E),  st(vE n) = 0  →  y(vE n) = y_floor  ∨  y(vE n) + 16 = y_floor
+offFloor :  ∀ n ∈ [t0, E),  st(vE n) = 0  →  y(vE n) = y_floor  ∨  y(vE n) + 16 = y_floor          （本物の走りで成り立たない。ラウンド 35 でなくなった）
 offNear  :  near(vE(E − 1))
 offSlow  :  ∀ n ∈ [t0 − 1, E),  st(vE n) = 1  ∧  vfd(vE n) ∈ F_slow  →  P(n + 1) ≤ P(n) + 16·(A − 1)
-offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origin ∈ {y_top, y_floor, y_floor − 16, y_floor − 32}
+offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origin ∈ {y_top, y_floor, y_floor − 16, y_floor − 32}        （ラウンド 35 でなくなった）
 ```
+
+`offStand` はラウンド 35 でなくなりました（項目 1-1-c-7-8-3、[かたまりの上の立ち: 落ちるときに読まないバイト](c-7-8-3-OffStand-ja.md)）。`offFloor` は本物の走りで成り立ちません。`t0` から彼は横の土管の上、床の 2 段上に立ち、そのあと入れます。ラウンド 35 でなくなりました（項目 1-1-c-7-8-4、[かたまりの右端を越えたあと: どの高さへの着地も](c-7-8-4-OffLand-ja.md)）。このフィールドのうち 3 つが残ります。
 
 その立ちに垂直の速さがないことは証明しています（`RoomRun.stand_ok`）。入る前の部屋のどの立ちも、垂直の速さがなく段の上にあります。最初の操作で彼は落ちていて（チェック `startAir`）、着地には速さがなく、立って始まりジャンプのないフレームは高さと速さを保つか着地し（`StandNext`）、段からの踏み切りはどれも立ちません（`jumpAirCheck`、チェック `jumpAir`）。
 
@@ -58,7 +60,7 @@ offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origi
 
 この 5 つは、どこでも `Off` より弱いわけではありません。`Off` はタイミングだけを求め、`t0` のあとのフレームは自由なデータでした。5 つは本物のフレームの事実を求め、タイミングはそこから証明します。
 
-新しい ROM のチェック（非公開の `Proof/RoomJoin.lean` の `room_checks` で `native_decide`）: `bridgeB`、`offT`、`slowB`、`pipeAc`、`pipeBc`、`standB`、`startAir`、`jumpAir`。合わせて非公開のビルドが約 30 秒長くなります（`Proof.RoomJoin` は静かな機械で 145 秒、ほかの走りがあると 193 秒、前は 116 秒）。`standB` はネイティブで 15 秒から 28 秒です。新しい数: `pipeA = 8`、`pipeB = 4`。事実 `off_two : 2 ≤ aboveF` と `pipe_sum : aboveF ≤ pipeA + pipeB + 1` があります。
+新しい ROM のチェック（非公開の `Proof/RoomJoin.lean` の `room_checks` で `native_decide`）: `bridgeB`、`offT`、`slowB`、`pipeAc`、`pipeBc`、`standB`、`startAir`、`jumpAir`（ラウンド 35 からは `pipeAc` と `pipeBc` の代わりに `landC`）。合わせて非公開のビルドが約 30 秒長くなります（`Proof.RoomJoin` は静かな機械で 145 秒、ほかの走りがあると 193 秒、前は 116 秒）。`standB` はネイティブで 15 秒から 28 秒です。新しい数: `pipeA = 8`、`pipeB = 4`。事実 `off_two : 2 ≤ aboveF` と `pipe_sum : aboveF ≤ pipeA + pipeB + 1` があります（ラウンド 35 で `pipeA`、`pipeB`、`pipe_sum` はなくなりました。`off_two` は残ります。チェック `keepA` と `offVfd` を足しました: [かたまりの上の立ち](c-7-8-3-OffStand-ja.md)）。
 
 ## 測ったこと
 
@@ -73,7 +75,7 @@ offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origi
 | そのうち `T + 1` でジャンプし、`t0 − 1` までどのフレームもかたまりの上より上（`offTop`） | 299 |
 | 入った走り | 65 |
 | `t0` から `E − 1` までの立ち | 216 |
-| そのうち床でも床の 1 段上でもないもの（`offFloor` に反する） | 0 |
+| そのうち床でも床の 1 段上でもないもの（`offFloor` に反する） | 0（ただしラウンド 35 の `room-off-back` では 225 本のうち 29 本） |
 | そのうち床の 1 段上（横の土管の上） | 2 |
 | `E − 1` の状態が床の近く（`offNear`） | 65 のうち 65 |
 | 部屋全体で、遅い踏み切りの落ちる力でジャンプの状態のフレーム | 496,014 |
@@ -83,19 +85,19 @@ offStand :  st(vE(t0 − 1)) = 0  →  vf = vfd  ∧  vfd ∈ forces  ∧  origi
 
 `E − t0` の最小は 12 でした（TAS）。`t0 − 1` で立ったあとは 19、遅いジャンプのあとは 14 でした。TAS では `t0` より前の最後の立ちが `C + 78` でかたまりの上、ジャンプは速く、`t0 = C + 99`、`E = C + 111` です。
 
-`offFloor` の最初の形は床の高さだけを求めました。それは測った 2 フレームで成り立ちませんでした。`t0 + 13` と `t0 + 14` に横の土管の上、床の 1 段上に立ったのです（`E = t0 + 27`）。それでその高さを許し、証明はそこへの着地も扱います。
+`offFloor` の最初の形は床の高さだけを求めました。それは測った 2 フレームで成り立ちませんでした。`t0 + 13` と `t0 + 14` に横の土管の上、床の 1 段上に立ったのです（`E = t0 + 27`）。それでその高さを許し、証明はそこへの着地も扱います。ラウンド 35 では、横の土管の上に登る走りで、床の 2 段上の 144 px でこのフィールドが成り立ちませんでした（[かたまりの右端を越えたあと: どの高さへの着地も](c-7-8-4-OffLand-ja.md)）。
 
 ## 残ること（証明していない）
 
-* 5 つの新しいフィールド。あとで証明する道:
+* 5 つの新しいフィールドのうち 3 つ。あとで証明する道:
   * `offTop`: かたまりの右の列。`t0 − 1` で左足はその上にあるので、その上の面か、それより上にいます。
-  * `offFloor`: かたまりの端を越えたあとのフレームの歩きで、かたまりと横の土管のあいだのマスを知るもの。左の壁の近くの `RoomWall.wall_frameX` のようにです。
+  * `offFloor`: 本物の走りで成り立たず、ラウンド 35 でなくなりました（項目 1-1-c-7-8-4）。証明はどの高さへの着地も許します。
   * `offNear`: 入るフレーム。その横のチェックは状態 0 でだけ入ります。フレーム `E` の歩きで示せるはずです。
   * `offSlow`: `t0` のあとの空中の速さの上限。`t0` のあとのフレームでの水平のモデルによります。
-  * `offStand`: 部屋を通しての垂直のバイト。`vstepR` が落ちる力と起点を保つことを示す歩きがあれば得られます。垂直の速さは `stand_ok` が与えます。
+  * `offStand`: ラウンド 35 で証明しました（項目 1-1-c-7-8-3）。もうフィールドではありません。
 * `Approach`、`Over`、`way` のどの場合か（項目 1-1-c-7-7、1-1-c-7-9、1-1-c-7-14）はそのままです。
 
-**ファイル。** `Theorems/OffDrop.lean`（`nearB`、`offAt`、`slowF`、`slowArcs`、数 `above`、`allLayers`、道）。`Theorems/RoomJoin.lean`（`offNext`、`offB`、`standFam`、`pipeLands`、`pipeAOk`、`RoomRun.off_gap_of` とその補題、5 つのフィールド、`RoomCore.off_gap`）。`Main.lean`: `room-off-ways`。非公開の `Proof/RoomJoin.lean` に 8 つのチェック、`pipeA`、`pipeB`、`off_two`、`pipe_sum`、`stop_cap`、`hit_three` が入ります。
+**ファイル。** `Theorems/OffDrop.lean`（`nearB`、`offAt`、`slowF`、`slowArcs`、数 `above`、`allLayers`、道）。`Theorems/RoomJoin.lean`（`offNext`、`offB`、`standFam`、`pipeLands`、`pipeAOk`、`RoomRun.off_gap_of` とその補題、5 つのフィールド、`RoomCore.off_gap`）。`Main.lean`: `room-off-ways`。非公開の `Proof/RoomJoin.lean` に 8 つのチェック、`pipeA`、`pipeB`、`off_two`、`pipe_sum`、`stop_cap`、`hit_three` が入ります。ラウンド 35 で `pipeLands`、`pipeAOk`、`pipeA`、`pipeB`、`pipe_sum` とチェック `pipeAc`、`pipeBc` はなくなり、`landS` と `landC` がその代わりになり、チェック `keepA` と `offVfd` を足しました。
 
 **再現。**
 ```

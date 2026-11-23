@@ -67,6 +67,7 @@ NoTile(m) ∧ NoTileM(c, m) ∧ RingOK ∧ colP < c + 32   ⇒   NoTileC(c, m)
 
 * 7 か所の `bufAll`: 旗のタイルを旗の列にだけ書く（`BufV`、26 回目）こと、そして、輪の中の解析の列に書くか解析が旗まで来ている（`NoTileM`）こと。
 * 2 つ目の部分は解析自身の書き込みでは正しいのですが、証明にはもう 1 つのバイトが要ります。`AreaParserCore` は、書き込みのアドレスを解析の列から計算しません。3 つ目のバイト、ブロックのバッファの列を読んで、輪のその列に書きます。列のステップ（`IncrementColumnPos`）は、列と一緒にそのバイトに 1 を足します（mod 32）。なので実際のフレームでは `B ≡ c (mod 32)` が成り立ちます（27 回目に測った: `B ≠ c mod 32` のフレームは 0）が、解析の歩きは `B` を追いません。証明には、列を追うのと同じように `B` を追う各フレームの歩き（列のステップのフレームでは値で分ける）と、`B` から書き込みのポインタを知る `AreaParserCore` の終わりの歩きが要ります。
+  35 回目のラウンド: 解析自身の書き込みでは証明しました（[解析は自分の列をブロックのバッファの列に書く](f-6-17-18-PoleBcol-ja.md)）。`bufAll` は `NoTileM` をほかの書き込みにだけ求めます。
 * `tilesCol`（`TileSlotC`）と `ctlU`: このラウンドでは変えていません。`keepB`: 変えていません。
 
 **ファイル.** `Theorems/PoleRing.lean`（新しい）、`Theorems/PoleJoin.lean`（`bufAll`、`TileColAll`、`Run.low`、`Run.bufC₁`、`Run.slotStart`、`Run.inRange`、`Run.tilesStart`、`Run.bufAt₁`）、`Theorems/PoleParserRun.lean`（行のチェック、`low₀`、`tilesCol_run`、`tilesCol_route`）、`Main.lean`（`genPoleRing`、Route のブロック、`pole-keep check` の 34 回目の数）。

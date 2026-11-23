@@ -132,6 +132,71 @@ theorem tiles_step {P : Places} {A : AS} {m : Machine} (hO : PlacesOK E P) (h0 :
       exact h0
     · rw [ba_get_set_ne _ _ _ _ hdi]
       exact ht d hd1 hd2
+
+/-- **One step on the block buffers** (round 35): with the check `keepOKB`, each byte of the block buffers keeps its value or becomes 0 -/
+theorem buf_step {P : Places} {A : AS} {m : Machine} (hO : PlacesOK E P) (hs : Sim E F A m) (hk : keepOKB P E A = true) (hh : EraseRange.SiteX P m)
+    {d : Nat} (hd1 : P.bufLo ≤ d) (hd2 : d < P.bufLo + P.bufN) : (go step m).2.ram.get! d = m.ram.get! d ∨ (go step m).2.ram.get! d = 0 := by
+  unfold keepOKB at hk
+  simp only [Bool.or_eq_true, Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true', decide_eq_true_eq] at hk
+  rcases hk with hk | ⟨⟨⟨⟨hpc, hn⟩, h81⟩, hak⟩, hav⟩
+  · exact Or.inl (StepWrites.keep_step hs hk d (by simp [inBuf, hd1, hd2]))
+  · have hmp : m.pc = P.erase := by rw [hs.pc]; exact hpc
+    have hn' : m.nmiPending = false := by rw [hs.nmi]; exact hn
+    have hp0 : m.pc ≥ 0x8000 := by rw [hmp]; exact hO.erase.1
+    have hp1 : m.pc + 1 ≥ 0x8000 := by rw [hs.pc]; exact h81
+    have hop : m.prg.get! (m.pc &&& m.prgMask).toNat = 0x91 := by rw [hs.prg, hs.mask, hmp]; exact hO.erase.2
+    obtain ⟨g1, _, _⟩ := hh.erase hmp
+    have hr := erase_ram hn' hs.halted hp0 hp1 hop g1 hs.trk
+    have ha : m.a = 0 := by rw [isK_eq hak hs.a]; exact hav
+    rw [hr]
+    by_cases hdi : (writeAddr m &&& 0x7FF).toNat = d
+    · rw [← hdi, ba_get_set_self _ _ _ (by rw [hs.size]; exact EraseRow.and7FF_lt _), ha]
+      exact Or.inr rfl
+    · rw [ba_get_set_ne _ _ _ _ hdi]
+      exact Or.inl rfl
+end
+
+/-! ## Round 35: the map's bits, and the head's cell -/
+
+/-- **The map's bits** (round 35): every bit of a byte of the block buffers that is 0 in the map `M` is 0 (as `RoomMap`'s `Zero`) -/
+def ZeroIn (P : Places) (M : Machine) (m : Machine) : Prop :=
+  ∀ d, P.bufLo ≤ d → d < P.bufLo + P.bufN → m.ram.get! d &&& ~~~ M.ram.get! d = 0
+
+/-- **The head's cell is free in the map** (round 35): at the block buffer routine's read for the head, the map's byte at the read's address is the empty tile
+or a coin. The route asks this (`roomRead`); before, it asked `ReadH`, the byte of the machine -/
+def HeadFree (P : Places) (M : Machine) (m : Machine) : Prop :=
+  m.pc = P.read → m.ram.get! P.saveI ∈ P.heads → M.ram.get! (readAddr m &&& 0x7FF).toNat ∈ P.headTiles
+
+/-- **The check on the ROM** (round 35): a tile of the list that has no bit outside a head tile is a head tile -/
+def headSub (P : Places) : Bool := P.tiles.all fun t => P.headTiles.all fun c => t &&& ~~~ c != 0 || P.headTiles.contains t
+
+/-- **`ReadH` from the head's cell** (round 35): the byte read is a tile of the list (`TilesIn`) with no bit outside the map's byte (`ZeroIn`), and the map's
+byte is a head tile (`HeadFree`) -/
+theorem readH_of_free {P : Places} {M m : Machine} (hh : headSub P = true) (ht : TilesIn P m) (hz : ZeroIn P M m) (hi : ReadIn P m)
+    (hf : HeadFree P M m) : ReadH P m := by
+  intro hpc hsv
+  obtain ⟨a1, a2, a3⟩ := hi hpc
+  have hc := hf hpc hsv
+  rw [RoomBlocks.readVal_eq a1]
+  have h1 := List.all_eq_true.1 hh _ (ht _ a2 a3)
+  have h2 := List.all_eq_true.1 h1 _ hc
+  simp only [Bool.or_eq_true, bne_iff_ne, ne_eq] at h2
+  rcases h2 with h2 | h2
+  · exact absurd (hz _ a2 a3) h2
+  · exact List.contains_iff_mem.1 h2
+
+section
+variable {E : Env} {F : Nat × UInt8}
+
+/-- **One step keeps the map's bits** (round 35), if the state's check `keepOKB` holds: the erase writes 0 -/
+theorem zero_step {P : Places} {M : Machine} {A : AS} {m : Machine} (hO : PlacesOK E P) (hs : Sim E F A m) (hk : keepOKB P E A = true)
+    (hh : EraseRange.SiteX P m) (hz : ZeroIn P M m) : ZeroIn P M (go step m).2 := by
+  intro d hd1 hd2
+  rcases buf_step hO hs hk hh hd1 hd2 with e | e
+  · rw [e]
+    exact hz d hd1 hd2
+  · rw [e]
+    exact UInt8.zero_and
 end
 
 /-! ## The frame with an invariant -/
@@ -154,7 +219,8 @@ theorem frame_of_walkVI (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R I : Machin
       I (trace m i j) → EraseRange.SiteX C.P (trace m i j) → (trace m i j).frame = m.frame → trace m i (j + 1) = (go step (trace m i j)).2 → J j → J (j + 1))
     (hJs : ∀ j, trace m i (j + 1) = trace m i j → J j → J (j + 1)) (hJ0 : J 0) :
     (∀ j, EraseRange.SiteX C.P (trace m i j)) ∧ (∃ B, C.fin B = true ∧ Sim C.E F B (frame m i)) ∧ (∀ j, I (trace m i j)) ∧ (∀ j, J j) ∧
-      (trace m i fuelPerFrame).frame = m.frame + 1 := by
+      (trace m i fuelPerFrame).frame = m.frame + 1 ∧
+      (∀ j, ∃ A, Sim C.E F A (trace m i j) ∧ FOK A.log (trace m i j) ∧ chk A = true) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have hph0 : Ph G S { m with pad := smbToPad i } := hph
   have hf0 : FOK S.log { m with pad := smbToPad i } := hf
@@ -208,12 +274,17 @@ theorem frame_of_walkVI (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R I : Machin
       have a3 : dotsPerFrame ≤ 3 * fuelPerFrame := by decide
       omega
     · exact h1
-  refine ⟨fun j => ?_, ?_, fun j => (key j).2.1, fun j => (key j).2.2, hend⟩
-  · obtain ⟨hj, hIj, _⟩ := key j
+  -- round 35: at each instruction a state with the walk's check covers the machine
+  have hcov : ∀ j, ∃ A, Sim C.E F A (trace m i j) ∧ FOK A.log (trace m i j) ∧ chk A = true := by
+    intro j
+    obtain ⟨hj, _, _⟩ := key j
     rcases hj with ⟨A, ⟨h1, hf1, _, n, h1'⟩, _, _, _⟩ | ⟨_, B, _, h2', _, h4, h4', _⟩
     · have hf1' : FOK (sclamp sq D A).log (trace m i j) := by unfold sclamp; split <;> exact hf1
-      exact hQ (sim_sclamp hD h1 (hS (hk j))) hf1' (chkV_of_walk h1') (hk j) hIj
-    · exact hQ h4 h4' h2' (hk j) hIj
+      exact ⟨_, sim_sclamp hD h1 (hS (hk j)), hf1', chkV_of_walk h1'⟩
+    · exact ⟨B, h4, h4', h2'⟩
+  refine ⟨fun j => ?_, ?_, fun j => (key j).2.1, fun j => (key j).2.2, hend, hcov⟩
+  · obtain ⟨A, h1, h2, h3⟩ := hcov j
+    exact hQ h1 h2 h3 (hk j) (key j).2.1
   · rw [frame_trace]
     rcases (key fuelPerFrame).1 with ⟨A, h1, _, _, h4⟩ | ⟨_, B, h2, _, _, h4, _, _⟩
     · exfalso
@@ -237,7 +308,8 @@ theorem frameVI {sp : AS → List AS} {Ru : Rules} {E : Env} {P : Places} {G : R
       I (trace m i j) → EraseRange.SiteX P (trace m i j) → (trace m i j).frame = m.frame → trace m i (j + 1) = (go step (trace m i j)).2 → J j → J (j + 1))
     (hJs : ∀ j, trace m i (j + 1) = trace m i j → J j → J (j + 1)) (hJ0 : J 0) :
     (∀ j, EraseRange.SiteX P (trace m i j)) ∧ (∃ B, fin B = true ∧ Sim E (m.frame, 2) B (frame m i)) ∧ (∀ j, I (trace m i j)) ∧ (∀ j, J j) ∧
-      (trace m i fuelPerFrame).frame = m.frame + 1 := by
+      (trace m i fuelPerFrame).frame = m.frame + 1 ∧
+      (∀ j, ∃ A, Sim E (m.frame, 2) A (trace m i j) ∧ FOK A.log (trace m i j) ∧ chk A = true) := by
   obtain ⟨hM, hw0⟩ := h.starts _ hq
   obtain ⟨S0, hS0, hs⟩ := ScreenPage.sim_of_room (F := (m.frame, 2)) hM h.pad hm rfl
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
@@ -270,5 +342,32 @@ theorem frameVI {sp : AS → List AS} {Ru : Rules} {E : Env} {P : Places} {G : R
 theorem inv_end {I : Machine → Prop} {m : Machine} {i : UInt8} (h : ∀ j, I (trace m i j)) : I (frame m i) := by
   rw [frame_trace]
   exact h _
+
+/-! ## Round 35: the map's bits at the first control -/
+
+section
+open ScreenPage (placesR refR)
+open PipeChangeEnd (Data InRowsT)
+variable {sy : Syms} {nm nmS : Names} {d : Data} {e m0 : Machine}
+
+/-- **The map's bits at the first control in the room** (round 35): from the room's condition with the map's bits (`RoomMap.start_of_rows`) and the reference,
+which has no bit that the map has not (`RoomMap.MapFacts.sub`) -/
+theorem zero_of_rows (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d e nmS m0 = true) {m : Machine} (h : InRowsT sy nm d e m)
+    (hm : controllable sy m = true) : ZeroIn (placesR sy nmS m0) (RoomMap.mapRef m0) m := by
+  have h0 := RoomMap.start_of_rows hc h hm
+  intro dd hd1 hd2
+  have hi : dd - (placesR sy nmS m0).bufLo < (placesR sy nmS m0).bufN := by omega
+  have e1 : (placesR sy nmS m0).bufLo + (dd - (placesR sy nmS m0).bufLo) = dd := by omega
+  have hmem : ((placesR sy nmS m0).bufLo + (dd - (placesR sy nmS m0).bufLo),
+      ~~~ (RoomMap.mapRef m0).ram.get! ((placesR sy nmS m0).bufLo + (dd - (placesR sy nmS m0).bufLo))) ∈ RoomMap.knownT sy nmS m0 :=
+    List.mem_append_left _ (List.mem_append_right _ (List.mem_map.2 ⟨_, List.mem_range.2 hi, rfl⟩))
+  have hb := h0.bytes _ hmem
+  simp only at hb
+  rw [e1] at hb
+  rw [hb]
+  have hs := hF.sub _ hi
+  rw [e1] at hs
+  exact hs
+end
 
 end Smbrta.ReadTiles

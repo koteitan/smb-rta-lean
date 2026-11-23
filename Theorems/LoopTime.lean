@@ -1,6 +1,7 @@
 import Theorems.ReadTiles
 import Theorems.SideRead
 import Theorems.SizeKeep
+import Theorems.HeadSide
 
 /-!
 # The time of the room's frames from the loops' back jumps
@@ -535,7 +536,7 @@ abbrev rtR (sy : Syms) (nm : Names) (m0 : Machine) : UInt8 := (refR m0).ram.get!
 
 /-- (i) with the time: from the control at 0, nothing known of the buffers -/
 def walk1B (sy : Syms) (nm : Names) (m0 : Machine) (T : List StepWrites.SState) (L L6 : List (List (Nat × UInt8))) : Bool :=
-  sizeCheck sy nm m0 L L6 && xFacts sy nm m0 && walkChk sy nm m0 (fixCuts m0 (zO sy nm m0)) (RoomMusic.regM sy m0 nm T) none [] [(refR m0, knownS sy nm)]
+  sizeCheck sy nm m0 L L6 && xFacts sy nm m0 && ReadTiles.headSub (placesR sy nm m0) && HeadSide.checkX sy nm m0 && walkChk sy nm m0 (fixCuts m0 (zO sy nm m0)) (RoomMusic.regM sy m0 nm T) none [] [(refR m0, knownS sy nm)]
     (finAnd (fin0 (ctlI nm) L L6) (finX (placesR sy nm m0) (stR sy nm m0)))
     (chk1X (placesR sy nm m0) (envR sy nm m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nm T) (spR sy nm m0) (stR sy nm m0) (rtR sy nm m0)) (scrQ sy m0)
 
@@ -589,30 +590,59 @@ theorem walk1B_parts {L L6 : List (List (Nat × UInt8))} (h : walk1B sy nmS m0 T
       (chk1X (placesR sy nmS m0) (envR sy nmS m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nmS T) (spR sy nmS m0) (stR sy nmS m0) (rtR sy nmS m0))
       (scrQ sy m0) = true := by
   simp only [walk1B, Bool.and_eq_true] at h
-  exact ⟨h.1.1, h.2⟩
+  exact ⟨h.1.1.1.1, h.2⟩
 
 theorem walk1B_x {L L6 : List (List (Nat × UInt8))} (h : walk1B sy nmS m0 T L L6 = true) : xFacts sy nmS m0 = true := by
   simp only [walk1B, Bool.and_eq_true] at h
+  exact h.1.1.1.2
+
+/-- round 35: the check `ReadTiles.headSub` is part of walk (i) -/
+theorem walk1B_h {L L6 : List (List (Nat × UInt8))} (h : walk1B sy nmS m0 T L L6 = true) : ReadTiles.headSub (placesR sy nmS m0) = true := by
+  simp only [walk1B, Bool.and_eq_true] at h
+  exact h.1.1.2
+
+/-- round 35: the check `HeadSide.checkX` (the walk that proves `Xbit` from the head's cell) is part of walk (i) -/
+theorem walk1B_c {L L6 : List (List (Nat × UInt8))} (h : walk1B sy nmS m0 T L L6 = true) : HeadSide.checkX sy nmS m0 = true := by
+  simp only [walk1B, Bool.and_eq_true] at h
   exact h.1.2
 
-/-- what the route asks on each instruction of a frame `U` that the walks (i) and (iv) follow: `Reads` through the pointers `Z`, the head's half of `Read`
-(round 34: the rest of `Read` is proved, `ReadTiles`; `Xbit` is asked apart, on the entering frame only), and `LateS` -/
-structure RestU (P : Places) (Z : List UInt8) (sq : UInt16 → Bool) (D : Nat) (m : Machine) : Prop where
+/-- what the route asks on each instruction of a frame `U` that the walks (i) and (iv) follow: `Reads` through the pointers `Z`, the head's cell free in the map
+`M` (round 34: the rest of `Read` is proved, `ReadTiles`; round 35: `ReadTiles.HeadFree` in place of the head's
+half of `Read`), and `LateS` -/
+structure RestU (P : Places) (M : Machine) (Z : List UInt8) (sq : UInt16 → Bool) (D : Nat) (m : Machine) : Prop where
   reads : SiteParts.ReadsAt Z m
-  readH : ReadTiles.ReadH P m
+  headFree : ReadTiles.HeadFree P M m
   lateS : LateS sq D m
 
-/-- what the route asks on each instruction of a frame that the walks (ii) and (iii) follow: `LateS` and the head's half of `Read` (round 32: the erase is
-proved; round 34: the rest of `Read`, and `Xbit` apart) -/
-structure RestB (P : Places) (sq : UInt16 → Bool) (D : Nat) (m : Machine) : Prop where
+/-- what the route asks on each instruction of a frame that the walks (ii) and (iii) follow: `LateS` and the head's cell free in the map `M` (round 32: the erase
+is proved; round 34: the rest of `Read`, and `Xbit` apart; round 35: `HeadFree` in place of the head's half of `Read`) -/
+structure RestB (P : Places) (M : Machine) (sq : UInt16 → Bool) (D : Nat) (m : Machine) : Prop where
   lateS : LateS sq D m
-  readH : ReadTiles.ReadH P m
+  headFree : ReadTiles.HeadFree P M m
+
+/-- round 35: the walks' invariant of the block buffers: the tiles of the list, and the map's bits -/
+abbrev MapIn (sy : Syms) (nmS : Names) (m0 : Machine) (m : Machine) : Prop :=
+  RoomMap.TilesIn (placesR sy nmS m0) m ∧ ReadTiles.ZeroIn (placesR sy nmS m0) (RoomMap.mapRef m0) m
 
 /-- round 34: `Read` from the checks of `ReadTiles` at a state, the block buffers' tiles and the head's half -/
 theorem read_of_chk {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {m : Machine} (hs : Sim E F A m) (hf : EraseRange.FOK A.log m)
     (hc : tilesChk P E A = true) (ht : RoomMap.TilesIn P m) (hh : ReadTiles.ReadH P m) : SiteParts.Read P m := by
   simp only [tilesChk, Bool.and_eq_true] at hc
   exact ReadTiles.read_of ht (readIn_of_ok hs hf hc.2) hh
+
+/-- round 35: `Read` from the checks of `ReadTiles` at a state, the block buffers' tiles and the map's bits, and the head's cell free in the map -/
+theorem read_of_chkF {E : Env} {F : Nat × UInt8} {P : Places} {M : Machine} {A : AS} {m : Machine} (hs : Sim E F A m) (hf : EraseRange.FOK A.log m)
+    (hc : tilesChk P E A = true) (hh : ReadTiles.headSub P = true) (ht : RoomMap.TilesIn P m) (hz : ReadTiles.ZeroIn P M m)
+    (hfr : ReadTiles.HeadFree P M m) : SiteParts.Read P m := by
+  simp only [tilesChk, Bool.and_eq_true] at hc
+  have hi := readIn_of_ok hs hf hc.2
+  exact ReadTiles.read_of ht hi (ReadTiles.readH_of_free hh ht hz hi hfr)
+
+/-- round 35: the read is in the block buffers, from the checks of `ReadTiles` at a state -/
+theorem readIn_of_chk {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {m : Machine} (hs : Sim E F A m) (hf : EraseRange.FOK A.log m)
+    (hc : tilesChk P E A = true) : ReadTiles.ReadIn P m := by
+  simp only [tilesChk, Bool.and_eq_true] at hc
+  exact readIn_of_ok hs hf hc.2
 
 /-- round 34: the step of a state with the checks of `ReadTiles` keeps the block buffers' tiles -/
 theorem tiles_of_chk {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {m : Machine} (hO : PlacesOK E P) (h0 : (0 : UInt8) ∈ P.tiles) (hs : Sim E F A m)
@@ -626,10 +656,11 @@ theorem zero_tiles (sy : Syms) (nmS : Names) (m0 : Machine) : (0 : UInt8) ∈ (p
 /-- the check of the walks from the patterns gives `SiteX` from `RestB` and the block buffers' tiles -/
 theorem siteX_of_B {sy : Syms} {nmS : Names} {m0 : Machine} {F : Nat × UInt8} {A : AS} {m : Machine} (hI : (ScreenPage.placesR sy nmS m0).offI < 2048)
     (hs : Sim (ScreenPage.envR sy nmS m0) F A m) (hf : EraseRange.FOK A.log m) (hc : chk2T (ScreenPage.placesR sy nmS m0) (ScreenPage.envR sy nmS m0) A = true)
-    {sq : UInt16 → Bool} {D : Nat} (hr : RestB (ScreenPage.placesR sy nmS m0) sq D m) (ht : RoomMap.TilesIn (ScreenPage.placesR sy nmS m0) m) :
+    (hh : ReadTiles.headSub (ScreenPage.placesR sy nmS m0) = true)
+    {sq : UInt16 → Bool} {D : Nat} (hr : RestB (ScreenPage.placesR sy nmS m0) (RoomMap.mapRef m0) sq D m) (ht : MapIn sy nmS m0 m) :
     EraseRange.SiteX (ScreenPage.placesR sy nmS m0) m := by
   simp only [chk2T, chk2R, chkT, SiteParts.chk0, Bool.and_eq_true] at hc
-  exact ⟨late_of_time hs hc.1.1.2, BufferRecords.reads_all hs hc.1.1.1.2, read_of_chk hs hf hc.2 ht hr.readH, erase_of_ok4 hs hc.1.2,
+  exact ⟨late_of_time hs hc.1.1.2, BufferRecords.reads_all hs hc.1.1.1.2, read_of_chkF hs hf hc.2 hh ht.1 ht.2 hr.headFree, erase_of_ok4 hs hc.1.2,
     SiteParts.off_of_ok hI hs hc.1.1.1.1⟩
 
 /-- the tiles' step for the walks: the check `chk` includes `tilesChk` -/
@@ -638,6 +669,17 @@ theorem tilesI_of {sy : Syms} {nmS : Names} {m0 : Machine} {chk : AS → Bool} (
     ∀ {F : Nat × UInt8} {A : AS} {m : Machine}, Sim (envR sy nmS m0) F A m → EraseRange.FOK A.log m → chk A = true → R m →
       RoomMap.TilesIn (placesR sy nmS m0) m → EraseRange.SiteX (placesR sy nmS m0) m → RoomMap.TilesIn (placesR sy nmS m0) (go step m).2 :=
   fun hs _ hc2 _ ht hh => tiles_of_chk hO (zero_tiles sy nmS m0) hs (hc _ hc2) hh ht
+
+/-- round 35: the step of the walks' invariant `MapIn`: the check `chk` includes `tilesChk` -/
+theorem mapI_of {sy : Syms} {nmS : Names} {m0 : Machine} {chk : AS → Bool} (hO : PlacesOK (envR sy nmS m0) (placesR sy nmS m0))
+    (hc : ∀ A, chk A = true → tilesChk (placesR sy nmS m0) (envR sy nmS m0) A = true) {R : Machine → Prop} :
+    ∀ {F : Nat × UInt8} {A : AS} {m : Machine}, Sim (envR sy nmS m0) F A m → EraseRange.FOK A.log m → chk A = true → R m →
+      MapIn sy nmS m0 m → EraseRange.SiteX (placesR sy nmS m0) m → MapIn sy nmS m0 (go step m).2 := by
+  intro F A m hs _ hc2 _ ht hh
+  have hc3 := hc _ hc2
+  refine ⟨tiles_of_chk hO (zero_tiles sy nmS m0) hs hc3 hh ht.1, ?_⟩
+  simp only [tilesChk, Bool.and_eq_true] at hc3
+  exact ReadTiles.zero_step hO hs hc3.1 hh ht.2
 
 /-- the invariant `XInv` on the room: with the places of the side pipe's read and the reference's routine -/
 abbrev XInvR (sy : Syms) (nmS : Names) (m0 : Machine) (m : Machine) (i : UInt8) (j : Nat) : Prop :=
@@ -672,10 +714,12 @@ theorem xJ0_of (hx : xFacts sy nmS m0 = true) {m : Machine} {i : UInt8} : XInvR 
 instruction, the frame's end by `fuelPerFrame`, and the end's place out of `xAt` to `stAt` -/
 structure FrameOut (sy : Syms) (nmS : Names) (m0 : Machine) (m : Machine) (i : UInt8) : Prop where
   sites : ∀ j, EraseRange.SiteX (placesR sy nmS m0) (trace m i j)
-  tiles : ∀ j, RoomMap.TilesIn (placesR sy nmS m0) (trace m i j)
+  tiles : ∀ j, MapIn sy nmS m0 (trace m i j)
   xinv : ∀ j, XInvR sy nmS m0 m i j
   fend : (trace m i fuelPerFrame).frame = m.frame + 1
   pcOut : ¬ ((placesR sy nmS m0).xAt ≤ (frame m i).pc ∧ (frame m i).pc ≤ stAtOf sy m0 (placesR sy nmS m0))
+  /-- round 35: the block buffer routine's read is in the block buffers -/
+  readIn : ∀ j, ReadTiles.ReadIn (placesR sy nmS m0) (trace m i j)
 
 theorem pcOut_of {F : Nat × UInt8} {B : AS} {m : Machine} (hs : Sim (envR sy nmS m0) F B m) (h : finX (placesR sy nmS m0) (stR sy nmS m0) B = true) :
     ¬ ((placesR sy nmS m0).xAt ≤ m.pc ∧ m.pc ≤ stAtOf sy m0 (placesR sy nmS m0)) := by
@@ -690,13 +734,14 @@ theorem pcOut_of {F : Nat × UInt8} {B : AS} {m : Machine} (hs : Sim (envR sy nm
 class of `L` or of `L6`; round 34: the block buffers' tiles and `XInvR` -/
 theorem rec_frame2B (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List (List (Nat × UInt8))} (hO : recCheckB sy nmS m0 T L L6 = true)
     {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) m) (hc : InCls (RoomMusic.regM sy m0 nmS T) m)
-    (hp : InPat (ctlI nmS) 0 L m) (hk : ∀ j, RestB (placesR sy nmS m0) (sndQ sy m0) sndDot (trace m i j))
-    (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0) (hV : RoomMap.TilesIn (placesR sy nmS m0) m) :
+    (hp : InPat (ctlI nmS) 0 L m) (hk : ∀ j, RestB (placesR sy nmS m0) (RoomMap.mapRef m0) (sndQ sy m0) sndDot (trace m i j))
+    (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0) (hV : MapIn sy nmS m0 m) :
     FrameOut sy nmS m0 m i ∧ (InPat (ctlI nmS) 0 L (frame m i) ∨ InPat (ctlI nmS) 6 L6 (frame m i)) := by
   obtain ⟨_, h2, _, _, _⟩ := BufferControl.keep_parts hK
   obtain ⟨_, hc6, hL, hL6, w1, w2, _, _⟩ := recB_parts hO
   obtain ⟨hsc, w1'⟩ := walk1B_parts w1
   have hx := walk1B_x w1
+  have hh := walk1B_h w1
   obtain ⟨hr0, _, hLS, _⟩ := size_parts hsc
   have w := EraseRange.vok_of_check w2
   have hsz : (refR m0).ram.size = 2048 := ((EraseRange.vok_of_check w1').starts _ (List.mem_singleton_self _)).1.szR
@@ -704,24 +749,30 @@ theorem rec_frame2B (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List
   obtain ⟨hv, s, hs1, hs2⟩ := hp
   have hm1 := cond_size (BufferControl.cond0 hm (hv.trans h2.symm)) hr0 hz
   have hm2 := cond_pat s hm1 hsz (hLS s hs1) hs2
-  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5⟩ := ReadTiles.frameVI (R := RestB (placesR sy nmS m0) (sndQ sy m0) sndDot) (I := RoomMap.TilesIn (placesR sy nmS m0))
+  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5, h6⟩ := ReadTiles.frameVI (R := RestB (placesR sy nmS m0) (RoomMap.mapRef m0) (sndQ sy m0) sndDot)
+    (I := MapIn sy nmS m0)
     (J := XInvR sy nmS m0 m i) (EraseRange.covF_splitRom sy m0 _ _) (EraseRange.spent_splitRom sy m0 _) w
-    (fun hs hf hc2 hr ht => siteX_of_B hI hs hf (by simp only [chk2X, Bool.and_eq_true] at hc2; exact hc2.1) hr ht)
-    (tilesI_of w.places (fun A hA => by simp only [chk2X, chk2T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.lateS)
+    (fun hs hf hc2 hr ht => siteX_of_B hI hs hf (by simp only [chk2X, Bool.and_eq_true] at hc2; exact hc2.1) hh hr ht)
+    (mapI_of w.places (fun A hA => by simp only [chk2X, chk2T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.lateS)
     (List.mem_map_of_mem (f := fun s => (BufferRecords.refPat (refR m0) s, BufferRecords.knownPat (knownS sy nmS) s)) hs1) hm2 hc hk hV
     (xJ_of w hx (fun A hA => by simp only [chk2X, Bool.and_eq_true] at hA; exact hA.2)) xJs_of (xJ0_of hx)
+  have h7 : ∀ j, ReadTiles.ReadIn (placesR sy nmS m0) (trace m i j) := fun j => by
+    obtain ⟨A, a1, a2, a3⟩ := h6 j
+    simp only [chk2X, chk2T, Bool.and_eq_true] at a3
+    exact readIn_of_chk a1 a2 a3.1.2
   simp only [finAnd, Bool.and_eq_true] at hf
-  exact ⟨⟨h1, h3, h4, h5, pcOut_of hs hf.2⟩, end0 hc6 (idx_of_all hL) (idx_of_all hL6) hf.1 hs⟩
+  exact ⟨⟨h1, h3, h4, h5, pcOut_of hs hf.2, h7⟩, end0 hc6 (idx_of_all hL) (idx_of_all hL6) hf.1 hs⟩
 
 /-- **(iii) with the time at the back jumps: a frame from the control at 6 in a pattern of `L6`**: from `RestB` with `sndQ`, `FrameOut` -/
 theorem rec_frame3B (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List (List (Nat × UInt8))} (hO : recCheckB sy nmS m0 T L L6 = true)
     {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) m) (hc : InCls (RoomMusic.regM sy m0 nmS T) m)
-    (hp : InPat (ctlI nmS) 6 L6 m) (hk : ∀ j, RestB (placesR sy nmS m0) (sndQ sy m0) sndDot (trace m i j))
-    (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0) (hV : RoomMap.TilesIn (placesR sy nmS m0) m) : FrameOut sy nmS m0 m i := by
+    (hp : InPat (ctlI nmS) 6 L6 m) (hk : ∀ j, RestB (placesR sy nmS m0) (RoomMap.mapRef m0) (sndQ sy m0) sndDot (trace m i j))
+    (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0) (hV : MapIn sy nmS m0 m) : FrameOut sy nmS m0 m i := by
   obtain ⟨_, _, h3, _, _⟩ := BufferControl.keep_parts hK
   obtain ⟨hk1, _, _, _, w1, _, w3, _⟩ := recB_parts hO
   obtain ⟨hsc, w1'⟩ := walk1B_parts w1
   have hx := walk1B_x w1
+  have hh := walk1B_h w1
   obtain ⟨_, hr6, _, hL6S⟩ := size_parts hsc
   have w := EraseRange.vok_of_check w3
   have hsz0 : (refR m0).ram.size = 2048 := ((EraseRange.vok_of_check w1').starts _ (List.mem_singleton_self _)).1.szR
@@ -732,77 +783,92 @@ theorem rec_frame3B (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List
     show ((refR m0).ram.set! (ctlI nmS) 6).size = 2048
     rw [PipeTransitionAll.ba_size_set, hsz0]
   have hm2 := cond_pat s hm1 hsz (hL6S s hs1) hs2
-  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5⟩ := ReadTiles.frameVI (R := RestB (placesR sy nmS m0) (sndQ sy m0) sndDot) (I := RoomMap.TilesIn (placesR sy nmS m0))
+  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5, h6⟩ := ReadTiles.frameVI (R := RestB (placesR sy nmS m0) (RoomMap.mapRef m0) (sndQ sy m0) sndDot)
+    (I := MapIn sy nmS m0)
     (J := XInvR sy nmS m0 m i) (EraseRange.covF_splitRom sy m0 _ _) (EraseRange.spent_splitRom sy m0 _) w
-    (fun hs hf hc2 hr ht => siteX_of_B hI hs hf (by simp only [chk2X, Bool.and_eq_true] at hc2; exact hc2.1) hr ht)
-    (tilesI_of w.places (fun A hA => by simp only [chk2X, chk2T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.lateS)
+    (fun hs hf hc2 hr ht => siteX_of_B hI hs hf (by simp only [chk2X, Bool.and_eq_true] at hc2; exact hc2.1) hh hr ht)
+    (mapI_of w.places (fun A hA => by simp only [chk2X, chk2T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.lateS)
     (List.mem_map_of_mem (f := fun s => (BufferRecords.refPat (ref6 nmS m0) s, BufferRecords.knownPat (knownS sy nmS) s)) hs1) hm2 hc hk hV
     (xJ_of w hx (fun A hA => by simp only [chk2X, Bool.and_eq_true] at hA; exact hA.2)) xJs_of (xJ0_of hx)
-  exact ⟨h1, h3, h4, h5, pcOut_of hs hf⟩
+  have h7 : ∀ j, ReadTiles.ReadIn (placesR sy nmS m0) (trace m i j) := fun j => by
+    obtain ⟨A, a1, a2, a3⟩ := h6 j
+    simp only [chk2X, chk2T, Bool.and_eq_true] at a3
+    exact readIn_of_chk a1 a2 a3.1.2
+  exact ⟨h1, h3, h4, h5, pcOut_of hs hf, h7⟩
 
 /-- **(i) with the time at the back jumps: a frame from the control at 0** with nothing known of the buffers: from `RestU` with `scrQ` (no `Late`), `FrameOut`,
 and the frame ends in the class of `L` or of `L6` -/
 theorem rec_frame1B (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List (List (Nat × UInt8))} (hO : recCheckB sy nmS m0 T L L6 = true)
     {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) m) (hc : InCls (RoomMusic.regM sy m0 nmS T) m)
-    (hv : m.ram.get! (ctlI nmS) = 0) (hk : ∀ j, RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot (trace m i j))
-    (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0) (hV : RoomMap.TilesIn (placesR sy nmS m0) m) :
+    (hv : m.ram.get! (ctlI nmS) = 0) (hk : ∀ j, RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot (trace m i j))
+    (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0) (hV : MapIn sy nmS m0 m) :
     FrameOut sy nmS m0 m i ∧ (InPat (ctlI nmS) 0 L (frame m i) ∨ InPat (ctlI nmS) 6 L6 (frame m i)) := by
   obtain ⟨_, h2, _, _, _⟩ := BufferControl.keep_parts hK
   obtain ⟨_, hc6, hL, hL6, w1, _, _, _⟩ := recB_parts hO
   obtain ⟨hsc, w1'⟩ := walk1B_parts w1
   have hx := walk1B_x w1
+  have hh := walk1B_h w1
   obtain ⟨hr0, _, _, _⟩ := size_parts hsc
   have w := EraseRange.vok_of_check w1'
   have hI : (placesR sy nmS m0).offI < 2048 := w.places.offI
   have hQ : ∀ {F : Nat × UInt8} {A : AS} {m' : Machine}, Sim (envR sy nmS m0) F A m' → EraseRange.FOK A.log m' →
       chk1X (placesR sy nmS m0) (envR sy nmS m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nmS T) (spR sy nmS m0) (stR sy nmS m0) (rtR sy nmS m0) A = true →
-      RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' → RoomMap.TilesIn (placesR sy nmS m0) m' →
+      RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' → MapIn sy nmS m0 m' →
       EraseRange.SiteX (placesR sy nmS m0) m' := by
     intro F A m' hs hf hc2 hr ht
     simp only [chk1X, chk1T, chk1R, SiteParts.chk0, Bool.and_eq_true] at hc2
-    exact ⟨late_of_time hs hc2.1.1.1.2, SiteParts.reads_of_ok hs hc2.1.1.1.1.2 hr.reads, read_of_chk hs hf hc2.1.2 ht hr.readH,
+    exact ⟨late_of_time hs hc2.1.1.1.2, SiteParts.reads_of_ok hs hc2.1.1.1.1.2 hr.reads, read_of_chkF hs hf hc2.1.2 hh ht.1 ht.2 hr.headFree,
       erase_of_ok4 hs hc2.1.1.2, SiteParts.off_of_ok hI hs hc2.1.1.1.1.1⟩
-  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5⟩ := ReadTiles.frameVI (R := RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot)
-    (I := RoomMap.TilesIn (placesR sy nmS m0)) (J := XInvR sy nmS m0 m i) (EraseRange.covF_splitRom sy m0 _ _) (EraseRange.spent_splitRom sy m0 _) w hQ
-    (tilesI_of w.places (fun A hA => by simp only [chk1X, chk1T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.lateS)
+  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5, h6⟩ := ReadTiles.frameVI (R := RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot)
+    (I := MapIn sy nmS m0) (J := XInvR sy nmS m0 m i) (EraseRange.covF_splitRom sy m0 _ _) (EraseRange.spent_splitRom sy m0 _) w hQ
+    (mapI_of w.places (fun A hA => by simp only [chk1X, chk1T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.lateS)
     (List.mem_singleton_self _) (cond_size (BufferControl.cond0 hm (hv.trans h2.symm)) hr0 hz) hc hk hV
     (xJ_of w hx (fun A hA => by simp only [chk1X, Bool.and_eq_true] at hA; exact hA.2)) xJs_of (xJ0_of hx)
+  have h7 : ∀ j, ReadTiles.ReadIn (placesR sy nmS m0) (trace m i j) := fun j => by
+    obtain ⟨A, a1, a2, a3⟩ := h6 j
+    simp only [chk1X, chk1T, Bool.and_eq_true] at a3
+    exact readIn_of_chk a1 a2 a3.1.2
   simp only [finAnd, Bool.and_eq_true] at hf
-  exact ⟨⟨h1, h3, h4, h5, pcOut_of hs hf.2⟩, end0 hc6 (idx_of_all hL) (idx_of_all hL6) hf.1 hs⟩
+  exact ⟨⟨h1, h3, h4, h5, pcOut_of hs hf.2, h7⟩, end0 hc6 (idx_of_all hL) (idx_of_all hL6) hf.1 hs⟩
 
 /-- **(iv) with the time at the back jumps: a frame from the control at 6** with nothing known of the buffers: from `RestU` with `scrQ` and `Off`, `FrameOut` -/
 theorem rec_frame4B (hK : BufferControl.keepCheck sy nmS m0 = true) {L L6 : List (List (Nat × UInt8))} (hO : recCheckB sy nmS m0 T L L6 = true)
     {m : Machine} {i : UInt8} (hm : RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) m) (hc : InCls (RoomMusic.regM sy m0 nmS T) m)
-    (hv : m.ram.get! (ctlI nmS) = 6) (hk : ∀ j, RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot (trace m i j))
+    (hv : m.ram.get! (ctlI nmS) = 6) (hk : ∀ j, RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot (trace m i j))
     (ho : ∀ j, SiteParts.Off (placesR sy nmS m0) (trace m i j)) (hz : m.ram.get! (SizeKeep.sizeI sy) &&& 0xFE = 0)
-    (hV : RoomMap.TilesIn (placesR sy nmS m0) m) : FrameOut sy nmS m0 m i := by
+    (hV : MapIn sy nmS m0 m) : FrameOut sy nmS m0 m i := by
   obtain ⟨_, _, h3, _, _⟩ := BufferControl.keep_parts hK
   obtain ⟨hk1, _, _, _, w1, _, _, w4⟩ := recB_parts hO
   obtain ⟨hsc, w1'⟩ := walk1B_parts w1
   have hx := walk1B_x w1
+  have hh := walk1B_h w1
   obtain ⟨_, hr6, _, _⟩ := size_parts hsc
   have w := EraseRange.vok_of_check w4
   have hsz0 : (refR m0).ram.size = 2048 := ((EraseRange.vok_of_check w1').starts _ (List.mem_singleton_self _)).1.szR
   have hm1 := cond_size (r := ref6 nmS m0) (BufferControl.cond6 hm hk1 (by rw [hsz0]; exact h3) hv) hr6 hz
   have hQ : ∀ {F : Nat × UInt8} {A : AS} {m' : Machine}, Sim (envR sy nmS m0) F A m' → EraseRange.FOK A.log m' →
       chk4X (placesR sy nmS m0) (envR sy nmS m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nmS T) (spR sy nmS m0) (stR sy nmS m0) (rtR sy nmS m0) A = true →
-      (RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m') →
-      RoomMap.TilesIn (placesR sy nmS m0) m' → EraseRange.SiteX (placesR sy nmS m0) m' := by
+      (RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m') →
+      MapIn sy nmS m0 m' → EraseRange.SiteX (placesR sy nmS m0) m' := by
     intro F A m' hs hf hc2 hr ht
     simp only [chk4X, chk4T, chk4R, Bool.and_eq_true] at hc2
-    exact ⟨late_of_time hs hc2.1.1.1.2, SiteParts.reads_of_ok hs hc2.1.1.1.1 hr.1.reads, read_of_chk hs hf hc2.1.2 ht hr.1.readH,
+    exact ⟨late_of_time hs hc2.1.1.1.2, SiteParts.reads_of_ok hs hc2.1.1.1.1 hr.1.reads, read_of_chkF hs hf hc2.1.2 hh ht.1 ht.2 hr.1.headFree,
       erase_of_ok4 hs hc2.1.1.2, hr.2⟩
-  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5⟩ := ReadTiles.frameVI
-    (R := fun m' => RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m')
-    (I := RoomMap.TilesIn (placesR sy nmS m0)) (J := XInvR sy nmS m0 m i) (EraseRange.covF_splitRom sy m0 _ _) (EraseRange.spent_splitRom sy m0 _) w hQ
-    (tilesI_of (chk := chk4X (placesR sy nmS m0) (envR sy nmS m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nmS T) (spR sy nmS m0) (stR sy nmS m0) (rtR sy nmS m0))
-      (R := fun m' => RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m') w.places
+  obtain ⟨h1, ⟨B, hf, hs⟩, h3, h4, h5, h6⟩ := ReadTiles.frameVI
+    (R := fun m' => RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m')
+    (I := MapIn sy nmS m0) (J := XInvR sy nmS m0 m i) (EraseRange.covF_splitRom sy m0 _ _) (EraseRange.spent_splitRom sy m0 _) w hQ
+    (mapI_of (chk := chk4X (placesR sy nmS m0) (envR sy nmS m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nmS T) (spR sy nmS m0) (stR sy nmS m0) (rtR sy nmS m0))
+      (R := fun m' => RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m') w.places
       (fun A hA => by simp only [chk4X, chk4T, Bool.and_eq_true] at hA; exact hA.1.2)) (fun hr => hr.1.lateS)
     (List.mem_singleton_self _) hm1 hc (fun j => ⟨hk j, ho j⟩) hV
     (xJ_of (chk := chk4X (placesR sy nmS m0) (envR sy nmS m0) (SiteParts.ptrS sy m0) (RoomMusic.regM sy m0 nmS T) (spR sy nmS m0) (stR sy nmS m0) (rtR sy nmS m0))
-      (R := fun m' => RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m')
-      (I := RoomMap.TilesIn (placesR sy nmS m0)) w hx (fun A hA => by simp only [chk4X, Bool.and_eq_true] at hA; exact hA.2)) xJs_of (xJ0_of hx)
-  exact ⟨h1, h3, h4, h5, pcOut_of hs hf⟩
+      (R := fun m' => RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot m' ∧ SiteParts.Off (placesR sy nmS m0) m')
+      (I := MapIn sy nmS m0) w hx (fun A hA => by simp only [chk4X, Bool.and_eq_true] at hA; exact hA.2)) xJs_of (xJ0_of hx)
+  have h7 : ∀ j, ReadTiles.ReadIn (placesR sy nmS m0) (trace m i j) := fun j => by
+    obtain ⟨A, a1, a2, a3⟩ := h6 j
+    simp only [chk4X, chk4T, Bool.and_eq_true] at a3
+    exact readIn_of_chk a1 a2 a3.1.2
+  exact ⟨h1, h3, h4, h5, pcOut_of hs hf, h7⟩
 
 end
 
@@ -819,15 +885,16 @@ variable {sy : Syms} {nm nmS : Names} {d : Data} {m0 : Machine}
 no `Late` is asked. On the frames `U` (the room's first frame and the frames after a frame that starts with the control at 6) the back jumps of the screen update's
 loop and of the sound routine run at dot `sndDot` or earlier (`LateS scrQ`); on the other frames the back jumps of the sound routine (`LateS sndQ`). Round 34:
 of `Read` only the head's half is asked (`ReadTiles.ReadH`): the block buffers hold tiles of the list at the room's first control (`RoomMap.tiles_of_rows`)
-and the walks carry it through every instruction of every frame. -/
+and the walks carry it through every instruction of every frame. Round 35: in place of the head's half, the head's cell free in the map (`ReadTiles.HeadFree`;
+the walks carry the map's bits too, `ReadTiles.ZeroIn`, `MapIn`), and no `Xbit`: before the entering frame the side pipe's read is not run (`SideRead.no_xAt`),
+and on the entering frame `Xbit` comes from the walk of `HeadSide` (its check is part of walk (i), `walk1B_c`). -/
 theorem loop_sites_of_rows {V : List (Machine × List Nat)} {T : List StepWrites.SState} {L L6 : List (List (Nat × UInt8))}
     (hF : RoomMap.MapFacts sy nmS m0) (hc : RoomMap.startCheckT sy nm d (PipeTransition.entry m0) nmS m0 = true) (hK : BufferControl.keepCheck sy nmS m0 = true)
     (hs : BufferControl.startCheckC sy nm d (PipeTransition.entry m0) nmS m0 = true) (hM : RoomMusic.Facts sy m0 nm d V nmS T)
     (hO : recCheckB sy nmS m0 T L L6 = true)
     {seq : Nat → Machine} {inp : Nat → UInt8} (next : ∀ n, seq (n + 1) = frame (seq n) (inp n)) {b a : Nat}
     (hin : InRowsT sy nm d (PipeTransition.entry m0) (seq b)) (hctl : controllable sy (seq b) = true) (h0 : ScreenPage.Room sy nmS m0 (seq b))
-    (rest : ∀ n, b ≤ n → n < a → ∀ j, ReadTiles.ReadH (placesR sy nmS m0) (trace (seq n) (inp n) j))
-    (xlast : b < a → ∀ j, SiteParts.Xbit (placesR sy nmS m0) (trace (seq (a - 1)) (inp (a - 1)) j))
+    (rest : ∀ n, b ≤ n → n < a → ∀ j, ReadTiles.HeadFree (placesR sy nmS m0) (RoomMap.mapRef m0) (trace (seq n) (inp n) j))
     (lateU : ∀ n, b ≤ n → n < a → U (ctlI nmS) seq b n → ∀ j, LateS (scrQ sy m0) sndDot (trace (seq n) (inp n) j))
     (lateS : ∀ n, b ≤ n → n < a → ¬ U (ctlI nmS) seq b n → ∀ j, LateS (sndQ sy m0) sndDot (trace (seq n) (inp n) j))
     (reads : ∀ n, b ≤ n → n < a → U (ctlI nmS) seq b n → ∀ j, SiteParts.ReadsAt (SiteParts.ptrS sy m0) (trace (seq n) (inp n) j))
@@ -846,10 +913,10 @@ theorem loop_sites_of_rows {V : List (Machine × List Nat)} {T : List StepWrites
   have key : ∀ k, b + k ≤ a → (∀ n, b ≤ n → n < b + k → ∀ j, SiteOK (placesR sy nmS m0) (trace (seq n) (inp n) j)) ∧
       (b + k < a → RoomCond (envR sy nmS m0) (refR m0) (RoomMusic.knownM nmS) (seq (b + k)) ∧ InCls (RoomMusic.regM sy m0 nmS T) (seq (b + k)) ∧
         (InPat (ctlI nmS) 0 L (seq (b + k)) ∨ InPat (ctlI nmS) 6 L6 (seq (b + k)) ∨ U (ctlI nmS) seq b (b + k)) ∧
-        RoomMap.TilesIn (placesR sy nmS m0) (seq (b + k))) := by
+        MapIn sy nmS m0 (seq (b + k))) := by
     intro k
     induction k with
-    | zero => exact fun _ => ⟨fun n h1 h2 => by omega, fun _ => ⟨hm0, ht, Or.inr (Or.inr (Or.inl rfl)), by rw [Nat.add_zero]; exact RoomMap.tiles_of_rows hc hin hctl⟩⟩
+    | zero => exact fun _ => ⟨fun n h1 h2 => by omega, fun _ => ⟨hm0, ht, Or.inr (Or.inr (Or.inl rfl)), by rw [Nat.add_zero]; exact ⟨RoomMap.tiles_of_rows hc hin hctl, ReadTiles.zero_of_rows hF hc hin hctl⟩⟩⟩
     | succ k ih =>
       intro hk
       obtain ⟨sites, hmk⟩ := ih (by omega)
@@ -863,15 +930,15 @@ theorem loop_sites_of_rows {V : List (Machine × List Nat)} {T : List StepWrites
           exact hr0
         · rw [SizeKeep.byte_all hk0 next h0 e0 sites (fun q a1 a2 => stay q a1 (by omega)) (b + k) (by omega) (Nat.le_refl _)]
           rfl
-      have hRS : U (ctlI nmS) seq b (b + k) → ∀ j, RestU (placesR sy nmS m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot (trace (seq (b + k)) (inp (b + k)) j) :=
+      have hRS : U (ctlI nmS) seq b (b + k) → ∀ j, RestU (placesR sy nmS m0) (RoomMap.mapRef m0) (SiteParts.ptrS sy m0) (scrQ sy m0) sndDot (trace (seq (b + k)) (inp (b + k)) j) :=
         fun hu j => ⟨reads (b + k) (by omega) (by omega) hu j, hR j, lateU (b + k) (by omega) (by omega) hu j⟩
-      have hRT : ¬ U (ctlI nmS) seq b (b + k) → ∀ j, RestB (placesR sy nmS m0) (sndQ sy m0) sndDot (trace (seq (b + k)) (inp (b + k)) j) := fun hu j =>
+      have hRT : ¬ U (ctlI nmS) seq b (b + k) → ∀ j, RestB (placesR sy nmS m0) (RoomMap.mapRef m0) (sndQ sy m0) sndDot (trace (seq (b + k)) (inp (b + k)) j) := fun hu j =>
         ⟨lateS (b + k) (by omega) (by omega) hu j, hR j⟩
       -- the frame `b + k`: `FrameOut`, and, if it starts with the control at 0, the class of the next frame; the block buffers' tiles at its end
       have hnow0 : FrameOut sy nmS m0 (seq (b + k)) (inp (b + k)) ∧
           ((seq (b + k)).ram.get! (ctlI nmS) = 0 →
             InPat (ctlI nmS) 0 L (frame (seq (b + k)) (inp (b + k))) ∨ InPat (ctlI nmS) 6 L6 (frame (seq (b + k)) (inp (b + k)))) ∧
-          RoomMap.TilesIn (placesR sy nmS m0) (frame (seq (b + k)) (inp (b + k))) := by
+          MapIn sy nmS m0 (frame (seq (b + k)) (inp (b + k))) := by
         by_cases hu : U (ctlI nmS) seq b (b + k)
         · rcases hctl06 with h0' | h6
           · obtain ⟨h1, h2⟩ := rec_frame1B hK hO hmc hcls h0' (hRS hu) hz hV
@@ -900,13 +967,14 @@ theorem loop_sites_of_rows {V : List (Machine × List Nat)} {T : List StepWrites
             exact stay (b + k + 1) (by omega) hl
           have hno := no_xAt hnow0.1.xinv hnow0.1.fend hnow0.1.pcOut hrt
           exact fun j hpc => absurd hpc (hno j)
-        · have e : b + k = a - 1 := by omega
-          rw [e]
-          exact xlast (by omega)
+        · -- round 35: on the entering frame, from the head's cell free in the map, by the walk of `HeadSide` (its check is part of walk (i))
+          have hr0 := (size_parts (walk1B_parts (recB_parts hO).2.2.2.2.1).1).1
+          exact HeadSide.xbit_of_check (walk1B_c (recB_parts hO).2.2.2.2.1) (cond_size hmc hr0 hz) hnow0.1.sites (fun j => (hnow0.1.tiles j).2)
+            hnow0.1.readIn hR
       have hnow : (∀ j, SiteOK (placesR sy nmS m0) (trace (seq (b + k)) (inp (b + k)) j)) ∧
           ((seq (b + k)).ram.get! (ctlI nmS) = 0 →
             InPat (ctlI nmS) 0 L (frame (seq (b + k)) (inp (b + k))) ∨ InPat (ctlI nmS) 6 L6 (frame (seq (b + k)) (inp (b + k)))) ∧
-          RoomMap.TilesIn (placesR sy nmS m0) (frame (seq (b + k)) (inp (b + k))) :=
+          MapIn sy nmS m0 (frame (seq (b + k)) (inp (b + k))) :=
         ⟨fun j => EraseRange.siteOK_of_X (hnow0.1.sites j) (hxb j), hnow0.2⟩
       refine ⟨fun n h1 h2 => ?_, fun hlt => ?_⟩
       · rcases Nat.lt_or_ge n (b + k) with h3 | h3

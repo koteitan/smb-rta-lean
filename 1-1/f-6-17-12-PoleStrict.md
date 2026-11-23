@@ -108,6 +108,7 @@ The 13 frames of the TAS with the control byte 6 are in the room below ground, w
 ## What is not proved
 
 * `ctlU`: that he takes no coin from the block buffers on the frames above ground before the touch. It needs the contents of the block buffers across frames, as (slot) of `TileSlot`.
+  Round 35: `ctlU` is gone. A walk of each frame follows the control byte with the coin's code cut, from a map of the block buffers with no coin's tile; new fields `coinBuf`, `readC`, `ctlKeep` ([no coin in the block buffers, so the control byte is not 6](f-6-17-17-PoleCoin.md)).
 * `TileSlot` (slot, near, read on the page two before the pole's), `bufAll` (7 places), `keepB` (66 places): not changed in this round.
 
 **Files.** `Theorems/PoleParserEnd.lean` (`kIdx`, `pats6`, `ctlPats`, `vTask`, `qN`, `finS`, `headN`, `startsN`, `csOf`, `atSN`, `atSZ`, `atS`, `atES`, `Cfgs.s`, `eCheckP`, `pats6_all`, `pats6_cover`, `cov_ctl`, `end_walkS`, `end_walkST`, `keep_eP`, `frame_six`, `frame_sixA`, `strictProbe`); `Theorems/PoleStrict.lean` (new); `Theorems/PoleParserRun.lean` (`amount_run`, `invJ_run`, `inv_run`, `tilesCol_run`, `tilesCol_route`); `Theorems/PoleJoin.lean` (`parCtlOf`, `ctlU`; `parWrap` removed); `Theorems/PoleWrap.lean` (its import); `Main.lean` (`pole_parser_jv`, `pole_top` and the import of `Proof.ScrollRule` in the private `PoleParserEnd`, the route's `tilesCol_route` line, `pole-keep ctl`, the round 31 line of `pole-keep parser`).

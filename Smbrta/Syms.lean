@@ -202,6 +202,13 @@ structure Syms where
   GetBlockBufferAddr : UInt16
   PlayerHeadCollision : UInt16
   BlockObjectsCore : UInt16
+  CRendLoop : UInt16
+  ChkCFloor : UInt16
+  BlockBufferColumnPos : UInt16
+  SprDataOffset_Ctrl : UInt16
+  CheckTopOfBlock : UInt16
+  CoinTile2 : UInt16
+  ExecGameLoopback : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -396,7 +403,14 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("AreaParserCore", fun s => s.AreaParserCore),
   ("GetBlockBufferAddr", fun s => s.GetBlockBufferAddr),
   ("PlayerHeadCollision", fun s => s.PlayerHeadCollision),
-  ("BlockObjectsCore", fun s => s.BlockObjectsCore)]
+  ("BlockObjectsCore", fun s => s.BlockObjectsCore),
+  ("CRendLoop", fun s => s.CRendLoop),
+  ("ChkCFloor", fun s => s.ChkCFloor),
+  ("BlockBufferColumnPos", fun s => s.BlockBufferColumnPos),
+  ("SprDataOffset_Ctrl", fun s => s.SprDataOffset_Ctrl),
+  ("CheckTopOfBlock", fun s => s.CheckTopOfBlock),
+  ("CoinTile2", fun s => s.CoinTile2),
+  ("ExecGameLoopback", fun s => s.ExecGameLoopback)]
 
 set_option maxRecDepth 100000 in
 /-- Parse a symbol file (`key value` per line, decimal). -/
@@ -601,6 +615,13 @@ def Syms.parse (text : String) : Except String Syms := do
     GetBlockBufferAddr := ← get "GetBlockBufferAddr"
     PlayerHeadCollision := ← get "PlayerHeadCollision"
     BlockObjectsCore := ← get "BlockObjectsCore"
+    CRendLoop := ← get "CRendLoop"
+    ChkCFloor := ← get "ChkCFloor"
+    BlockBufferColumnPos := ← get "BlockBufferColumnPos"
+    SprDataOffset_Ctrl := ← get "SprDataOffset_Ctrl"
+    CheckTopOfBlock := ← get "CheckTopOfBlock"
+    CoinTile2 := ← get "CoinTile2"
+    ExecGameLoopback := ← get "ExecGameLoopback"
   }
 
 def Syms.load (path : String) : IO Syms := do

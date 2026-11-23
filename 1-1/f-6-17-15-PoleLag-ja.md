@@ -75,6 +75,7 @@ ctlU :  触るフレームより前の、プレイヤーのルーチンに来る
 ## 証明していないこと
 
 * `ctlU`: 解析が 157 px 以上遅れているあいだ、マリオは地上でコインを取らない。これをなくす証明には、32 回目のラウンドが書いたとおり、どのフレームでもマリオが読むところのブロックのバッファの中身（そこにコインのタイルがない）と、フレームの中で制御バイトを追う歩きが要ります。あるいは、地上で制御バイトが 6 のフレームの数の上限が要ります。
+  35 回目のラウンド: `ctlU` はなくなりました。各フレームの歩きが、コインのタイルのないブロックのバッファの地図から、コインのコードを切って制御バイトを追います。新しいフィールドは `coinBuf`、`readC`、`ctlKeep` です（[ブロックのバッファにコインがないので、制御バイトは 6 でない](f-6-17-17-PoleCoin-ja.md)）。
 * `bufAll`、`keepB`、`tilesCol`（(near) と (read)）: この段では変えていません。
 
 **ファイル.** `Theorems/PoleLag.lean`（新しい）。`Theorems/PoleStrict.lean`（`noWrap_of_jy`。`JY` での `step_strict`、`invJ_onFrames`、`ruleW_onFrames`）。`Theorems/PoleParserRun.lean`（`invJ_run`、`colMono_run`）。`Theorems/PoleJoin.lean`（`ctlU`）。`Main.lean`（`pole-keep parser` の 33 回目のラウンドの PoleLag の行）。

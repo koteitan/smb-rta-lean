@@ -10,10 +10,12 @@ from the block's top whose arc reaches the floor by the entering frame, or stepp
 
 * `offAt`: every takeoff from a stand at the height `y0`, for every stored speed, is the first state of a jump from `y0` (`Jump.arcStart`).
 * `slowArcs`: every state of a jump from `y0` whose takeoff was below the air threshold is in the jump state with the fall force of such a takeoff (`slowF`).
-* `allLayers`: the states of every layer of a search, each layer once (for `RoomJoin.pipeLands`).
+* `allLayers`: the states of every layer of a search, each layer once (for `RoomJoin.offArcs`, which feeds `RoomJoin.landsAt`).
 * `above` of an arc (`Jump.Arc.above`): it counts the frames since the last state above the standing height; `above_after` bounds it from a state above it.
+* `visS` (round 35): a search with a set of the states seen, and starts at later layers (`visS_spec`), for the checks `RoomJoin.offB` and `RoomJoin.landS`.
 
-The walk of the frames after `t0` from a stand on the block's top is the check `RoomJoin.offB` on `RoomJoin.standFam` (the field `offStand`).
+The walk of the frames after `t0` from a stand on the block's top is the check `RoomJoin.offB` on `RoomJoin.standFam` (the field `offStand` until round 34; since
+round 35 `RoomJoin.SimV`, page `1-1/c-7-8-3-OffStand.md`). Since round 35 a landing past the block's right end may be at any height (page `1-1/c-7-8-4-OffLand.md`).
 
 There is no game data in this file. Page: `1-1/c-7-8-2-OffDrop.md`.
 -/
@@ -159,5 +161,84 @@ theorem above_after {sy : Syms} {m : Machine} {y0 h : Nat} {x u : Arc} (hx : x �
           exact (succ_above h5).2 hw
     have := reach_above h2
     omega
+
+/-! ## A search with a set of the states seen, and starts at later layers (round 35)
+
+`visS succ P starts d r F V` checks `P` on the new states `F` of the layer at depth `d` and on the new states of the layers after it, up to `r` more steps. `V` holds every
+state seen so far. The new states of the layer at depth `d + 1` are the next states of `F` and the states of `starts (d + 1)` that are not yet in `V`. A state seen before is
+not followed again: it was seen at a smaller depth, so it was followed for more steps. So every state `m ≤ r` steps after a state of `V`, and `m` steps after a state of
+`starts (d + j)` with `j + m ≤ r`, has `P` (`visS_spec`), when the states of `V` but those of `F` have `P` and their next states are in `V`. -/
+
+/-- the search with a set of the states seen, and starts at later layers -/
+def visS {σ : Type} [DecidableEq σ] [Hashable σ] [LawfulHashable σ] (succ : σ → List σ) (P : σ → Bool) (starts : Nat → List σ) :
+    Nat → Nat → List σ → Std.HashSet σ → Bool
+  | _, 0, F, _ => F.all P
+  | d, r + 1, F, V =>
+    let N := (Std.HashSet.ofList (((F.flatMap succ) ++ starts (d + 1)).filter fun t => !V.contains t)).toList
+    F.all P && visS succ P starts (d + 1) r N (V.insertMany N)
+
+/-- what `visS` says -/
+theorem visS_spec {σ : Type} [DecidableEq σ] [Hashable σ] [LawfulHashable σ] (succ : σ → List σ) (P : σ → Bool) (starts : Nat → List σ) :
+    ∀ (r d : Nat) (F : List σ) (V : Std.HashSet σ), visS succ P starts d r F V = true →
+      (∀ s, s ∈ V → s ∉ F → P s = true) → (∀ s, s ∈ V → s ∉ F → ∀ t ∈ succ s, t ∈ V) → (∀ s ∈ F, s ∈ V) →
+      (∀ s, s ∈ V → ∀ m u, m ≤ r → Cert.Reach succ s m u → P u = true) ∧
+      (∀ j s, 1 ≤ j → s ∈ starts (d + j) → ∀ m u, j + m ≤ r → Cert.Reach succ s m u → P u = true)
+  | 0, d, F, V, h, h1, _, _ => by
+    simp only [visS, List.all_eq_true] at h
+    refine ⟨fun s hs m u hm hr => ?_, fun j _ _ _ m _ hm _ => absurd hm (by omega)⟩
+    have : m = 0 := by omega
+    subst this
+    rw [hr.zero]
+    by_cases hF : s ∈ F
+    · exact h s hF
+    · exact h1 s hs hF
+  | r + 1, d, F, V, h, h1, h2, h3 => by
+    simp only [visS, Bool.and_eq_true, List.all_eq_true] at h
+    obtain ⟨hF, hrest⟩ := h
+    generalize hN : (Std.HashSet.ofList (((F.flatMap succ) ++ starts (d + 1)).filter fun t => !V.contains t)).toList = N at hrest
+    have mN : ∀ t, t ∈ N ↔ t ∈ (F.flatMap succ ++ starts (d + 1)) ∧ t ∉ V := by
+      intro t
+      rw [← hN, Std.HashSet.mem_toList, Std.HashSet.mem_ofList, List.contains_iff_mem, List.mem_filter]
+      simp [Std.HashSet.contains_iff_mem]
+    have mV' : ∀ t, t ∈ V.insertMany N ↔ t ∈ V ∨ t ∈ N := by
+      intro t
+      rw [Std.HashSet.mem_insertMany_list, List.contains_iff_mem]
+    -- a state of the next layer's candidates is in `V'`
+    have inV' : ∀ t, t ∈ (F.flatMap succ ++ starts (d + 1)) → t ∈ V.insertMany N := by
+      intro t ht
+      rw [mV']
+      by_cases hv : t ∈ V
+      · exact Or.inl hv
+      · exact Or.inr ((mN t).2 ⟨ht, hv⟩)
+    have hP : ∀ s, s ∈ V → P s = true := fun s hs => by
+      by_cases hs' : s ∈ F
+      · exact hF s hs'
+      · exact h1 s hs hs'
+    have hsucc : ∀ s, s ∈ V → ∀ t ∈ succ s, t ∈ V.insertMany N := by
+      intro s hs t ht
+      by_cases hs' : s ∈ F
+      · exact inV' t (List.mem_append_left _ (List.mem_flatMap.2 ⟨s, hs', ht⟩))
+      · exact (mV' t).2 (Or.inl (h2 s hs hs' t ht))
+    have I1 : ∀ s, s ∈ V.insertMany N → s ∉ N → P s = true := by
+      intro s hs hn
+      rcases (mV' s).1 hs with hv | hn'
+      · exact hP s hv
+      · exact absurd hn' hn
+    have I2 : ∀ s, s ∈ V.insertMany N → s ∉ N → ∀ t ∈ succ s, t ∈ V.insertMany N := by
+      intro s hs hn t ht
+      rcases (mV' s).1 hs with hv | hn'
+      · exact hsucc s hv t ht
+      · exact absurd hn' hn
+    have I3 : ∀ s ∈ N, s ∈ V.insertMany N := fun s hs => (mV' s).2 (Or.inr hs)
+    obtain ⟨k1, k2⟩ := visS_spec succ P starts r (d + 1) N (V.insertMany N) hrest I1 I2 I3
+    refine ⟨fun s hs m u hm hr => ?_, fun j s hj hs m u hm hr => ?_⟩
+    · cases hr with
+      | refl => exact hP s hs
+      | @step _ t _ m' ht hr' => exact k1 t (hsucc s hs t ht) m' u (by omega) hr'
+    · rcases Nat.lt_or_ge j 2 with hj2 | hj2
+      · have e : j = 1 := by omega
+        subst e
+        exact k1 s (inV' s (List.mem_append_right _ hs)) m u (by omega) hr
+      · exact k2 (j - 1) s (by omega) (by rw [show d + 1 + (j - 1) = d + j by omega]; exact hs) m u (by omega) hr
 
 end Smbrta.OffDrop

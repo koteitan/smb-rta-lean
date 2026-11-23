@@ -315,14 +315,15 @@ theorem amount_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceF
 /-- **The parser's invariant, its column below 16 and `JV` at every frame's start up to the touch's frame**, on the frames of `PoleJoin.Run`
 (round 31: `PoleStrict.invJ_onFrames`): from their values at control (`h0`, `hJ`), the checks on the ROM (`hN` the numbers of the machine at control, `hk` that of
 `FrameKeep`, `hq`, `he`, `hs` those of the parser's walks for the area's type `v` of the machine at control), the fields `keep.cleanE` (`cleanPI_of_E`),
-`frames.posW` (`cut_of_posW`), `ctlU`, the scroll's amount (`amount_run`, with the check of the scroll's rule `hsc` and `htop`), and the edge's bound (`edgeLow_run`: `hfr`, `hg` the touch not later than `farN` frames after control, `hb`
+`frames.posW` (`cut_of_posW`), the control byte not 6 at `UpdScrollVar` (round 35: `PoleJoin.Run.ctl6` from the coin's map and the walk of `PoleCoin`, `hcC`, `hmK`; it was the field `ctlU`), the scroll's amount (`amount_run`, with the check of the scroll's rule `hsc` and `htop`), and the edge's bound (`edgeLow_run`: `hfr`, `hg` the touch not later than `farN` frames after control, `hb`
 the number on the ROM) -/
 theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
     (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
-    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
     ∀ n, n < R.keep.toFrames.ix R.g →
       (Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n)) ∧ PoleLag.JY (valsOf (places sy m0) (R.keep.toFrames.all n)) := by
   subst hv
@@ -337,7 +338,7 @@ theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFra
   refine PoleStrict.invJ_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs hsc Nm.idle (by rw [e0]; exact h0) (by rw [e0]; exact PoleLag.jy_of_jv hJ)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
-    (fun n hn n₀ a1 a2 k hk hf => R.ctlU n (by omega) n₀ a1 a2 k hk hf)
+    (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK n (by omega) k hpu hf))
     (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
     (fun n hn => by rw [← edge_eq]; exact hE n hn)
 
@@ -347,9 +348,10 @@ theorem inv_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFram
     (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
-    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
     ∀ n, n < R.keep.toFrames.ix R.g → Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n) :=
-  fun n hn => (invJ_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ n hn).1
+  fun n hn => (invJ_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK n hn).1
 
 /-- **The parser's column does not go back** from a frame's start to the next one up to the touch's frame (round 33): the weak rule of each frame
 (`PoleStrict.ruleW_onFrames`, under the conditions of `invJ_run`) keeps the column or adds one (`PoleStrict.col_of_ruleW`) -/
@@ -358,7 +360,8 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
-    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
     ∀ n, n + 1 < R.keep.toFrames.ix R.g →
       PoleJoin.parColOf sy m0 (R.keep.toFrames.all n) ≤ PoleJoin.parColOf sy m0 (R.keep.toFrames.all (n + 1)) := by
   subst hv
@@ -375,7 +378,7 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (by rw [e0]; exact PoleLag.jy_of_jv hJ)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
-    (fun n hn n₀ a1 a2 k hk hf => R.ctlU n (by omega) n₀ a1 a2 k hk hf)
+    (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK n (by omega) k hpu hf))
     (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
     (fun n hn => by rw [← edge_eq]; exact hE n hn) n hn)
 
@@ -389,14 +392,21 @@ theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surfac
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
     (hNT : NoTiles (PoleFrame.spotsF sy m0) (R.seq 0))
-    (hL : PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R.seq 0) + 32) (hRg : PoleRing.RingOK (PoleFrame.spotsF sy m0)) : R.TileColAll := by
+    (hL : PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R.seq 0) + 32) (hRg : PoleRing.RingOK (PoleFrame.spotsF sy m0))
+    (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) : R.TileColAll := by
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
-  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ, ?_, ?_, hRg⟩
+  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK, ?_, ?_, hRg, ?_⟩
   · rw [e0]
     exact PoleSlot.slotMap_of_none hNT
   · rw [e0]
     exact hL
+  · intro n hn k hpc
+    have hw0 := R.watched₀ st hfq hc0.castle
+    obtain ⟨hI, hS⟩ := PoleBcol.frames_bcol hk hcB R.keep.toFrames hc0.start hw0 hIB (fun n hn k => R.bKeep n hn k) n hn
+    have e : ((R.keep.toFrames.all n).ram.get! (PoleBcol.bcOf sy m0).bI).toNat = PoleJoin.parColOf sy m0 (R.keep.toFrames.all n) % 32 := hI.1
+    exact PoleBcol.noTileM_of_ring (e ▸ hS k hpc)
 
 /-- **The parser's column at the start of the touch's frame is at most 384 px past the edge there** (`inv_run`, `PoleParser.col_le`): with it the round 30 parts
 (`near`) and (`read`) of the far reads give the field `tilesCol` of round 33 (`PoleSlot.tileSlotC_of_N`) -/
@@ -405,10 +415,11 @@ theorem colEdge_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
-    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0))) :
+    (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
     16 * PoleJoin.parColOf sy m0 (R.keep.fm R.g) ≤ ScrollRule.left16 (ScrollRule.places sy m0) (R.keep.fm R.g) + 384 := by
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
-  have hI := inv_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ (R.keep.toFrames.ix R.g - 1) (by omega)
+  have hI := inv_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK (R.keep.toFrames.ix R.g - 1) (by omega)
   rw [parCol_eq, edge_eq]
   exact col_le hI.1
 
@@ -470,6 +481,81 @@ theorem ring_of_low {nm nx : PipeTransitionAll.Names} {e : Machine} {A B : Nat} 
   simp only [lowCheckK, Bool.and_eq_true] at hk
   exact PoleRing.ringOK_of_check hk.1
 
+/-! ## Round 35: no coin's tile in the block buffers at control
+
+`PoleJoin.Run.ctl6` needs the coin's map at control: no byte of the block buffers holds a coin's tile. In every state with control of the rows of the change out of
+the side pipe every byte of the block buffers is known (as for `PoleTileCtl.mapCheckK`), and none is a coin's tile: the check `coinMapK`, with the coin's places of
+`PoleCoin` in place of the pole's (they have no column, so `PoleTileCtl.rowsMap` asks that no byte is a coin's tile). -/
+
+/-- **The check on the ROM** (round 35): no coin's tile in the block buffers in every state with control of the rows of the change out of the side pipe -/
+def coinMapK (sy : Syms) (m0 : Machine) (nm nx : PipeTransitionAll.Names) (e : Machine) (A B : Nat) (R : StepWrites.Rt) : Bool :=
+  decide ((PoleCoin.coinOf sy m0).Q.bufLo + (PoleCoin.coinOf sy m0).Q.bufBytes ≤ 2048) &&
+    PoleTileCtl.rowsMap sy (PoleCoin.coinOf sy m0).Q ((SideChangeSound.rowsOf sy nm nx e A B R).map (·.row))
+
+/-- **No coin's tile in the block buffers at control**, on a real run of the change (as `PoleTileCtl.EndRunQ.colMap`) -/
+theorem EndRunQ.coinMap {nm nx : PipeTransitionAll.Names} {e : Machine} {A B : Nat} {R : StepWrites.Rt} {es : List Machine}
+    (S : SideChangeBound.Statement sy nm e es A B) (T : SideChangeSound.EndStatementK sy nm nx e A B R) (Q : SidePause.PipeQ sy nm nx e A B R)
+    (hk : coinMapK sy m0 nm nx e A B R = true) (R' : SidePause.EndRunQ sy nm nx e A) (hc : ∀ n, R'.a ≤ n → n < R'.b → controllable sy (R'.seq n) = false) :
+    PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R'.seq R'.b) := by
+  simp only [coinMapK, Bool.and_eq_true, decide_eq_true_eq] at hk
+  exact PoleTileCtl.map_of_invL hk.1 hk.2 (SideChangeSound.invL_of_invS (SidePause.EndRunQ.inRows S T Q R' hc)) R'.atCtl
+
+/-! ## Round 35: the block buffer's column at control
+
+`PoleBcol.frames_bcol` needs `PoleBcol.BInv` at control: the block buffer's column `B` is the parser's column mod 32, with the column in its page below 16. In
+every state with control of the rows of the change out of the side pipe the three bytes are known and meet it (`bInvK`). -/
+
+/-- a state of a row: it knows the bytes of control, and if it has control, it knows `B`, the parser's column and its page, with `BInv` -/
+def rowB (sy : Syms) (m0 : Machine) (S : TaintRun.AS) : Bool :=
+  let rt := FrameKeep.parRt sy m0
+  let bA := FrameKeep.romWE m0 (rt + 0x11)
+  let cA := FrameKeep.romWE m0 (rt + 1)
+  let pA := FrameKeep.romWE m0 (rt + 0x0E)
+  (SurfaceFrames.ctlBytes sy).all (SideChangeEnd.knowsAd S) &&
+    (!controllable sy (SideChangeEnd.mOf S) || (SideChangeEnd.knowsAd S bA && SideChangeEnd.knowsAd S cA && SideChangeEnd.knowsAd S pA &&
+      (peek (SideChangeEnd.mOf S) bA).toNat == ((peek (SideChangeEnd.mOf S) pA).toNat * 16 + (peek (SideChangeEnd.mOf S) cA).toNat) % 32 &&
+      decide ((peek (SideChangeEnd.mOf S) cA).toNat < 16)))
+
+/-- **The check on the ROM** (round 35): `BInv` in every state with control of the rows of the change out of the side pipe -/
+def bInvK (sy : Syms) (m0 : Machine) (nm nx : PipeTransitionAll.Names) (e : Machine) (A B : Nat) (R : StepWrites.Rt) : Bool :=
+  ((SideChangeSound.rowsOf sy nm nx e A B R).map (·.row)).all fun r => r.R.all (rowB sy m0)
+
+theorem bInv_of_state {E : TaintRun.Env} {Fr : Nat × UInt8} {S : TaintRun.AS} {m : Machine} (hs : TaintRun.Sim E Fr S m) (hr : rowB sy m0 S = true)
+    (h : controllable sy m = true) : PoleBcol.BInv (PoleBcol.bcOf sy m0) m := by
+  simp only [rowB, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_true_eq, beq_iff_eq] at hr
+  obtain ⟨hk, hr⟩ := hr
+  rcases hr with h1 | ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩
+  · have := SurfaceFrames.controllable_of_known hs hk h
+    rw [this] at h1
+    cases h1
+  · have e1 := peek_of_known hs h1
+    have e2 := peek_of_known hs h2
+    have e3 := peek_of_known hs h3
+    refine ⟨?_, ?_⟩
+    · show (peek m _).toNat = ((peek m _).toNat * 16 + (peek m _).toNat) % 32
+      rw [e1, e2, e3]
+      exact h4
+    · show (peek m _).toNat < 16
+      rw [e2]
+      exact h5
+
+theorem bInv_of_invL {C : SideChangeEnd.Ctx} :
+    ∀ {l : List SideChangeEnd.Row}, (l.all fun r => r.R.all (rowB sy m0)) = true → ∀ {m : Machine}, SideChangeEnd.InvL C l m → controllable sy m = true →
+      PoleBcol.BInv (PoleBcol.bcOf sy m0) m
+  | [], _, _, h, _ => by cases h
+  | r :: t, hl, _, h, hc => by
+    simp only [List.all_cons, Bool.and_eq_true] at hl
+    rcases h with ⟨S, hS, hs⟩ | h
+    · exact bInv_of_state hs (List.all_eq_true.1 hl.1 S hS) hc
+    · exact bInv_of_invL hl.2 h hc
+
+/-- **`BInv` at control**, on a real run of the change -/
+theorem EndRunQ.bInv {nm nx : PipeTransitionAll.Names} {e : Machine} {A B : Nat} {R : StepWrites.Rt} {es : List Machine}
+    (S : SideChangeBound.Statement sy nm e es A B) (T : SideChangeSound.EndStatementK sy nm nx e A B R) (Q : SidePause.PipeQ sy nm nx e A B R)
+    (hk : bInvK sy m0 nm nx e A B R = true) (R' : SidePause.EndRunQ sy nm nx e A) (hc : ∀ n, R'.a ≤ n → n < R'.b → controllable sy (R'.seq n) = false) :
+    PoleBcol.BInv (PoleBcol.bcOf sy m0) (R'.seq R'.b) :=
+  bInv_of_invL hk (SideChangeSound.invL_of_invS (SidePause.EndRunQ.inRows S T Q R' hc)) R'.atCtl
+
 section Route
 open Route
 
@@ -489,6 +575,28 @@ theorem low₀ {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.St
   rw [R.atCtl]
   exact EndRunQ.low hS hT hQ hm ((R.chgK hR hB hK).run₂ hR (R.entry₁ hB hK)) R.chg.ctlFirst₂
 
+/-- **`BInv` at control above ground** (round 35), on the real machines (as `low₀`). `hm` is the check on the ROM. -/
+theorem bInv₀ {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hm : bInvK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) {PA : PoleJoin.Box}
+    (R : Route.Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.pole.seq 0) := by
+  rw [R.atCtl]
+  exact EndRunQ.bInv hS hT hQ hm ((R.chgK hR hB hK).run₂ hR (R.entry₁ hB hK)) R.chg.ctlFirst₂
+
+/-- **No coin's tile in the block buffers at control above ground** (round 35), on the real machines (as `PoleTileCtl.colMap₀`). `hm` is the check on the ROM. -/
+theorem coinMap₀ {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hm : coinMapK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) {PA : PoleJoin.Box}
+    (R : Route.Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.pole.seq 0) := by
+  rw [R.atCtl]
+  exact EndRunQ.coinMap hS hT hQ hm ((R.chgK hR hB hK).run₂ hR (R.entry₁ hB hK)) R.chg.ctlFirst₂
+
 /-- **What the touch's frame of the route needs of the parser** (`PoleJoin.Run.TileColAll`): `tilesCol_run` on `R.pole`, with the invariant, no pole's tile in
 the block buffers and the column at control from the rows of the change out of the side pipe (`PoleParser.inv₀`, `PoleParser.col₀`; the checks `hmI`, `hmC` on the ROM). The box is written `⟨M, dx, dy, rows⟩`, as in `PoleJoin.touch_castle`, so that
 the private proof's facts on its machine `M` match without unfolding it -/
@@ -498,6 +606,8 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hmI : invCheckK sy m0 384 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hmC : colCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hmJ : PoleStrict.jvCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hmL : lowCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
+    (hmK : coinMapK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hcC : PoleCoin.coinCheck sy m0 = true)
+    (hmB : bInvK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) {M : Machine} {dx dy rows : Nat}
     (R : Route.Run sy m0 N D rN b vs ⟨M, dx, dy, rows⟩ Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
     (st : SurfaceFrames.Start sy ⟨M, dx, dy, rows⟩ (R.pole.seq 0)) (hN : SurfaceFrames.numbersCheck sy m0 ⟨M, dx, dy, rows⟩ J = true)
@@ -507,7 +617,8 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (htop : TopSpeed.top sy ≤ 48) : R.pole.TileColAll :=
   tilesCol_run R.pole hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop ⟨(inv₀ hS hT hQ hR hmI hB hK R).1, col₀ hS hT hQ hR hmC hB hK R⟩ (PoleStrict.jv₀ hS hT hQ hR hmJ hB hK R)
-    (inv₀ hS hT hQ hR hmI hB hK R).2 (low₀ hS hT hQ hR hmL hB hK R) (ring_of_low hmL)
+    hcC (coinMap₀ hS hT hQ hR hmK hB hK R) (inv₀ hS hT hQ hR hmI hB hK R).2 (low₀ hS hT hQ hR hmL hB hK R) (ring_of_low hmL) hcB
+    (bInv₀ hS hT hQ hR hmB hB hK R)
 
 end Route
 

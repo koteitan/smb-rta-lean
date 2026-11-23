@@ -9,6 +9,9 @@ only its half for the head: a read for the head gives the empty tile or a coin.
 This is proved, with checks on the ROM in the private proofs that already exist (the four walks of `LoopTime.recCheckB` and `RoomMap.startCheckT`; no new
 private file). The field `roomRead` is narrowed. No field is added.
 
+Round 35: the field `roomRead` no longer asks the byte read for the head. It asks only that the head's cell is free in the map; the walks also carry the map's
+bits, and the byte read follows ([The head's read from the head's cell in the map](d-2-4-2-10-HeadFree.md)).
+
 `tr_n(j)` is the machine after `j` instructions of frame `n`. `B` is the set of the 416 bytes of the two block buffers, `T` the list of the tiles
 (`P.tiles`: the tiles of the block buffers of the reference machine, and the empty tile; 12 tiles on this ROM). `read` is the block buffer routine's
 `LDA (zp),Y`, `addr(m)` its address, `val(m)` the byte it reads, `save(m)` the byte where the routine keeps its offset, `heads` the head's offsets and

@@ -21,7 +21,7 @@ Here the strict rule is proved on real frames, from two conditions on one state 
 * `noWrapP_onFrames`: the statement of the old field `parWrap`, from `JV` and an edge's move of at most 3 px at every `UpdScrollVar`.
 
 What is not proved here: that the control byte is not 6 at `UpdScrollVar` (the code sets it to 6 when he takes a coin, `RemoveCoin_Axe`), and that the scroll's
-amount is at most 3 when it is in 1 ‥ 128. The first is the new field `PoleJoin.Run.ctlU`; the second is the theorem `PoleParserRun.amount_run`, from part e's
+amount is at most 3 when it is in 1 ‥ 128. The first was the field `PoleJoin.Run.ctlU` (round 35: a theorem, `PoleJoin.Run.ctl6`, by the walk of `PoleCoin`); the second is the theorem `PoleParserRun.amount_run`, from part e's
 reading of each counted frame. Measured by `pole-keep parser`. Round 32 (`PoleLate`): `step_strict` and `invJ_onFrames` ask the control byte not 6 only where
 the parser is late at `UpdScrollVar` (`S + 3·N ≥ 32`); else a frame with the control byte 6 keeps `JV` too (`PoleLate.jv_weak`). Round 33 (`PoleLag`):
 `step_strict`, `invJ_onFrames` and `ruleW_onFrames` carry the weaker `PoleLag.JY` (`N ≤ 7 ∧ S + 3·N < 157`), which is all that no wrap and the strict walks need

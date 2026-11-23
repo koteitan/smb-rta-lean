@@ -91,6 +91,24 @@ theorem bufVS_of_VM {Q : Spots} {c : Nat} {m : Machine} (h : BufVM Q c m) (hr : 
 theorem bufC_of_VM {Q : Spots} {c : Nat} {m : Machine} (h : BufVM Q c m) (hr : RingOK Q) (hc : colP Q < c + 32) : BufC Q c m :=
   PoleSlot.bufC_of_VS (bufVS_of_VM h hr hc)
 
+/-- **What the field `bufAll` asks of one instruction from round 35** (`1-1/f-6-17-18-PoleBcol.md`): `BufVM`, but `NoTileM` only away from the place `st`, the
+area parser's store of a column (there the walk of `PoleBcol` proves it) -/
+def BufVR (Q : Spots) (c : Nat) (st : UInt16) (m : Machine) : Prop :=
+  PoleKeepFar.farBuf Q m = false → (m.nmiPending = false → m.halted = false → 0x8000 ≤ m.pc → 0x8000 ≤ m.pc + 1 → 0x8000 ≤ m.pc + 1 + 1 →
+    PoleKeepFar.staOps.contains (opAt m) = true → Tile Q m.a) → (wTarget (opAt m) m).isSome = true → NoTile Q m ∧ (m.pc ≠ st → NoTileM Q c m)
+
+/-- `BufVM` gives `BufVR`: the round 34 field asks more -/
+theorem bufVR_of_VM {Q : Spots} {c : Nat} {st : UInt16} {m : Machine} (h : BufVM Q c m) : BufVR Q c st m :=
+  fun hf ht hs => ⟨(h hf ht hs).1, fun _ => (h hf ht hs).2⟩
+
+/-- **`BufVM` from `BufVR`** and `NoTileM` at the place `st` -/
+theorem bufVM_of_R {Q : Spots} {c : Nat} {st : UInt16} {m : Machine} (h : BufVR Q c st m) (hs : m.pc = st → NoTileM Q c m) : BufVM Q c m :=
+  fun hf ht hw => ⟨(h hf ht hw).1, if e : m.pc = st then hs e else (h hf ht hw).2 e⟩
+
+/-- `BufAt` from `BufVR` (`PoleKeepFar.bufAt_of_V`) -/
+theorem bufAt_of_VR {Q : Spots} {c : Nat} {st : UInt16} {m : Machine} (h : BufVR Q c st m) : BufAt Q m :=
+  PoleKeepFar.bufAt_of_V fun hf ht hs => (h hf ht hs).1
+
 /-- the bound `colP < c + 32` from the bound at the first frame, along columns that do not go back -/
 theorem low_mono {Q : Spots} {c : Nat → Nat} {K : Nat} (h0 : colP Q < c 0 + 32) (hm : ∀ n, n + 1 < K → c n ≤ c (n + 1)) :
     ∀ n, n < K → colP Q < c n + 32

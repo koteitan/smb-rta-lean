@@ -8,6 +8,9 @@ position's low bits are not 0 at that read) is asked only on the entering frame 
 This is proved, with checks on the ROM in the private proofs that already exist (the four walks of `LoopTime.recCheckB`; no new private file). The field
 `roomXbit` is narrowed. No field is added.
 
+Round 35: the field `roomXbit` is gone. On the entering frame `Xbit` follows from the field `roomRead` by one more walk of the frame
+([The side pipe's read of the position, from the head's cell](d-2-4-2-11-HeadSide.md)); on the frames before, this page's `no_xAt` still gives it.
+
 `tr_n(j)` is the machine after `j` instructions of frame `n`. `xAt` is the side pipe's read of the position (`LDA` of the position in `PlyrPipe`), `stAt` the
 store of the routine byte after it (the first `STA zp` of the routine byte from `xAt` on), `rt(m)` the routine byte, `v` the reference's routine (the
 player's routine). `a₂` is the first frame from the room's first control `b₁` on that starts with another routine than the player's.

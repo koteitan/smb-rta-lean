@@ -10,7 +10,7 @@ import Theorems.CollideKeep
 import Theorems.VertKeep
 import Theorems.FaceKeep
 import Theorems.SurfaceRead
-import Theorems.SideRange
+import Theorems.SideLoop
 import Theorems.ImpedePosition
 import Theorems.PositionKeep
 import Theorems.EdgeStep
@@ -424,7 +424,7 @@ def numbersCheck (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Bool :=
     ClampSide.checkAll sy m0 && decide (2 ≤ (ScrollRule.places sy m0).thr1) && RightEdge.check sy m0 &&
     decide (ClampSide.edge16 (ClampSide.places sy m0) 1 c % 65536 = (ClampSide.edge16 (ClampSide.places sy m0) 0 c + 255) % 65536) &&
     decide (posP sy c + 16 * (top sy : Int) * (farN sy c : Int) < 65280 * 256) && PushTimer.sCheck sy m0 (peek c sy.AreaType) &&
-    SideRange.rCheck sy m0 (peek c sy.AreaType)
+    SideLoop.lCheck sy m0 (peek c sy.AreaType)
 
 /-- what `numbersCheck` says -/
 structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
@@ -511,8 +511,9 @@ structure Numbers (sy : Syms) (m0 : Machine) (B : Box) (J : Nat) : Prop where
   pageB : posP sy B.m + 16 * (top sy : Int) * (farN sy B.m : Int) < 65280 * 256
   /-- round 32: the walks of his pixel and his page after the scroll handler's call (`PushTimer.pix_end`; round 33: and his speed) -/
   pushC : PushTimer.sCheck sy m0 (peek B.m sy.AreaType) = true
-  /-- round 34: the walk of the stores that may reach the side collision's timer, from the scroll handler's call to the frame's end (`SideRange.near_side`) -/
-  rangeC : SideRange.rCheck sy m0 (peek B.m sy.AreaType) = true
+  /-- round 34: the walk of the stores that may reach the side collision's timer, from the scroll handler's call to the frame's end (`SideRange.near_side`;
+  round 35: `SideLoop.near_side`, with a finer table) -/
+  rangeC : SideLoop.lCheck sy m0 (peek B.m sy.AreaType) = true
 
 theorem numbers_of_check {B : Box} {J : Nat} (h : numbersCheck sy m0 B J = true) : Numbers sy m0 B J := by
   simp only [numbersCheck, PrevKeep.prevOKB, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, bne_iff_ne, ne_eq, List.all_eq_true, List.mem_range] at h
@@ -1398,11 +1399,15 @@ structure OnFrames (sy : Syms) (m0 : Machine) (B : Box) (T J g : Nat) (seq : Nat
   with the walk of the speed. So it asks less at each frame and more frames than round 32's field. Round 34: asked only at such a store in the area parser's code
   (from `AreaParserCore` to `GetBlockBufferAddr`) or in the code of the head's collision with a block (from `PlayerHeadCollision` to `BlockObjectsCore`)
   (`SideRange.Resid`); at the other stores that may reach the timer it is a theorem
-  (`SideRange.near_side`, a walk that knows bounds on the index registers: `OnFrames.sideWAt`). -/
+  (`SideRange.near_side`, a walk that knows bounds on the index registers: `OnFrames.sideWAt`). Round 35: asked only at three kinds of store there
+  (`SideLoop.Resid`): a store through a pointer (`STA (zp),Y`) in those two pieces of code, and the store of the castle's loop of rows (from `CRendLoop` to
+  `ChkCFloor`); at the others it is a theorem (`SideLoop.near_side`, the same walk with a finer table and a split before `LDX abs,Y`). What the walk does not
+  know there is a byte that lives across frames: the block buffer's column (`BlockBufferColumnPos`, for the area parser's pointer), `SprDataOffset_Ctrl` (an
+  index of a store that may write the pointer of the head's collision), and the row where the castle starts, from the area's data. -/
   sideW : ∀ j, 1 ≤ j → j < g → (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0 →
     ∀ k n, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → k ≤ n → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
     (PipeEntryRule.trace (K.fm j) (K.pad j) n).frame = (K.fm j).frame → PushTimer.NearW sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n) →
-    SideRange.Resid sy (PipeEntryRule.trace (K.fm j) (K.pad j) n) → PushTimer.SideW sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n)
+    SideLoop.Resid sy (PipeEntryRule.trace (K.fm j) (K.pad j) n) → PushTimer.SideW sy m0 (PipeEntryRule.trace (K.fm j) (K.pad j) n)
   /-- each counted frame before the touch, from the scroll handler to its end, at each instruction: a store of a byte of the position by its address is inside the
   push or the clamp at the screen's edge, and outside them a store through an index or a pointer writes no byte of the position (`PositionKeep.PosW`). With
   `clampR` this gives the position on a frame that keeps a speed to the right (`PositionKeep.keep_frame`: the field `AfterP.keep` and a part of `collide`) -/
@@ -1484,8 +1489,9 @@ structure AreaRun (sy : Syms) (m0 : Machine) {S : FrameKeep.RealRun} {a g : Nat}
   pageB : 0 < g → posP sy (seq 0) + 16 * (top sy : Int) * (farN sy (seq 0) : Int) < 65280 * 256
   /-- round 32: the walks of his pixel and his page after the scroll handler's call (`PushTimer.pix_end`; round 33: and his speed) -/
   pt : PushTimer.sCheck sy m0 v = true
-  /-- round 34: the walk of the stores that may reach the side collision's timer, from the scroll handler's call to the frame's end (`SideRange.near_side`) -/
-  rg : SideRange.rCheck sy m0 v = true
+  /-- round 34: the walk of the stores that may reach the side collision's timer, from the scroll handler's call to the frame's end (`SideRange.near_side`;
+  round 35: `SideLoop.near_side`, with a finer table) -/
+  rg : SideLoop.lCheck sy m0 v = true
 
 /-- **`CtrlKeep.area_end` on the frames of a run**: a frame in control keeps the area's type, the swimming flag and the change of size, and if it comes to the player's
 routine it ends not paused. The condition on each instruction is `CleanK` of `FrameKeep.guardF` (the field `cleanF` of `FrameKeep.Frames`): it holds `CtrlKeep.Spare`
@@ -2030,7 +2036,8 @@ theorem OnFrames.relAll (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy
     exact O.relStep hck hst Ar (j := j + 1) (by omega) h3 (by rw [show j + 1 - 1 = j by omega]; exact ih (by omega))
 
 /-- round 34: **the old field `sideW`** (round 33's form: at every store that may reach the side collision's timer, `PushTimer.NearW`), from the narrowed field
-(the stores of `SideRange.Resid`) and the walk of `SideRange.near_side` (the other stores) -/
+(the stores of `SideRange.Resid`) and the walk of `SideRange.near_side` (the other stores); round 35: from the field at the stores of `SideLoop.Resid`
+and the walk of `SideLoop.near_side` -/
 theorem OnFrames.sideWAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames sy m0 B T J g seq K) (hst : ∀ n, n < K.ix g → FrameKeep.StartK sy m0 (K.all n))
     {v : UInt8} (Ar : AreaRun sy m0 K v) (j : Nat) (h1 : 1 ≤ j) (h3 : j < g) (hside : (seq j).ram.get! (ScrollRule.places sy m0).sideB ≠ PushTimer.pushT sy m0) :
     ∀ k n, CtrlKeep.arrAt sy (K.fm j) (K.pad j) ≤ k → k ≤ n → (PipeEntryRule.trace (K.fm j) (K.pad j) k).pc = sy.PlayerSubs →
@@ -2046,11 +2053,11 @@ theorem OnFrames.sideWAt (hck : CtrlKeep.ctrlCheck sy m0 = true) (O : OnFrames s
   have h0 := start_fm hst h1 (by omega)
   have hclE := K.cleanE (K.ix j - 1) (by show K.ix j - 1 < K.ix g; omega)
   have hxs := K.noStore (K.ix j - 1) (by show K.ix j - 1 + 1 < K.ix g; omega)
-  obtain ⟨kq, hkq, hqq, _, _, H⟩ := SideRange.near_side Ar.rg h0 hclE hxs hck hAf harr.1 harr.2.1 harr.2.2
+  obtain ⟨kq, hkq, hqq, _, _, H⟩ := SideLoop.near_side Ar.rg h0 hclE hxs hck hAf harr.1 harr.2.1 harr.2.2
   have honce := GuardE.subs_onceE hck Ar.keep h0 hclE hxs hAf harr.1 harr.2.1 harr.2.2
   have hkk : k = kq := honce k kq hk (Nat.le_of_lt hkq) hpc hqq
   subst hkk
-  by_cases hres : SideRange.Resid sy (PipeEntryRule.trace (K.fm j) (K.pad j) n)
+  by_cases hres : SideLoop.Resid sy (PipeEntryRule.trace (K.fm j) (K.pad j) n)
   · exact O.sideW j h1 h3 hside k n hk hkn hpc hfn hn hres
   · exact H n hkn hfn hn hres
 
@@ -3960,6 +3967,8 @@ structure MovesScan where
   vMid : Bool := false
   /-- round 29, measured: `SideTimer.NearM` at the frame's start asks the bound and `MoveScroll.NearA` at the arrival does not (the timer at most 1 there, not 0) -/
   nearMore : Bool := false
+  /-- round 35, measured: the frame comes to a store of `SideLoop.Resid` (from the scroll handler on) -/
+  residAt : Bool := false
   deriving Inhabited
 
 /-- run the frame of `M` with the input `i` instruction by instruction, `a` the machine at the end of the counted frame before, and look at `Moves`, and at `box` if `box` -/
@@ -3978,6 +3987,8 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
   let mut sideWBad := false
   let mut sideWNearBad := false
   let mut sideWResBad := false
+  let mut residAt := false
+  let mut residBytes := false
   let mut clampRBad := false
   let mut calls := false
   let CP := ClampSide.places sy m0
@@ -3996,8 +4007,14 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
       if !PushTimer.sideWB sy m0 c then sideWBad := true
       -- round 33: the field asks it only at the stores that may reach the timer
       if PushTimer.nearWB sy m0 c && !PushTimer.sideWB sy m0 c then sideWNearBad := true
-      -- round 34: the field asks it only at the stores of `SideRange.Resid`
-      if PushTimer.nearWB sy m0 c && SideRange.residB sy c.pc && !PushTimer.sideWB sy m0 c then sideWResBad := true
+      -- round 34: the field asks it only at the stores of `SideRange.Resid`; round 35: of `SideLoop.Resid`
+      if PushTimer.nearWB sy m0 c && SideLoop.residB sy c.pc (PipeWrites.opAt c) && !PushTimer.sideWB sy m0 c then sideWResBad := true
+      -- round 35, measured only: at the stores of `SideLoop.Resid`, the block buffer's column below 32, the control of the block objects' offset 0 or 1, and in
+      -- the castle's loop of rows the row at most 10
+      if PushTimer.nearWB sy m0 c && SideLoop.residB sy c.pc (PipeWrites.opAt c) then
+        residAt := true
+        if decide (32 ≤ peek c sy.BlockBufferColumnPos) || decide (2 ≤ peek c sy.SprDataOffset_Ctrl) ||
+            (decide (sy.CRendLoop ≤ c.pc) && decide (c.pc < sy.ChkCFloor) && decide (10 < c.x)) then residBytes := true
       if c.pc == Pc.entry && decide (0 < sbyte (peek c sy.Player_X_Speed)) &&
           ScreenClamp.target (FrameModel.Rom.of m0) Pc c c.y != posP sy c then clampRBad := true
       if c.pc == sy.ImpedePlayerMove || c.pc == Pc.entry then calls := true
@@ -4031,6 +4048,7 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
     if !leftEndB sy m0 b then f := "leftEnd (a theorem)" :: f
     if posWBad then f := "posW" :: f
     if sideWResBad && b.ram.get! (ScrollRule.places sy m0).sideB != PushTimer.pushT sy m0 then f := "sideW" :: f
+    if residBytes then f := "SideLoop's bytes (measured only)" :: f
     -- round 34: round 33's field, a theorem (`OnFrames.sideWAt`)
     if sideWNearBad && b.ram.get! (ScrollRule.places sy m0).sideB != PushTimer.pushT sy m0 then f := "sideWAt (a theorem)" :: f
     -- round 32: `SideW` on every frame (more than the field asks), for the page
@@ -4067,6 +4085,6 @@ def movesScan (sy : Syms) (m0 : Machine) (B : Box) (a M : Machine) (i : UInt8) (
         bf := "faceJ" :: bf
     let P := ScrollRule.places sy m0
     let nearMore := decide (M.ram.get! P.sideB ≤ 1) && M.ram.get! P.lockB == 0 && decide (P.thr1 ≤ M.ram.get! P.pfs) && R.ram.get! P.sideB != 0
-    return { fails := f, boxFails := bf, next := b, subs := subs.length, inp := some (FrameModel.readIn sy R), vMid, nearMore }
+    return { fails := f, boxFails := bf, next := b, subs := subs.length, inp := some (FrameModel.readIn sy R), vMid, nearMore, residAt }
 
 end Smbrta.SurfaceFrames
