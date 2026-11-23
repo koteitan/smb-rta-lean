@@ -64,7 +64,7 @@ A stand at 32 px can jump past the top of the screen. There the height wraps to 
 
 ## What remains (not proved)
 
-* `offTop`, `offNear`, `offSlow` ([Off the block's top: the frames to the floor](c-7-8-2-OffDrop.md) says how each could be proved).
+* `offTop`, `offSlow` ([Off the block's top: the frames to the floor](c-7-8-2-OffDrop.md) says how each could be proved). `offNear` is proved in round 36 ([The entering frame](c-7-8-5-EntryVert.md)).
 
 **Files.** `Theorems/OffDrop.lean` (`visS`, `visS_spec`). `Theorems/RoomJoin.lean` (`offNext`, `offStep`, `offRunV`, `offB`, `landsAt`, `landS`, `offRunV_eq`, `offB_spec`, `landS_spec`, `mem_landsAt`, `RoomRun.next_E`, `RoomRun.real_reach`, `RoomRun.descend_k`, `RoomRun.land_bound`; gone: `offFloor`, `offLand`, `pipeLands`, `pipeAOk`, `pipe_bound`, `pipeAc`, `pipeBc`, `pipeA`, `pipeB`, `pipe_sum`). `Main.lean`: `room-off-back` (measured only), `room-off-stand`; the private `Proof/RoomJoin.lean` gets `landC`.
 

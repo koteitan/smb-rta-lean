@@ -482,12 +482,14 @@ theorem live_stepC (hP : PlacesOK K C.E C.G) (ht : C.t.all (walkC C K l Fu) = tr
       · right
         exact k2
 
-/-- **One frame from a walk**: from a live state at the frame's start with the map, while each instruction meets `CleanK`, does not write a byte of `l` by its
-address, and meets `BufAt` and `ReadC`, the map holds at the frame's end and the control byte is not 6 at each `UpdScrollVar` of the frame -/
+/-- **One frame from a walk**: from a live state at the frame's start with the map, while each instruction meets `CleanK` (round 36: asked only of the
+instructions of the frame), does not write a byte of `l` by its address, and meets `BufAt` and `ReadC`, the map holds at the frame's end and the control byte is
+not 6 at each `UpdScrollVar` of the frame -/
 theorem frame_of_walkC (hP : PlacesOK K C.E C.G) (ht : C.t.all (walkC C K l Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray)
     (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top) {S : AS} {m : Machine} {i : UInt8} (hw : walkC C K l Fu S = true) (hs : Sim C.E F S m)
     (hr0 : CoinRead K m)
-    (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) (hx : ∀ j, storesTo l (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false)
+    (hk : ∀ j, (trace m i j).frame = m.frame → CleanK C.G C.S.store (trace m i j))
+    (hx : ∀ j, storesTo l (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false)
     (hb : ∀ j, BufAt K.Q (trace m i j)) (hrd : ∀ j, ReadC K (trace m i j)) (hm : ColMap K.Q m) :
     ColMap K.Q (PipeTransition.frame m i) ∧ ∀ j, (trace m i j).pc = K.upd → (trace m i j).frame = m.frame → (trace m i j).ram.get! K.ctlI ≠ 6 := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact TaintRun.mem_top _ }
@@ -507,7 +509,7 @@ theorem frame_of_walkC (hP : PlacesOK K C.E C.G) (ht : C.t.all (walkC C K l Fu) 
           rw [e]
           simp only [nxt, if_neg hc]
         rw [e2]
-        obtain ⟨_, a1, a2⟩ := live_stepC hP ht hkl hops hT h1 (hk j) (hx j) (hb j) (hrd j) hmj hcr
+        obtain ⟨_, a1, a2⟩ := live_stepC hP ht hkl hops hT h1 (hk j h3) (hx j) (hb j) (hrd j) hmj hcr
         refine ⟨a1, ?_⟩
         rcases a2 with ⟨A', b1, _, b3, b4⟩ | b1
         · exact Or.inl ⟨A', b1, by rw [b3, h3], b4⟩
@@ -522,8 +524,8 @@ theorem frame_of_walkC (hP : PlacesOK K C.E C.G) (ht : C.t.all (walkC C K l Fu) 
   refine ⟨by rw [frame_trace]; exact (key fuelPerFrame).1, ?_⟩
   intro j hpc hfr
   obtain ⟨hmj, h⟩ := key j
-  rcases h with ⟨A, h1, _, hcr⟩ | h1
-  · exact (live_stepC hP ht hkl hops hT h1 (hk j) (hx j) (hb j) (hrd j) hmj hcr).1 hpc
+  rcases h with ⟨A, h1, h3, hcr⟩ | h1
+  · exact (live_stepC hP ht hkl hops hT h1 (hk j h3) (hx j) (hb j) (hrd j) hmj hcr).1 hpc
   · omega
 
 end
@@ -548,7 +550,7 @@ theorem coinOK_of_check (h : coinCheckW S G E K l = true) : CoinOK S G E K l := 
 /-- **One frame in control**: a frame from `FrameStart`, whose instructions meet `CleanK`, do not write a byte of `l` by their addresses, and meet `BufAt` and
 `ReadC`, keeps the map, and the control byte is not 6 at each `UpdScrollVar` of the frame -/
 theorem frame_coin (hc : coinCheckW S G E K l = true) (hE : E.pad = AB.top) {m : Machine} {i : UInt8} (h0 : FrameStart G E m)
-    (hk : ∀ j, CleanK G S.store (trace m i j)) (hx : ∀ j, storesTo l (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false)
+    (hk : ∀ j, (trace m i j).frame = m.frame → CleanK G S.store (trace m i j)) (hx : ∀ j, storesTo l (trace m i j).prg (trace m i j).prgMask (trace m i j).pc = false)
     (hb : ∀ j, BufAt K.Q (trace m i j)) (hrd : ∀ j, ReadC K (trace m i j)) (hm : ColMap K.Q m) :
     ColMap K.Q (PipeTransition.frame m i) ∧ ∀ j, (trace m i j).pc = K.upd → (trace m i j).frame = m.frame → (trace m i j).ram.get! K.ctlI ≠ 6 := by
   have hC := coinOK_of_check hc
@@ -598,14 +600,14 @@ theorem start_C {sy : Syms} {m0 : Machine} {m : Machine} (h : FrameKeep.StartK s
   ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, h.known⟩
 
 /-- **The frames before the touch's frame keep the coin's map, and the control byte is not 6 at their `UpdScrollVar`**: the map at control, and on each
-instruction of each frame before the touch's frame `BufAt`, `ReadC` and `CtlR`. `hcK` is the check of the walk of `FrameKeep` (every frame starts in control),
-`hcC` the walk of this file. -/
+instruction of each frame before the touch's frame `BufAt`, `ReadC` and `CtlR` (round 36: `CtlR` only on the instructions of the frame; it is a theorem on the
+route, `PoleJoin.Run.ctlR`). `hcK` is the check of the walk of `FrameKeep` (every frame starts in control), `hcC` the walk of this file. -/
 theorem frames_coin {sy : Syms} {m0 : Machine} {Sr : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (hcK : FrameKeep.keepCheckOf sy m0 = true)
     (hcC : coinCheck sy m0 = true) (Fr : FrameKeep.Frames sy m0 Sr a g seq) (hs0 : FrameKeep.StartK sy m0 (seq 0)) (h0 : FrameKeep.Watched (FrameKeep.watchOf sy) (seq 0))
     (hm0 : ColMap (coinOf sy m0).Q (seq 0))
     (hb : ∀ n, n + 1 < Fr.ix g → ∀ k, BufAt (coinOf sy m0).Q (trace (Fr.all n) (Fr.inp n) k))
     (hrd : ∀ n, n + 1 < Fr.ix g → ∀ k, ReadC (coinOf sy m0) (trace (Fr.all n) (Fr.inp n) k))
-    (hct : ∀ n, n + 1 < Fr.ix g → ∀ k, CtlR (coinOf sy m0) (trace (Fr.all n) (Fr.inp n) k)) :
+    (hct : ∀ n, n + 1 < Fr.ix g → ∀ k, (trace (Fr.all n) (Fr.inp n) k).frame = (Fr.all n).frame → CtlR (coinOf sy m0) (trace (Fr.all n) (Fr.inp n) k)) :
     ∀ n, n + 1 < Fr.ix g → ColMap (coinOf sy m0).Q (Fr.all n) ∧
       ∀ k, (trace (Fr.all n) (Fr.inp n) k).pc = sy.UpdScrollVar → (trace (Fr.all n) (Fr.inp n) k).frame = (Fr.all n).frame →
         (trace (Fr.all n) (Fr.inp n) k).ram.get! (coinOf sy m0).ctlI ≠ 6 := by
@@ -616,7 +618,7 @@ theorem frames_coin {sy : Syms} {m0 : Machine} {Sr : FrameKeep.RealRun} {a g : N
         (trace (Fr.all n) (Fr.inp n) k).ram.get! (coinOf sy m0).ctlI ≠ 6 := by
     intro n hn hm
     obtain ⟨a1, _⟩ := Fr.all_start hcK hs0 h0 n (by omega)
-    exact frame_coin hcC rfl (start_C a1) (fun j => cleanK_C (Fr.clean n (by omega) j) (hct n hn j)) (Fr.noStore n hn) (hb n hn) (hrd n hn) hm
+    exact frame_coin hcC rfl (start_C a1) (fun j hf => cleanK_C (Fr.clean n (by omega) j) (hct n hn j hf)) (Fr.noStore n hn) (hb n hn) (hrd n hn) hm
   have maps : ∀ n, n + 1 < Fr.ix g → ColMap (coinOf sy m0).Q (Fr.all n) := by
     intro n
     induction n with

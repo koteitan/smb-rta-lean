@@ -98,13 +98,14 @@ def outR (P : Places) (r : Machine) (B : AS) : Bool :=
   decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI
 
 /-- at the frame's end: a state marked `[4, 4, 4]` or `[1, h, 0]` ends out of the player's routine; a state marked `[7, _]` or `[5, h]` knows the player's state to be 0 or
-2, or ends out of the player's routine -/
+2, or ends out of the player's routine. Since round 36 "out of the player's routine" is `RoomVert.outE`: not in the side pipe's routine either, so the frame that enters
+the side pipe is followed too (`after_RSE`) -/
 def finS (sy : Syms) (P : Places) (r : Machine) (B : AS) : Bool :=
   match B.log with
-  | [4, 4, 4] => outR P r B
-  | [1, _, 0] => outR P r B
-  | [7, _] => outR P r B || (knIs (B.getK (I sy.Player_State)) 0 || knIs (B.getK (I sy.Player_State)) 2)
-  | [5, _] => outR P r B || (knIs (B.getK (I sy.Player_State)) 0 || knIs (B.getK (I sy.Player_State)) 2)
+  | [4, 4, 4] => RoomVert.outE P r B
+  | [1, _, 0] => RoomVert.outE P r B
+  | [7, _] => RoomVert.outE P r B || (knIs (B.getK (I sy.Player_State)) 0 || knIs (B.getK (I sy.Player_State)) 2)
+  | [5, _] => RoomVert.outE P r B || (knIs (B.getK (I sy.Player_State)) 0 || knIs (B.getK (I sy.Player_State)) 2)
   | _ => true
 
 section
@@ -319,11 +320,12 @@ set_option maxHeartbeats 1000000 in
 the player's routine, then from there to its end no step writes the height's fraction, the forces, the jump's origin and the vertical page; and the height, the vertical
 speed and its fraction stay and the state is 0 or 2 at the end, and no step from the player's routine on comes to the side check in the state 0; or he lands: the state, the
 vertical speed and its fraction are 0, and the height is the one at the player's routine with the low four bits 0. The frame starts in the room's condition, and each
-instruction meets `SiteOK`. -/
-theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phS sy E P) E P r K C Fu)
+instruction meets `SiteOK`. Since round 36 also for a frame that ends in the side pipe's routine `P.eng` (the entering frame). -/
+theorem after_RSE {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phS sy E P) E P r K C Fu)
     (hfin : C.fin = finS sy P r) (hap : apartS sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
-    (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame → StandAt sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
+    (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame → StandAt sy (trace m i j) →
+       ((frame m i).ram.get! P.rtI = r.ram.get! P.rtI ∨ (frame m i).ram.get! P.rtI = P.eng) →
        (∀ x ∈ vRestS sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
        (((∀ x ∈ vLand3 sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
          ((frame m i).ram.get! (I sy.Player_State) = 0 ∨ (frame m i).ram.get! (I sy.Player_State) = 2) ∧
@@ -644,13 +646,10 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
       omega
   have hfinB : finS sy P r B = true := by rw [← hfin]; exact hB1
   -- the frame does not end out of the player's routine
-  have outF : outR P r B ≠ true := by
-    intro e
-    simp only [outR, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at e
-    obtain ⟨⟨a1, a2⟩, a3⟩ := e
-    have e2 := isK_eq a2 (hB2.ram _ a1)
-    rw [← hJ3, hrt] at e2
-    exact a3 e2.symm
+  have outF : RoomVert.outE P r B ≠ true := by
+    have hBe := hB2
+    rw [← hJ3] at hBe
+    exact RoomVert.not_outE hBe hrt
   have notOut : ∀ l, (l = [4, 4, 4] ∨ ∃ a, l = [1, a, 0]) → B.log ≠ l := by
     intro l hl e
     apply outF
@@ -659,7 +658,7 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have stK : (B.log = [7, 1] ∨ B.log = [7, 2] ∨ B.log = [7, 7] ∨ ∃ a, B.log = [5, a]) →
       (frame m i).ram.get! (I sy.Player_State) = 0 ∨ (frame m i).ram.get! (I sy.Player_State) = 2 := by
     intro hl
-    have h1 : outR P r B = true ∨ (knIs (B.getK (I sy.Player_State)) 0 = true ∨ knIs (B.getK (I sy.Player_State)) 2 = true) := by
+    have h1 : RoomVert.outE P r B = true ∨ (knIs (B.getK (I sy.Player_State)) 0 = true ∨ knIs (B.getK (I sy.Player_State)) 2 = true) := by
       rcases hl with e | e | e | ⟨a, e⟩ <;> simpa [finS, e] using hfinB
     rw [hJ3]
     rcases h1 with e | e | e
@@ -698,6 +697,21 @@ theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
       rw [only j₀ a1 a2] at a3
       exact absurd hstand a3
     · exact absurd e (notOut _ (Or.inl rfl))
+
+/-- **The frame from the player's routine, standing**, for a frame that ends in the player's routine (`after_RSE`) -/
+theorem after_RS {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phS sy E P) E P r K C Fu)
+    (hfin : C.fin = finS sy P r) (hap : apartS sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (∀ j j', j < j' → (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerCtrlRoutine) ∧
+    (∀ j, (trace m i j).pc = sy.PlayerCtrlRoutine → (trace m i j).frame = m.frame → StandAt sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
+       (∀ x ∈ vRestS sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
+       (((∀ x ∈ vLand3 sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
+         ((frame m i).ram.get! (I sy.Player_State) = 0 ∨ (frame m i).ram.get! (I sy.Player_State) = 2) ∧
+         (∀ j₁, j ≤ j₁ → (trace m i j₁).frame = m.frame → (trace m i j₁).pc = sy.DoPlayerSideCheck → (trace m i j₁).ram.get! (I sy.Player_State) ≠ 0)) ∨
+        ((frame m i).ram.get! (I sy.Player_State) = 0 ∧ (frame m i).ram.get! (I sy.Player_Y_Speed) = 0 ∧
+         (frame m i).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
+         (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0))) := by
+  obtain ⟨u, H⟩ := after_RSE h hfin hap hm hk
+  exact ⟨u, fun j hq hf hs hrt => H j hq hf hs (Or.inl hrt)⟩
 
 /-! ## One frame of the room that starts standing -/
 

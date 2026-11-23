@@ -64,7 +64,7 @@ landS_spec         :  1 ≤ d  ∧  s ∈ landsAt(d)  ∧  d + i ≤ aboveF − 
 
 ## 残ること（証明していない）
 
-* `offTop`、`offNear`、`offSlow`（[かたまりの上から: 床までのフレーム](c-7-8-2-OffDrop-ja.md) にそれぞれの証明の道があります）。
+* `offTop`、`offSlow`（[かたまりの上から: 床までのフレーム](c-7-8-2-OffDrop-ja.md) にそれぞれの証明の道があります）。`offNear` はラウンド 36 で証明しました（[入るフレーム](c-7-8-5-EntryVert-ja.md)）。
 
 **ファイル。** `Theorems/OffDrop.lean`（`visS`、`visS_spec`）。`Theorems/RoomJoin.lean`（`offNext`、`offStep`、`offRunV`、`offB`、`landsAt`、`landS`、`offRunV_eq`、`offB_spec`、`landS_spec`、`mem_landsAt`、`RoomRun.next_E`、`RoomRun.real_reach`、`RoomRun.descend_k`、`RoomRun.land_bound`。なくなったもの: `offFloor`、`offLand`、`pipeLands`、`pipeAOk`、`pipe_bound`、`pipeAc`、`pipeBc`、`pipeA`、`pipeB`、`pipe_sum`）。`Main.lean`: `room-off-back`（測っただけ）、`room-off-stand`。非公開の `Proof/RoomJoin.lean` に `landC` が入ります。
 

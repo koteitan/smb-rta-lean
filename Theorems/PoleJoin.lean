@@ -13,6 +13,7 @@ import Theorems.PoleSlot
 import Theorems.PoleRing
 import Theorems.PoleCoin
 import Theorems.PoleBcol
+import Theorems.PoleNear
 import Theorems.StopRead
 
 /-!
@@ -1402,8 +1403,14 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   whose base no index reaches either byte, nor of a store through the zero page and `X` (`PoleKeepFar.keepB_of_R`) -/
   keepB : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleKeepFar.KeepR sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- round 35 (`1-1/f-6-17-18-PoleBcol.md`): each instruction of each frame up to the touch's frame, counted or not: a store through an index or a pointer that
-  `PoleKeepFar.farStore` does not settle does not write the block buffer's column `B` (`PoleBcol.BcR`), so the walk of `PoleBcol` keeps it known -/
-  bKeep : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleBcol.BcR (PoleBcol.bcOf sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
+  `PoleKeepFar.farStore` does not settle does not write the block buffer's column `B` (`PoleBcol.BcR`), so the walk of `PoleBcol` keeps it known.
+  Round 36 (`1-1/f-6-17-19-PoleNear.md`): asked only at a store through a pointer but the area parser's store of a column (`PoleNear.ResidB`), and on the
+  touch's frame at the instructions after its first store of the routine, the mode or the task by its address: at the other instructions the walk of `PoleNear`
+  proves it (`PoleNear.near_frames`), and at the parser's store the walk of `PoleBcol` (`Run.bNoW`) -/
+  bKeep : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k,
+    (PoleNear.ResidB sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) ∨
+      ∃ j, j < k ∧ FrameKeep.CtlStore sy (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) j) = true) →
+    PoleBcol.BcR (PoleBcol.bcOf sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- round 29 (in place of the old `tilesCol`, which asked `PoleTileFar.TileCol`: right after such a read, at the pole's column, the byte read is not one of the pole's
   tiles): up to the routine's write, right after a read of the side check with the page two or more before the pole's, at the pole's column, if the byte read is one
   of the pole's tiles then the area parser's column of the frame's start had come to the pole's; he is at most 112 px left of the screen's left edge of the frame's
@@ -1428,8 +1435,11 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   byte read is a coin's tile, the read is in the RAM, in the block buffers (`PoleCoin.ReadC`) -/
   readC : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleCoin.ReadC (PoleCoin.coinOf sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- round 35: each instruction of each frame before the touch's frame: a store through an index or a pointer that `PoleKeepFar.farStore` does not settle does
-  not write the screen buffers' control byte (`PoleCoin.CtlR`), so the walk of `PoleCoin` keeps it known -/
-  ctlKeep : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleCoin.CtlR (PoleCoin.coinOf sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
+  not write the screen buffers' control byte (`PoleCoin.CtlR`), so the walk of `PoleCoin` keeps it known. Round 36 (`1-1/f-6-17-19-PoleNear.md`): asked only at
+  the places of `PoleNear.ResidC` (a store through a pointer in the code of the head's collision with a block, the castle's loop of rows, the store of
+  `RenderUnderPart`): at the other instructions the walk of `PoleNear` proves it, and at the parser's store the walk of `PoleBcol` (`Run.ctlR`) -/
+  ctlKeep : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleNear.ResidC sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) →
+    PoleCoin.CtlR (PoleCoin.coinOf sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- up to the write, a store through an index or a pointer that writes the position's pixel or page is one of the move routine's stores of them, with the index 0 -/
   posKeep : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n → PoleFrame.PosKeep sy m0 (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
   /-- up to the write, the scroll handler's store of the position at the screen's edges does not bring him into the pole's range: if he is in it right after that store
@@ -1636,18 +1646,57 @@ theorem Run.low {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : 
     (hT : R.TileColAll) : ∀ n, n < R.keep.toFrames.ix R.g → PoleSlot.colP (PoleFrame.spotsF sy m0) < parColOf sy m0 (R.keep.toFrames.all n) + 32 :=
   PoleRing.low_mono (c := fun n => parColOf sy m0 (R.keep.toFrames.all n)) hT.2.2.1 hT.1
 
+/-- round 36 (`1-1/f-6-17-19-PoleNear.md`): **on each frame up to the touch's frame, no store through an index or a pointer but the parser's store of a column
+writes `B`**: up to the frame's first store of the routine, the mode or the task by its address and away from the places of `PoleNear.ResidB` by the walk of
+`PoleNear` (`PoleNear.near_frames`, `hcN`), and at those places and after such a store by the field `bKeep` -/
+theorem Run.bNoW {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hcN : PoleNear.nCheck sy m0 = true) (hs0 : FrameKeep.StartK sy m0 (R.seq 0))
+    (hw0 : FrameKeep.Watched (FrameKeep.watchOf sy) (R.seq 0)) :
+    ∀ n, n < R.keep.toFrames.ix R.g → ∀ k, (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k).frame = (R.keep.toFrames.all n).frame →
+      (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k).pc ≠ (PoleBcol.bcOf sy m0).store →
+      PoleBcol.NoW (PoleBcol.bcOf sy m0).bI (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k) := by
+  intro n hn k hf hpc
+  by_cases hx : ∃ j, j < k ∧ FrameKeep.CtlStore sy (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) j) = true
+  · exact PoleBcol.b_of_R (R.bKeep n hn k (Or.inr hx))
+  · have hx' : ∀ j, j < k → FrameKeep.CtlStore sy (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) j) = false := by
+      intro j hj
+      cases e : FrameKeep.CtlStore sy (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) j) with
+      | false => rfl
+      | true => exact absurd ⟨j, hj, e⟩ hx
+    by_cases hr : PoleNear.ResidB sy m0 (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k)
+    · exact PoleBcol.b_of_R (R.bKeep n hn k (Or.inl hr))
+    · exact (PoleNear.near_frames hk hcN R.keep.toFrames hs0 hw0 n hn k hx' hf hpc).2 hr
+
+/-- round 36: **on each frame before the touch's frame no store through an index or a pointer writes the control byte** (`PoleCoin.CtlR` on each instruction of
+the frame): at the parser's store of a column by the walk of `PoleBcol` (`PoleBcol.frames_bcol`, which knows `B` there, with `Run.bNoW`), at the places of
+`PoleNear.ResidC` by the field `ctlKeep`, elsewhere by the walk of `PoleNear` (no frame before the touch's frame stores the routine, the mode or the task by its
+address: `keep.noStore`) -/
+theorem Run.ctlR {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
+    (hs0 : FrameKeep.StartK sy m0 (R.seq 0)) (hw0 : FrameKeep.Watched (FrameKeep.watchOf sy) (R.seq 0)) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
+    ∀ n, n + 1 < R.keep.toFrames.ix R.g → ∀ k, (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k).frame = (R.keep.toFrames.all n).frame →
+      PoleCoin.CtlR (PoleCoin.coinOf sy m0) (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k) := by
+  intro n hn k hf _
+  by_cases hpc : (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k).pc = (PoleBcol.bcOf sy m0).store
+  · exact ((PoleBcol.frames_bcol hk hcB R.keep.toFrames hs0 hw0 hIB (R.bNoW hk hcN hs0 hw0) n (by omega)).2 k hpc).2.2
+  · by_cases hr : PoleNear.ResidC sy m0 (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k)
+    · exact PoleCoin.ctl_of_R (R.ctlKeep n hn k hr)
+    · exact (PoleNear.near_frames hk hcN R.keep.toFrames hs0 hw0 n (by omega) k (fun j _ => R.keep.toFrames.noStore n hn j) hf hpc).1 hr
+
 /-- **Round 35: the screen buffers' control byte is not 6 at `UpdScrollVar`** on each frame before the touch's frame (`PoleCoin.frames_coin`), from no coin's tile
 in the block buffers at control (`hm0`, from the rows of the change: `PoleParserRun.coinMap₀`), the walk of `PoleCoin` (`hcC`) and that of `FrameKeep` (`hk`), and
-the fields `coinBuf` (`PoleKeepFar.bufAt_of_V`), `readC` and `ctlKeep`. It is what the old field `ctlU` gave. -/
+the fields `coinBuf` (`PoleKeepFar.bufAt_of_V`), `readC` and `ctlKeep`. It is what the old field `ctlU` gave. Round 36: `CtlR` is `Run.ctlR` (the walks of
+`PoleNear` and `PoleBcol`, `hcN`, `hcB`, `hIB`, and the narrowed field `ctlKeep`) -/
 theorem Run.ctl6 {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hk : FrameKeep.keepCheckOf sy m0 = true) (hcC : PoleCoin.coinCheck sy m0 = true) (hs0 : FrameKeep.StartK sy m0 (R.seq 0))
-    (hw0 : FrameKeep.Watched (FrameKeep.watchOf sy) (R.seq 0)) (hm0 : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
+    (hw0 : FrameKeep.Watched (FrameKeep.watchOf sy) (R.seq 0)) (hm0 : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
+    (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     ∀ n, n + 1 < FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g → ∀ k, (PipeEntryRule.trace (Sr.seq (ar + n)) (Sr.inp (ar + n)) k).pc = sy.UpdScrollVar →
       (PipeEntryRule.trace (Sr.seq (ar + n)) (Sr.inp (ar + n)) k).frame = (Sr.seq (ar + n)).frame →
       parCtlOf sy m0 (PipeEntryRule.trace (Sr.seq (ar + n)) (Sr.inp (ar + n)) k) ≠ 6 := by
   intro n hn k hpc hf
   exact (PoleCoin.frames_coin hk hcC R.keep.toFrames hs0 hw0 hm0 (fun n hn k => PoleKeepFar.bufAt_of_V (R.coinBuf n hn k)) (fun n hn k => R.readC n hn k)
-    (fun n hn k => R.ctlKeep n hn k) n hn).2 k hpc hf
+    (fun n hn k hf => R.ctlR hk hcN hcB hs0 hw0 hIB n hn k hf) n hn).2 k hpc hf
 
 /-- round 33: the touch's frame meets `PoleSlot.BufC` on each instruction, for the parser's column at its start: `bufAll` on its frame, with
 `PoleRing.bufC_of_VM` (round 34: with the ring's facts and the bound of `Run.low`) -/

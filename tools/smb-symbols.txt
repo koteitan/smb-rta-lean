@@ -226,3 +226,6 @@ CheckTopOfBlock
 CoinTile2=byte:CheckForCoinMTiles+5
 # the loop command's step back of the pages (round 35, part f)
 ExecGameLoopback
+# the shuffle of the sprites' data offsets in the screen's interrupt, and the area parser's loop that draws a column of one metatile down to the floor (round 36, part f)
+SpriteShuffler
+RenderUnderPart

@@ -882,6 +882,16 @@ theorem pole_bcol_walk : PoleBcol.bcolCheck sy ctx = true := by native_decide
 theorem pole_bcol_rows : PoleParserRun.bInvK sy ctx sideBoundNames sideEndNames (SideTransition.entry ctx) 160 122 sideRt = true := by native_decide
 ")
 
+/-- round 36 (`PoleNear`): the walk of one whole frame in control, up to its first store of the routine, the mode or the task, that knows where each store through
+an index or a pointer may go, for the control byte and the block buffer's column -/
+def genPoleNear (dir : String) : IO Unit :=
+  IO.FS.writeFile s!"{dir}/PoleNear.lean" ("import Proof.Rom\nimport Theorems.PoleNear\n" ++ s!"/-! {privateNote} -/\n" ++ "
+open Smbrta Smbrta.Rom
+set_option maxHeartbeats 0
+/-- the walk of one whole frame in control with the stores that may reach the control byte or the block buffer's column (`PoleNear.near_frame`) -/
+theorem pole_near_walk : PoleNear.nCheck sy ctx = true := by native_decide
+")
+
 /-- The machine-based pole arc uses the movement routine's fixed stack and halt value. -/
 def genPoleJump (dir : String) : IO Unit :=
   IO.FS.writeFile s!"{dir}/PoleJump.lean" ("import Proof.RoomVert\nimport Theorems.PoleJump\n" ++ s!"/-! {privateNote} -/\n" ++ "
@@ -1964,6 +1974,7 @@ theorem room_checks : Checks sy ctx roomNums where
   jumpAir := by native_decide
   keepA := by native_decide
   offVfd := by native_decide
+  entryY := by native_decide
 
 open Smbrta.RoomJoin in
 /-- **The bonus room**: in a run with these frames, the side pipe is entered at least {98 + joinT.aboveF} frames after first control -/
@@ -2109,7 +2120,7 @@ theorem flag_check : FlagRule.flagCheck flagCtx (FlagRule.dataOf flagCtx) = true
 theorem flag_checked : FlagRule.Checked flagCtx (FlagRule.dataOf flagCtx) := FlagRule.checked_of_check flag_check
 ")
   -- the whole route
-  IO.FS.writeFile s!"{dir}/Route.lean" ("import Proof.PipeWrites\nimport Proof.RoomJoin\nimport Proof.RoomVert\nimport Proof.RoomStart\nimport Proof.ScreenStart\nimport Proof.PoleJoin\nimport Proof.CastleToLevel\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.SideChangeEnd\nimport Proof.FlagRule\nimport Proof.SurfaceFrames\nimport Proof.ScreenPage\nimport Proof.TitleStart\nimport Proof.EntryKeep\nimport Proof.ControlStart\nimport Proof.StartRun\nimport Proof.RoomMap\nimport Proof.LagPause\nimport Proof.Opening\nimport Proof.OpenFrames\nimport Proof.SideEntryEnd\nimport Proof.SideEntryRest\nimport Proof.SideChangeSound\nimport Proof.SidePause\nimport Proof.RoomPause\nimport Proof.AreaJoin\nimport Proof.EntryHeight\nimport Proof.OpenMap\nimport Proof.RoomBlocks\nimport Proof.RoomLand\nimport Proof.OpenAir\nimport Proof.RoomWall\nimport Proof.RoomRunSpeed\nimport Proof.RoomAbsKeep\nimport Proof.RoomCorner\nimport Proof.RoomHigh\nimport Proof.PoleParser\nimport Proof.PoleParserEnd\nimport Proof.PoleRing\nimport Proof.PoleCoin\nimport Proof.PoleBcol\n" ++ head ["Route", "SurfaceLate", "PoleParserRun"] ++ s!"
+  IO.FS.writeFile s!"{dir}/Route.lean" ("import Proof.PipeWrites\nimport Proof.RoomJoin\nimport Proof.RoomVert\nimport Proof.RoomStart\nimport Proof.ScreenStart\nimport Proof.PoleJoin\nimport Proof.CastleToLevel\nimport Proof.PipeChangeBound\nimport Proof.PipeChangeEnd\nimport Proof.SideChangeEnd\nimport Proof.FlagRule\nimport Proof.SurfaceFrames\nimport Proof.ScreenPage\nimport Proof.TitleStart\nimport Proof.EntryKeep\nimport Proof.ControlStart\nimport Proof.StartRun\nimport Proof.RoomMap\nimport Proof.LagPause\nimport Proof.Opening\nimport Proof.OpenFrames\nimport Proof.SideEntryEnd\nimport Proof.SideEntryRest\nimport Proof.SideChangeSound\nimport Proof.SidePause\nimport Proof.RoomPause\nimport Proof.AreaJoin\nimport Proof.EntryHeight\nimport Proof.OpenMap\nimport Proof.RoomBlocks\nimport Proof.RoomLand\nimport Proof.OpenAir\nimport Proof.RoomWall\nimport Proof.RoomRunSpeed\nimport Proof.RoomAbsKeep\nimport Proof.RoomCorner\nimport Proof.RoomHigh\nimport Proof.PoleParser\nimport Proof.PoleParserEnd\nimport Proof.PoleRing\nimport Proof.PoleCoin\nimport Proof.PoleBcol\nimport Proof.PoleNear\n" ++ head ["Route", "SurfaceLate", "PoleParserRun"] ++ s!"
 open Smbrta.SideChangeSound in
 /-- the rows of the change out of the side pipe with the sound's bytes in tables: the frames up to control, the state at control above ground, and the machine there as the
 walk of `FrameKeep` needs it, with the rows made once -/
@@ -2153,7 +2164,7 @@ theorem route_1_1 (R : Run sy ctx {pipeN} {pipeD} roomNums (beside ctx) (beforeG
   -- round 29: `TileCol` on the touch's frame, from the area parser's invariant (`PoleParserRun.tilesCol_route`)
   have hav : peek (above ctx {surfCtl}) sy.AreaType = 1 := by native_decide
   have heb : posP sy (above ctx {surfCtl}) + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy (above ctx {surfCtl}) : Int) < 64896 * 256 := by native_decide
-  have hTc := PoleParserRun.tilesCol_route side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ pole_parser_rows pole_parser_col pole_parser_jv pole_parser_low pole_coin_rows pole_coin_walk pole_bcol_rows pole_bcol_walk title_check entry_checks R hst pole_numbers top_frictionCheck pole_frac keep_check hc0 hg heb hav pole_parser_q pole_parser_e pole_parser_s scroll_rule_check pole_top
+  have hTc := PoleParserRun.tilesCol_route side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ pole_parser_rows pole_parser_col pole_parser_jv pole_parser_low pole_coin_rows pole_coin_walk pole_bcol_rows pole_bcol_walk pole_near_walk title_check entry_checks R hst pole_numbers top_frictionCheck pole_frac keep_check hc0 hg heb hav pole_parser_q pole_parser_e pole_parser_s scroll_rule_check pole_top
   have h₅ := pole_touch_castle R.pole hst hc0 hm0 hw0 hg hTc
   refine level_ge_of_parts (by decide) (by decide) (by decide) pipe_end side_bound side_sound side_pause ⟨screen_facts, screen_timer_same, screen_rt, pipe_end, screen_start, room_pause, pause_index, room_music, map_facts, map_start, map_startF, side_entry_end_check, side_rest_check, area_facts, height_facts, buffer_facts⟩ flag_checked rfl title_check entry_checks R h₁ h₃ ?_
   rcases h₅ with ⟨a, b⟩ | ⟨a, b, c⟩ | ⟨a, b⟩
@@ -15185,11 +15196,17 @@ structure ParserRep where
   bcRBadA : Nat := 0
   tileOffStore : Nat := 0
   storeRingBad : Nat := 0
+  /-- round 36 (PoleNear): the instructions in control at the places of `PoleNear.ResidC` and `PoleNear.ResidB` (where the narrowed fields `ctlKeep` and `bKeep`
+  stay asked), those where the field is false there, and the parser's stores that write the control byte or `B` -/
+  residCN : Nat := 0
+  residBN : Nat := 0
+  residBad : Nat := 0
+  storeNoW : Nat := 0
   deriving Inhabited
 
 /-- round 35: the facts that `PoleCoin` asks or proves above ground, as one number: 0 when none fails -/
 def ParserRep.bad35 (r : ParserRep) : Nat := r.ctlIdxA + r.readOutA + r.readCoinA + r.coinMapA + r.coinIdxA + r.readCBadA + r.ctlRBadA + (if r.ctlValsA.all (· == 0) then 0 else 1) +
-  r.bInvBadA + r.bcRBadA + r.storeRingBad
+  r.bInvBadA + r.bcRBadA + r.storeRingBad + r.residBad + r.storeNoW
 
 def ParserRep.show (r : ParserRep) : String :=
   s!"frames that start in control {r.frames}; values of 16·col + 16·p(N) + S − edge (value, frames) {r.vals}; block buffer's column ≠ the parser's column mod 32 on {r.bcolBad} frames; stores of a pole's tile into the block buffers {r.tileStores}, parser's column minus the pole's column at them (px) {r.tileDiffs}" ++
@@ -15204,7 +15221,8 @@ def ParserRep.show (r : ParserRep) : String :=
   s!"\n  round 33 (PoleSlot): at the stores of a pole's tile into the block buffers, the parser's column of the frame's start minus the pole's {r.tileDiffs0}, below 0 (BufVS false) {r.slotStoreBad}; frame starts in control with the slot's map false {r.slotStartBad}; far reads in the pole's column where TileSlotN (near and read) is false {r.tsBad33}, where TileSlotC (the round 33 tilesCol: the parser's column of the frame's start before the pole's) is false {r.tsBadC}" ++
   s!"\n  round 33 (PoleLag): largest lag S + 3·N at UpdScrollVar in control {r.lagMax}, above ground {r.lagMaxA}; visits above ground with the lag ≥ 157 (where ctlU asks the control byte not 6) {r.lagAskA}, where ctlU is false {r.lagBadA}" ++
   s!"\n  round 35 (PoleCoin): the control byte at UpdScrollVar above ground: values {r.ctlValsA}; stores through an index or a pointer to it: any area {r.ctlIdxAny}, above ground {r.ctlIdxA}; the player's collision reads {r.readsP} and the reads above a bumped block {r.readsTop}, out of the block buffers: any area {r.readOutAny}, above ground {r.readOutA}; a coin's tile read above ground {r.readCoinA}; frame starts above ground with a coin's tile in the block buffers {r.coinMapA}; stores through an index or a pointer that leave a coin's tile in the block buffers above ground {r.coinIdxA}; instructions where readC is false: any area {r.readCBadAny}, above ground {r.readCBadA}; where ctlKeep is false: any area {r.ctlRBadAny}, above ground {r.ctlRBadA}" ++
-  s!"\n  round 35 (PoleBcol): frame starts in control with BInv false: any area {r.bInvBad}, above ground {r.bInvBadA}; instructions where bKeep is false: any area {r.bcRBad}, above ground {r.bcRBadA}; stores of a pole's tile away from the parser's store {r.tileOffStore}; at the parser's store, bytes changed outside the ring's column of B {r.storeRingBad}"
+  s!"\n  round 35 (PoleBcol): frame starts in control with BInv false: any area {r.bInvBad}, above ground {r.bInvBadA}; instructions where bKeep is false: any area {r.bcRBad}, above ground {r.bcRBadA}; stores of a pole's tile away from the parser's store {r.tileOffStore}; at the parser's store, bytes changed outside the ring's column of B {r.storeRingBad}" ++
+  s!"\n  round 36 (PoleNear): instructions at the places of ResidC {r.residCN}, of ResidB {r.residBN}, where the narrowed field is false there {r.residBad}; parser's stores that write the control byte or B {r.storeNoW}"
 
 /-- one real frame for `pole-keep parser`: at its start, if in control, the parser's sum; on its steps, the stores of a pole's tile into the block buffers -/
 def parserScanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 : ParserRep) : ParserRep × Machine := Id.run do
@@ -15216,6 +15234,7 @@ def parserScanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 :
   let topR := PipeEntryRule.findOp m0 sy.CheckTopOfBlock 0xB1 32
   let Kc := PoleCoin.coinOf sy m0
   let Kb := PoleBcol.bcOf sy m0
+  let NP := PoleNear.nearOf sy m0
   let mut r := r0
   if controllable sy m then
     let bv := (m.ram.get! Kb.bI).toNat
@@ -15290,6 +15309,14 @@ def parserScanFrame (sy : Syms) (m0 : Machine) (m : Machine) (pad : UInt8) (r0 :
       if !PoleCoin.readCB Kc c then r := { r with readCBadAny := r.readCBadAny + 1, readCBadA := r.readCBadA + (if above then 1 else 0) }
       if !PoleCoin.ctlRB Kc c then r := { r with ctlRBadAny := r.ctlRBadAny + 1, ctlRBadA := r.ctlRBadA + (if above then 1 else 0) }
       if !PoleBcol.bcRB Kb c then r := { r with bcRBad := r.bcRBad + 1, bcRBadA := r.bcRBadA + (if above then 1 else 0) }
+      -- round 36 (PoleNear)
+      if PoleNear.residC sy NP c.pc (PipeWrites.opAt c) then r := { r with residCN := r.residCN + 1, residBad := r.residBad + (if PoleCoin.ctlRB Kc c then 0 else 1) }
+      if PoleNear.residB NP c.pc (PipeWrites.opAt c) then r := { r with residBN := r.residBN + 1, residBad := r.residBad + (if PoleBcol.bcRB Kb c then 0 else 1) }
+      if c.pc == Kb.store then
+        let w := match PipeWrites.wTarget (PipeWrites.opAt c) c with
+          | some t => decide (t < 0x2000) && ((t &&& 0x7FF).toNat == Kb.bI || (t &&& 0x7FF).toNat == Kb.ctlI)
+          | none => false
+        if w then r := { r with storeNoW := r.storeNoW + 1 }
       if c.pc == Kb.store then
         let c' := (PipeTransitionAll.go step c).2
         let b0 := (c.ram.get! Kb.bI).toNat
@@ -15555,6 +15582,7 @@ def bcolDiag (C : FrameKeep.CfgK) (K : PoleBcol.Bc) (b : Nat) : Nat → TaintRun
   | n + 1, A =>
     (PoleBcol.preB C K A).findSome? fun A₁ =>
       if !PoleBcol.storeOK C.E K b A₁ then some s!"the store at {A₁.pc.toNat}: target {(PoleBcol.storeT C.E K A₁).map (·.toNat)}, y known {A₁.y.k.toNat} {A₁.y.v.toNat}"
+      else if !PoleBcol.missS C.E K A₁ then some s!"round 36: the store at {A₁.pc.toNat} may write B or the control byte: target {(PoleBcol.storeT C.E K A₁).map (·.toNat)}"
       else (FrameKeep.kstep C.S C.G C.E C.ops A₁).findSome? fun r =>
         match r with
         | none => some s!"no step at {A₁.pc.toNat} (nmi {A₁.nmi})"
@@ -15606,8 +15634,156 @@ def poleBcolCheck (sy : Syms) (romPath : String) (pieces : List Nat) : IO UInt32
     return if ok && bad == 0 then 0 else 1
   return if bad == 0 then 0 else 1
 
+/-- round 36 (PoleNear): a failure of the test `t` at a state of a walk, by pc: the count and the first state (no part of the proof) -/
+abbrev NearFails := Std.HashMap Nat (Nat × TaintRun.AS)
+
+def nearAdd (t : TaintRun.AS → Bool) (A : TaintRun.AS) (acc : NearFails) : NearFails :=
+  if t A then acc else
+  match acc[A.pc.toNat]? with
+  | some (c, B) => acc.insert A.pc.toNat (c + 1, B)
+  | none => acc.insert A.pc.toNat (1, A)
+
+/-- round 36 (PoleNear): the states of the walk `PoleCoin.walkC` from `A` where `t` fails (no part of the proof) -/
+def nearScanC (C : FrameKeep.CfgK) (K : PoleCoin.Coin) (l : List Nat) (t : TaintRun.AS → Bool) : Nat → TaintRun.AS → NearFails → NearFails
+  | 0, _, acc => acc
+  | n + 1, A, acc =>
+    if FrameKeep.storesTo l C.E.prg C.E.mask A.pc then acc else
+    (PoleCoin.preC C K A).foldl (fun acc A₁ =>
+      let acc := nearAdd t A₁ acc
+      if !(PoleCoin.ctlOK K A₁ && PoleTileWalk.okSK C.E K.Q A₁) then acc else
+      (FrameKeep.kstep C.S C.G C.E C.ops A₁).foldl (fun acc r =>
+        match r with
+        | none => acc
+        | some B =>
+          if !PoleCoin.pairC K A₁ B then acc
+          else if B.k == A.k then (if C.cut.get! B.pc.toNat != 0 && FrameKeep.coverK C B then acc else nearScanC C K l t n B acc)
+          else acc) acc) acc
+
+/-- round 36 (PoleNear): the states of the walk `PoleBcol.walkB` from `A` where `t` fails (no part of the proof) -/
+def nearScanB (C : FrameKeep.CfgK) (K : PoleBcol.Bc) (b : Nat) (t : TaintRun.AS → Bool) : Nat → TaintRun.AS → NearFails → NearFails
+  | 0, _, acc => acc
+  | n + 1, A, acc =>
+    (PoleBcol.preB C K A).foldl (fun acc A₁ =>
+      let acc := nearAdd t A₁ acc
+      if !PoleBcol.storeOK C.E K b A₁ then acc else
+      (FrameKeep.kstep C.S C.G C.E C.ops A₁).foldl (fun acc r =>
+        match r with
+        | none => acc
+        | some B =>
+          if B.k == A.k then (if C.cut.get! B.pc.toNat != 0 && FrameKeep.coverK C B then acc else nearScanB C K b t n B acc)
+          else acc) acc) acc
+
+def nearAbS (b : TaintRun.AB) : String := s!"{b.k.toNat}/{(b.v &&& b.k).toNat}"
+
+def nearShow (E : TaintRun.Env) (acc : NearFails) : IO Unit := do
+  for (pc, c, A) in (acc.toList.mergeSort fun a b => a.1 ≤ b.1) do
+    let op := SideRange.opA E A
+    let z := SideRange.zop E A
+    IO.println s!"  pc {pc} op {op.toNat} operand {(SideRange.opnd E A).toNat} count {c}: X {nearAbS A.x} Y {nearAbS A.y}, ptr lo {nearAbS (A.getK z.toNat)} hi {nearAbS (A.getK (z + 1).toNat)}"
+
+/-- round 36 (PoleNear): the measure `pole-keep near [b]`: where the walks of `PoleCoin` and `PoleBcol` do not know that a store through an index or a pointer
+misses the control byte and `B` -/
+def poleNearMeasure (sy : Syms) (romPath : String) (pieces : List Nat) : IO UInt32 := do
+  let m0 := smb11Start sy (← loadCart romPath)
+  let E := PipeEntryRule.envOf m0
+  let S := FrameKeep.spotOf sy m0
+  let K := PoleCoin.coinOf sy m0
+  let G := PoleCoin.guardC sy m0
+  let l := FrameKeep.ctlI sy
+  let KB := PoleBcol.bcOf sy m0
+  IO.println s!"control byte {K.ctlI}, B {KB.bI}"
+  let t0 ← IO.monoMsNow
+  let C := PoleCoin.cfgC S G E K l
+  let mut accC : NearFails := {}
+  let mut accCB : NearFails := {}
+  for i in [0:C.t.size] do
+    accC := nearScanC C K l (PoleNear.missT K.ctlI E) FrameKeep.fuelK C.t[i]! accC
+    accCB := nearScanC C K l (PoleNear.missT KB.bI E) FrameKeep.fuelK C.t[i]! accCB
+  for b in [false, true] do
+    accC := nearScanC C K l (PoleNear.missT K.ctlI E) FrameKeep.fuelK (FrameKeep.startK G [] b) accC
+    accCB := nearScanC C K l (PoleNear.missT KB.bI E) FrameKeep.fuelK (FrameKeep.startK G [] b) accCB
+  IO.println s!"walk of PoleCoin ({C.t.size} states, {(← IO.monoMsNow) - t0} ms): the control byte, {accC.size} pcs"
+  nearShow E accC
+  IO.println s!"walk of PoleCoin: B, {accCB.size} pcs"
+  nearShow E accCB
+  flush
+  let GB := PoleBcol.guardB sy m0
+  let mut accB : NearFails := {}
+  let mut accBC : NearFails := {}
+  for b in pieces do
+    let t1 ← IO.monoMsNow
+    let CB := PoleBcol.cfgB S GB E KB b
+    for i in [0:CB.t.size] do
+      accB := nearScanB CB KB b (PoleNear.missT KB.bI E) FrameKeep.fuelK CB.t[i]! accB
+      accBC := nearScanB CB KB b (PoleNear.missT K.ctlI E) FrameKeep.fuelK CB.t[i]! accBC
+    for late in [false, true] do
+      accB := nearScanB CB KB b (PoleNear.missT KB.bI E) FrameKeep.fuelK (PoleBcol.startB GB KB b late) accB
+      accBC := nearScanB CB KB b (PoleNear.missT K.ctlI E) FrameKeep.fuelK (PoleBcol.startB GB KB b late) accBC
+    IO.println s!"piece {b}: {CB.t.size} states, {(← IO.monoMsNow) - t1} ms; B fails at {accB.size} pcs, the control byte at {accBC.size} pcs so far"
+    flush
+  IO.println s!"walk of PoleBcol: B, {accB.size} pcs"
+  nearShow E accB
+  IO.println s!"walk of PoleBcol: the control byte, {accBC.size} pcs"
+  nearShow E accBC
+  return if accC.size == 0 && accB.size == 0 then 0 else 1
+
+/-- round 36 (PoleNear): the search of the whole frame with `SideRange`'s table, the test for the control byte and `B`; `cut` the stores of the routine, the mode
+and the task by address (no part of the proof) -/
+def poleNearSearch (sy : Syms) (romPath : String) (cut : Bool) (exC exB : List Nat := []) (exK : Option (List Nat) := none) (readT : Bool := false) : IO UInt32 := do
+  let m0 := smb11Start sy (← loadCart romPath)
+  let E := PipeEntryRule.envOf m0
+  let K := PoleCoin.coinOf sy m0
+  let KB := PoleBcol.bcOf sy m0
+  let l := if cut then FrameKeep.ctlI sy else []
+  let t0 ← IO.monoMsNow
+  let KQ := K.Q
+  let ok := fun (A : TaintRun.AS) => A.pc == KB.store || ((PoleNear.missT K.ctlI E A || exC.contains A.pc.toNat) && (PoleNear.missT KB.bI E A || exB.contains A.pc.toNat) &&
+    (match exK with
+     | some l => PoleNear.missB KQ E A || l.contains A.pc.toNat
+     | none => true) &&
+    (!readT || !(A.pc == K.read || A.pc == K.top) || PoleNear.missPR (fun i => !PoleTileWalk.inBufB KQ i) E A))
+  let R ← IO.lazyPure fun _ => PoleNear.searchN sy m0 l ok
+  IO.println s!"search (cut {cut}): table {R.X.done.size} keys, multi {R.X.multi.size}, steps {R.X.steps}, fails {R.X.fails}, {(← IO.monoMsNow) - t0} ms"
+  let fp := R.X.failPcs.toList.mergeSort fun a b => a.1 ≤ b.1
+  IO.println s!"fail pcs {fp.length}: {fp}"
+  let mut seen : Std.HashMap Nat Unit := {}
+  for (_, A) in R.failAt do
+    if !(seen.contains A.pc.toNat) then
+      seen := seen.insert A.pc.toNat ()
+      let op := SideRange.opA E A
+      let z := SideRange.zop E A
+      IO.println s!"  pc {A.pc.toNat} op {op.toNat} operand {(SideRange.opnd E A).toNat}: ctl {PoleNear.missT K.ctlI E A} B {PoleNear.missT KB.bI E A} coin {PoleNear.missB K.Q E A} (A {nearAbS A.a}); X {nearAbS A.x} Y {nearAbS A.y}, ptr lo {nearAbS (A.getK z.toNat)} hi {nearAbS (A.getK (z + 1).toNat)}, log {A.log}"
+  for (k0, A) in R.failAt.toList.take 3 do
+    match R.X.done[k0]? with
+    | some (D, _) => IO.println s!"  fail at {A.pc.toNat} from the table state at {D.pc.toNat}: X {nearAbS D.x} Y {nearAbS D.y} bounds {D.log}; pred {R.pred[k0]?}"
+    | none => IO.println s!"  fail at {A.pc.toNat} from key not in the table"
+  flush
+  return if R.X.fails == 0 then 0 else 1
+
+/-- round 36 (PoleNear): the search of `PoleNear.searchN` with the places of `ResidC` and `ResidB`, the places, and the check `PoleNear.nCheck` natively -/
+def poleNearCheck (sy : Syms) (romPath : String) : IO UInt32 := do
+  let m0 := smb11Start sy (← loadCart romPath)
+  IO.println s!"places: the parser's store {(PoleBcol.bcOf sy m0).store.toNat}, the control byte {(PoleBcol.bcOf sy m0).ctlI}, B {(PoleBcol.bcOf sy m0).bI}, the store of RenderUnderPart {(PoleNear.nearOf sy m0).rup.toNat}, the shuffle {sy.SpriteShuffler.toNat} to {(PoleNear.shufE sy m0).toNat}"
+  let t0 ← IO.monoMsNow
+  let (f, fp, sz) ← IO.lazyPure fun _ => PoleNear.nFails sy m0
+  IO.println s!"search: fails {f} at {fp}, table {sz} keys, {(← IO.monoMsNow) - t0} ms"
+  flush
+  let t1 ← IO.monoMsNow
+  let ok ← IO.lazyPure fun _ => PoleNear.nCheck sy m0
+  IO.println s!"the check PoleNear.nCheck {ok}, {(← IO.monoMsNow) - t1} ms"
+  return if ok && f == 0 then 0 else 1
+
 /-- the commands `pole-keep check FM2 [N]`, `pole-keep search` and `pole-keep parser FM2 [N]` (outside the main match, which is at the C compiler's nesting limit) -/
 def poleKeepCmd (sy : Syms) (rom : String) : List String → IO UInt32
+  | ["near-check"] => poleNearCheck sy rom
+  | ["near-search"] => poleNearSearch sy rom false
+  | ["near-search", "cut"] => poleNearSearch sy rom true
+  | ["near-search", "cut", c, b] => poleNearSearch sy rom true ((c.splitOn ",").filterMap String.toNat?) ((b.splitOn ",").filterMap String.toNat?)
+  | ["near-search", "read", c, b] => poleNearSearch sy rom true ((c.splitOn ",").filterMap String.toNat?) ((b.splitOn ",").filterMap String.toNat?) none true
+  | ["near-search", "cut", c, b, k] => poleNearSearch sy rom true ((c.splitOn ",").filterMap String.toNat?) ((b.splitOn ",").filterMap String.toNat?) (some ((k.splitOn ",").filterMap String.toNat?))
+  | ["near-search", "nocut", c, b] => poleNearSearch sy rom false ((c.splitOn ",").filterMap String.toNat?) ((b.splitOn ",").filterMap String.toNat?)
+  | ["near"] => poleNearMeasure sy rom (List.range 32)
+  | ["near", b] => poleNearMeasure sy rom [b.toNat!]
   | ["ctl"] => poleCtlMeasure sy rom
   | ["coin"] => poleCoinCheck sy rom
   | ["bcol"] => poleBcolCheck sy rom (List.range 32)
@@ -17004,6 +17180,8 @@ structure FramesCount where
   nearMore : Nat := 0
   /-- round 35, measured: frames that come to a store of `SideLoop.Resid` -/
   residN : Nat := 0
+  /-- round 36, measured: frames without `SideAcross.FactsAt` -/
+  factsN : Nat := 0
 
 def FramesCount.bad (c : FramesCount) : Nat := c.lagMoved + c.one + c.mid + c.move + c.gain + c.impV + c.impF + c.impP + c.boxBad + c.ends + c.movesBad + c.boxM +
   c.lagArr + c.endPaused + c.spare + c.lagUnpaused + c.areaMoved
@@ -17020,7 +17198,7 @@ def spareHits (sy : Syms) (m0 m : Machine) (pad : UInt8) : Nat := Id.run do
   return n
 
 def FramesCount.str (c : FramesCount) : String :=
-  s!"frames {c.frames} (not in control {c.noCtl}, lag {c.lag}, moved on a lag frame {c.lagMoved}, not clean {c.unclean}); FAILS: OneFrame {c.one}, mid {c.mid}, `Frame` move {c.move} gain {c.gain} impedeV {c.impV} impedeF {c.impF} impedeP {c.impP}; kinds: quiet {c.quiet}, block of Left {c.blockL}, hit {c.hit}, mask stop {c.maskStop}; P' held at the edge {c.clamp}; a hit moving right with no push: largest v₂ {c.edgeV}; frames before J {c.boxN}, FAILS {c.boxBad}; OnFrames: Moves {c.moves}, masked {c.masked}, FAILS: end {c.ends}, Moves {c.movesBad} {c.why}, box from the scroll handler {c.boxM}; input at the routine not that of the two ends {c.inDiff}; masked at the mover: the model's speed {c.maskSame}, the speed 0 {c.maskZero}, not Pre ∧ Coll (so MaskStop) {c.maskStopNeed}; frames before J where a vertical byte changes after the scroll handler {c.vMid}; FAILS: lag frames at the player's routine {c.lagArr}, counted frames that end paused {c.endPaused}, frames with a store through an index to a byte of `spareI` {c.spare}, lag frames that end not paused {c.lagUnpaused}, frames that change the area's type, the swimming flag or the change of size {c.areaMoved}; round 28 (measured, not failures): frame starts against `NearM` {c.nearM}, frame starts with the side timer at most 1 and the place byte not pixel − left in [0, 256) {c.placeEq}; round 29 (measured): frames where `nearM` asks more than `NearA` {c.nearMore}; round 35 (measured): frames that come to a store of `SideLoop.Resid` {c.residN}"
+  s!"frames {c.frames} (not in control {c.noCtl}, lag {c.lag}, moved on a lag frame {c.lagMoved}, not clean {c.unclean}); FAILS: OneFrame {c.one}, mid {c.mid}, `Frame` move {c.move} gain {c.gain} impedeV {c.impV} impedeF {c.impF} impedeP {c.impP}; kinds: quiet {c.quiet}, block of Left {c.blockL}, hit {c.hit}, mask stop {c.maskStop}; P' held at the edge {c.clamp}; a hit moving right with no push: largest v₂ {c.edgeV}; frames before J {c.boxN}, FAILS {c.boxBad}; OnFrames: Moves {c.moves}, masked {c.masked}, FAILS: end {c.ends}, Moves {c.movesBad} {c.why}, box from the scroll handler {c.boxM}; input at the routine not that of the two ends {c.inDiff}; masked at the mover: the model's speed {c.maskSame}, the speed 0 {c.maskZero}, not Pre ∧ Coll (so MaskStop) {c.maskStopNeed}; frames before J where a vertical byte changes after the scroll handler {c.vMid}; FAILS: lag frames at the player's routine {c.lagArr}, counted frames that end paused {c.endPaused}, frames with a store through an index to a byte of `spareI` {c.spare}, lag frames that end not paused {c.lagUnpaused}, frames that change the area's type, the swimming flag or the change of size {c.areaMoved}; round 28 (measured, not failures): frame starts against `NearM` {c.nearM}, frame starts with the side timer at most 1 and the place byte not pixel − left in [0, 256) {c.placeEq}; round 29 (measured): frames where `nearM` asks more than `NearA` {c.nearMore}; round 35 (measured): frames that come to a store of `SideLoop.Resid` {c.residN}; round 36 (measured): frames without `SideAcross.FactsAt` {c.factsN}"
 
 /-- One frame from `cur` to `b`, as `SurfaceFrames` states it, where `a` is the machine when the routine of the frame before it ended: `cur` is `a`, or later by `lag` frames. `j` is the frame's number from control, or 0 -/
 def framesOne (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) (B : PoleJoin.Box) (a cur b : Machine) (pad : UInt8) (j : Nat) (c0 : FramesCount) : FramesCount := Id.run do
@@ -17079,6 +17257,7 @@ def framesOne (sy : Syms) (nm : PipeTransitionAll.Names) (m0 : Machine) (B : Pol
   if ms.vMid then c := { c with vMid := c.vMid + 1 }
   if ms.nearMore then c := { c with nearMore := c.nearMore + 1 }
   if ms.residAt then c := { c with residN := c.residN + 1 }
+  if ms.factsBad then c := { c with factsN := c.factsN + 1 }
   if !ms.boxFails.isEmpty then
     c := { c with boxM := c.boxM + 1 }
     for w in ms.boxFails do
@@ -25612,6 +25791,13 @@ def roomOffBack (sy : Syms) (romPath fm2 : String) (seeds : Nat) : IO UInt32 := 
   let mut nearBad := 0
   let mut slowN := 0
   let mut slowBad := 0
+  -- round 36: the runs that enter earlier than the bound of `off_gap_of` (E + 1 < t0 + aboveF), and those that enter when a slow jump reaches the floor (E = t0 − 1 + aboveS)
+  let mut minEt := 100000
+  let mut earlyTop := 0
+  let mut earlySlow := 0
+  let joinT := Jump.summary sy m0 3
+  let aboveF := joinT.aboveF
+  let aboveS := joinT.aboveS
   let aF := sy.AirFastSpeed.toNat
   let offs := (List.range 256).map fun v => (v, RoomJoin.jumpOffR sy m0 sY.toUInt8 v.toUInt8)
   let slowF := ((offs.filter fun p => p.1 < aF).map (·.2.vfd)).eraseDups
@@ -25687,6 +25873,9 @@ def roomOffBack (sy : Syms) (romPath fm2 : String) (seeds : Nat) : IO UInt32 := 
       IO.println s!"  seed {sd}, Left {kL}, A {hA}: t0 = C + {f + g}, enters {enter} at t0 + {h}; least x {minX} (goal x {goal / 256}), stand heights {stH}; at the end x {posP sy m / 256}, height {(VertModel.vsOf sy m).y}, state {(VertModel.vsOf sy m).st}, speed {peek m sy.Player_X_Speed}"
     if enter then
       entered := entered + 1
+      minEt := min minEt h
+      if h + 1 < aboveF then earlyTop := earlyTop + 1
+      if h + 1 == aboveS then earlySlow := earlySlow + 1
       if !offs.isEmpty then
         badRuns := badRuns + 1
         bad := bad + offs.length
@@ -25695,6 +25884,7 @@ def roomOffBack (sy : Syms) (romPath fm2 : String) (seeds : Nat) : IO UInt32 := 
           IO.println s!"  against the round-34 field offFloor: seed {sd}, Left {kL}, A {hA}: t0 = C + {f + g}, enters at t0 + {h}; stands off the floor and the pipe at (t0 + frame, height) {offs.take 6}"
   IO.println s!"seeds {seeds}: on the block's top {onTop}, walked past its right end {past}; runs {runs}, back left of the goal after t0 {back}, entered {entered}, of them with a stand from t0 on neither on the floor nor one row above it (against the round-34 field offFloor) {badRuns}, such stands {bad}, heights {heights}"
   IO.println s!"offNear: entries whose frame before is not near the floor {nearBad} of {entered}; offSlow: slow-force jump frames from t0 on {slowN}, moving more than 16·(A − 1) {slowBad}"
+  IO.println s!"round 36: least E − t0 of the entries {minEt}; entries with E + 1 < t0 + aboveF {earlyTop}, with E = t0 − 1 + aboveS {earlySlow}"
   (← IO.getStdout).flush
   return (if nearBad == 0 && slowBad == 0 then 0 else 1)
 
@@ -25716,6 +25906,260 @@ def roomStoredCheck (sy : Syms) (romPath : String) : IO UInt32 := do
   IO.println s!"the largest adder amax {am}, the air threshold {sy.AirFastSpeed.toNat}: amax + 255 < 256 · threshold (NumFacts.amax_air) {ok3}"
   return (if ok && ok2 && ok3 then 0 else 1)
 
+/-- The checks of round 36 (page `1-1/c-7-8-5-EntryVert.md`): the walks B, C, S of the room's frames with the frame's ends that exclude the side pipe's routine
+(`RoomVert.checkB`, `RoomFall.checkC`, `RoomStand.checkS`; for each, the states of the search at the frame's end that the old and the new end conditions refuse),
+the walk of `RoomAbsKeep` with its own end condition (`checkX`, `finX`), and `RoomJoin.Checks.entryY`. Then real entering frames: the movie's, and `n` runs of own
+inputs from the room's first control (A in a rhythm with Right, Right with B, and turns); at each entering frame it asks what `InRoom.airL`, `standL`, `jumpL`, `yL`
+say, and `nearB` of the frame before -/
+def roomEntryVert (sy : Syms) (romPath fm2 : String) (seeds : Nat) : IO UInt32 := do
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let txt ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let nmS := ScreenPage.namesOf txt
+  let P := ScreenPage.placesR sy nmS m0
+  let E := ScreenPage.envR sy nmS m0
+  let r := ScreenPage.refR m0
+  let Z := ScreenPage.aidsOf sy nmS m0
+  let K := RoomMap.knownT sy nmS m0
+  let shw := fun (B : TaintRun.AS) => s!"pc {B.pc.toNat} log {B.log} spent {B.spent} rt {(B.getK P.rtI).v.toNat}/{(B.getK P.rtI).k.toNat}"
+  let oldB := fun (B : TaintRun.AS) => B.log != [1] || (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI)
+  let mut ok := true
+  for (nm, ph, f, fo) in [("B", RoomVert.phB sy E P, RoomVert.finB P r, oldB), ("C", RoomFall.phC sy E P, RoomFall.finC P r, fun _ => true),
+      ("S", RoomStand.phS sy E P, RoomStand.finS sy P r, fun _ => true)] do
+    let t0 ← IO.monoMsNow
+    let X := RoomVert.searchOfV sy ph P Z E r K
+    let badN := X.ends.filter fun B => !f B
+    let badO := X.ends.filter fun B => !fo B
+    IO.println s!"walk {nm}: search steps {X.steps}, failures {X.fails}, end states {X.ends.size}, refused by the round-36 end condition {badN.size} (walk B's old one: {badO.size}) ({(← IO.monoMsNow) - t0} ms)"
+    for B in badN.toList.take 8 do IO.println s!"  refused: {shw B}"
+    (← IO.getStdout).flush
+  let tm := fun (f : Unit → Bool) => do
+    let t0 ← IO.monoMsNow
+    let v ← IO.lazyPure f
+    let t1 ← IO.monoMsNow
+    return (v, t1 - t0)
+  let (cb, tb) ← tm fun _ => RoomVert.checkB sy nmS m0
+  let (cc, tc) ← tm fun _ => RoomFall.checkC sy nmS m0
+  let (cs, ts) ← tm fun _ => RoomStand.checkS sy nmS m0
+  let (cx, tx) ← tm fun _ => RoomAbsKeep.checkX sy nmS m0
+  IO.println s!"checkB {cb} ({tb} ms), checkC {cc} ({tc} ms), checkS {cs} ({ts} ms), checkX (finX) {cx} ({tx} ms)"
+  let gy := Jump.groundY sy
+  let ye := peek (SideTransition.entry m0) sy.Player_Y_Position
+  let ey := ye == gy.toUInt8
+  IO.println s!"entryY: the reference entry ends at {ye.toNat} px, the floor's height {gy}: {ey}"
+  ok := ok && cb && cc && cs && cx && ey
+  (← IO.getStdout).flush
+  -- real entering frames
+  let rRt := r.ram.get! P.rtI
+  let inRoom := fun (c : Machine) => c.ram.get! P.rtI == rRt
+  let vR := fun (s : Jump.VS) (a : Bool) => RoomJoin.vstepR sy m0 s a
+  let nearF := fun (s : Jump.VS) => OffDrop.nearB sy m0 s
+  -- the relations of `airL`, `standL`, `jumpL`, `yL` at an entering frame from `m` with the input `i` (A read from the pad)
+  let judge := fun (m m' : Machine) (i : UInt8) =>
+    let s := VertModel.vsOf sy m
+    let t := VertModel.vsOf sy m'
+    let a := i &&& 0x80 != 0
+    let newA := a && (peek m sy.PreviousA_B_Buttons &&& 0x80 == 0)
+    let yOK := peek m' sy.Player_Y_Position == ye
+    let air := s.st == 0 || (Jump.falling (vR s a) && (t == vR s a || t == VertAir.land (vR s a)))
+    let stand := s.st != 0 || newA || (t.dummy == s.dummy && t.vf == s.vf && t.vfd == s.vfd && t.origin == s.origin &&
+      ((t.y == s.y && t.vy == s.vy && t.mf == s.mf && (t.st == 0 || t.st == 2)) || (t.st == 0 && t.vy == 0 && t.mf == 0 && t.y == s.y &&& 0xF0)))
+    let jump := s.st != 0 || !newA
+    (yOK, air, stand, jump, nearF s, s.st)
+  let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2))
+  let mut t := powerOn cart 0
+  let mut seen := false
+  let mut k := 0
+  while k < inputs.size && (!seen || (peek t sy.GameEngineSubroutine).toUInt16 != sy.EngVerticalPipe) do
+    t := runFrame t inputs[k]!
+    seen := seen || controllable sy t
+    k := k + 1
+  while k < inputs.size && !controllable sy t do
+    t := runFrame t inputs[k]!
+    k := k + 1
+  let mC := t
+  -- the movie's entering frame
+  let mut mv := mC
+  let mut kk := k
+  let mut movieE := false
+  while kk < inputs.size && inRoom mv && !movieE do
+    let m' := runFrame mv inputs[kk]!
+    if !inRoom m' then
+      let (y1, a1, s1, j1, n1, st1) := judge mv m' (smbToPad inputs[kk]!)
+      IO.println s!"the movie's entering frame (movie frame {kk}): state at its start {st1}; yL {y1}, airL {a1}, standL {s1}, jumpL {j1}, nearB of the frame before {n1}"
+      ok := ok && y1 && a1 && s1 && j1 && n1
+      movieE := true
+    mv := m'
+    kk := kk + 1
+  let mut z : UInt64 := 777777
+  let mut entered := 0
+  let mut bad := 0
+  let mut sts : List Nat := []
+  for sd in List.range seeds do
+    let mut c := mC
+    let mut f := 0
+    let jP := 4 + (sd % 13)
+    while f < 1200 && inRoom c do
+      z := z ^^^ (z <<< 13)
+      z := z ^^^ (z >>> 7)
+      z := z ^^^ (z <<< 17)
+      let w := ((z >>> 11) &&& 15).toNat
+      let ph := (f / 120) % 4
+      let i : UInt8 :=
+        if sd % 3 == 0 then (if (f / jP) % 3 == 0 then (0x80 : UInt8) else 0) ||| (if w < 12 then 0x41 else if w < 14 then 0x01 else 0x42)
+        else if sd % 3 == 1 then (if (f / jP) % 2 == 0 then (0x80 : UInt8) else 0) ||| (if ph == 3 then 0x42 else 0x41)
+        else (if w < 3 then (0x80 : UInt8) else 0) ||| (if ph == 2 then 0x02 else 0x01)
+      let c' := runFrame c (smbToPad i)
+      if !inRoom c' then
+        entered := entered + 1
+        let (y1, a1, s1, j1, n1, st1) := judge c c' i
+        sts := (sts ++ [st1.toNat]).eraseDups
+        if !(y1 && a1 && s1 && j1 && n1) then
+          bad := bad + 1
+          if bad ≤ 5 then IO.println s!"  against: seed {sd}, frame {f + 1}: state {st1}, yL {y1}, airL {a1}, standL {s1}, jumpL {j1}, nearB {n1}"
+      c := c'
+      f := f + 1
+  IO.println s!"own runs {seeds}: entering frames {entered}, states at their start {sts}, against yL, airL, standL, jumpL or nearB {bad}"
+  return (if ok && bad == 0 then 0 else 1)
+
+/-- Measured only (round 36): the frames of the field `offSlow`. Runs as `room-off-back` (onto the block's top, right to `t0`, back and forth), and for each frame
+that starts in a slow jump (the jump state with a fall force of a slow takeoff from the block's top), before and from `t0 − 1` on, the speed `v` and the stored speed `s`
+at the player's routine `R` and at the end of the move `Q`, and what the rest of the frame does (`FrameModel.Collide`). Counts against: `|v_R| ≤ A − 1 ∧ s_R ≤ A − 1`;
+`|v_Q| ≤ A − 1`; `s_Q ∈ {s_R, |v_Q|}`; `P_Q = P_R + 16·v_Q`; `Collide(Q, end)`; `s_end = s_Q`; `s_R = |v_R|`; the move at most `16·(A − 1)` -/
+def roomOffSlow (sy : Syms) (romPath fm2 : String) (seeds : Nat) : IO UInt32 := do
+  let cart ← loadCart romPath
+  let m0 := smb11Start sy cart
+  let txt ← IO.FS.readFile (← (← Config.load none).path "disasm")
+  let nmS := ScreenPage.namesOf txt
+  let P ← IO.lazyPure fun _ => ScreenPage.placesR sy nmS m0
+  let rRt ← IO.lazyPure fun _ => (ScreenPage.refR m0).ram.get! P.rtI
+  let inRoom := fun (c : Machine) => c.ram.get! P.rtI == rRt
+  let goal := FastTakeoff.goalP sy
+  let sY := Jump.standY sy 3
+  let aF := sy.AirFastSpeed.toNat
+  let cap : Int := (aF : Int) - 1
+  let offs := (List.range 256).map fun v => (v, RoomJoin.jumpOffR sy m0 sY.toUInt8 v.toUInt8)
+  let slowF := ((offs.filter fun p => p.1 < aF).map (·.2.vfd)).eraseDups
+  let scan := fun (m : Machine) (pad : UInt8) => Id.run do
+    let t := m.frame + 1
+    let mut c : Machine := { m with pad }
+    let mut n := 0
+    let mut R : Option Machine := none
+    let mut Q : Option Machine := none
+    while n < fuelPerFrame && !(decide (c.frame ≥ t) || c.halted) do
+      if R.isNone && c.pc == sy.PlayerCtrlRoutine then R := some c
+      if R.isSome && Q.isNone && c.pc == sy.PlayerSubs then Q := some c
+      c := (PipeTransitionAll.go step c).2
+      n := n + 1
+    return (c, R, Q)
+  let inputs := alignInputs (parseFm2 (← IO.FS.readFile fm2))
+  let mut t := powerOn cart 0
+  let mut seen := false
+  let mut k := 0
+  while k < inputs.size && (!seen || (peek t sy.GameEngineSubroutine).toUInt16 != sy.EngVerticalPipe) do
+    t := runFrame t inputs[k]!
+    seen := seen || controllable sy t
+    k := k + 1
+  while k < inputs.size && !controllable sy t do
+    t := runFrame t inputs[k]!
+    k := k + 1
+  let mC := t
+  let mut z : UInt64 := 424242
+  -- counters: [frames, against c1 .. c8], for the frames before t0 − 1 and from t0 − 1 on
+  let mut cnt : Array (Array Nat) := #[Array.replicate 9 0, Array.replicate 9 0]
+  let mut maxV : Array Int := #[0, 0]
+  let mut maxS : Array Nat := #[0, 0]
+  let mut maxMove : Array Int := #[0, 0]
+  let mut shown := 0
+  for sd in List.range seeds do
+    let mut c := mC
+    let mut f := 0
+    let mut top := false
+    let jP := 4 + ((z >>> 24) % 12).toNat
+    let mut hist : Array (Machine × UInt8) := #[]
+    while f < 400 && inRoom c && !top do
+      z := z ^^^ (z <<< 13)
+      z := z ^^^ (z >>> 7)
+      z := z ^^^ (z <<< 17)
+      let w := ((z >>> 11) &&& 15).toNat
+      let i : UInt8 := if sd % 2 == 0 then (if (f / jP) % 3 == 0 then (0x80 : UInt8) else 0) ||| (if w < 12 then 0x41 else if w < 14 then 0x01 else 0x42)
+        else (if (f / jP) % 2 == 0 then (0x80 : UInt8) else 0) ||| 0x41
+      hist := hist.push (c, i)
+      c := runFrame c (smbToPad i)
+      f := f + 1
+      let s := VertModel.vsOf sy c
+      top := s.st == 0 && s.y.toNat == sY && posP sy c < goal
+    if !top then continue
+    -- phase 2: right to t0; for half of the seeds a jump from the block's top every 24 frames
+    let mut g := 0
+    while g < 200 && inRoom c && posP sy c < goal do
+      let i : UInt8 := if sd % 4 < 2 && g % 24 < 6 then 0x81 else 0x01
+      hist := hist.push (c, i)
+      c := runFrame c (smbToPad i)
+      g := g + 1
+    if !(inRoom c && goal ≤ posP sy c) then continue
+    let t0i := hist.size
+    let kL := [0, 2, 4, 6, 8, 12][sd % 6]!
+    let hA := [8, 16, 24, 32][(sd / 6) % 4]!
+    let mut h := 0
+    while h < 600 && inRoom c do
+      let i : UInt8 :=
+        if sd % 8 ≥ 6 && h < 40 + 8 * kL then (if h % 6 == 3 then 0xC2 else 0x42)
+        else if sd % 8 ≥ 6 && h < 40 + 8 * kL + 100 then 0x41
+        else if sd % 8 ≥ 6 then (if ((h - (40 + 8 * kL + 100)) % 160) < 40 then 0x42 else 0x41)
+        else if sd % 8 ≥ 4 then (if h % 20 < 4 then 0x81 else 0x01)
+        else if h < kL then 0x42
+        else if h < kL + hA then 0xC2
+        else if h < kL + hA + 20 then 0x02
+        else if h < kL + hA + 140 then (if sd % 4 < 2 then 0x41 else if ((h - (kL + hA + 20)) / 8) % 2 == 1 then 0xC1 else 0x41)
+        else if ((h - (kL + hA + 140)) % 160) < 40 then 0x42 else 0x41
+      hist := hist.push (c, i)
+      c := runFrame c (smbToPad i)
+      h := h + 1
+    -- the frames of the run: hist[j] = (the machine at the start of a frame, its input)
+    for j in [0:hist.size] do
+      let (m, i) := hist[j]!
+      let s0 := VertModel.vsOf sy m
+      if !(s0.st == 1 && slowF.contains s0.vfd) then continue
+      let late := if j + 1 ≥ t0i then 1 else 0
+      let (e, R?, Q?) := scan m (smbToPad i)
+      match R?, Q? with
+      | some R, some Q =>
+        let vR := sbyte (peek R sy.Player_X_Speed)
+        let sR := (peek R sy.Player_XSpeedAbsolute).toNat
+        let vQ := sbyte (peek Q sy.Player_X_Speed)
+        let sQ := (peek Q sy.Player_XSpeedAbsolute).toNat
+        let vE := sbyte (peek e sy.Player_X_Speed)
+        let PR := posP sy R
+        let PQ := posP sy Q
+        let PE := posP sy e
+        let c1 := vR.natAbs ≤ aF - 1 && sR ≤ aF - 1
+        let c2 := vQ.natAbs ≤ aF - 1
+        let c3 := sQ == sR || sQ == vQ.natAbs
+        let c4 := PQ - PR == 16 * vQ
+        let c5 := (vE == vQ || vE == 0) && peek e sy.Player_X_MoveForce == peek Q sy.Player_X_MoveForce &&
+          (PE == PQ || PE == PQ - 256 || (PE == PQ + 256 && vQ ≤ 0))
+        let c6 := (peek e sy.Player_XSpeedAbsolute).toNat == sQ
+        let c7 := sR == vR.natAbs
+        let c8 := PE - posP sy m ≤ 16 * cap
+        let flags := [c1, c2, c3, c4, c5, c6, c7, c8]
+        let mut row := cnt[late]!
+        row := row.set! 0 (row[0]! + 1)
+        for q in [0:8] do
+          if !flags[q]! then row := row.set! (q + 1) (row[q + 1]! + 1)
+        cnt := cnt.set! late row
+        maxV := maxV.set! late (max maxV[late]! (max vR.natAbs vQ.natAbs))
+        maxS := maxS.set! late (max maxS[late]! (max sR sQ))
+        maxMove := maxMove.set! late (max maxMove[late]! (PE - posP sy m))
+        if (!c1 || !c2 || !c3 || !c4 || !c5 || !c8) && shown < 12 then
+          shown := shown + 1
+          IO.println s!"  seed {sd}, frame {j + 1} (t0 at {t0i}): vR {vR} sR {sR} vQ {vQ} sQ {sQ} vEnd {vE}; P_Q − P_R {PQ - PR}, end − Q {PE - PQ}, move {PE - posP sy m}; flags {flags}"
+      | _, _ => IO.println s!"  seed {sd}, frame {j + 1}: no R or no Q"
+  for (lbl, q) in [("before t0 − 1", 0), ("from t0 − 1 on", 1)] do
+    IO.println s!"slow-jump frames {lbl}: {cnt[q]![0]!}; against |vR|,sR ≤ A−1 {cnt[q]![1]!}, |vQ| ≤ A−1 {cnt[q]![2]!}, sQ ∈ (sR, |vQ|) {cnt[q]![3]!}, P_Q = P_R + 16 vQ {cnt[q]![4]!}, Collide {cnt[q]![5]!}, s_end = sQ {cnt[q]![6]!}, sR = |vR| {cnt[q]![7]!}, move ≤ 16(A−1) {cnt[q]![8]!}; largest |v| {maxV[q]!}, stored {maxS[q]!}, move {maxMove[q]!}"
+  let bad := (List.range 8).any fun q => q != 6 && cnt[1]![q + 1]! != 0
+  return (if bad then 1 else 0)
+
 /-- The second half of the command dispatch of `main`. One long `match` makes nested C code
   that passes the C compiler's nesting limit, so the commands are split over two functions. -/
 def mainMore (sy : Syms) (rom : String) (args : List String) : IO UInt32 := do
@@ -25730,6 +26174,9 @@ def mainMore (sy : Syms) (rom : String) (args : List String) : IO UInt32 := do
   | ["room-off-ways", fm2, n] => roomOffWays sy rom fm2 n.toNat!
   | ["room-off-stand"] => roomOffStand sy rom
   | ["room-off-back", fm2, n] => roomOffBack sy rom fm2 n.toNat!
+  | ["room-entry-vert", fm2] => roomEntryVert sy rom fm2 300
+  | ["room-entry-vert", fm2, n] => roomEntryVert sy rom fm2 n.toNat!
+  | ["room-off-slow", fm2, n] => roomOffSlow sy rom fm2 n.toNat!
   | ["title-pause-near"] => titlePauseNear sy rom
   | ["entry-pause-check"] => entryPauseCheck sy rom
   | ["pipe-end-check", fm2] => pipeEndCheck sy rom fm2
@@ -25940,8 +26387,8 @@ def main (args : List String) : IO UInt32 := do
   | ["run", fm2] => runMovie sy rom fm2 fceuxSkip
   | ["run", fm2, k] => runMovie sy rom fm2 k.toNat!
   | ["gen-rom"] => genRom sy rom dir
-  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genRoomLand dir; genRoomFricLow dir; genRoomWall dir; genRoomRunSpeed dir; genRoomAbsKeep dir; genRoomCorner dir; genRoomHigh dir; genPoleJump dir; genPoleTiles dir; genPoleParser dir; genPoleParserEnd dir; genPoleRing dir; genPoleCoin dir; genPoleBcol dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genSizeKeep dir; genBufferControl dir; genBufferCoin dir; genBufferEnd dir; genLandDist sy rom dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; genPositionWriters dir; genScrollRule dir; genClampSide dir; return r
-  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genRoomLand dir; genRoomFricLow dir; genRoomWall dir; genRoomRunSpeed dir; genRoomAbsKeep dir; genRoomCorner dir; genRoomHigh dir; genPoleJump dir; genPoleTiles dir; genPoleParser dir; genPoleParserEnd dir; genPoleRing dir; genPoleCoin dir; genPoleBcol dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genSizeKeep dir; genBufferControl dir; genBufferCoin dir; genBufferEnd dir; genLandDist sy rom dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; genPositionWriters dir; genScrollRule dir; genClampSide dir; return r
+  | ["gen-proofs"] => do let r ← genProofs sy rom dir false; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genRoomLand dir; genRoomFricLow dir; genRoomWall dir; genRoomRunSpeed dir; genRoomAbsKeep dir; genRoomCorner dir; genRoomHigh dir; genPoleJump dir; genPoleTiles dir; genPoleParser dir; genPoleParserEnd dir; genPoleRing dir; genPoleCoin dir; genPoleBcol dir; genPoleNear dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genSizeKeep dir; genBufferControl dir; genBufferCoin dir; genBufferEnd dir; genLandDist sy rom dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; genPositionWriters dir; genScrollRule dir; genClampSide dir; return r
+  | ["gen-proofs", "--full"] => do let r ← genProofs sy rom dir true; genLagPause dir; genSideSound sy rom dir; genOpenFrames dir; genRoomVert dir; genRoomAddress dir; genRoomCollision dir; genRoomFootCut dir; genRoomLand dir; genRoomFricLow dir; genRoomWall dir; genRoomRunSpeed dir; genRoomAbsKeep dir; genRoomCorner dir; genRoomHigh dir; genPoleJump dir; genPoleTiles dir; genPoleParser dir; genPoleParserEnd dir; genPoleRing dir; genPoleCoin dir; genPoleBcol dir; genPoleNear dir; genSidePause dir; genRoomMusic sy rom dir; genAreaKeep dir; genSizeKeep dir; genBufferControl dir; genBufferCoin dir; genBufferEnd dir; genLandDist sy rom dir; genEntryHeight dir; genEntrySolidFacts dir; genEntryHeadHeight dir; genOpenMap dir; genPhaseFrame dir; genOpenFlat dir; genOpenJump dir; genOpenAir dir; genUpClean dir; genOpenAfter dir; genOpenStore dir; genImpedePosition dir; genPositionWriters dir; genScrollRule dir; genClampSide dir; return r
   | ["phys-validate", r, l] => physValidate sy rom r.toNat! l.toNat! 0 0
   | ["phys-validate", r, l, b, p] =>
     physValidate sy rom r.toNat! l.toNat! ((hexDecode b).toList.headD 0) p.toNat!

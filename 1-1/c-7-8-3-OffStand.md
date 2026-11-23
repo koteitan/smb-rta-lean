@@ -59,7 +59,7 @@ The field had no measured frame against it (round 34: `room-off-ways`, 34 stands
 
 ## What remains (not proved)
 
-* `offTop`, `offNear`, `offSlow` ([Off the block's top: the frames to the floor](c-7-8-2-OffDrop.md) says how each could be proved). `offFloor` is gone too, in round 35 (item 1-1-c-7-8-4).
+* `offTop`, `offSlow` ([Off the block's top: the frames to the floor](c-7-8-2-OffDrop.md) says how each could be proved). `offNear` is proved in round 36 ([The entering frame](c-7-8-5-EntryVert.md)). `offFloor` is gone too, in round 35 (item 1-1-c-7-8-4).
 
 **Files.** `Theorems/OffStand.lean` (`keepOK`, `run_K`, `air_keep`, `fall_same`). `Theorems/RoomJoin.lean` (`forcesR`, `standFam`, `offVfdCheck`, `jump_vfd`, `SimV`, `fall_sim`, `offNext_sim`, `nearB_sim`, `RoomRun.st_012`, `RoomRun.vfd_ok`, `RoomRun.offB_path_sim`, `RoomRun.offB_gap_sim`, `RoomRun.off_stand`; the checks `keepA`, `offVfd`). `Main.lean`: `room-off-stand`; the private `Proof/RoomJoin.lean` gets `keepA` and `offVfd`.
 

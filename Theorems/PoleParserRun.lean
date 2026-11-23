@@ -323,7 +323,8 @@ theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFra
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
-    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
+    (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     ∀ n, n < R.keep.toFrames.ix R.g →
       (Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n)) ∧ PoleLag.JY (valsOf (places sy m0) (R.keep.toFrames.all n)) := by
   subst hv
@@ -338,7 +339,7 @@ theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFra
   refine PoleStrict.invJ_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs hsc Nm.idle (by rw [e0]; exact h0) (by rw [e0]; exact PoleLag.jy_of_jv hJ)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
-    (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK n (by omega) k hpu hf))
+    (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK hcN hcB hIB n (by omega) k hpu hf))
     (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
     (fun n hn => by rw [← edge_eq]; exact hE n hn)
 
@@ -349,9 +350,10 @@ theorem inv_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFram
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
-    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
+    (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     ∀ n, n < R.keep.toFrames.ix R.g → Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n) :=
-  fun n hn => (invJ_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK n hn).1
+  fun n hn => (invJ_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB n hn).1
 
 /-- **The parser's column does not go back** from a frame's start to the next one up to the touch's frame (round 33): the weak rule of each frame
 (`PoleStrict.ruleW_onFrames`, under the conditions of `invJ_run`) keeps the column or adds one (`PoleStrict.col_of_ruleW`) -/
@@ -361,7 +363,8 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
-    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
+    (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     ∀ n, n + 1 < R.keep.toFrames.ix R.g →
       PoleJoin.parColOf sy m0 (R.keep.toFrames.all n) ≤ PoleJoin.parColOf sy m0 (R.keep.toFrames.all (n + 1)) := by
   subst hv
@@ -378,7 +381,7 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (by rw [e0]; exact PoleLag.jy_of_jv hJ)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
-    (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK n (by omega) k hpu hf))
+    (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK hcN hcB hIB n (by omega) k hpu hf))
     (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
     (fun n hn => by rw [← edge_eq]; exact hE n hn) n hn)
 
@@ -392,21 +395,21 @@ theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surfac
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
-    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) (hcN : PoleNear.nCheck sy m0 = true)
     (hNT : NoTiles (PoleFrame.spotsF sy m0) (R.seq 0))
     (hL : PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R.seq 0) + 32) (hRg : PoleRing.RingOK (PoleFrame.spotsF sy m0))
     (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) : R.TileColAll := by
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
-  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK, ?_, ?_, hRg, ?_⟩
+  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB, ?_, ?_, hRg, ?_⟩
   · rw [e0]
     exact PoleSlot.slotMap_of_none hNT
   · rw [e0]
     exact hL
   · intro n hn k hpc
     have hw0 := R.watched₀ st hfq hc0.castle
-    obtain ⟨hI, hS⟩ := PoleBcol.frames_bcol hk hcB R.keep.toFrames hc0.start hw0 hIB (fun n hn k => R.bKeep n hn k) n hn
+    obtain ⟨hI, hS⟩ := PoleBcol.frames_bcol hk hcB R.keep.toFrames hc0.start hw0 hIB (R.bNoW hk hcN hc0.start hw0) n hn
     have e : ((R.keep.toFrames.all n).ram.get! (PoleBcol.bcOf sy m0).bI).toNat = PoleJoin.parColOf sy m0 (R.keep.toFrames.all n) % 32 := hI.1
-    exact PoleBcol.noTileM_of_ring (e ▸ hS k hpc)
+    exact PoleBcol.noTileM_of_ring (e ▸ (hS k hpc).1)
 
 /-- **The parser's column at the start of the touch's frame is at most 384 px past the edge there** (`inv_run`, `PoleParser.col_le`): with it the round 30 parts
 (`near`) and (`read`) of the far reads give the field `tilesCol` of round 33 (`PoleSlot.tileSlotC_of_N`) -/
@@ -416,10 +419,11 @@ theorem colEdge_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
-    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0)) :
+    (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
+    (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     16 * PoleJoin.parColOf sy m0 (R.keep.fm R.g) ≤ ScrollRule.left16 (ScrollRule.places sy m0) (R.keep.fm R.g) + 384 := by
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
-  have hI := inv_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK (R.keep.toFrames.ix R.g - 1) (by omega)
+  have hI := inv_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB (R.keep.toFrames.ix R.g - 1) (by omega)
   rw [parCol_eq, edge_eq]
   exact col_le hI.1
 
@@ -607,7 +611,7 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hmJ : PoleStrict.jvCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hmL : lowCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hmK : coinMapK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hcC : PoleCoin.coinCheck sy m0 = true)
-    (hmB : bInvK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
+    (hmB : bInvK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hcN : PoleNear.nCheck sy m0 = true)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) {M : Machine} {dx dy rows : Nat}
     (R : Route.Run sy m0 N D rN b vs ⟨M, dx, dy, rows⟩ Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
     (st : SurfaceFrames.Start sy ⟨M, dx, dy, rows⟩ (R.pole.seq 0)) (hN : SurfaceFrames.numbersCheck sy m0 ⟨M, dx, dy, rows⟩ J = true)
@@ -617,7 +621,7 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (htop : TopSpeed.top sy ≤ 48) : R.pole.TileColAll :=
   tilesCol_run R.pole hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop ⟨(inv₀ hS hT hQ hR hmI hB hK R).1, col₀ hS hT hQ hR hmC hB hK R⟩ (PoleStrict.jv₀ hS hT hQ hR hmJ hB hK R)
-    hcC (coinMap₀ hS hT hQ hR hmK hB hK R) (inv₀ hS hT hQ hR hmI hB hK R).2 (low₀ hS hT hQ hR hmL hB hK R) (ring_of_low hmL) hcB
+    hcC (coinMap₀ hS hT hQ hR hmK hB hK R) hcN (inv₀ hS hT hQ hR hmI hB hK R).2 (low₀ hS hT hQ hR hmL hB hK R) (ring_of_low hmL) hcB
     (bInv₀ hS hT hQ hR hmB hB hK R)
 
 end Route

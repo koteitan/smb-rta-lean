@@ -87,7 +87,7 @@ Signatures that changed, exactly:
 ## What is not proved
 
 * `bufAll`: `BufV` (a pole's tile goes only into the pole's column, round 26), and `NoTileM` at the stores other than the parser's store of a column (no measured store of a pole's tile is there).
-* `bKeep`: no store through an index or a pointer writes `B` (0 measured).
+* `bKeep`: no store through an index or a pointer writes `B` (0 measured). Round 36: asked only at the stores through a pointer but the parser's store of a column, and on the touch's frame after its first store of the routine, the mode or the task; the walk of `PoleNear` proves it elsewhere, and at the parser's store this walk does (`missS`) ([the stores that may reach the control byte or the block buffer's column](f-6-17-19-PoleNear.md)).
 * `BufV` at the parser's store is still asked: that its rows hold a pole's tile only in the pole's column. A proof needs the metatiles that the parser draws.
 
 **Files.** `Theorems/PoleBcol.lean` (new); `Theorems/PoleRing.lean` (`BufVR`); `Theorems/PoleJoin.lean` (`bufAll`, `bKeep`, `TileColAll`, `Run.bufC₁`, `Run.slotStart`, `Run.tilesStart`, `Run.bufAt₁`); `Theorems/PoleParserRun.lean` (the rows check, `bInv₀`, `tilesCol_run`, `tilesCol_route`); `Smbrta/Syms.lean`, `tools/smb-symbols.txt` (`ExecGameLoopback`); `Main.lean` (`genPoleBcol`, the Route block, `pole-keep bcol`, the counters of `pole-keep parser`).

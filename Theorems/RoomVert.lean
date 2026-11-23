@@ -406,9 +406,53 @@ def phB (sy : Syms) (E : Env) (P : Places) : Ph where
   pre := fun A => !(A.pc == sy.PlayerSubs && (A.spent || !A.log.isEmpty))
   ok := fun A => !A.spent || !mayWriteV sy E P A
 
-/-- at the frame's end: a state whose bytes of `vKeep` may have been written after `Q` ends out of the player's routine: the routine byte is known and is not the reference's -/
+/-- (round 36) the routine byte is known at the frame's end and is neither the reference's nor the side pipe's routine `P.eng`: the frame leaves the player's routine,
+and not into the side pipe -/
+def outE (P : Places) (r : Machine) (B : AS) : Bool :=
+  decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI && (B.getK P.rtI).v != P.eng
+
+/-- (round 36) a known bit of the routine byte differs from the side pipe's routine `P.eng` -/
+def notEng (P : Places) (B : AS) : Bool :=
+  decide (P.rtI < 2048) && (P.eng &&& (B.getK P.rtI).k != (B.getK P.rtI).v &&& (B.getK P.rtI).k)
+
+theorem outE_ne {E : Env} {F : Nat × UInt8} {P : Places} {r : Machine} {B : AS} {m : Machine} (hs : Sim E F B m) (h : outE P r B = true) :
+    m.ram.get! P.rtI ≠ r.ram.get! P.rtI ∧ m.ram.get! P.rtI ≠ P.eng := by
+  simp only [outE, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at h
+  obtain ⟨⟨⟨a1, a2⟩, a3⟩, a4⟩ := h
+  have e := isK_eq a2 (hs.ram _ a1)
+  rw [e]
+  exact ⟨a3, a4⟩
+
+theorem notEng_ne {E : Env} {F : Nat × UInt8} {P : Places} {B : AS} {m : Machine} (hs : Sim E F B m) (h : notEng P B = true) : m.ram.get! P.rtI ≠ P.eng := by
+  simp only [notEng, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at h
+  obtain ⟨a1, a2⟩ := h
+  intro e
+  have hm := hs.ram _ a1
+  rw [e] at hm
+  exact a2 hm
+
+/-- an end in the player's routine or in the side pipe's routine is not `outE` -/
+theorem not_outE {E : Env} {F : Nat × UInt8} {P : Places} {r : Machine} {B : AS} {m : Machine} (hs : Sim E F B m)
+    (hrt : m.ram.get! P.rtI = r.ram.get! P.rtI ∨ m.ram.get! P.rtI = P.eng) : outE P r B ≠ true := by
+  intro h
+  obtain ⟨a, b⟩ := outE_ne hs h
+  rcases hrt with e | e
+  · exact a e
+  · exact b e
+
+/-- at the frame's end: a state whose bytes of `vKeep` may have been written after `Q` ends out of the player's routine: the routine byte is known and is not the reference's.
+Since round 36 it is not the side pipe's routine either (`outE`), and a state that came to `Q` rising with no such write since knows the routine byte not to be the side pipe's
+(`notEng`): so a frame that comes to `Q` rising does not enter the side pipe (`after_QE`) -/
 def finB (P : Places) (r : Machine) (B : AS) : Bool :=
-  B.log != [1] || (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI)
+  (B.log != [1] || outE P r B) && (!B.spent || notEng P B)
+
+theorem finB_one {P : Places} {r : Machine} {B : AS} (h : finB P r B = true) (hl : B.log = [1]) : outE P r B = true := by
+  simp only [finB, hl, bne_self_eq_false, Bool.false_or, Bool.and_eq_true] at h
+  exact h.1
+
+theorem finB_spent {P : Places} {r : Machine} {B : AS} (h : finB P r B = true) (hb : B.spent = true) : notEng P B = true := by
+  simp only [finB, hb, Bool.not_true, Bool.false_or, Bool.and_eq_true] at h
+  exact h.2
 
 /-! ## Finding the table: a search, no part of the proof -/
 
@@ -1147,13 +1191,14 @@ theorem keepVH_step {sy : Syms} {E : Env} {F : Nat × UInt8} {P : Places} {A : A
       simp only [Bool.not_false, Bool.true_and, Bool.not_eq_false'] at h1
       exact StepWrites.keep_step hs h1 _ (List.contains_iff_mem.2 (List.mem_append_right _ (List.mem_singleton.2 rfl)))
 
-/-- **The frame from the scroll handler.** The frame comes to the scroll handler at most once. If it comes there in the air and rising, and ends in the player's routine, no
-step from there to its end writes the bytes of `vKeep`. The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
-theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phB sy E P) E P r K C Fu)
+/-- **The frame from the scroll handler** (round 36: also when it enters the side pipe). The frame comes to the scroll handler at most once. If it comes there in the air
+and rising, the frame does not end with the side pipe's routine `P.eng`, and if it ends in the player's routine, no step from there to its end writes the bytes of `vKeep`.
+The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
+theorem after_QE {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phB sy E P) E P r K C Fu)
     (hfin : C.fin = finB P r) (hap : apartB sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
-    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Rising sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
-       ∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) := by
+    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Rising sy (trace m i j) → (frame m i).ram.get! P.rtI ≠ P.eng ∧
+       ((frame m i).ram.get! P.rtI = r.ram.get! P.rtI → ∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x)) := by
   obtain ⟨S, hw, hs, s1, s2, s3⟩ := start_of_room h hm
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hk' : ∀ j, SiteOK C.P (trace m i j) := by rw [h.pl]; exact hk
@@ -1229,7 +1274,7 @@ theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat 
     · rw [hpre.1] at e
       cases e
     · exact e hpre.2
-  refine ⟨uniq, fun jq hq hf hrise hrt x hx => ?_⟩
+  refine ⟨uniq, fun jq hq hf hrise => ?_⟩
   have hjJ : jq < J := by
     rcases Nat.lt_or_ge jq J with h1 | h1
     · exact h1
@@ -1238,15 +1283,8 @@ theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat 
       rw [show J + (jq - J) = jq by omega] at e
       rw [e, hJ1] at hf
       omega
-  -- the end is in the player's routine, so the state at the end is not marked `[1]`
-  have hl1 : B.log ≠ [1] := by
-    intro hl
-    rw [hfin] at hB1
-    simp only [finB, hl, bne_self_eq_false, Bool.false_or, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at hB1
-    obtain ⟨⟨a1, a2⟩, a3⟩ := hB1
-    have e := isK_eq a2 (hB2.ram _ a1)
-    rw [← hJ3, hrt] at e
-    exact a3 e.symm
+  rw [hfin] at hB1
+  rw [← hJ3] at hB2
   obtain ⟨q1, q2, q3, q4⟩ := hB3
   have only : ∀ j₀, j₀ < J → (trace m i j₀).pc = sy.PlayerSubs → j₀ = jq := by
     intro j₀ h1 h2
@@ -1258,13 +1296,26 @@ theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat 
   · rcases q1 jq hjJ hq with e2 | e2
     · obtain ⟨_, j₀, a1, a2, a3⟩ := q2 e2
       rw [only j₀ a1 a2] at a3
+      refine ⟨notEng_ne hB2 (finB_spent hB1 e2), fun _ x hx => ?_⟩
       rw [hJ3]
       exact a3 x hx
     · exact absurd e e2
-  · exact absurd e hl1
+  · -- marked `[1]`: the end is out of the player's routine, and not in the side pipe's
+    obtain ⟨a, b⟩ := outE_ne hB2 (finB_one hB1 e)
+    exact ⟨b, fun hrt => absurd hrt a⟩
   · obtain ⟨j₀, a1, a2, a3⟩ := q3 e
     rw [only j₀ a1 a2] at a3
     exact absurd hrise a3
+
+/-- **The frame from the scroll handler.** The frame comes to the scroll handler at most once. If it comes there in the air and rising, and ends in the player's routine, no
+step from there to its end writes the bytes of `vKeep`. The frame starts in the room's condition, and each instruction meets `SiteOK` (`after_QE`). -/
+theorem after_Q {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phB sy E P) E P r K C Fu)
+    (hfin : C.fin = finB P r) (hap : apartB sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
+    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Rising sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
+       ∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) := by
+  obtain ⟨u, H⟩ := after_QE h hfin hap hm hk
+  exact ⟨u, fun j hq hf hr hrt => (H j hq hf hr).2 hrt⟩
 
 /-- **The frame from the scroll handler, with the vertical page.** `after_Q`, for the bytes of `vKeepH`: the bytes of `vKeep` and the vertical page. If the frame comes to the
 scroll handler in the air and rising, and ends in the player's routine, no step from there to its end writes them. The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
@@ -1361,11 +1412,8 @@ theorem after_QP {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have hl1 : B.log ≠ [1] := by
     intro hl
     rw [hfin] at hB1
-    simp only [finB, hl, bne_self_eq_false, Bool.false_or, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at hB1
-    obtain ⟨⟨a1, a2⟩, a3⟩ := hB1
-    have e := isK_eq a2 (hB2.ram _ a1)
-    rw [← hJ3, hrt] at e
-    exact a3 e.symm
+    rw [← hJ3] at hB2
+    exact (outE_ne hB2 (finB_one hB1 hl)).1 hrt
   obtain ⟨q1, q2, q3, q4⟩ := hB3
   have only : ∀ j₀, j₀ < J → (trace m i j₀).pc = sy.PlayerSubs → j₀ = jq := by
     intro j₀ h1 h2

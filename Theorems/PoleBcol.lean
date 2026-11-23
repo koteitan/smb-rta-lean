@@ -49,6 +49,8 @@ structure Bc where
   incP : UInt16
   loopP : UInt16
   loopE : UInt16
+  /-- round 36: the screen buffers' control byte (`PoleCoin.Coin.ctlI`), which the parser's store must not write either -/
+  ctlI : Nat
   deriving Inhabited
 
 /-- the first `JSR t` from `a` on, within `n` bytes -/
@@ -69,7 +71,8 @@ def bcOf (sy : Syms) (m0 : Machine) : Bc :=
     zhi := PipeEntryRule.findOp m0 (PipeEntryRule.findOp m0 sy.AreaParserCore 0x91 512) 0x90 32
     incP := rt + 0x0D
     loopP := sy.ExecGameLoopback
-    loopE := PipeEntryRule.findOp m0 sy.ExecGameLoopback 0x60 128 }
+    loopE := PipeEntryRule.findOp m0 sy.ExecGameLoopback 0x60 128
+    ctlI := (PoleCoin.coinOf sy m0).ctlI }
 
 /-- **The invariant on one state**: `B` is the parser's column mod 32, and the column in its page is below 16 -/
 def BInv (K : Bc) (m : Machine) : Prop :=
@@ -89,6 +92,9 @@ def bcRB (K : Bc) (m : Machine) : Bool :=
     match wTarget (opAt m) m with
     | some t => !(decide (t < 0x2000) && (t &&& 0x7FF).toNat == K.bI)
     | none => true
+
+/-- **No store through an index or a pointer writes the RAM byte `s`** (one instruction; round 36) -/
+def NoW (s : Nat) (m : Machine) : Prop := ∀ t, wTarget (opAt m) m = some t → t < 0x2000 → (t &&& 0x7FF).toNat ≠ s
 
 /-- **The guard of the walk**: `FrameKeep.guardK` with `B`, the column and the page protected too -/
 def guardB (sy : Syms) (m0 : Machine) : Guard :=
@@ -114,6 +120,13 @@ def storeOK (E : Env) (K : Bc) (b : Nat) (A : AS) : Bool :=
     | some t => !(decide (t < 0x2000)) || !PoleTileWalk.inBufB K.Q (t &&& 0x7FF).toNat || PoleRing.ringCol K.Q (t &&& 0x7FF).toNat == b
     | none => false
 
+/-- round 36: at the parser's store the target is known, and it is not `B` or the control byte -/
+def missS (E : Env) (K : Bc) (A : AS) : Bool :=
+  A.pc != K.store ||
+    match storeT E K A with
+    | some t => !(decide (t < 0x2000)) || ((t &&& 0x7FF).toNat != K.bI && (t &&& 0x7FF).toNat != K.ctlI)
+    | none => false
+
 /-- at the frame's end: `B`, the column and the page's lowest bit are known, with the invariant -/
 def endB (K : Bc) (B : AS) : Bool :=
   let bb := B.getK K.bI
@@ -131,10 +144,10 @@ def prePage (K : Bc) (A : AS) : List AS :=
 /-- all the pieces before a step: those of `FrameKeep`, then these -/
 def preB (C : CfgK) (K : Bc) (A : AS) : List AS := (preK C.S C.G A).flatMap (prePage K)
 
-/-- **The walk**: `FrameKeep.walkK` with the pieces of the page, the test `storeOK` on the way and `endB` at the frame's end -/
+/-- **The walk**: `FrameKeep.walkK` with the pieces of the page, the tests `storeOK` and `missS` on the way and `endB` at the frame's end -/
 def walkB (C : CfgK) (K : Bc) (b : Nat) : Nat → AS → Bool
   | 0, _ => false
-  | n + 1, A => (preB C K A).all fun A₁ => storeOK C.E K b A₁ && (kstep C.S C.G C.E C.ops A₁).all fun r =>
+  | n + 1, A => (preB C K A).all fun A₁ => storeOK C.E K b A₁ && missS C.E K A₁ && (kstep C.S C.G C.E C.ops A₁).all fun r =>
     match r with
     | none => false
     | some B => if B.k == A.k then (C.cut.get! B.pc.toNat != 0 && coverK C B) || walkB C K b n B else B.k == A.k + 1 && endB K B
@@ -345,6 +358,59 @@ theorem store_ring (hP : PlacesB K E) {b : Nat} {A : AS} {m : Machine} (hs : Sim
       · rw [if_neg hk] at ht
         cases ht
 
+/-- round 36: **the target of the parser's store** is the one that `storeT` gives -/
+theorem store_target (hP : PlacesB K E) {A : AS} {m : Machine} (hs : Sim E F A m) (hpc : m.pc = K.store) {t : UInt16} (ht : storeT E K A = some t) :
+    wTarget (opAt m) m = some t := by
+  have hp1 : m.pc + 1 ≥ 0x8000 := by rw [hpc]; exact hP.s1
+  have hop : opAt m = 0x91 := by
+    unfold opAt
+    rw [hs.prg, hs.mask, hpc]
+    exact hP.op
+  have hz : RoomBlocks.operand m = E.prg.get! ((K.store + 1) &&& E.mask).toNat := by
+    unfold RoomBlocks.operand
+    rw [hs.prg, hs.mask, hpc]
+  have ew : wTarget 0x91 m = some (ScreenPage.writeAddr m) := rfl
+  rw [hop, ew, RoomBlocks.writeAddr_eq hp1, hz]
+  unfold storeT at ht
+  by_cases hk : ((A.getK ((E.prg.get! ((K.store + 1) &&& E.mask).toNat).toUInt16 &&& 0x7FF).toNat).isK &&
+      (A.getK (((E.prg.get! ((K.store + 1) &&& E.mask).toNat) + 1).toUInt16 &&& 0x7FF).toNat).isK && A.y.isK) = true
+  · rw [if_pos hk] at ht
+    have et := (Option.some.inj ht).symm
+    simp only [Bool.and_eq_true] at hk
+    obtain ⟨⟨hlo, hhi⟩, hy⟩ := hk
+    rw [et]
+    unfold RoomBlocks.ptrZ
+    rw [known_eq hlo (hs.ram _ (PipeTransitionAll.mask_lt _)), known_eq hhi (hs.ram _ (PipeTransitionAll.mask_lt _)), known_eq hy hs.y]
+  · rw [if_neg hk] at ht
+    cases ht
+
+/-- round 36: **the parser's store writes neither `B` nor the control byte**, from `missS` -/
+theorem store_miss (hP : PlacesB K E) {A : AS} {m : Machine} (hs : Sim E F A m) (hpc : m.pc = K.store) (hok : missS E K A = true) :
+    NoW K.bI m ∧ NoW K.ctlI m := by
+  have hA : A.pc = K.store := hs.pc.symm.trans hpc
+  simp only [missS, hA, bne_self_eq_false, Bool.false_or] at hok
+  cases ht : storeT E K A with
+  | none =>
+    rw [ht] at hok
+    cases hok
+  | some t =>
+    rw [ht] at hok
+    have hw := store_target hP hs hpc ht
+    simp only [Bool.or_eq_true, Bool.not_eq_true', decide_eq_false_iff_not, Bool.and_eq_true, bne_iff_ne, ne_eq] at hok
+    refine ⟨fun t' ht' hlt => ?_, fun t' ht' hlt => ?_⟩
+    · rw [hw] at ht'
+      have e := Option.some.inj ht'
+      subst e
+      rcases hok with h | ⟨h1, _⟩
+      · exact absurd hlt h
+      · exact h1
+    · rw [hw] at ht'
+      have e := Option.some.inj ht'
+      subst e
+      rcases hok with h | ⟨_, h2⟩
+      · exact absurd hlt h
+      · exact h2
+
 end
 
 /-- every machine is in a piece of `prePage` -/
@@ -365,6 +431,13 @@ theorem cov_prePage {E : Env} {F : Nat × UInt8} {K : Bc} (hP : PlacesB K E) {A 
 /-- every machine is in a piece of `preB` -/
 theorem cov_preB {C : CfgK} {F : Nat × UInt8} {K : Bc} (hP : PlacesB K C.E) {A : AS} {m : Machine} (hc : CleanK C.G C.S.store m) (hs : Sim C.E F A m) :
     ∃ B ∈ preB C K A, Sim C.E F B m ∧ B.k = A.k := by
+  obtain ⟨B, hB, h1, h2⟩ := FrameKeep.cov_preK hc hs
+  obtain ⟨D, hD, h3, h4⟩ := cov_prePage hP h1
+  exact ⟨D, List.mem_flatMap.2 ⟨B, hB, hD⟩, h3, h4.trans h2⟩
+
+/-- round 36: every machine is in a piece of `preB`, from `CleanK` of the walk's guard without its protected bytes (the pieces do not read them) -/
+theorem cov_preB0 {C : CfgK} {F : Nat × UInt8} {K : Bc} (hP : PlacesB K C.E) {A : AS} {m : Machine} (hc : CleanK { C.G with prot := [] } C.S.store m)
+    (hs : Sim C.E F A m) : ∃ B ∈ preB C K A, Sim C.E F B m ∧ B.k = A.k := by
   obtain ⟨B, hB, h1, h2⟩ := FrameKeep.cov_preK hc hs
   obtain ⟨D, hD, h3, h4⟩ := cov_prePage hP h1
   exact ⟨D, List.mem_flatMap.2 ⟨B, hB, hD⟩, h3, h4.trans h2⟩
@@ -395,24 +468,31 @@ theorem cover_liveB (ht : C.t.all (walkB C K b Fu) = true) (hkl : C.kl = C.t.map
     exact ⟨D, ⟨TaintRun.sim_le hle hs, Fu, hall⟩, (PipeWrites.le_k hle).symm⟩
   · cases h2
 
-/-- **One step from a live state**: the store's fact, and the next live state or the frame's end with `endB` -/
+/-- **One step from a live state**: the store's facts, and the next live state or the frame's end with `endB`. Round 36: `CleanK` of the walk's guard is asked
+only when the step does not write `B` through an index or a pointer (`hh`), and that is asked only away from the parser's store (`hnw`): at the store the walk
+knows the target (`missS`) -/
 theorem live_stepB (hP : PlacesB K C.E) (ht : C.t.all (walkB C K b Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray)
-    (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine} (hl : LiveB C K b F A m) (hh : CleanK C.G C.S.store m) :
-    (m.pc = K.store → StoreRing K b m) ∧
+    (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine} (hl : LiveB C K b F A m) (hh0 : CleanK { C.G with prot := [] } C.S.store m)
+    (hh : NoW K.bI m → CleanK C.G C.S.store m) (hnw : m.pc ≠ K.store → NoW K.bI m) :
+    (m.pc = K.store → StoreRing K b m ∧ NoW K.bI m ∧ NoW K.ctlI m) ∧
     ((∃ A', LiveB C K b F A' (go step m).2 ∧ A'.k = A.k ∧ (go step m).2.frame = m.frame ∧ m.fdot + 3 ≤ (go step m).2.fdot) ∨
       ((go step m).2.frame = m.frame + 1 ∧ ∃ B, endB K B = true ∧ Sim C.E F B (go step m).2)) := by
   obtain ⟨hs, n, hw⟩ := hl
   cases n with
   | zero => simp [walkB] at hw
   | succ n =>
-    obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preB hP hh hs
-    obtain ⟨r, hr1, hB⟩ := FrameKeep.s_kstep hops hT hh hs1
+    obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preB0 hP hh0 hs
     simp only [walkB, List.all_eq_true] at hw
     have hw1 := hw A₁ hA
     simp only [Bool.and_eq_true, List.all_eq_true] at hw1
-    obtain ⟨hst, hw1⟩ := hw1
+    obtain ⟨⟨hst, hms⟩, hw1⟩ := hw1
+    have hnb : NoW K.bI m := by
+      by_cases hpc : m.pc = K.store
+      · exact (store_miss hP hs1 hpc hms).1
+      · exact hnw hpc
+    obtain ⟨r, hr1, hB⟩ := FrameKeep.s_kstep hops hT (hh hnb) hs1
     have hw2 := hw1 r hr1
-    refine ⟨fun hpc => store_ring hP hs1 hpc hst, ?_⟩
+    refine ⟨fun hpc => ⟨store_ring hP hs1 hpc hst, store_miss hP hs1 hpc hms⟩, ?_⟩
     cases r with
     | none => simp at hw2
     | some B =>
@@ -433,11 +513,15 @@ theorem live_stepB (hP : PlacesB K C.E) (ht : C.t.all (walkB C K b Fu) = true) (
         simp only [Bool.and_eq_true] at hw2
         exact ⟨k2, B, hw2.2, h1⟩
 
-/-- **One frame from a walk**: the store's fact at each parser's store of the frame, and `endB` at the frame's end -/
+/-- **One frame from a walk**: the store's facts at each parser's store of the frame, and `endB` at the frame's end. Round 36: on the instructions of the frame,
+`CleanK` of the walk's guard without its protected bytes (`hk0`), `CleanK` of the guard when the instruction does not write `B` (`hk`), and that away from the
+parser's store (`hnw`) -/
 theorem frame_of_walkB (hP : PlacesB K C.E) (ht : C.t.all (walkB C K b Fu) = true) (hkl : C.kl = C.t.map knownOf) (hops : C.ops = (aRows C.E).toArray)
     (hT : 2 ≤ F.2.toNat) (hp : C.E.pad = AB.top) {S : AS} {m : Machine} {i : UInt8} (hw : walkB C K b Fu S = true) (hs : Sim C.E F S m)
-    (hk : ∀ j, CleanK C.G C.S.store (trace m i j)) :
-    (∀ j, (trace m i j).pc = K.store → StoreRing K b (trace m i j)) ∧
+    (hk0 : ∀ j, (trace m i j).frame = m.frame → CleanK { C.G with prot := [] } C.S.store (trace m i j))
+    (hk : ∀ j, (trace m i j).frame = m.frame → NoW K.bI (trace m i j) → CleanK C.G C.S.store (trace m i j))
+    (hnw : ∀ j, (trace m i j).frame = m.frame → (trace m i j).pc ≠ K.store → NoW K.bI (trace m i j)) :
+    (∀ j, (trace m i j).pc = K.store → StoreRing K b (trace m i j) ∧ NoW K.bI (trace m i j) ∧ NoW K.ctlI (trace m i j)) ∧
       ∃ B, endB K B = true ∧ Sim C.E F B (PipeTransition.frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact TaintRun.mem_top _ }
   have key : ∀ j, (∃ A, LiveB C K b F A (trace m i j) ∧ (trace m i j).frame = m.frame ∧ m.fdot + 3 * j ≤ (trace m i j).fdot) ∨
@@ -455,7 +539,7 @@ theorem frame_of_walkB (hP : PlacesB K C.E) (ht : C.t.all (walkB C K b Fu) = tru
           rw [e]
           simp only [nxt, if_neg hc]
         rw [e2]
-        rcases (live_stepB hP ht hkl hops hT h1 (hk j)).2 with ⟨A', a1, _, a3, a4⟩ | ⟨a1, B, a2, a4⟩
+        rcases (live_stepB hP ht hkl hops hT h1 (hk0 j h3) (hk j h3) (hnw j h3)).2 with ⟨A', a1, _, a3, a4⟩ | ⟨a1, B, a2, a4⟩
         · exact Or.inl ⟨A', a1, by rw [a3, h3], by omega⟩
         · exact Or.inr ⟨by rw [a1, h3], B, a2, a4⟩
       · have hc : ((trace m i j).frame ≥ m.frame + 1 || (trace m i j).halted) = true := by
@@ -466,8 +550,8 @@ theorem frame_of_walkB (hP : PlacesB K C.E) (ht : C.t.all (walkB C K b Fu) = tru
         rw [e2]
         exact Or.inr ⟨h1, B, h2, h4⟩
   refine ⟨fun j hpc => ?_, ?_⟩
-  · rcases key j with ⟨A, h1, _, _⟩ | ⟨_, B, h2, h4⟩
-    · exact (live_stepB hP ht hkl hops hT h1 (hk j)).1 hpc
+  · rcases key j with ⟨A, h1, h3, _⟩ | ⟨_, B, h2, h4⟩
+    · exact (live_stepB hP ht hkl hops hT h1 (hk0 j h3) (hk j h3) (hnw j h3)).1 hpc
     · exfalso
       simp only [endB, Bool.and_eq_true, bne_iff_ne, ne_eq] at h2
       exact h2.1.1.1.1.1 (h4.pc.symm.trans hpc)
@@ -559,10 +643,14 @@ theorem bcolOK_of_check (h : bcolCheckW S G E K = true) : BcolOK S G E K := by
     exact ⟨h3.1.1, h3.1.2, h3.2⟩⟩
 
 /-- **One frame in control**: a frame from `FrameStart` with `BInv`, whose instructions meet `CleanK` of the walk's guard, ends with `BInv`, and its parser's store
-writes only in the ring's column `B` of its start -/
+writes only in the ring's column `B` of its start, and (round 36) neither `B` nor the control byte. Round 36: `CleanK` of the guard is asked only where the
+instruction does not write `B` through an index or a pointer (`hk`), and that only away from the parser's store (`hnw`) -/
 theorem frame_bcol (hc : bcolCheckW S G E K = true) (hE : E.pad = AB.top) {m : Machine} {i : UInt8} (h0 : FrameStart G E m) (hI : BInv K m)
-    (hk : ∀ j, CleanK G S.store (trace m i j)) :
-    BInv K (PipeTransition.frame m i) ∧ ∀ j, (trace m i j).pc = K.store → StoreRing K (m.ram.get! K.bI).toNat (trace m i j) := by
+    (hk0 : ∀ j, (trace m i j).frame = m.frame → CleanK { G with prot := [] } S.store (trace m i j))
+    (hk : ∀ j, (trace m i j).frame = m.frame → NoW K.bI (trace m i j) → CleanK G S.store (trace m i j))
+    (hnw : ∀ j, (trace m i j).frame = m.frame → (trace m i j).pc ≠ K.store → NoW K.bI (trace m i j)) :
+    BInv K (PipeTransition.frame m i) ∧ ∀ j, (trace m i j).pc = K.store → StoreRing K (m.ram.get! K.bI).toNat (trace m i j) ∧ NoW K.bI (trace m i j) ∧
+      NoW K.ctlI (trace m i j) := by
   have hC := bcolOK_of_check hc
   have hb : (m.ram.get! K.bI).toNat < 32 := by
     rw [hI.1]
@@ -575,7 +663,7 @@ theorem frame_bcol (hc : bcolCheckW S G E K = true) (hE : E.pad = AB.top) {m : M
     | false => exact w2
     | true => exact w3
   obtain ⟨h1, B, h2, h3⟩ := frame_of_walkB (C := cfgB S G E K (m.ram.get! K.bI).toNat) (F := (m.frame, 2)) hC.places w1 rfl rfl
-    (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs1 hk
+    (show 2 ≤ (2 : UInt8).toNat by decide) hE hw0 hs1 hk0 hk hnw
   exact ⟨inv_of_end hC.places h3 h2, h1⟩
 
 /-- **No store through an index or a pointer writes `B`**, from `BcR` -/
@@ -601,32 +689,37 @@ theorem prot_E {sy : Syms} {m0 : Machine} :
   · simp [FrameKeep.guardE, FrameKeep.guardF, hx]
 
 set_option maxRecDepth 100000 in
-/-- the walk's guard: `CleanK` of it from `CleanK` of `FrameKeep.guardE` and `BcR` -/
-theorem cleanK_B {sy : Syms} {m0 : Machine} {m : Machine} (h : CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store m) (hr : BcR (bcOf sy m0) m) :
+/-- the walk's guard: `CleanK` of it from `CleanK` of `FrameKeep.guardE` and no store through an index or a pointer to `B` (round 36: `NoW`; it was `BcR`) -/
+theorem cleanK_B {sy : Syms} {m0 : Machine} {m : Machine} (h : CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store m) (hr : NoW (bcOf sy m0).bI m) :
     CleanK (guardB sy m0) (FrameKeep.spotOf sy m0).store m :=
   PoleCoin.cleanK_one (G := { FrameKeep.guardK sy m0 with prot := (bcOf sy m0).colI :: (bcOf sy m0).pageI :: (FrameKeep.guardK sy m0).prot })
-    (FrameKeep.cleanK_sub h prot_E rfl rfl rfl rfl) (b_of_R hr)
+    (FrameKeep.cleanK_sub h prot_E rfl rfl rfl rfl) hr
 
 /-- the start of a frame for the walk's guard: the same as for `FrameKeep.guardK` -/
 theorem start_B {sy : Syms} {m0 : Machine} {m : Machine} (h : FrameKeep.StartK sy m0 m) : FrameStart (guardB sy m0) (PipeEntryRule.envOf m0) m :=
   ⟨h.pc, h.s, h.dot, h.ctrl, h.s0, h.strobe, h.halted, h.trk, h.prg, h.mask, h.size, h.known⟩
 
-/-- **On every frame up to the touch's frame `BInv` holds at the start, and the parser's store writes only in the ring's column `B` of the frame's start**: from
-`BInv` at control (`hI0`), the walk of `FrameKeep` (`hcK`: every frame starts in control), the walk of this file (`hcB`), the field `keep.cleanE` and `BcR` on
-each instruction (`hct`) -/
+/-- **On every frame up to the touch's frame `BInv` holds at the start, and the parser's store writes only in the ring's column `B` of the frame's start** and
+(round 36) neither `B` nor the control byte: from `BInv` at control (`hI0`), the walk of `FrameKeep` (`hcK`: every frame starts in control), the walk of this
+file (`hcB`), the field `keep.cleanE`, and on each instruction of the frame but the parser's store no store through an index or a pointer to `B` (`hct`; round
+35 asked `BcR` on every instruction) -/
 theorem frames_bcol {sy : Syms} {m0 : Machine} {Sr : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (hcK : FrameKeep.keepCheckOf sy m0 = true)
     (hcB : bcolCheck sy m0 = true) (Fr : FrameKeep.Frames sy m0 Sr a g seq) (hs0 : FrameKeep.StartK sy m0 (seq 0))
     (h0 : FrameKeep.Watched (FrameKeep.watchOf sy) (seq 0)) (hI0 : BInv (bcOf sy m0) (seq 0))
-    (hct : ∀ n, n < Fr.ix g → ∀ k, BcR (bcOf sy m0) (trace (Fr.all n) (Fr.inp n) k)) :
+    (hct : ∀ n, n < Fr.ix g → ∀ k, (trace (Fr.all n) (Fr.inp n) k).frame = (Fr.all n).frame → (trace (Fr.all n) (Fr.inp n) k).pc ≠ (bcOf sy m0).store →
+      NoW (bcOf sy m0).bI (trace (Fr.all n) (Fr.inp n) k)) :
     ∀ n, n < Fr.ix g → BInv (bcOf sy m0) (Fr.all n) ∧
-      ∀ k, (trace (Fr.all n) (Fr.inp n) k).pc = (bcOf sy m0).store → StoreRing (bcOf sy m0) ((Fr.all n).ram.get! (bcOf sy m0).bI).toNat (trace (Fr.all n) (Fr.inp n) k) := by
+      ∀ k, (trace (Fr.all n) (Fr.inp n) k).pc = (bcOf sy m0).store → StoreRing (bcOf sy m0) ((Fr.all n).ram.get! (bcOf sy m0).bI).toNat (trace (Fr.all n) (Fr.inp n) k) ∧
+        NoW (bcOf sy m0).bI (trace (Fr.all n) (Fr.inp n) k) ∧ NoW (bcOf sy m0).ctlI (trace (Fr.all n) (Fr.inp n) k) := by
   have e0 : seq 0 = Fr.all 0 := by rw [Fr.at_ix 0 (Nat.zero_le _), Fr.ix0]
   have one : ∀ n, n < Fr.ix g → BInv (bcOf sy m0) (Fr.all n) →
       BInv (bcOf sy m0) (PipeTransition.frame (Fr.all n) (Fr.inp n)) ∧
-      ∀ k, (trace (Fr.all n) (Fr.inp n) k).pc = (bcOf sy m0).store → StoreRing (bcOf sy m0) ((Fr.all n).ram.get! (bcOf sy m0).bI).toNat (trace (Fr.all n) (Fr.inp n) k) := by
+      ∀ k, (trace (Fr.all n) (Fr.inp n) k).pc = (bcOf sy m0).store → StoreRing (bcOf sy m0) ((Fr.all n).ram.get! (bcOf sy m0).bI).toNat (trace (Fr.all n) (Fr.inp n) k) ∧
+        NoW (bcOf sy m0).bI (trace (Fr.all n) (Fr.inp n) k) ∧ NoW (bcOf sy m0).ctlI (trace (Fr.all n) (Fr.inp n) k) := by
     intro n hn hI
     obtain ⟨a1, _⟩ := Fr.all_start hcK hs0 h0 n hn
-    exact frame_bcol hcB rfl (start_B a1) hI (fun j => cleanK_B (Fr.cleanE n hn j) (hct n hn j))
+    exact frame_bcol hcB rfl (start_B a1) hI (fun j _ => FrameKeep.cleanK_sub (Fr.cleanE n hn j) (fun x hx => by cases hx) rfl rfl rfl rfl)
+      (fun j _ hnb => cleanK_B (Fr.cleanE n hn j) hnb) (fun j hf hpc => hct n hn j hf hpc)
   have invs : ∀ n, n < Fr.ix g → BInv (bcOf sy m0) (Fr.all n) := by
     intro n
     induction n with

@@ -105,7 +105,7 @@ The exit code of `pole-keep parser` now asks these facts above ground (exit 0). 
 
 * `coinBuf`: that no store through an index or a pointer leaves a coin's tile in the block buffers above ground. The area parser draws the columns from the level's data; above ground in 1-1 they hold no coin. A proof needs the parser's walk to follow the metatiles it stores.
 * `readC`: that a read that finds a coin's tile is in the block buffers. The collision routine's checks of the height keep every one of his reads in the 13 rows (measured: no read out of the block buffers), but the walk does not know his height there.
-* `ctlKeep`: no store through an index or a pointer writes the control byte (0 measured).
+* `ctlKeep`: no store through an index or a pointer writes the control byte (0 measured). Round 36: asked only at the places of `PoleNear.ResidC`; the walk of `PoleNear` proves it elsewhere ([the stores that may reach the control byte or the block buffer's column](f-6-17-19-PoleNear.md)).
 * `tilesCol` (`TileSlotC`), `bufAll`, `keepB`: not changed by this step.
 
 **Files.** `Theorems/PoleCoin.lean` (new); `Theorems/PoleJoin.lean` (the fields, `Run.ctl6`); `Theorems/PoleParserRun.lean` (`coinMapK`, `EndRunQ.coinMap`, `coinMap₀`, the new hypotheses); `Smbrta/Syms.lean`, `tools/smb-symbols.txt` (two symbols); `Main.lean` (`genPoleCoin`, the Route block, `pole-keep coin`, the round 35 counters of `pole-keep parser`).

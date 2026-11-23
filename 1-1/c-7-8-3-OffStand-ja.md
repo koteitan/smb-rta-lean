@@ -59,7 +59,7 @@ nearB_sim   :  SimV(a, b)  →  near(a) = near(b)
 
 ## 残ること（証明していない）
 
-* `offTop`、`offNear`、`offSlow`（[かたまりの上から: 床までのフレーム](c-7-8-2-OffDrop-ja.md) にそれぞれの証明の道があります）。`offFloor` もラウンド 35 でなくなりました（項目 1-1-c-7-8-4）。
+* `offTop`、`offSlow`（[かたまりの上から: 床までのフレーム](c-7-8-2-OffDrop-ja.md) にそれぞれの証明の道があります）。`offNear` はラウンド 36 で証明しました（[入るフレーム](c-7-8-5-EntryVert-ja.md)）。`offFloor` もラウンド 35 でなくなりました（項目 1-1-c-7-8-4）。
 
 **ファイル。** `Theorems/OffStand.lean`（`keepOK`、`run_K`、`air_keep`、`fall_same`）。`Theorems/RoomJoin.lean`（`forcesR`、`standFam`、`offVfdCheck`、`jump_vfd`、`SimV`、`fall_sim`、`offNext_sim`、`nearB_sim`、`RoomRun.st_012`、`RoomRun.vfd_ok`、`RoomRun.offB_path_sim`、`RoomRun.offB_gap_sim`、`RoomRun.off_stand`。チェック `keepA`、`offVfd`）。`Main.lean`: `room-off-stand`。非公開の `Proof/RoomJoin.lean` に `keepA` と `offVfd` が入ります。
 

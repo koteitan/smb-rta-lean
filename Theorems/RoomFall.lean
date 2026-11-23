@@ -109,11 +109,12 @@ def phC (sy : Syms) (E : Env) (P : Places) : Ph where
   pre := fun A => !(A.pc == sy.PlayerSubs && (A.spent || !A.log.isEmpty))
   ok := fun A => !A.spent || (!mayWrite E P (vRestW sy) A && (A.log.head? == some 1 || !mayWrite E P (vLand sy) A))
 
-/-- at the frame's end: a state marked `[4, 4, 4]` or `[1, h, 0]` ends out of the player's routine: the routine byte is known and is not the reference's -/
+/-- at the frame's end: a state marked `[4, 4, 4]` or `[1, h, 0]` ends out of the player's routine: the routine byte is known and is not the reference's; since round 36
+not the side pipe's routine either (`RoomVert.outE`), so the frame that enters the side pipe is followed too (`after_QHE`) -/
 def finC (P : Places) (r : Machine) (B : AS) : Bool :=
   match B.log with
-  | [4, 4, 4] => decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI
-  | [1, _, 0] => decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI
+  | [4, 4, 4] => RoomVert.outE P r B
+  | [1, _, 0] => RoomVert.outE P r B
   | _ => true
 
 section
@@ -380,14 +381,15 @@ theorem keep_of_may {E : Env} {F : Nat × UInt8} {P : Places} {A : AS} {y : Mach
     exact StepWrites.keep_step hs hm x (List.contains_iff_mem.2 hx)
 
 /-- **The frame from the scroll handler, falling.** The frame comes to the scroll handler at most once. If it comes there falling in the air, and ends in the player's
-routine, then from there to its end no step writes the vertical page; and no step writes the bytes of `vKeep`, or he lands: the state, the vertical speed and its fraction are 0 at the end, the height is the one
+routine (since round 36: or in the side pipe's routine, `P.eng`), then from there to its end no step writes the vertical page; and no step writes the bytes of `vKeep`, or he lands: the state, the vertical speed and its fraction are 0 at the end, the height is the one
 at the scroll handler with the low four bits 0, and the other bytes of `vKeep` (`vRest`) are those at the scroll handler. The frame starts in the room's condition, and each
 instruction meets `SiteOK`. In the first case every instruction of the frame from the scroll handler on has the four bytes of the landing of the scroll
 handler (`after_QC` drops this history). -/
-theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phC sy E P) E P r K C Fu)
+theorem after_QHE {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phC sy E P) E P r K C Fu)
     (hfin : C.fin = finC P r) (hap : apartC sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
-    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Falling sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
+    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Falling sy (trace m i j) →
+       ((frame m i).ram.get! P.rtI = r.ram.get! P.rtI ∨ (frame m i).ram.get! P.rtI = P.eng) →
        (frame m i).ram.get! (I sy.Player_Y_HighPos) = (trace m i j).ram.get! (I sy.Player_Y_HighPos) ∧
        (((∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
         ∀ j', j ≤ j' → (trace m i j').frame = m.frame → ∀ x ∈ vLand sy, (trace m i j').ram.get! x = (trace m i j).ram.get! x) ∨
@@ -636,13 +638,11 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have notOut : ∀ l, (l = [4, 4, 4] ∨ ∃ a, l = [1, a, 0]) → B.log ≠ l := by
     intro l hl e
     rw [hfin] at hB1
-    have hB1' : (decide (P.rtI < 2048) && (B.getK P.rtI).isK && ((B.getK P.rtI).v != r.ram.get! P.rtI)) = true := by
+    have hB1' : RoomVert.outE P r B = true := by
       rcases hl with rfl | ⟨a, rfl⟩ <;> simpa [finC, e] using hB1
-    simp only [Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at hB1'
-    obtain ⟨⟨a1, a2⟩, a3⟩ := hB1'
-    have e2 := isK_eq a2 (hB2.ram _ a1)
-    rw [← hJ3, hrt] at e2
-    exact a3 e2.symm
+    have hBe := hB2
+    rw [← hJ3] at hBe
+    exact RoomVert.not_outE hBe hrt hB1'
   obtain ⟨q1, q2, q3, q4⟩ := hB3
   have only : ∀ j₀, j₀ < J → (trace m i j₀).pc = sy.PlayerSubs → j₀ = jq := by
     intro j₀ h1 h2
@@ -687,6 +687,20 @@ theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
       rw [only j₀ a1 a2] at a3
       exact absurd hfall a3
     · exact absurd e (notOut _ (Or.inl rfl))
+
+/-- **The frame from the scroll handler, falling**: `after_QHE` for a frame that ends in the player's routine -/
+theorem after_QH {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phC sy E P) E P r K C Fu)
+    (hfin : C.fin = finC P r) (hap : apartC sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
+    (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → Falling sy (trace m i j) → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
+       (frame m i).ram.get! (I sy.Player_Y_HighPos) = (trace m i j).ram.get! (I sy.Player_Y_HighPos) ∧
+       (((∀ x ∈ vKeep sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧
+        ∀ j', j ≤ j' → (trace m i j').frame = m.frame → ∀ x ∈ vLand sy, (trace m i j').ram.get! x = (trace m i j).ram.get! x) ∨
+       ((∀ x ∈ vRest sy, (frame m i).ram.get! x = (trace m i j).ram.get! x) ∧ (frame m i).ram.get! (I sy.Player_State) = 0 ∧
+        (frame m i).ram.get! (I sy.Player_Y_Speed) = 0 ∧ (frame m i).ram.get! (I sy.Player_Y_MoveForce) = 0 ∧
+        (frame m i).ram.get! (I sy.Player_Y_Position) = (trace m i j).ram.get! (I sy.Player_Y_Position) &&& 0xF0))) := by
+  obtain ⟨u, H⟩ := after_QHE h hfin hap hm hk
+  exact ⟨u, fun j hq hf hF hrt => H j hq hf hF (Or.inl hrt)⟩
 
 /-- **The frame from the scroll handler, falling** (`after_QH` without the history) -/
 theorem after_QC {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phC sy E P) E P r K C Fu)

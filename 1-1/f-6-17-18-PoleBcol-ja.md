@@ -87,7 +87,7 @@ bKeep :  farStore([B]) = false  →  添え字やポインタを通す書き込�
 ## 証明していないこと
 
 * `bufAll`: `BufV`（旗のタイルは旗の列にだけ入る、26 回目）と、解析の列の書き込みでないところでの `NoTileM`（測った旗のタイルの書き込みはそこにはない）。
-* `bKeep`: 添え字やポインタを通す書き込みが `B` を書かないこと（測って 0）。
+* `bKeep`: 添え字やポインタを通す書き込みが `B` を書かないこと（測って 0）。36 回目: 解析の列の書き込み以外のポインタを通す書き込みと、触るフレームでルーチン、モード、タスクの最初の書き込みのあとでだけ求めます。ほかは `PoleNear` の歩きが証明し、解析の書き込みではこの歩きが証明します（`missS`）（[制御バイトとブロックのバッファの列に届きうる書き込み](f-6-17-19-PoleNear-ja.md)）。
 * 解析の書き込みでの `BufV` はまだ求めています: その行が旗のタイルを旗の列にだけ持つこと。証明には、解析が描くメタタイルが要ります。
 
 **ファイル.** `Theorems/PoleBcol.lean`（新しい）。`Theorems/PoleRing.lean`（`BufVR`）。`Theorems/PoleJoin.lean`（`bufAll`、`bKeep`、`TileColAll`、`Run.bufC₁`、`Run.slotStart`、`Run.tilesStart`、`Run.bufAt₁`）。`Theorems/PoleParserRun.lean`（行のチェック、`bInv₀`、`tilesCol_run`、`tilesCol_route`）。`Smbrta/Syms.lean`、`tools/smb-symbols.txt`（`ExecGameLoopback`）。`Main.lean`（`genPoleBcol`、Route のブロック、`pole-keep bcol`、`pole-keep parser` の数）。

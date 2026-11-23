@@ -105,7 +105,7 @@ ctlKeep :  farStore([ctl]) = false  →  添え字やポインタを通す書き
 
 * `coinBuf`: 地上で、添え字やポインタを通す書き込みがブロックのバッファにコインのタイルを残さないこと。エリアの解析は面のデータから列を描きます。1-1 の地上ではそこにコインはありません。証明には、解析の歩きが書くメタタイルを追う必要があります。
 * `readC`: コインのタイルを見つける読みがブロックのバッファの中にあること。当たり判定のルーチンの高さの確かめは、マリオのどの読みも 13 行の中に保ちます（測った: ブロックのバッファの外の読みはない）。けれども、歩きはそこで高さを知りません。
-* `ctlKeep`: 添え字やポインタを通す書き込みが制御バイトを書かないこと（測って 0）。
+* `ctlKeep`: 添え字やポインタを通す書き込みが制御バイトを書かないこと（測って 0）。36 回目: `PoleNear.ResidC` の場所でだけ求め、ほかは `PoleNear` の歩きが証明します（[制御バイトとブロックのバッファの列に届きうる書き込み](f-6-17-19-PoleNear-ja.md)）。
 * `tilesCol`（`TileSlotC`）、`bufAll`、`keepB`: この一歩では変えていません。
 
 **ファイル.** `Theorems/PoleCoin.lean`（新しい）。`Theorems/PoleJoin.lean`（フィールド、`Run.ctl6`）。`Theorems/PoleParserRun.lean`（`coinMapK`、`EndRunQ.coinMap`、`coinMap₀`、新しい仮定）。`Smbrta/Syms.lean`、`tools/smb-symbols.txt`（記号 2 つ）。`Main.lean`（`genPoleCoin`、Route のブロック、`pole-keep coin`、`pole-keep parser` の 35 回目の数）。

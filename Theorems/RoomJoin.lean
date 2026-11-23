@@ -1128,12 +1128,11 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (
       (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)) →
     fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (startAt sy m S b lim C n) (inpAt sy m S b lim C n) (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)))
   /-- (round 34, page `1-1/c-7-8-2-OffDrop.md`) the last frame before `t0` that ends standing ends on the block's top, and every frame after it before `t0` ends in the air
-  above the block's top. With `offNear` and `offSlow` in place of the field `Off` of `way` (and `offFloor`, `offStand` until round 34; since round 35
-  `RoomRun.next_E`, `RoomRun.off_stand` prove what they gave, page `1-1/c-7-8-3-OffStand.md`) -/
+  above the block's top. With `offSlow` in place of the field `Off` of `way` (and `offFloor`, `offStand` until round 34; since round 35
+  `RoomRun.next_E`, `RoomRun.off_stand` prove what they gave, page `1-1/c-7-8-3-OffStand.md`; and `offNear` until round 35, since round 36 `RoomRun.offNear_of`, page
+  `1-1/c-7-8-5-EntryVert.md`) -/
   offTop : ∃ T, C ≤ T ∧ T < t0 ∧ (VertModel.vsOf sy (endAt sy m S b lim C T)).st = 0 ∧ (VertModel.vsOf sy (endAt sy m S b lim C T)).y.toNat = standY sy N.h ∧
     ∀ j, T < j → j < t0 → (VertModel.vsOf sy (endAt sy m S b lim C j)).st ≠ 0 ∧ (VertModel.vsOf sy (endAt sy m S b lim C j)).y.toNat < standY sy N.h
-  /-- (round 34) the frame before the entry ends on the floor, or in the air one frame of `vstepR` from the floor's height (`OffDrop.nearB`) -/
-  offNear : OffDrop.nearB sy m (VertModel.vsOf sy (endAt sy m S b lim C (E - 1))) = true
   /-- (round 34) from frame `t0` to the entry, a frame that starts in the jump state with the fall force of a takeoff from the block's top below the air threshold
   (`OffDrop.slowF`) moves him at most `A − 1` sixteenths of a pixel right -/
   offSlow : ∀ n, t0 ≤ n + 1 → n < E → (VertModel.vsOf sy (endAt sy m S b lim C n)).st = 1 →
@@ -1987,6 +1986,8 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   (`OffStand.air_keep`, `OffStand.fall_same`); the takeoffs and the states at first control have a fall force of the room (`RoomRun.vfd_ok`) -/
   keepA : OffStand.keepOK sy m (FrameModel.ctrlStack sy m) = true
   offVfd : offVfdCheck sy m N = true
+  /-- (round 36, `RoomRun.offNear_of`) the reference entry into the side pipe ends at the floor's height -/
+  entryY : peek (SideTransition.entry m) sy.Player_Y_Position = (groundY sy).toUInt8
 
 /-! ## Lists of frames -/
 
@@ -5559,6 +5560,29 @@ structure InRoom (r : RoomRun sy m N S b lim) : Prop where
       (PipeEntryRule.trace (r.fm n) (r.inAt n) j').pc ≠ sy.PlayerSubs) ∧
     ∀ k, (PipeEntryRule.trace (r.fm n) (r.inAt n) k).pc = sy.PlayerSubs → (PipeEntryRule.trace (r.fm n) (r.inAt n) k).frame = (r.fm n).frame →
       peek (PipeTransition.frame (r.fm n) (r.inAt n)) sy.Player_XSpeedAbsolute = peek (PipeEntryRule.trace (r.fm n) (r.inAt n) k) sy.Player_XSpeedAbsolute
+  /-- (round 36, page `1-1/c-7-8-5-EntryVert.md`) the entering frame `E`, when it starts in the air and comes to the player's routine at `k` as `air` asks: `vstepR` falls,
+  and the vertical bytes at the frame's end are those of `vstepR` or its landing (`Route.Run.roomAirL`: `EntryVert.air_room`; the walks' frame ends exclude the side pipe's
+  routine since round 36) -/
+  airL : r.C < r.E → peek (r.fm (r.E - 1)) sy.Player_State ≠ 0 → ∀ k,
+    VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k) →
+    (peek (r.fm (r.E - 1)) sy.Player_State = 1 → peek (r.fm (r.E - 1)) sy.DiffToHaltJump = 1) →
+    peek (r.fm (r.E - 1)) sy.PreviousA_B_Buttons &&& 0x80 = peek (r.fm (r.E - 1)) sy.A_B_Buttons &&& 0x80 →
+    falling (vstepR sy m (VertModel.vsOf sy (r.fm (r.E - 1))) (peek (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k) sy.SavedJoypadBits &&& 0x80 != 0)) = true ∧
+    (VertModel.vsOf sy (PipeTransition.frame (r.fm (r.E - 1)) (r.inAt (r.E - 1))) =
+       vstepR sy m (VertModel.vsOf sy (r.fm (r.E - 1))) (peek (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k) sy.SavedJoypadBits &&& 0x80 != 0) ∨
+     VertModel.vsOf sy (PipeTransition.frame (r.fm (r.E - 1)) (r.inAt (r.E - 1))) =
+       VertAir.land (vstepR sy m (VertModel.vsOf sy (r.fm (r.E - 1))) (peek (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k) sy.SavedJoypadBits &&& 0x80 != 0)))
+  /-- (round 36) the entering frame, when it starts standing and comes to the player's routine at `k` with no jump in the input that the model reads there, ends as
+  `StandNext` allows (`Route.Run.roomStandL`: `EntryVert.stand_room`) -/
+  standL : r.C < r.E → peek (r.fm (r.E - 1)) sy.Player_State = 0 → ∀ k, (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k).pc = sy.PlayerCtrlRoutine →
+    (FrameModel.readIn sy (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k)).jump = false →
+    StandNext (VertModel.vsOf sy (r.fm (r.E - 1))) (VertModel.vsOf sy (PipeTransition.frame (r.fm (r.E - 1)) (r.inAt (r.E - 1))))
+  /-- (round 36) the entering frame does not come to the player's routine in the state `AtV` with a jump in the input that the model reads there: a takeoff rises at the
+  scroll handler, and such a frame does not end in the side pipe's routine (`Route.Run.roomJumpL`: `EntryVert.jump_room`) -/
+  jumpL : r.C < r.E → ∀ k, VertAir.AtV sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k) →
+    (FrameModel.readIn sy (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) k)).jump = true → False
+  /-- (round 36) the entering frame ends with the height of the reference entry (`Route.Run.roomYL`: `Route.Run.y₂`, part d's walks `EntryHeight` and `EntryHeightBig`) -/
+  yL : r.C < r.E → peek (PipeTransition.frame (r.fm (r.E - 1)) (r.inAt (r.E - 1))) sy.Player_Y_Position = peek (SideTransition.entry m) sy.Player_Y_Position
 
 /-- **`mouth`**: on the entry frame he is at the mouth, or past its left end. `P(E)` is read at the frame's end (`read_PE`), and the walks of the room's frames put the position
 there (`InRoom.mouthE`) -/
@@ -8105,7 +8129,7 @@ theorem ab_of_run (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r
 
 `read_vs` reads the frames only up to `t0`, but the walks of the room's frames hold up to the frame before the entry: a frame in the air is `vstepR` or its landing
 (`InRoom.air`), a frame that starts standing with no jump is `StandNext` (`InRoom.stand`), one with a jump the takeoff (`InRoom.jump`). So the vertical bytes of the
-machines after `t0` (`vE`) are followed to the frame before the entry, which the field `offNear` puts near the floor. Before `t0` the field `offTop` gives the last stand,
+machines after `t0` (`vE`) are followed to the frame before the entry, which `offNear_of` puts near the floor (the field `offNear` until round 35). Before `t0` the field `offTop` gives the last stand,
 on the block's top, and the frames after it above the block's top. -/
 
 /-- the vertical state at the end of the room's frame `n`, read from the machine (`fr.vs n` up to `t0`: `vs_fe`) -/
@@ -8280,6 +8304,75 @@ theorem real_reach (H : Checks sy m N) (hr : r.InRoom) {D : Nat} (hC : r.C ≤ D
     rw [show D + (i + 1) = D + i + 1 by omega]
     exact OffDrop.reach_snoc ih (r.next_E H hr (by omega) (by omega))
 
+/-- a whole row keeps its high four bits -/
+theorem row_hi : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0x0F = 0) → (UInt8.ofNat n.val &&& 0xF0 = UInt8.ofNat n.val) := by decide +kernel
+
+/-- **The frame before the entry is near the floor** (round 36, page `1-1/c-7-8-5-EntryVert.md`; the field `offNear` until round 35). The entering frame ends at the floor's
+height (`InRoom.yL`, the reference entry's height, and `entryY`). If it starts in the air, `vstepR` falls and the frame ends on it or on its landing (`InRoom.airL`): so
+`vstepR` reaches the floor's height falling. If it starts standing, it does not take off (`InRoom.jumpL`), and it keeps the height or lands on its whole row
+(`InRoom.standL`, `stand_ok`): so it stands on the floor's height -/
+theorem offNear_of (H : Checks sy m N) (hr : r.InRoom) (hCE : r.C < r.E) : OffDrop.nearB sy m (r.vE (r.E - 1)) = true := by
+  have hC : r.C ≤ r.E - 1 := by omega
+  have hE : r.E - 1 < r.E := by omega
+  have hv0 := r.vE_fm hr hC hE
+  have hpc := r.arr_pc hr hC hE
+  have hcl := hr.cut _ hC hE _ hpc
+  have hg := H.standW.ground
+  have hyE : (VertModel.vsOf sy (PipeTransition.frame (r.fm (r.E - 1)) (r.inAt (r.E - 1)))).y = (groundY sy).toUInt8 :=
+    (hr.yL hCE).trans H.entryY
+  have hgN : ((groundY sy).toUInt8).toNat = groundY sy := by
+    simp only [Nat.toUInt8, UInt8.toNat_ofNat]
+    exact Nat.mod_eq_of_lt hg
+  have hst0 : (VertModel.vsOf sy (r.fm (r.E - 1))).st = peek (r.fm (r.E - 1)) sy.Player_State := rfl
+  by_cases hst : (r.vE (r.E - 1)).st = 0
+  · have hs' : peek (r.fm (r.E - 1)) sy.Player_State = 0 := by rw [← hst0, hv0]; exact hst
+    cases hj : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) (r.arr (r.E - 1)))).jump with
+    | true => exact (hr.jumpL hCE _ hcl hj).elim
+    | false =>
+      have hsn := hr.standL hCE hs' _ hpc hj
+      rw [hv0] at hsn
+      obtain ⟨_, _, _, _, h5⟩ := hsn
+      have hok := r.stand_ok H hr (r.E - 1 - r.C) (by omega)
+      rw [show r.C + (r.E - 1 - r.C) = r.E - 1 by omega] at hok
+      obtain ⟨_, _, hrow⟩ := hok hst
+      have hy : (r.vE (r.E - 1)).y = (groundY sy).toUInt8 := by
+        rcases h5 with ⟨e1, _⟩ | ⟨_, _, _, e4⟩
+        · rw [← e1]
+          exact hyE
+        · have hh := row_hi ⟨(r.vE (r.E - 1)).y.toNat, (r.vE (r.E - 1)).y.toNat_lt⟩
+          simp only [UInt8.ofNat_toNat] at hh
+          rw [← hh hrow, ← e4]
+          exact hyE
+      simp [OffDrop.nearB, hst, hy, hgN]
+  · have hs' : peek (r.fm (r.E - 1)) sy.Player_State ≠ 0 := by rw [← hst0, hv0]; exact hst
+    obtain ⟨hf, e⟩ := hr.airL hCE hs' _ hcl (hr.pair _ hC hE).1 (hr.pair _ hC hE).2
+    rw [hv0] at hf e
+    generalize (peek (PipeEntryRule.trace (r.fm (r.E - 1)) (r.inAt (r.E - 1)) (r.arr (r.E - 1))) sy.SavedJoypadBits &&& 0x80 != 0) = a at hf e
+    have hle : groundY sy ≤ (vstepR sy m (r.vE (r.E - 1)) a).y.toNat := by
+      rcases e with e | e
+      · rw [← e, hyE, hgN]
+        exact Nat.le_refl _
+      · have e2 := congrArg VS.y e
+        rw [hyE] at e2
+        have h1 : ((vstepR sy m (r.vE (r.E - 1)) a).y &&& 0xF0).toNat ≤ (vstepR sy m (r.vE (r.E - 1)) a).y.toNat := by
+          have := hiF0_le ⟨(vstepR sy m (r.vE (r.E - 1)) a).y.toNat, (vstepR sy m (r.vE (r.E - 1)) a).y.toNat_lt⟩
+          simpa using this
+        have h2 : (VertAir.land (vstepR sy m (r.vE (r.E - 1)) a)).y = (vstepR sy m (r.vE (r.E - 1)) a).y &&& 0xF0 := rfl
+        rw [h2] at e2
+        rw [← e2, hgN] at h1
+        exact h1
+    have key : (falling (OffDrop.stepR sy m (r.vE (r.E - 1)) a) && decide (groundY sy ≤ (OffDrop.stepR sy m (r.vE (r.E - 1)) a).y.toNat)) = true := by
+      show (falling (vstepR sy m (r.vE (r.E - 1)) a) && decide (groundY sy ≤ (vstepR sy m (r.vE (r.E - 1)) a).y.toNat)) = true
+      simp [hf, hle]
+    have hst' : ((r.vE (r.E - 1)).st != 0) = true := by simpa using hst
+    unfold OffDrop.nearB
+    rw [Bool.or_eq_true]
+    right
+    rw [Bool.and_eq_true]
+    refine ⟨hst', ?_⟩
+    rw [List.any_eq_true]
+    exact ⟨a, by cases a <;> simp, key⟩
+
 /-- **The frames past the block's right end follow `offNext` up to `SimV`** (round 35): from a frame `D` whose state is `SimV` to a state of `L`, if `offB K L` holds, no
 frame `D + i` with `i ≤ K` before the entry is near the floor (`offNext_sim`, `nearB_sim`) -/
 theorem offB_path_sim (H : Checks sy m N) (hr : r.InRoom) {K : Nat} {L : List VS} (hc : offB sy m K L = true) {D : Nat} (hC : r.C ≤ D)
@@ -8309,7 +8402,7 @@ theorem offB_gap_sim (H : Checks sy m N) (hr : r.InRoom) {K : Nat} {L : List VS}
   · exfalso
     have h1 := r.offB_path_sim H hr hc hC hL hw (r.E - 1 - D) (by omega) (by omega)
     rw [show D + (r.E - 1 - D) = r.E - 1 by omega] at h1
-    have h2 := r.offNear
+    have h2 := r.offNear_of H hr (by omega)
     rw [h1] at h2
     cases h2
 
@@ -8409,7 +8502,7 @@ theorem land_bound (H : Checks sy m N) (hr : r.InRoom) {x w v : Arc} (hx : x ∈
     rw [show D + n + (r.E - 1 - (D + n)) = r.E - 1 by omega, hland] at hreach
     have h2' := H.nums.off_two
     have hn := landS_spec H.landC ha1 hmem (r.E - 1 - (D + n)) _ (by omega) hreach
-    have h3 := r.offNear
+    have h3 := r.offNear_of H hr (by omega)
     rw [hn] at h3
     cases h3
   · exact hge
@@ -8428,7 +8521,7 @@ theorem slow_sum {D : Nat} (hstep : ∀ i, i < N.aboveS → posP sy (r.fe (D + i
 
 /-- **After a jump from the block's top**: the last stand before `t0` is on the block's top at frame `T`, frame `T + 1 < t0` takes off, and the frames after it before
 `t0` are above the block's top (the field `offTop`). The real frames follow the jump (`InRoom.air`, `bridgeAll` on the jumps from the block's top) up to `t0 − 1`, and from
-there down to the floor (`descend_k`, the field `offNear`) or to a landing one row above it (`pipe_bound`). A fast jump comes to the floor at least `aboveF` frames after
+there down to the floor (`descend_k`, `offNear_of`) or to a landing above it (`land_bound`; until round 34 one row above it, `pipe_bound`). A fast jump comes to the floor at least `aboveF` frames after
 `t0 − 1` (`dropOk`); a slow one at least `aboveS`, and if the entry came then, every frame from `t0 − 1` on would be one of the slow jump (`slowArcs`), which moves at most
 the air speed (the field `offSlow`): too short of the mouth (`slow_mouth`) -/
 theorem off_arc (H : Checks sy m N) (hr : r.InRoom) {T : Nat} (hC : r.C ≤ T) (hT : T + 1 < r.t0) (h0 : (r.vE T).st = 0) (hy : (r.vE T).y.toNat = standY sy N.h)
@@ -8537,7 +8630,7 @@ theorem off_arc (H : Checks sy m N) (hr : r.InRoom) {T : Nat} (hC : r.C ≤ T) (
   · exact r.land_bound H hr hx hw hwy pv (D := r.t0 - 1) (by omega) (by omega) (by omega) (by omega) p1 pf p3 p4
   · -- the frame before the entry is near the floor: one more frame of the jump reaches it
     rw [show r.t0 - 1 + (r.E - 1 - (r.t0 - 1)) = r.E - 1 by omega] at hvs
-    have hnear := r.offNear
+    have hnear := r.offNear_of H hr (by omega)
     have e3 : OffDrop.nearB sy m v.s = true := by
       rw [← hvs]
       exact hnear

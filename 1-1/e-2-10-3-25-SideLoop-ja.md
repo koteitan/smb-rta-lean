@@ -62,4 +62,6 @@ sideW : ∀ j, 1 ≤ j → j < g → side(seq j) ≠ t₁₆ →
 
 これを証明するには、そのようなバイトの範囲をフレームからフレームへ保つ歩きが要ります。その最初の段を測りました: スクロールの処理のあと、この歩きの知る限りでは、6 つの場所の書き込みが `BlockBufferColumnPos` を書きえ（どれもブロックのバッファへのポインタを通した書き込み）、19 の場所の書き込みが `SprDataOffset_Ctrl` を書きえます。だから、そのような範囲には、まずほかの範囲が要ります。
 
+**ラウンド 36.** ブロックのバッファの列と `SprDataOffset_Ctrl` がその範囲で始まり、添え字かポインタを通した書き込みがそれを書かないフレーム（`SideAcross.FactsAt`、パート f のフィールドが与える）では、4 つの書き込みも証明し（城のループは始めの行についての新しいフィールド `castleRow` で）、`sideW` はほかのフレームでだけ求めます（[フレームをまたいで残る 2 つのバイトと城の始めの行、横のタイマーに届きうる書き込み](e-2-10-3-26-SideAcross-ja.md)）。
+
 **ファイル:** `Theorems/SideLoop.lean`（`residB`、`Resid`、`resid_old`、`keyL`、`spL`、`cov_spL`、`okL`、`okL_spec`、`searchL`、`lCfg`、`lCheck`、`lFails`、`near_side`）。変えたもの: `Theorems/SurfaceFrames.lean`（フィールド `sideW`、`OnFrames.sideWAt`、`numbersCheck`、`Numbers.rangeC`、`AreaRun.rg`、`movesScan`）、`Smbrta/Syms.lean` と `tools/smb-symbols.txt`（記号 `CRendLoop`、`ChkCFloor`、測るためだけの `BlockBufferColumnPos`、`SprDataOffset_Ctrl`）、`Main.lean`（`surface-frames-check` の数え 1 つ）。

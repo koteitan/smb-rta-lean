@@ -7,7 +7,7 @@ one whole frame of the room (the abstract machine of `RoomMap`, as `RoomVert`'s 
 writes it.
 
 The walk sets its bit on every state at `PlayerSubs` (`phX`). A state with the bit whose step may write the stored speed (`mayWriteX`) drops the bit and is marked
-`[1]`; such a state must end the frame out of the player's routine (`RoomVert.finB`). The erase of a coin writes in the block buffers, which do not hold the stored speed
+`[1]`; such a state must end the frame out of the player's routine (`finX`, until round 35 `RoomVert.finB`). The erase of a coin writes in the block buffers, which do not hold the stored speed
 (`apartX`). So a frame of the room that comes to `PlayerSubs` and ends in the player's routine ends with the stored speed of `PlayerSubs` (`after_QX`, `abs_frame`).
 `RoomJoin.RoomRun.InRoom.absAfter` is this on the real machines (`Route.Run.roomAbs`).
 
@@ -21,7 +21,13 @@ open PipeTransitionAll (Names go)
 open TaintRun
 open PipeEntryRule (trace nxt frame_trace trace_stop)
 open ScreenPage (Places SiteOK PlacesOK CfgS RoomCond)
-open RoomVert (Ph walkV OKV I finB sim_bits trace_succ start_of_room frame_of_walkV erase_keep)
+open RoomVert (Ph walkV OKV I sim_bits trace_succ start_of_room frame_of_walkV erase_keep)
+
+/-- at the frame's end: a state whose stored speed may have been written after `PlayerSubs` ends out of the player's routine: the routine byte is known and is not the
+reference's. Until round 35 this was `RoomVert.finB`, which since round 36 also asks of walk B's states that they do not end in the side pipe's routine; this walk's
+states with the bit do end so on the entering frame -/
+def finX (P : Places) (r : Machine) (B : AS) : Bool :=
+  B.log != [1] || (decide (P.rtI < 2048) && (B.getK P.rtI).isK && (B.getK P.rtI).v != r.ram.get! P.rtI)
 
 /-- the step of `A` may write the stored speed: not the erase of a coin, which writes in the block buffers -/
 def mayWriteX (sy : Syms) (E : Env) (P : Places) (A : AS) : Bool :=
@@ -46,19 +52,19 @@ open ScreenPage (placesR envR refR aidsOf)
 
 /-- the walk from the end of the move, on the room -/
 abbrev cfgX (sy : Syms) (nm : Names) (m0 : Machine) : CfgS :=
-  RoomVert.cfgOfV sy (phX sy (envR sy nm m0) (placesR sy nm m0)) (finB (placesR sy nm m0) (refR m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0)
+  RoomVert.cfgOfV sy (phX sy (envR sy nm m0) (placesR sy nm m0)) (finX (placesR sy nm m0) (refR m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0)
     (refR m0) (RoomMap.knownT sy nm m0)
 
 /-- the check of the walk from the end of the move -/
 def checkX (sy : Syms) (nm : Names) (m0 : Machine) : Bool :=
-  RoomVert.walkCheckV sy (phX sy (envR sy nm m0) (placesR sy nm m0)) (finB (placesR sy nm m0) (refR m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0)
+  RoomVert.walkCheckV sy (phX sy (envR sy nm m0) (placesR sy nm m0)) (finX (placesR sy nm m0) (refR m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0)
     (refR m0) (RoomMap.knownT sy nm m0)
 
 /-- the search of the walk, for the program: the number of failures, the first failing state's address, the states at the frame's end, those of them marked `[1]`,
-and those that `finB` refuses with the address of the first -/
+and those that `finX` refuses with the address of the first -/
 def searchX (sy : Syms) (nm : Names) (m0 : Machine) : Nat × Option UInt16 × Nat × Nat × Nat × Option UInt16 :=
   let X := RoomVert.searchOfV sy (phX sy (envR sy nm m0) (placesR sy nm m0)) (placesR sy nm m0) (aidsOf sy nm m0) (envR sy nm m0) (refR m0) (RoomMap.knownT sy nm m0)
-  let bad := X.ends.filter fun B => !finB (placesR sy nm m0) (refR m0) B
+  let bad := X.ends.filter fun B => !finX (placesR sy nm m0) (refR m0) B
   (X.fails, X.firstFail.map (·.pc), X.ends.size, (X.ends.filter (·.log == [1])).size, bad.size, bad[0]?.map (·.pc))
 
 end
@@ -82,7 +88,7 @@ theorem keepX_step {sy : Syms} {E : Env} {F : Nat × UInt8} {P : Places} {A : AS
 /-- **The frame from the end of the move.** The frame comes to `PlayerSubs` at most once. If it comes there and ends in the player's routine, no step from there to its
 end writes the stored speed. The frame starts in the room's condition, and each instruction meets `SiteOK`. -/
 theorem after_QX {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat × UInt8)} {C : CfgS} {Fu : Nat} (h : OKV (phX sy E P) E P r K C Fu)
-    (hfin : C.fin = finB P r) (hap : apartX sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
+    (hfin : C.fin = finX P r) (hap : apartX sy P = true) {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hk : ∀ j, SiteOK P (trace m i j)) :
     (∀ j j', j < j' → (trace m i j).pc = sy.PlayerSubs → (trace m i j').frame = m.frame → (trace m i j').pc ≠ sy.PlayerSubs) ∧
     (∀ j, (trace m i j).pc = sy.PlayerSubs → (trace m i j).frame = m.frame → (frame m i).ram.get! P.rtI = r.ram.get! P.rtI →
        (frame m i).ram.get! (I sy.Player_XSpeedAbsolute) = (trace m i j).ram.get! (I sy.Player_XSpeedAbsolute)) := by
@@ -163,7 +169,7 @@ theorem after_QX {sy : Syms} {E : Env} {P : Places} {r : Machine} {K : List (Nat
   have hl1 : B.log ≠ [1] := by
     intro hl
     rw [hfin] at hB1
-    simp only [finB, hl, bne_self_eq_false, Bool.false_or, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at hB1
+    simp only [finX, hl, bne_self_eq_false, Bool.false_or, Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq] at hB1
     obtain ⟨⟨a1, a2⟩, a3⟩ := hB1
     have e := isK_eq a2 (hB2.ram _ a1)
     rw [← hJ3, hrt] at e

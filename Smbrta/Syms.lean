@@ -209,6 +209,8 @@ structure Syms where
   CheckTopOfBlock : UInt16
   CoinTile2 : UInt16
   ExecGameLoopback : UInt16
+  SpriteShuffler : UInt16
+  RenderUnderPart : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -410,7 +412,9 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("SprDataOffset_Ctrl", fun s => s.SprDataOffset_Ctrl),
   ("CheckTopOfBlock", fun s => s.CheckTopOfBlock),
   ("CoinTile2", fun s => s.CoinTile2),
-  ("ExecGameLoopback", fun s => s.ExecGameLoopback)]
+  ("ExecGameLoopback", fun s => s.ExecGameLoopback),
+  ("SpriteShuffler", fun s => s.SpriteShuffler),
+  ("RenderUnderPart", fun s => s.RenderUnderPart)]
 
 set_option maxRecDepth 100000 in
 /-- Parse a symbol file (`key value` per line, decimal). -/
@@ -622,6 +626,8 @@ def Syms.parse (text : String) : Except String Syms := do
     CheckTopOfBlock := ← get "CheckTopOfBlock"
     CoinTile2 := ← get "CoinTile2"
     ExecGameLoopback := ← get "ExecGameLoopback"
+    SpriteShuffler := ← get "SpriteShuffler"
+    RenderUnderPart := ← get "RenderUnderPart"
   }
 
 def Syms.load (path : String) : IO Syms := do
