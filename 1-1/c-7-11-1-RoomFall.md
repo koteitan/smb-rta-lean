@@ -91,7 +91,7 @@ Of the 2,621 landings, 2,595 were on the floor. On every frame in the air, `vste
 
 `varc_all` gives each frame of a jump from the floor, up to the landing. The proof of [Joining the bonus room](c-5-RoomJoin.md) still states the jumps as wholes, in the field `way` (`Approach.reach`, `Over.reach`, `Off.jump.reach`):
 
-* The takeoff frame from the side of the block and from the block's top (`Over` from the heights, `Off.jump`). From the floor it is proved: a floor frame with a jump input gives a state of `arcStart` (1-1-c-7-5-14, `RoomRun.takeoff_of`). `bridgeAll` is true from those heights in a program, but `OnArc` and Lean use only the floor.
+* The takeoff frame from the side of the block and from the block's top (`Over` from the heights, `Off.jump`). From the floor it is proved: a floor frame with a jump input gives a state of `arcStart` (1-1-c-7-5-14, `RoomRun.takeoff_of`). `bridgeAll` is true from those heights in a program, but `OnArc` and Lean use only the floor. Since round 34 `bridgeAll` from the block's top is a ROM check of `RoomRun.off_gap_of` (`Checks.bridgeB`, [Off the block's top: the frames to the floor](c-7-8-2-OffDrop.md)), and `Off` is gone.
 * Which frame lands: `varc_all` says that a landing is `land` of the `vstep` state, but not on which frame he lands. The window of `Approach` (he lands on the block's top) and the frame `F` of `Off` (he reaches the floor) need the collision routine's feet check, on the block map.
 * The frames that start at or below the ground falling (`varc_all` asks that he is not there).
 * The inputs of the air frames (`Approach.air`). `air_in` is proved in [Frames that start standing in the room](c-7-5-5-RoomStand.md).

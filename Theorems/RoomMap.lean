@@ -758,13 +758,24 @@ theorem mapFacts_of_check {sy : Syms} {nm : Names} {m0 : Machine} (h : mapCheck 
 
 open PipeChangeEnd (Data timeEnv timeCtx timeRows InRowsT)
 
-/-- **The check on the ROM**: in the rows of the time of the change into the room, a machine with control is in a start state of the condition, with the bits of the map -/
+/-- **The block buffers hold tiles of the list** (round 34): every byte of the two block buffers is a tile of `P.tiles` -/
+def TilesIn (P : Places) (m : Machine) : Prop := ∀ d, P.bufLo ≤ d → d < P.bufLo + P.bufN → m.ram.get! d ∈ P.tiles
+
+/-- round 34: a state of the rows, if it has control, knows every byte of the block buffers, with a tile of the list -/
+def tileRow (sy : Syms) (P : Places) (S : AS) : Bool :=
+  (SurfaceFrames.ctlBytes sy).all (SideChangeEnd.knowsAd S) &&
+    (!controllable sy (SideChangeEnd.mOf S) || (List.range P.bufN).all fun j => (S.getK (P.bufLo + j)).isK && P.tiles.contains (S.getK (P.bufLo + j)).v)
+
+/-- **The check on the ROM**: in the rows of the time of the change into the room, a machine with control is in a start state of the condition, with the bits of the map;
+round 34: and the rows know every byte of the block buffers with a tile of the list (`tileRow`) -/
 def startCheckT (sy : Syms) (nm : Names) (d : Data) (e : Machine) (nmS : Names) (m0 : Machine) : Bool :=
   let r := refR m0
   let P := placesOf sy nmS m0 r
   let K := knownOf nmS ++ bufK P.bufLo P.bufN (mapRef m0) ++ scrK sy m0
   let E := envOf nmS sy r
-  maskOK r K && decide ((timeEnv d e).prg.data = E.prg.data) && (timeEnv d e).mask == E.mask && ScreenStart.rowsR sy r K (timeRows (timeCtx sy nm d e) d e)
+  let rows := timeRows (timeCtx sy nm d e) d e
+  maskOK r K && decide ((timeEnv d e).prg.data = E.prg.data) && (timeEnv d e).mask == E.mask && ScreenStart.rowsR sy r K rows &&
+    (decide (P.bufLo + P.bufN ≤ 2048) && rows.all fun w => w.R.all (tileRow sy P))
 
 variable {sy : Syms} {nm nmS : Names} {d : Data} {e m0 : Machine}
 
@@ -772,11 +783,43 @@ variable {sy : Syms} {nm nmS : Names} {d : Data} {e m0 : Machine}
 theorem start_of_rows (hc : startCheckT sy nm d e nmS m0 = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) :
     RoomCond (envR sy nmS m0) (refR m0) (knownT sy nmS m0) m := by
   simp only [startCheckT, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
-  obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hc
+  obtain ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, _⟩ := hc
   have hM := maskOK_spec h1
   have hp := ScreenStart.ba_eq h2
   have hc0 : RoomCond (timeEnv d e) (refR m0) (knownT sy nmS m0) m := ScreenStart.room_of_invL hM h4 h hm
   exact ScreenStart.roomCond_env hc0 hp h3
+
+/-- round 34: a state of the rows with `tileRow` covers a machine with control whose block buffers hold tiles of the list -/
+theorem tiles_of_state {E : Env} {F : Nat × UInt8} {P : Places} {S : AS} {m : Machine} (hB : P.bufLo + P.bufN ≤ 2048) (hs : Sim E F S m)
+    (hr : tileRow sy P S = true) (h : controllable sy m = true) : TilesIn P m := by
+  simp only [tileRow, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true] at hr
+  obtain ⟨hk, hr⟩ := hr
+  rcases hr with h1 | h1
+  · have := SurfaceFrames.controllable_of_known hs hk h
+    rw [this] at h1
+    cases h1
+  · intro d hd1 hd2
+    have h2 := List.all_eq_true.1 h1 (d - P.bufLo) (List.mem_range.2 (by omega))
+    rw [show P.bufLo + (d - P.bufLo) = d by omega] at h2
+    simp only [Bool.and_eq_true] at h2
+    rw [TaintRun.isK_eq h2.1 (hs.ram d (by omega))]
+    exact List.contains_iff_mem.1 h2.2
+
+theorem tiles_of_invL {C : SideChangeEnd.Ctx} {P : Places} (hB : P.bufLo + P.bufN ≤ 2048) : ∀ {l : List SideChangeEnd.Row},
+    (l.all fun w => w.R.all (tileRow sy P)) = true → ∀ {m : Machine}, SideChangeEnd.InvL C l m → controllable sy m = true → TilesIn P m
+  | [], _, _, h, _ => by cases h
+  | w :: t, hl, _, h, hc => by
+    simp only [List.all_cons, Bool.and_eq_true] at hl
+    rcases h with ⟨S, hS, hs⟩ | h
+    · exact tiles_of_state hB hs (List.all_eq_true.1 hl.1 S hS) hc
+    · exact tiles_of_invL hB hl.2 h hc
+
+/-- **The block buffers at the first control in the room hold tiles of the list** (round 34), for a machine with control in the rows of the time -/
+theorem tiles_of_rows (hc : startCheckT sy nm d e nmS m0 = true) {m : Machine} (h : InRowsT sy nm d e m) (hm : controllable sy m = true) :
+    TilesIn (placesR sy nmS m0) m := by
+  simp only [startCheckT, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
+  obtain ⟨_, hB, hl⟩ := hc
+  exact tiles_of_invL hB hl h hm
 
 /-- **The block map and the side pipe's tiles in the room, on the real machines.** `seq` lists the frames of a run; frame `b` is the first control in the room, a machine with
 control in the rows of the change; each frame before `a` meets `SiteOK` on each instruction and starts in the player's routine. Then on each frame from `b` to `a`: every bit of

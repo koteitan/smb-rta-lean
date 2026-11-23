@@ -209,3 +209,9 @@ MovePlayerVertically
 NoJSChk
 # the friction routine: where its two ways to slow a move right join
 RghtFrict
+# the area parser's code: from its core to the routine of the block buffer's address, which follows the area objects' routines
+AreaParserCore
+GetBlockBufferAddr
+# the head's collision with a block and the routines of the bumped block it calls: from its routine to the block objects' routine
+PlayerHeadCollision
+BlockObjectsCore

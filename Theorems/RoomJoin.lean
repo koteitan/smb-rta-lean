@@ -10,6 +10,7 @@ import Theorems.SurfaceFrames
 import Theorems.VertAir
 import Theorems.VertJump
 import Theorems.StoredClean
+import Theorems.OffDrop
 
 /-!
 # Joining the bonus room
@@ -68,7 +69,8 @@ The case split, all by `cases` and `by_cases`:
   frame after the fall is the bound from the frame before with the landing one frame later (`slowBigOk`, page `1-1/c-7-14-1-BigApproach.md`), and a slow
   one on that frame is the search of `LandDist` from the room's first frame with the table of the frames after the landing (`Checks.slowLand`, page
   `1-1/c-7-14-2-LandDist.md`);
-* then off the block by a fast jump, a slow jump or stepping off, `entry_ge`.
+* then off the block: at least `aboveF − 1` frames from `t0` to the entry (`RoomCore.off_gap`, proved from the real frames after `t0` by `RoomRun.off_gap_of`, round 34,
+  page `1-1/c-7-8-2-OffDrop.md`), `entry_ge`.
 -/
 
 
@@ -605,6 +607,10 @@ structure Nums where
   vStart : List VS
   /-- the landing at the end of the first fall is checked for the horizontal coordinates below this (`InRoom.land`) -/
   landX : Nat := 0
+  /-- (round 34) a jump from the block's top comes down to one row above the floor at least `pipeA` frames after he was last above the block's top, and from a landing
+  there he is not near the floor for `pipeB` frames (`pipeAOk`, `offB`) -/
+  pipeA : Nat := 0
+  pipeB : Nat := 0
   deriving Repr, Inhabited
 
 /-- the room of `FastTakeoff`, with these numbers -/
@@ -663,35 +669,6 @@ def SlackOK (sy : Syms) (s : Int) : Prop := 255 ≤ s ∧ 16 * (top sy : Int) - 
 /-- the least slack of `SlackOK`: from left of the corner one frame at the top speed, pushed back one pixel. With no wall the frames that `low_floor` and `low_jump`
 prove are this close to the corner, and one more pixel is one frame at the top speed less a 256th -/
 def lowT (sy : Syms) : Int := 16 * (top sy : Int) - 257
-
-/-- frame `i + 1` of a slow jump that does not follow `hstep`: he still moves at most the air speed. A hit from the block's right
-side pushes him 1 px, only if he is moving left or stopped -/
-def Moved (sy : Syms) (fr : Frames) (i : Nat) : Prop :=
-  capped sy (fr.hs (i + 1)) = true ∧ inD sy (fr.hs (i + 1)) = true ∧
-    fr.P (i + 1) ≤ fr.P i + 16 * ((sy.AirFastSpeed.toNat : Int) - 1)
-
-/-- how he gets past the block's right end at frame `t0`, ending on the floor at frame `F` if nothing stops him. A stop or a landing
-on the way only delays the floor, so `F` is at or before the entry frame `E` -/
-inductive Off (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 E : Nat) : Type where
-  /-- a jump from the block: frame `T1 + 1` is the takeoff frame, `n` frames later he reaches the floor. At `t0 - 1` he is above
-  the block, or standing on it right before the jump -/
-  | jump (T1 n F : Nat) (x u : Arc)
-      (T1_ge : C ≤ T1)
-      (x_mem : x ∈ arcStart sy m (standY sy N.h) N.h)
-      (reach : Cert.Reach (arcSucc sy m N.h) x n u)
-      (floor : falling u.s = true ∧ groundY sy ≤ u.s.y.toNat)
-      (hF : F = T1 + 1 + n)
-      (F_le : F ≤ E)
-      (above : t0 + u.above ≤ F + 1)
-      (slowJ : x.fast = false → F = E → capped sy (fr.hs T1) = true ∧
-        ∀ i, T1 ≤ i → i < F → (Follow sy m fr i ∧ isAir (fr.inp (i + 1)) = true) ∨ Moved sy fr i) :
-      Off sy m N fr C t0 E
-  /-- stepping off: `t0` is the frame that walks past the end; then he falls with the fall force `f` and the carried fraction `d` -/
-  | step (F : Nat) (f d : UInt8)
-      (f_mem : f ∈ forces sy m)
-      (hF : t0 + walkFrames sy m N.h f d ≤ F)
-      (F_le : F ≤ E) :
-      Off sy m N fr C t0 E
 
 /-- he passes over the block in one jump, from the floor or from the side of the block: the jump still runs at frame `t0` -/
 structure Over (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 : Nat) : Type where
@@ -815,12 +792,12 @@ structure Approach (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 : Na
     (C + N.fall + N.lastG < T1 ∨ C + N.fall + 1 + N.rise < n ∨ ∃ j, T1 < j ∧ j ≤ n ∧ (fr.vs j).y.toNat < cornerY sy N.h + 16) →
     LowAt sy m N fr n ∨ (sz = 0 ∧ n = T1 + 1 + u.low ∧ fr.P n ≤ cornerP sy + N.lowSlack)
 
-/-- over the block in one jump, or onto it and off it. Only a run with no wall hit and no stop needs its takeoff from the floor. `sz` is the player's size byte at
-first control (0: big), for `Approach` -/
+/-- over the block in one jump, or onto it. Only a run with no wall hit and no stop needs its takeoff from the floor. `sz` is the player's size byte at first control
+(0: big), for `Approach`. Until round 33 `onto` also held the way off the block (`Off`: a jump from the block's top or stepping off, with the frames to the floor); since
+round 34 the frames from `t0` to the entry are `RoomCore.off_gap`, proved from the real frames (`RoomRun.off_gap_of`, page `1-1/c-7-8-2-OffDrop.md`) -/
 inductive Way (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (C t0 E : Nat) (sz : UInt8) : Type where
   | over (o : Over sy m N fr C t0) : Way sy m N fr C t0 E sz
-  | onto (a : NoWall sy m N fr C → (∀ n, C + N.hitF ≤ n → n ≤ t0 → ¬Stop sy m N fr n) → Approach sy m N fr C t0 sz)
-      (off : Off sy m N fr C t0 E) : Way sy m N fr C t0 E sz
+  | onto (a : NoWall sy m N fr C → (∀ n, C + N.hitF ≤ n → n ≤ t0 → ¬Stop sy m N fr n) → Approach sy m N fr C t0 sz) : Way sy m N fr C t0 E sz
 
 /-- frame `n` is in a jump from the floor with the takeoff frame `T + 1` -/
 def OnArc (sy : Syms) (m : Machine) (N : Nums) (fr : Frames) (T n : Nat) : Prop :=
@@ -998,6 +975,9 @@ structure RoomCore (sy : Syms) (m : Machine) (N : Nums) (sz : UInt8) extends Roo
   /-- with no wall, the fall ends on the floor. Once a field of `RoomRun`; now `RoomRun.floor_at_of` proves it: with no wall there is no stand before the end of the
   fall, so the first fall gives the floor's height there, and the field `land_at` says that he stands -/
   floor_at : NoWall sy m N fr C → OnFloor sy (fr.vs (C + N.fall))
+  /-- (round 34) the entry comes after `t0`, at least `aboveF − 1` frames later. Until round 33 the field `Off` of `way` gave it (a jump from the block's top, or stepping
+  off it, with the frames to the floor). `RoomRun.off_gap_of` proves it from the real frames after `t0` (page `1-1/c-7-8-2-OffDrop.md`) -/
+  off_gap : t0 < E ∧ t0 + N.aboveF ≤ E + 1
   /-- the state at first control -/
   start : fr.hs C = (room sy N).s0
   startP0 : (room sy N).P0 ≤ fr.P C
@@ -1075,6 +1055,10 @@ abbrev startAt (sy : Syms) (m : Machine) (S : FrameKeep.RealRun) (b lim C n : Na
 /-- the input of the room's frame `n + 1` -/
 abbrev inpAt (sy : Syms) (m : Machine) (S : FrameKeep.RealRun) (b lim C n : Nat) : UInt8 := S.inp (b + (ixR sy m S b lim (n + 1 - C) - 1))
 
+/-- (round 34) the side he presses is masked at the player's routine `T` of a frame: the stored speed is `|v|` there, but the state is not `FrameModel.AtCtrl` -/
+abbrev MaskedAt (sy : Syms) (m T : Machine) : Prop :=
+  ¬FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) T ∧ peek T sy.Player_XSpeedAbsolute = TopSpeed.absB (peek T sy.Player_X_Speed)
+
 /-- what a real run in the room gives, on real machines. The machines are those of the real run `S`: the room's frame `n` ends at `endAt … n` (`RoomRun.fe`), the end of
 the `(n − C)`-th frame from frame `b` on that ends not paused, and the room's frame `n + 1` is the real frame from `startAt … n` (`RoomRun.fm`) with its input (`RoomRun.inAt`,
 `RoomRun.pad`). So the machine at first control is `S.seq b` (`RoomRun.fe_C`). These are definitions; that the room's frame `n + 1` is the real frame of the machine where
@@ -1108,14 +1092,17 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (
   `1-1/c-7-4-4-StoredClean.md`) asked only when frame `n` stops him and comes to its player's routine not in the state `AtCtrl`, and there the stored speed is `|v|` (the
   side he presses is masked) or he is in the air with neither Left nor Right (`FrameModel.caseOf`): after a frame that follows the model the stored speed is `|v|`
   (`RoomRun.ab_cleanW`), after a stop in the state `AtCtrl` the size of `hstep`'s speed from the state before (`RoomRun.ab_fresh`), and after another stop with a stale
-  stored speed at most one adder and a fraction (`RoomRun.ab_stale`, `NumFacts.amax_air`) -/
+  stored speed at most one adder and a fraction (`RoomRun.ab_stale`, `NumFacts.amax_air`). Since round 34 (page `1-1/c-7-6-2-FallCap.md`) in the air with neither Left
+  nor Right only after an earlier frame that comes to its player's routine with the side it presses masked (`MaskedAt`): otherwise the stored speed is below the air
+  threshold through the fall (`RoomRun.ab_fall`) -/
   ab_early : ∀ n, C + N.fall ≤ n → n + 1 < C + N.hitF → n < t0 →
     ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (startAt sy m S b lim C n) (inpAt sy m S b lim C n)
       (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)) →
     ¬FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))
       (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)))) →
     (peek (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)))) sy.Player_XSpeedAbsolute = TopSpeed.absB (peek (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)))) sy.Player_X_Speed) ∨
-      (FrameModel.stOf (FrameModel.caseOf sy (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))))).n ≠ 0 ∧ FrameModel.lrOf (FrameModel.caseOf sy (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))))).n = 0)) →
+      (FrameModel.stOf (FrameModel.caseOf sy (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))))).n ≠ 0 ∧ FrameModel.lrOf (FrameModel.caseOf sy (PipeEntryRule.trace (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (n - 1)) (inpAt sy m S b lim C (n - 1))))).n = 0 ∧
+        ∃ k, C < k ∧ k < n ∧ MaskedAt sy m (PipeEntryRule.trace (startAt sy m S b lim C (k - 1)) (inpAt sy m S b lim C (k - 1)) (CtrlKeep.arrAt sy (startAt sy m S b lim C (k - 1)) (inpAt sy m S b lim C (k - 1)))))) →
     fr.ab n < sy.AirFastSpeed.toNat
   /-- from `hitF` to `runF`, a frame on the ground with no jump that does not follow `hstep`, with `RunningSpeed` 0 at its start, and whose stored speed is not the size
   of its speed at the start (it was stored before a stop), reads a stored speed below the running threshold, when the frame before follows the model (`CleanW`) or does
@@ -1143,6 +1130,26 @@ structure RoomRun (sy : Syms) (m : Machine) (N : Nums) (S : FrameKeep.RealRun) (
   read_stop : ∀ n, C ≤ n → n < t0 → ¬FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (startAt sy m S b lim C n) (inpAt sy m S b lim C n)
       (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)) →
     fr.inp (n + 1) = FrameModel.readIn sy (PipeEntryRule.trace (startAt sy m S b lim C n) (inpAt sy m S b lim C n) (CtrlKeep.arrAt sy (startAt sy m S b lim C n) (inpAt sy m S b lim C n)))
+  /-- (round 34, page `1-1/c-7-8-2-OffDrop.md`) the last frame before `t0` that ends standing ends on the block's top, and every frame after it before `t0` ends in the air
+  above the block's top. With `offFloor`, `offNear`, `offSlow` and `offStand` in place of the field `Off` of `way` -/
+  offTop : ∃ T, C ≤ T ∧ T < t0 ∧ (VertModel.vsOf sy (endAt sy m S b lim C T)).st = 0 ∧ (VertModel.vsOf sy (endAt sy m S b lim C T)).y.toNat = standY sy N.h ∧
+    ∀ j, T < j → j < t0 → (VertModel.vsOf sy (endAt sy m S b lim C j)).st ≠ 0 ∧ (VertModel.vsOf sy (endAt sy m S b lim C j)).y.toNat < standY sy N.h
+  /-- (round 34) from `t0` to the frame before the entry, a frame that ends standing ends on the floor's height or one row above it (on the side pipe) -/
+  offFloor : ∀ n, t0 ≤ n → n < E → (VertModel.vsOf sy (endAt sy m S b lim C n)).st = 0 →
+    (VertModel.vsOf sy (endAt sy m S b lim C n)).y.toNat = groundY sy ∨ (VertModel.vsOf sy (endAt sy m S b lim C n)).y.toNat + 16 = groundY sy
+  /-- (round 34) the frame before the entry ends on the floor, or in the air one frame of `vstepR` from the floor's height (`OffDrop.nearB`) -/
+  offNear : OffDrop.nearB sy m (VertModel.vsOf sy (endAt sy m S b lim C (E - 1))) = true
+  /-- (round 34) from frame `t0` to the entry, a frame that starts in the jump state with the fall force of a takeoff from the block's top below the air threshold
+  (`OffDrop.slowF`) moves him at most `A − 1` sixteenths of a pixel right -/
+  offSlow : ∀ n, t0 ≤ n + 1 → n < E → (VertModel.vsOf sy (endAt sy m S b lim C n)).st = 1 →
+    (VertModel.vsOf sy (endAt sy m S b lim C n)).vfd ∈ OffDrop.slowF sy m (standY sy N.h) N.h →
+    posP sy (endAt sy m S b lim C (n + 1)) ≤ posP sy (endAt sy m S b lim C n) + 16 * ((sy.AirFastSpeed.toNat : Int) - 1)
+  /-- (round 34) if frame `t0 − 1` ends standing, it ends with the jump force equal to the fall force, which is one of a takeoff's (`Jump.forces`), and the jump origin at
+  the block's top or at a height of `N.heights` (no vertical speed is proved: `RoomRun.stand_ok`) -/
+  offStand : (VertModel.vsOf sy (endAt sy m S b lim C (t0 - 1))).st = 0 →
+    (VertModel.vsOf sy (endAt sy m S b lim C (t0 - 1))).vf = (VertModel.vsOf sy (endAt sy m S b lim C (t0 - 1))).vfd ∧
+    (VertModel.vsOf sy (endAt sy m S b lim C (t0 - 1))).vfd ∈ forces sy m ∧
+    (VertModel.vsOf sy (endAt sy m S b lim C (t0 - 1))).origin.toNat ∈ standY sy N.h :: N.heights
 
 section
 variable {sy : Syms} {m : Machine} {N : Nums} {S : FrameKeep.RealRun} {b lim : Nat}
@@ -1654,6 +1661,65 @@ frame up to frame `fall − 1` -/
 def anyCheck (sy : Syms) (m : Machine) (N : Nums) : Bool :=
   ajRun sy m N (offTable sy m) N.fall 0 N.vStart {} []
 
+/-! ### Past the block's right end (round 34, page `1-1/c-7-8-2-OffDrop.md`)
+
+From `t0` to the entry he stands only on the floor or one row above it (on the side pipe): the field `RoomRun.offFloor`. So past the block's right end the next vertical
+states are those of `offNext`: `anyNext` with the stands at other heights left out. The check `offB` goes `K` frames through them from a list of states and asks that no
+state is near the floor (`OffDrop.nearB`): then the entry is at least `K` frames later (`RoomRun.offB_path`). -/
+
+/-- a height he may stand at past the block's right end before the entry: the floor's, or one row above it -/
+def offLand (sy : Syms) (t : VS) : Bool := decide (t.y.toNat = groundY sy) || decide (t.y.toNat + 16 = groundY sy)
+
+/-- the vertical states one frame later past the block's right end: in the air `vstepR` with A or not, and its landing if it falls and lands at a height of `offLand`;
+standing, the states of `noJumpNext` that are in the air or stand at such a height, and the takeoffs of the row from the table `T` -/
+def offNext (sy : Syms) (m : Machine) (T : Array (List VS)) (s : VS) : List VS :=
+  if s.st == 0 then ((noJumpNext sy m s).filter fun t => t.st != 0 || offLand sy t) ++ T[(s.y >>> 4).toNat]!
+  else [true, false].flatMap fun a => let t := vstepR sy m s a; if falling t && offLand sy (VertAir.land t) then [t, VertAir.land t] else [t]
+
+/-- not near the floor (`OffDrop.nearB`) and `offNext` of a state together, each `vstepR` computed once (`offStep_eq`) -/
+def offStep (sy : Syms) (m : Machine) (T : Array (List VS)) (s : VS) : Bool × List VS :=
+  if s.st == 0 then (!decide (s.y.toNat = groundY sy), ((noJumpNext sy m s).filter fun t => t.st != 0 || offLand sy t) ++ T[(s.y >>> 4).toNat]!)
+  else
+    let tT := vstepR sy m s true
+    let tF := vstepR sy m s false
+    let near := fun t => falling t && decide (groundY sy ≤ t.y.toNat)
+    let one := fun t => if falling t && offLand sy (VertAir.land t) then [t, VertAir.land t] else [t]
+    (!(near tT || near tF), one tT ++ one tF)
+
+/-- the layers of `offStep`: each state of each layer up to `K` frames is not near the floor -/
+def offRun (sy : Syms) (m : Machine) (T : Array (List VS)) : Nat → List VS → Bool
+  | 0, L => L.all fun s => (offStep sy m T s).1
+  | k + 1, L =>
+    let G := L.map (offStep sy m T)
+    G.all (·.1) && offRun sy m T k (Std.HashSet.ofList (G.flatMap (·.2))).toList
+
+/-- **The check of the frames past the block's right end**: from the states of `L`, for `K` frames of `offNext`, no state is near the floor -/
+def offB (sy : Syms) (m : Machine) (K : Nat) (L : List VS) : Bool := offRun sy m (offTable sy m) K L
+
+/-- the stands on the block's top that frame `t0 − 1` may end with (the field `RoomRun.offStand`): no vertical speed, the jump force the fall force of a takeoff, the jump
+origin at the block's top or at a height a jump starts from below it (`N.heights`), any fraction, A or not -/
+def standFam (sy : Syms) (m : Machine) (N : Nums) : List VS :=
+  (forces sy m).flatMap fun f => (standY sy N.h :: N.heights).flatMap fun o => (List.range 256).flatMap fun d => [true, false].map fun p =>
+    { y := (standY sy N.h).toUInt8, mf := 0, vy := 0, dummy := d.toUInt8, vf := f, vfd := f, origin := o.toUInt8, st := 0, prevA := p }
+
+/-- the states of the jumps from the block's top up to `arcFrames` frames, each layer once -/
+def offArcs (sy : Syms) (m : Machine) (N : Nums) : List Arc := OffDrop.allLayers (arcSucc sy m N.h) (arcStart sy m (standY sy N.h) N.h) arcFrames
+
+/-- the landings one row above the floor (on the side pipe) of the jumps from the block's top: the landing of each state that falls, at most one row above the floor and
+above it -/
+def pipeLands (sy : Syms) (m : Machine) (N : Nums) : List VS :=
+  ((offArcs sy m N).filter fun u => falling u.s && decide (groundY sy ≤ u.s.y.toNat + 16) && decide (u.s.y.toNat < groundY sy)).map fun u => VertAir.land u.s
+
+/-- **The check of the jumps from the block's top that reach one row above the floor**: such a state is at least `pipeA` frames after he was last above the block's top -/
+def pipeAOk (sy : Syms) (m : Machine) (N : Nums) : Bool :=
+  arcCheck sy m (standY sy N.h) N.h fun u => !(falling u.s && decide (groundY sy ≤ u.s.y.toNat + 16)) || decide (N.pipeA ≤ u.above)
+
+/-- a stand has no vertical speed and is on a whole row (round 34, `RoomRun.stand_ok`) -/
+def StandOK (s : VS) : Prop := s.st = 0 → s.vy = 0 ∧ s.mf = 0 ∧ s.y &&& 0x0F = 0
+
+/-- **The check of the takeoffs from the whole rows**: none of them stands -/
+def jumpAirCheck (sy : Syms) (m : Machine) : Bool := (List.range 16).all fun r => (offRow sy m r).all fun t => t.st != 0
+
 /-- **The bound of `low_by` at frame `C + j`** (since round 27, page `1-1/c-7-5-20-LowBound.md`): up to `runF`, one frame at the top speed for each frame after
 `hitF − 1`, where he is left of the corner (`corner_late`); after `runF`, one frame at the top speed for each frame after `runF`. Past the corner by
 `16·top·(j − (hitF − 1)) − 1` or `16·top·(j − runF) − 1` -/
@@ -1701,8 +1767,6 @@ structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   len_ok : N.lenS < arcFrames ∧ N.lenF < arcFrames ∧ N.lenB < arcFrames ∧ N.lenA < arcFrames
   /-- off the block: a fast jump gives the bound; the others are not shorter, or are short of the mouth -/
   above_le : N.aboveF ≤ N.aboveS + 1
-  walk_le : N.aboveF ≤ N.walk + 1
-  air_ge : N.aboveS ≤ N.airS + 1
   slow_mouth : goalP sy + 16 * ((sy.AirFastSpeed.toNat : Int) - 1) * (N.aboveS : Int) ≤ SidePipe.mouthP sy 0
   /-- the order of the frames -/
   rise_lt : N.rise < arcFrames
@@ -1712,6 +1776,12 @@ structure NumFacts (sy : Syms) (m : Machine) (N : Nums) : Prop where
   hit_run : N.hitF ≤ N.runF
   /-- the room's start is at least 8 px right of the start of the position's range -/
   start_far : 2048 ≤ 256 * (sy.RoomStartX.toNat : Int)
+  /-- (round 34) the frames from `t0` to the entry: at least two, and a landing one row above the floor is enough (`RoomRun.off_gap_of`) -/
+  off_two : 2 ≤ N.aboveF
+  pipe_sum : N.aboveF ≤ N.pipeA + N.pipeB + 1
+  /-- (round 34) one frame from a stop stays below the air threshold, and the field `ab_early` ends at the end of the fall (`RoomRun.ab_fall`) -/
+  stop_cap : N.stopPhi + gFast sy m + 255 < 256 * (sy.AirFastSpeed.toNat : Int)
+  hit_three : N.hitF ≤ N.fall + 3
   run_ge : N.fall + 1 ≤ N.runF
   goal_ge : N.runF + 1 ≤ N.goalF
   fall_wall : N.wallF + 1 + N.wallK ≤ N.fall
@@ -1904,6 +1974,19 @@ structure Checks (sy : Syms) (m : Machine) (N : Nums) : Prop where
   corner : CornerFacts sy m N
   /-- on a jump's first frames from the floor the height does not grow -/
   down : arcDown sy m N = true
+  /-- (round 34) the jumps from the block's top: `vstepR` is `vstep` on every state of them, every takeoff from it is the first state of one, and one from below the air
+  threshold stays in the jump state with its fall force -/
+  bridgeB : VertAir.bridgeAll sy m (FrameModel.ctrlStack sy m) (standY sy N.h) N.h = true
+  offT : OffDrop.offAt sy m (standY sy N.h) N.h = true
+  slowB : OffDrop.slowArcs sy m (standY sy N.h) N.h = true
+  /-- (round 34) the side pipe: a jump from the block's top comes down to one row above the floor late, and a landing there is not near the floor for `pipeB` frames -/
+  pipeAc : pipeAOk sy m N = true
+  pipeBc : offB sy m N.pipeB (pipeLands sy m N) = true
+  /-- (round 34) from a stand on the block's top of `standFam`, no state is near the floor for `aboveF − 1` frames of `offNext` -/
+  standB : offB sy m (N.aboveF - 1) (standFam sy m N) = true
+  /-- (round 34) at first control he is in the air, and no takeoff from a whole row stands (`RoomRun.stand_ok`) -/
+  startAir : N.vStart.all (fun s => s.st != 0) = true
+  jumpAir : jumpAirCheck sy m = true
 
 /-! ## Lists of frames -/
 
@@ -4558,66 +4641,14 @@ theorem landed_short (H : Checks sy m N) (hE : r.t0 < r.E) (hw : NoWall sy m N r
       have hleft := hleft1
       exact fast_short r H hE hw hs a ht hf hearly (L' := N.rise - 1) (by omega) H.roomBig.2.1 (fun n h1 h2 => hleft n h1 (by omega))
 
-/-- **The entry is not before `t0`**: on the entry frame he is at the mouth (`mouth`), past the goal, and before `t0` he is not past the goal. The way off the block puts the
-entry after first control. So the frames that the proof asks to be `VFrame` are before the entry. -/
-theorem t0_le_E (H : Checks sy m N) (off : Off sy m N r.fr r.C r.t0 r.E) : r.t0 ≤ r.E := by
-  have hm := r.mouth
-  have hs := H.nums.slow_mouth
-  have hA := H.nums.air_pos
-  have h0 : (0 : Int) ≤ 16 * ((sy.AirFastSpeed.toNat : Int) - 1) * (N.aboveS : Int) :=
-    Int.mul_nonneg (Int.mul_nonneg (by decide) (by omega)) (by omega)
-  cases off with
-  | jump T1 n F x u T1_ge x_mem reach floor hF F_le above slowJ =>
-    by_cases h : r.t0 ≤ r.E
-    · exact h
-    · exfalso
-      have h1 := r.first r.E (by omega) (by omega)
-      omega
-  | step F f d f_mem hF F_le => omega
-
-/-- **The entry comes after `t0`**: a jump off the block reaches the floor `aboveS` or `aboveF` frames after he was last above it, and stepping off takes `walk`
-frames, each at least one frame more than he needs to get past the block's end -/
-theorem t0_lt_E (H : Checks sy m N) (off : Off sy m N r.fr r.C r.t0 r.E) : r.t0 < r.E := by
-  have hn := H.nums
-  have hv := hn.vf
-  cases off with
-  | jump T1 n F x u T1_ge x_mem reach floor hF F_le above slowJ =>
-    have hle : n ≤ arcFrames := by
-      have h0 := arc_len H.lenB x_mem reach hn.len_ok.2.2.1 hn.len_ok.2.2.1
-      simp only [ite_self] at h0
-      have := hn.len_ok.2.2.1
-      omega
-    have h1 := arc_spec H.drop x x_mem n u hle reach
-    obtain ⟨_, h3⟩ := arc_k reach
-    have hfl : (falling u.s && decide (groundY sy ≤ u.s.y.toNat)) = true := by
-      simp only [Bool.and_eq_true, decide_eq_true_eq]
-      exact floor
-    unfold dropOk at h1
-    rw [hfl, h3] at h1
-    simp only [Bool.not_true, Bool.false_or] at h1
-    cases hf : x.fast with
-    | true =>
-      rw [hf] at h1
-      simp only [if_true, decide_eq_true_eq] at h1
-      omega
-    | false =>
-      rw [hf] at h1
-      simp only [Bool.false_eq_true, if_false, Bool.and_eq_true, decide_eq_true_eq] at h1
-      omega
-  | step F f d f_mem hF F_le =>
-    have hw2 := H.walk
-    simp only [walkOk, List.all_eq_true, decide_eq_true_eq] at hw2
-    have h1 := hw2 f f_mem d (mem_bytes d)
-    omega
-
 /-- he is not past the block's right end by frame `C + goalF` -/
 theorem past_late (H : Checks sy m N) : r.C + N.goalF < r.t0 := by
   by_cases ht : r.t0 ≤ r.C + N.goalF
   · exfalso
     cases hw : r.way with
     | over o => exact no_landing r H o
-    | onto a off =>
-      have hE := t0_lt_E r H off
+    | onto a =>
+      have hE := r.off_gap.1
       by_cases hstop : ∃ h, r.C + N.hitF ≤ h ∧ h ≤ r.t0 ∧ Stop sy m N r.fr h
       · obtain ⟨h, h1, h2, h3⟩ := hstop
         have h4 := stop_short r H hE h1 h2 h3 ht
@@ -4631,91 +4662,13 @@ theorem past_late (H : Checks sy m N) : r.C + N.goalF < r.t0 := by
           omega
   · omega
 
-/-! ### Off the block -/
-
-/-- a slow jump: at most the air speed on every frame -/
-theorem slow_move (H : Checks sy m N) {u F : Nat} (hc : capped sy (r.fr.hs u) = true) (hD : inD sy (r.fr.hs u) = true)
-    (hfr : ∀ i, u ≤ i → i < F → (Follow sy m r.fr i ∧ isAir (r.fr.inp (i + 1)) = true) ∨ Moved sy r.fr i) :
-    ∀ d, u + d ≤ F → capped sy (r.fr.hs (u + d)) = true ∧ inD sy (r.fr.hs (u + d)) = true ∧
-      r.fr.P (u + d) ≤ r.fr.P u + 16 * ((sy.AirFastSpeed.toNat : Int) - 1) * (d : Int)
-  | 0, _ => ⟨hc, hD, by simp⟩
-  | d + 1, h => by
-    obtain ⟨h1, h2, h3⟩ := slow_move H hc hD hfr d (by omega)
-    have hm : 16 * ((sy.AirFastSpeed.toNat : Int) - 1) * ((d + 1 : Nat) : Int) =
-        16 * ((sy.AirFastSpeed.toNat : Int) - 1) * (d : Int) + 16 * ((sy.AirFastSpeed.toNat : Int) - 1) := by
-      push_cast
-      rw [Int.mul_add, Int.mul_one]
-    rw [show u + (d + 1) = u + d + 1 by omega, hm]
-    rcases hfr (u + d) (by omega) (by omega) with ⟨h4, h5⟩ | ⟨h4, h5, h6⟩
-    · obtain ⟨h7, h8, h9⟩ := h4
-      have h10 : capped sy (r.fr.hs (u + d + 1)) = true := by
-        rw [h8]
-        rcases step_cap H.air h2 h1 h7 with h11 | ⟨h11, _⟩
-        · exact h11
-        · rw [h5] at h11
-          exact absurd h11 (by decide)
-      refine ⟨h10, ?_, ?_⟩
-      · rw [h8]
-        exact (FastTakeoff.step_facts H.air.pot h2 h7).1
-      · simp only [capped, decide_eq_true_eq] at h10
-        omega
-    · exact ⟨h4, h5, by omega⟩
-
-/-- **The bonus room.** From a run and the checks: the entry comes at least `goalF + aboveF` frames after first control -/
+/-- **The bonus room.** From a run and the checks: the entry comes at least `goalF + aboveF` frames after first control. He is past the block's right end only after frame
+`C + goalF` (`past_late`), and the entry comes at least `aboveF − 1` frames after that (`off_gap`; until round 33 from the field `Off`: a fast jump from the block's top, a
+slow one, or stepping off) -/
 theorem entry_ge (H : Checks sy m N) : r.C + N.goalF + N.aboveF ≤ r.E := by
   have hN := past_late r H
-  have hn := H.nums
-  cases hw : r.way with
-  | over o => exact (no_landing r H o).elim
-  | onto _ off =>
-    cases off with
-    | jump T1 n F x u T1_ge x_mem reach floor hF F_le above slowJ =>
-      have hlen := arc_len H.lenB x_mem reach hn.len_ok.2.2.1 hn.len_ok.2.2.1
-      simp only [ite_self] at hlen
-      have hle : n ≤ arcFrames := by
-        have := hn.len_ok.2.2.1
-        omega
-      have h1 := arc_spec H.drop x x_mem n u hle reach
-      obtain ⟨h2, h3⟩ := arc_k reach
-      have h4 := arcStart_k x_mem
-      have hfl : (falling u.s && decide (groundY sy ≤ u.s.y.toNat)) = true := by
-        simp only [Bool.and_eq_true, decide_eq_true_eq]
-        exact floor
-      unfold dropOk at h1
-      rw [hfl, h3] at h1
-      simp only [Bool.not_true, Bool.false_or] at h1
-      cases hf : x.fast with
-      | true =>
-        rw [hf] at h1
-        simp only [if_true, decide_eq_true_eq] at h1
-        omega
-      | false =>
-        rw [hf] at h1
-        simp only [Bool.false_eq_true, if_false, Bool.and_eq_true, decide_eq_true_eq] at h1
-        by_cases hE : r.C + N.goalF + N.aboveF ≤ r.E
-        · exact hE
-        · exfalso
-          have hab := hn.above_le
-          have hag := hn.air_ge
-          have hFE : F = r.E := by omega
-          have hFv : F = r.C + N.goalF + N.aboveS := by omega
-          have hT1 : T1 ≤ r.C + N.goalF := by omega
-          obtain ⟨hc, hfr⟩ := slowJ hf hFE
-          have hD := inD_at r H T1_ge (by omega)
-          obtain ⟨h5, h6, _⟩ := slow_move r H hc hD hfr (r.C + N.goalF - T1) (by omega)
-          rw [show T1 + (r.C + N.goalF - T1) = r.C + N.goalF by omega] at h5 h6
-          obtain ⟨_, _, h7⟩ := slow_move r H h5 h6 (F := F) (fun i h8 h9 => hfr i (by omega) h9) N.aboveS (by omega)
-          rw [← hFv, hFE] at h7
-          have h8 := r.first (r.C + N.goalF) (by omega) hN
-          have h9 := r.mouth
-          have h10 := hn.slow_mouth
-          omega
-    | step F f d f_mem hF F_le =>
-      have hw2 := H.walk
-      simp only [walkOk, List.all_eq_true, decide_eq_true_eq] at hw2
-      have h1 := hw2 f f_mem d (mem_bytes d)
-      have h3 := hn.walk_le
-      omega
+  have h2 := r.off_gap.2
+  omega
 
 end RoomCore
 
@@ -5074,6 +5027,137 @@ theorem first_of {P : Nat → Prop} {a : Nat} : ∀ n, (∃ j, a < j ∧ j < n �
     · obtain ⟨i, i1, i2, i3, i4⟩ := first_of n h
       exact ⟨i, i1, by omega, i3, i4⟩
     · exact ⟨j, h1, h2, h3, fun i hi1 hi2 hi3 => h ⟨i, hi1, by omega, hi3⟩⟩
+
+/-! ### The checks past the block's right end (round 34) -/
+
+theorem offStep_eq (T : Array (List VS)) (s : VS) : offStep sy m T s = (!OffDrop.nearB sy m s, offNext sy m T s) := by
+  unfold offStep offNext OffDrop.nearB
+  by_cases h : s.st = 0
+  · simp [h]
+  · have h1 : (s.st == 0) = false := by simpa using h
+    have h2 : (s.st != 0) = true := by simpa using h
+    simp [h1, h2, List.flatMap, List.any, OffDrop.stepR, vstepR]
+
+theorem offRun_eq (T : Array (List VS)) : ∀ (K : Nat) (L : List VS),
+    offRun sy m T K L = Cert.checkPrunedS (offNext sy m T) (fun s => !OffDrop.nearB sy m s) (fun _ _ => true) K L
+  | 0, L => by
+    simp only [offRun, Cert.checkPrunedS, offStep_eq]
+  | K + 1, L => by
+    have e1 : ((L.map (offStep sy m T)).all fun g => g.1) = L.all fun s => !OffDrop.nearB sy m s := by
+      rw [List.all_map]
+      congr 1
+      funext s
+      simp [offStep_eq]
+    have e2 : ((L.map (offStep sy m T)).flatMap fun g => g.2) = L.flatMap (offNext sy m T) := by
+      rw [List.flatMap_map]
+      congr 1
+      funext s
+      simp [offStep_eq]
+    have e3 : (Cert.nextS (offNext sy m T) L).filter ((fun _ _ => true) K) = Cert.nextS (offNext sy m T) L := List.filter_eq_self.2 (fun _ _ => rfl)
+    simp only [offRun, Cert.checkPrunedS]
+    rw [e1, e2, e3, offRun_eq T K]
+    rfl
+
+/-- what `offB` says: no state `n ≤ K` frames of `offNext` after a state of `L` is near the floor -/
+theorem offB_spec {K : Nat} {L : List VS} (hc : offB sy m K L = true) :
+    ∀ s ∈ L, ∀ n u, n ≤ K → Cert.Reach (offNext sy m (offTable sy m)) s n u → OffDrop.nearB sy m u = false := by
+  intro s hs n u hn hr
+  unfold offB at hc
+  rw [offRun_eq] at hc
+  have h := Cert.prunedS_spec (offNext sy m (offTable sy m)) (fun s => !OffDrop.nearB sy m s) (fun _ _ => true) (fun _ _ h0 => by simp at h0) K L hc s hs n u hn hr
+  simpa using h
+
+theorem land_row : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0xF0) &&& 0x0F = 0 := by decide +kernel
+theorem land_lt : ∀ n : Fin 256, (UInt8.ofNat n.val).toNat < (UInt8.ofNat n.val &&& 0xF0).toNat + 16 := by decide +kernel
+theorem row_iff : ∀ n : Fin 256, (UInt8.ofNat n.val &&& 0x0F = 0 ↔ n.val % 16 = 0) ∧ (UInt8.ofNat n.val &&& 0xF0 = UInt8.ofNat n.val ↔ n.val % 16 = 0) := by
+  decide +kernel
+
+/-- a landing is on a whole row -/
+theorem land_y_row (t : VS) : (VertAir.land t).y &&& 0x0F = 0 := by
+  have h := land_row ⟨t.y.toNat, t.y.toNat_lt⟩
+  simpa using h
+
+/-- the height before a landing is at least its row, and less than the next row -/
+theorem land_y (t : VS) : (VertAir.land t).y.toNat ≤ t.y.toNat ∧ t.y.toNat < (VertAir.land t).y.toNat + 16 := by
+  have h1 := hiF0_le ⟨t.y.toNat, t.y.toNat_lt⟩
+  have h2 := land_lt ⟨t.y.toNat, t.y.toNat_lt⟩
+  simp only [UInt8.ofNat_toNat] at h1 h2
+  exact ⟨h1, h2⟩
+
+/-- the heights of `offLand` are whole rows -/
+theorem row_offLand (hf : (groundY sy).toUInt8 &&& 0xF0 = (groundY sy).toUInt8) {t : VS} (h : offLand sy t = true) : t.y &&& 0x0F = 0 := by
+  have hk : UInt8.ofNat ((groundY sy) % 256) = (groundY sy).toUInt8 := UInt8.toNat_inj.mp (by simp [Nat.toUInt8, UInt8.toNat_ofNat])
+  have hg := ((row_iff ⟨(groundY sy) % 256, Nat.mod_lt _ (by decide)⟩).2).1 (by show UInt8.ofNat ((groundY sy) % 256) &&& 0xF0 = UInt8.ofNat ((groundY sy) % 256); rw [hk]; exact hf)
+  have hy := (row_iff ⟨t.y.toNat, t.y.toNat_lt⟩).1
+  simp only [UInt8.ofNat_toNat] at hy
+  apply hy.2
+  simp only [offLand, Bool.or_eq_true, decide_eq_true_eq] at h
+  simp only at hg
+  omega
+
+theorem offNext_air {T : Array (List VS)} {s t : VS} (hs : s.st ≠ 0) {a : Bool}
+    (h : t = vstepR sy m s a ∨ (falling (vstepR sy m s a) = true ∧ t = VertAir.land (vstepR sy m s a) ∧ offLand sy t = true)) : t ∈ offNext sy m T s := by
+  have e : (s.st == 0) = false := by simpa using hs
+  unfold offNext
+  rw [e, if_neg (by decide)]
+  refine List.mem_flatMap.2 ⟨a, by cases a <;> simp, ?_⟩
+  simp only
+  rcases h with rfl | ⟨hf, rfl, hl⟩
+  · split <;> simp
+  · rw [if_pos (by rw [hf, hl]; rfl)]
+    simp
+
+theorem offNext_stand {T : Array (List VS)} {s t : VS} (hs : s.st = 0) (h : StandNext s t) (hl : t.st = 0 → offLand sy t = true) : t ∈ offNext sy m T s := by
+  unfold offNext
+  rw [hs, if_pos (by decide)]
+  refine List.mem_append_left _ (List.mem_filter.2 ⟨mem_noJumpNext_stand hs h, ?_⟩)
+  by_cases h0 : t.st = 0
+  · rw [hl h0]; simp
+  · simp [h0]
+
+theorem offNext_jump {s : VS} (hs : s.st = 0) (hy : s.y &&& 0x0F = 0) (abs : UInt8) : jumpOffR sy m s.y abs ∈ offNext sy m (offTable sy m) s := by
+  have h := row_all ⟨s.y.toNat, s.y.toNat_lt⟩
+  simp only [UInt8.ofNat_toNat] at h
+  obtain ⟨h1, h2⟩ := h hy
+  unfold offNext
+  rw [hs, if_pos (by decide), offTable_get _ h1]
+  refine List.mem_append_right _ ?_
+  show jumpOffR sy m s.y abs ∈ jumpOffs sy m (UInt8.ofNat (16 * (s.y >>> 4).toNat))
+  rw [h2]
+  exact mem_jumpOffs s.y abs
+
+/-- a stand on the block's top of `offStand` is in `standFam` -/
+theorem mem_standFam {s : VS} (hy : s.y.toNat = standY sy N.h) (hmf : s.mf = 0) (hvy : s.vy = 0) (hvf : s.vf = s.vfd) (hf : s.vfd ∈ forces sy m)
+    (ho : s.origin.toNat ∈ standY sy N.h :: N.heights) (hst : s.st = 0) : s ∈ standFam sy m N := by
+  unfold standFam
+  refine List.mem_flatMap.2 ⟨s.vfd, hf, List.mem_flatMap.2 ⟨s.origin.toNat, ho, List.mem_flatMap.2 ⟨s.dummy.toNat, List.mem_range.2 s.dummy.toNat_lt,
+    List.mem_map.2 ⟨s.prevA, by cases s.prevA <;> simp, ?_⟩⟩⟩⟩
+  obtain ⟨y, mf, vy, dummy, vf, vfd, origin, st, pa⟩ := s
+  simp only at hy hmf hvy hvf hst ⊢
+  subst hmf hvy hvf hst
+  have ey : (standY sy N.h).toUInt8 = y := by rw [← hy]; exact UInt8.ofNat_toNat
+  rw [ey]
+  simp
+
+/-- a landing one row above the floor of a jump from the block's top is in `pipeLands` -/
+theorem mem_pipeLands {x u : Arc} (hx : x ∈ arcStart sy m (standY sy N.h) N.h) {n : Nat} (hn : n ≤ arcFrames) (hr : Cert.Reach (arcSucc sy m N.h) x n u)
+    (hf : falling u.s = true) (h1 : groundY sy ≤ u.s.y.toNat + 16) (h2 : u.s.y.toNat < groundY sy) : VertAir.land u.s ∈ pipeLands sy m N := by
+  unfold pipeLands
+  refine List.mem_map.2 ⟨u, List.mem_filter.2 ⟨OffDrop.mem_allLayers arcFrames hx hr hn, ?_⟩, rfl⟩
+  simp [hf, h1, h2]
+
+/-- a takeoff from a whole row does not stand (`jumpAirCheck`) -/
+theorem jump_air (hc : jumpAirCheck sy m = true) {y : UInt8} (hy : y &&& 0x0F = 0) (abs : UInt8) : (jumpOffR sy m y abs).st ≠ 0 := by
+  have h := row_all ⟨y.toNat, y.toNat_lt⟩
+  simp only [UInt8.ofNat_toNat] at h
+  obtain ⟨h1, h2⟩ := h hy
+  have h3 := List.all_eq_true.mp hc _ (List.mem_range.2 h1)
+  have hm : jumpOffR sy m y abs ∈ offRow sy m (y >>> 4).toNat := by
+    show jumpOffR sy m y abs ∈ jumpOffs sy m (16 * (y >>> 4).toNat).toUInt8
+    rw [show (16 * (y >>> 4).toNat).toUInt8 = UInt8.ofNat (16 * (y >>> 4).toNat) from rfl, h2]
+    exact mem_jumpOffs y abs
+  have h4 := List.all_eq_true.mp h3 _ hm
+  simpa using h4
 
 namespace RoomRun
 
@@ -6115,39 +6199,6 @@ theorem ab_stale (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.
     exact stale_arith hf han f.friction_gain hlow f.frac
   · refine Or.inr ⟨q3, q4, ?_⟩
     rw [hab, qa, r.read_ab n hC (by omega)]
-
-/-- the stored speed that each frame reads is `|v|`, or the frame leaves him stopped and, from the end of the fall to `hitF`, the stored speed is below the threshold
-(the field `ab_early`), or (round 32) after a frame that stops him and comes to its player's routine in the state `AtCtrl` it is the size of `hstep`'s speed from the state
-before that frame (`ab_fresh`). Round 33: after a frame that follows the model it is `|v|` (`ab_cleanW`), and after a stop with a stale stored speed it is at most one adder
-and a fraction (`ab_stale`, below the air threshold by `NumFacts.amax_air`), unless that frame is in the air with neither Left nor Right; the field is asked only on the
-other frames -/
-theorem ab_of_run (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.hs n).v).natAbs ∨
-    (Stop sy m N r.fr (n + 1) ∧ (r.C + N.fall ≤ n → n + 1 < r.C + N.hitF →
-      r.fr.ab n < sy.AirFastSpeed.toNat ∨ (r.C < n ∧ r.fr.ab n = (sbyte (hstep sy m (r.fr.hs (n - 1)) (r.fr.inp n)).v).natAbs))) := by
-  intro n h1 h2
-  have hfall := H.nums.fall_wall
-  have hair := H.nums.amax_air
-  by_cases hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)
-  · exact Or.inl (r.ab_clean H hr h1 h2 hc)
-  · rcases r.clean n h1 h2 with h3 | h3
-    · exact absurd (r.cleanR_of H hr h1 h2 h3) hc
-    · by_cases hn : r.C + N.fall ≤ n
-      · obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
-        rcases r.clean n' (by omega) (by omega) with hcw | ⟨_, hrw⟩
-        · -- round 33: after a frame that follows the model the stored speed is `|v|` (`ab_cleanW`)
-          exact Or.inl (r.ab_cleanW H hr st (by omega) h2 hcw)
-        · refine Or.inr ⟨h3.1, fun h0 h4 => ?_⟩
-          rw [Nat.add_sub_cancel]
-          by_cases hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n'))
-          · exact Or.inr ⟨by omega, r.ab_fresh H hr st (by omega) h2 hrw hat⟩
-          · -- round 33: a stale stored speed: the friction from the speed 0 (`ab_stale`), or the field
-            by_cases habs : peek (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n')) sy.Player_XSpeedAbsolute = TopSpeed.absB (peek (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n')) sy.Player_X_Speed)
-            · exact Or.inl (r.ab_early (n' + 1) h0 h4 h2 hc (by rw [Nat.add_sub_cancel]; exact hat) (by rw [Nat.add_sub_cancel]; exact Or.inl habs))
-            · rcases r.ab_stale H hr st (by omega) h2 hrw habs with h5 | ⟨h5, h6, _⟩
-              · left
-                omega
-              · exact Or.inl (r.ab_early (n' + 1) h0 h4 h2 hc (by rw [Nat.add_sub_cancel]; exact hat) (by rw [Nat.add_sub_cancel]; exact Or.inr ⟨h5, h6⟩))
-      · exact Or.inr ⟨h3.1, fun h0 => absurd h0 hn⟩
 
 /-- **`stop_run`** (round 31): from `hitF` to `runF`, a frame that does not follow `hstep`, with `RunningSpeed` 0 and the speed below the running threshold at its
 start, leaves `RunningSpeed` 0. At the player's routine `RunningSpeed` is that of the frame's start (`InRoom.before`), so 0, and the state is 0, 1 or 2 (`InRoom.cut`). In
@@ -7751,6 +7802,592 @@ theorem push_one_of (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe
     rw [r.P_fe (n := n + 1) (by omega) (by omega), r.P_fm hr hC (by omega) (by omega), r.next hC (r.ups_lt hr hC (by omega)), ← e6, ← e3]
     rcases f.impedeP with h | h | ⟨h, _⟩ <;> omega
 
+/-! ### The stored speed through the fall (round 34, page `1-1/c-7-6-2-FallCap.md`)
+
+Through the fall the speed stays below the air threshold: at first control he stands still (`start_fallR`), a frame that starts in the air has an air input
+(`air_in_of`) and keeps it below (`AirCap.step_cap`), a frame that ends standing in the fall does not follow `hstep` (`stand_off_of`), so it is a stop with `Φ ≤ stopPhi`,
+and one frame from there gains at most `gFast` (`Potential.stepOk`, `NumFacts.stop_cap`). So the stored speed that each frame reads up to the end of the fall is below the
+air threshold (`ab_fall`): it is `|v|` after a frame that follows the model, `hstep`'s after a stop in the state `AtCtrl`, at most one adder and a fraction after a
+stale stop, or the one of the frame before in the air with neither side; only after a masked side it is not followed. -/
+
+/-- a state with `Φ` at most `X`, with `X + 255` below `256·A`, is below the air threshold -/
+theorem capped_of_phi (H : Checks sy m N) {s : HS} {X : Int} (h1 : phi sy m s ≤ X) (h2 : X + 255 < 256 * (sy.AirFastSpeed.toNat : Int)) : capped sy s = true := by
+  have h3 := phi_ge H.air.pot s
+  have h4 : s.f.toNat < 256 := s.f.toNat_lt
+  simp only [capped, decide_eq_true_eq]
+  unfold V at h3
+  omega
+
+/-- **Through the fall the speed is below the air threshold, and a stand in the fall is a stop** -/
+theorem cap_fall (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ d, d ≤ N.fall → r.C + d ≤ r.t0 →
+    capped sy (r.fr.hs (r.C + d)) = true ∧ (d < N.fall → (r.fr.vs (r.C + d)).st = 0 → phi sy m (r.fr.hs (r.C + d)) ≤ N.stopPhi)
+  | 0, _, _ => by
+    refine ⟨(r.start_fallR H st).cap, fun _ h0 => ?_⟩
+    exfalso
+    have hv : (VertModel.vsOf sy (r.fe r.C)).st = 2 := st.v.1
+    rw [Nat.add_zero, r.vs_fe (Nat.le_refl _) r.t0_ge] at h0
+    rw [hv] at h0
+    exact absurd h0 (by decide)
+  | d + 1, h1, h2 => by
+    obtain ⟨ic, ip⟩ := cap_fall H hr st d (by omega) (by omega)
+    have hfl := H.nums.fall_le
+    have hsc := H.nums.stop_cap
+    rw [show r.C + (d + 1) = r.C + d + 1 by omega]
+    have hD := r.inD_of H hr st d (by omega)
+    rcases r.frames_of H hr st (r.C + d) (by omega) (by omega) with hf | hs
+    · obtain ⟨hi, hh, hP⟩ := hf
+      have hcap : capped sy (r.fr.hs (r.C + d + 1)) = true := by
+        rw [hh]
+        by_cases hst : (r.fr.vs (r.C + d)).st = 0
+        · have hp := ip (by omega) hst
+          have hok := H.air.pot.check _ hD _ hi
+          simp only [Potential.stepOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+          exact capped_of_phi H (X := N.stopPhi + gFast sy m) (by have := hok.1.1.2; omega) hsc
+        · have hai := r.air_in_of H hr st (r.C + d) (by omega) (by omega) hst
+          rcases step_cap H.air hD ic hi with h3 | ⟨h3, _⟩
+          · exact h3
+          · simp [isAir, hai.2.1] at h3
+      refine ⟨hcap, fun hd h0 => ?_⟩
+      exfalso
+      have hnf := r.fall_long_of H hr st (r.C + d + 1) (by omega) (by omega)
+      exact r.stand_off_of H hr st (r.C + d) (by omega) (by omega) (Or.inl (by omega)) h0 hnf ⟨hi, hh, hP⟩
+    · refine ⟨?_, fun _ _ => hs.2.1⟩
+      have h3 := hs.2.1
+      exact capped_of_phi H h3 H.nums.stop_small
+
+/-- **The stored speed through the fall is below the air threshold**, when no frame up to it comes to its player's routine with the side it presses masked -/
+theorem ab_fall (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ d, d ≤ N.fall → r.C + d < r.t0 →
+    (∀ k, r.C < k → k ≤ r.C + d → ¬MaskedAt sy m (PipeEntryRule.trace (r.fm (k - 1)) (r.inAt (k - 1)) (r.arr (k - 1)))) →
+    r.fr.ab (r.C + d) < sy.AirFastSpeed.toNat
+  | 0, _, h2, _ => by
+    have hE := r.t0_le_E H hr
+    have hpc := r.arrive H hr (n := r.C) (Nat.le_refl _) (by omega)
+    rw [Nat.add_zero, r.read_ab r.C (Nat.le_refl _) (by omega)]
+    change (peek (PipeEntryRule.trace (r.fm r.C) (r.inAt r.C) (r.arr r.C)) sy.Player_XSpeedAbsolute).toNat < _
+    rw [hr.absBefore r.C (Nat.le_refl _) (by omega) _ hpc, hr.absKeep r.C (Nat.le_refl _) (by omega), st.ab]
+    have := H.nums.air_pos
+    simpa using this
+  | d + 1, h1, h2, hm => by
+    have ih := ab_fall H hr st d (by omega) (by omega) (fun k a b => hm k a (by omega))
+    have hsc := H.nums.stop_cap
+    have hair := H.nums.amax_air
+    rw [show r.C + (d + 1) = r.C + d + 1 by omega] at hm ⊢
+    have hC : r.C ≤ r.C + d := by omega
+    rcases r.clean (r.C + d) hC (by omega) with hcw | ⟨_, hrw⟩
+    · rw [r.ab_cleanW H hr st hC (by omega) hcw]
+      have := (r.cap_fall H hr st (d + 1) h1 (by omega)).1
+      rw [show r.C + (d + 1) = r.C + d + 1 by omega] at this
+      simpa [capped] using this
+    · by_cases hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm (r.C + d)) (r.inAt (r.C + d)) (r.arr (r.C + d)))
+      · rw [r.ab_fresh H hr st hC (by omega) hrw hat]
+        obtain ⟨ic, ip⟩ := r.cap_fall H hr st d (by omega) (by omega)
+        have hD := r.inD_of H hr st d (by omega)
+        have hi : r.fr.inp (r.C + d + 1) ∈ inputs := by
+          rw [r.read_inp hC (by omega)]
+          exact readIn_mem sy _
+        have hcap : capped sy (hstep sy m (r.fr.hs (r.C + d)) (r.fr.inp (r.C + d + 1))) = true := by
+          by_cases hst : (r.fr.vs (r.C + d)).st = 0
+          · have hp := ip (by omega) hst
+            have hok := H.air.pot.check _ hD _ hi
+            simp only [Potential.stepOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+            exact capped_of_phi H (X := N.stopPhi + gFast sy m) (by have := hok.1.1.2; omega) hsc
+          · have hai := r.air_in_of H hr st (r.C + d) hC (by have := H.nums.fall_le; omega) hst
+            rcases step_cap H.air hD ic hi with h3 | ⟨h3, _⟩
+            · exact h3
+            · simp [isAir, hai.2.1] at h3
+        simpa [capped] using hcap
+      · by_cases habs : peek (PipeEntryRule.trace (r.fm (r.C + d)) (r.inAt (r.C + d)) (r.arr (r.C + d))) sy.Player_XSpeedAbsolute =
+            TopSpeed.absB (peek (PipeEntryRule.trace (r.fm (r.C + d)) (r.inAt (r.C + d)) (r.arr (r.C + d))) sy.Player_X_Speed)
+        · exfalso
+          have := hm (r.C + d + 1) (by omega) (Nat.le_refl _)
+          rw [show r.C + d + 1 - 1 = r.C + d by omega] at this
+          exact this ⟨hat, habs⟩
+        · rcases r.ab_stale H hr st hC (by omega) hrw habs with h5 | ⟨_, _, h7⟩
+          · omega
+          · rw [h7]
+            exact ih
+
+/-- the stored speed that each frame reads is `|v|`, or the frame leaves him stopped and, from the end of the fall to `hitF`, the stored speed is below the threshold
+(the field `ab_early`), or (round 32) after a frame that stops him and comes to its player's routine in the state `AtCtrl` it is the size of `hstep`'s speed from the state
+before that frame (`ab_fresh`). Round 33: after a frame that follows the model it is `|v|` (`ab_cleanW`), and after a stop with a stale stored speed it is at most one adder
+and a fraction (`ab_stale`, below the air threshold by `NumFacts.amax_air`), unless that frame is in the air with neither Left nor Right; the field is asked only on the
+other frames -/
+theorem ab_of_run (H : Checks sy m N) (hr : r.InRoom) (st : StartAt sy N (r.fe r.C)) : ∀ n, r.C ≤ n → n < r.t0 → r.fr.ab n = (sbyte (r.fr.hs n).v).natAbs ∨
+    (Stop sy m N r.fr (n + 1) ∧ (r.C + N.fall ≤ n → n + 1 < r.C + N.hitF →
+      r.fr.ab n < sy.AirFastSpeed.toNat ∨ (r.C < n ∧ r.fr.ab n = (sbyte (hstep sy m (r.fr.hs (n - 1)) (r.fr.inp n)).v).natAbs))) := by
+  intro n h1 h2
+  have hfall := H.nums.fall_wall
+  have hair := H.nums.amax_air
+  by_cases hc : FrameModel.CleanR sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (r.fm n) (r.inAt n) (r.arr n)
+  · exact Or.inl (r.ab_clean H hr h1 h2 hc)
+  · rcases r.clean n h1 h2 with h3 | h3
+    · exact absurd (r.cleanR_of H hr h1 h2 h3) hc
+    · by_cases hn : r.C + N.fall ≤ n
+      · obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+        rcases r.clean n' (by omega) (by omega) with hcw | ⟨_, hrw⟩
+        · -- round 33: after a frame that follows the model the stored speed is `|v|` (`ab_cleanW`)
+          exact Or.inl (r.ab_cleanW H hr st (by omega) h2 hcw)
+        · refine Or.inr ⟨h3.1, fun h0 h4 => ?_⟩
+          rw [Nat.add_sub_cancel]
+          by_cases hat : FrameModel.AtCtrl sy (FrameModel.Rom.of m) (FrameModel.ctrlStack sy m) (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n'))
+          · exact Or.inr ⟨by omega, r.ab_fresh H hr st (by omega) h2 hrw hat⟩
+          · -- round 33: a stale stored speed: the friction from the speed 0 (`ab_stale`), or the field
+            by_cases habs : peek (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n')) sy.Player_XSpeedAbsolute = TopSpeed.absB (peek (PipeEntryRule.trace (r.fm n') (r.inAt n') (r.arr n')) sy.Player_X_Speed)
+            · exact Or.inl (r.ab_early (n' + 1) h0 h4 h2 hc (by rw [Nat.add_sub_cancel]; exact hat) (by rw [Nat.add_sub_cancel]; exact Or.inl habs))
+            · rcases r.ab_stale H hr st (by omega) h2 hrw habs with h5 | ⟨h5, h6, h7⟩
+              · left
+                omega
+              · -- round 34: carried in the air with neither side, below the threshold through the fall (`ab_fall`), unless an earlier frame was masked
+                by_cases hmk : ∃ k, r.C < k ∧ k < n' + 1 ∧ MaskedAt sy m (PipeEntryRule.trace (r.fm (k - 1)) (r.inAt (k - 1)) (r.arr (k - 1)))
+                · exact Or.inl (r.ab_early (n' + 1) h0 h4 h2 hc (by rw [Nat.add_sub_cancel]; exact hat) (by rw [Nat.add_sub_cancel]; exact Or.inr ⟨h5, h6, hmk⟩))
+                · left
+                  rw [h7]
+                  have h3f := H.nums.hit_three
+                  have hb := r.ab_fall H hr st (n' - r.C) (by omega) (by omega) (fun k a b hk => hmk ⟨k, a, by omega, hk⟩)
+                  rwa [show r.C + (n' - r.C) = n' by omega] at hb
+      · exact Or.inr ⟨h3.1, fun h0 => absurd h0 hn⟩
+
+/-! ### Past the block's right end: the entry is at least `aboveF − 1` frames after `t0` (round 34, page `1-1/c-7-8-2-OffDrop.md`)
+
+`read_vs` reads the frames only up to `t0`, but the walks of the room's frames hold up to the frame before the entry: a frame in the air is `vstepR` or its landing
+(`InRoom.air`), a frame that starts standing with no jump is `StandNext` (`InRoom.stand`), one with a jump the takeoff (`InRoom.jump`). So the vertical bytes of the
+machines after `t0` (`vE`) are followed to the frame before the entry, which the field `offNear` puts near the floor. Before `t0` the field `offTop` gives the last stand,
+on the block's top, and the frames after it above the block's top. -/
+
+/-- the vertical state at the end of the room's frame `n`, read from the machine (`fr.vs n` up to `t0`: `vs_fe`) -/
+abbrev vE (n : Nat) : VS := VertModel.vsOf sy (r.fe n)
+
+theorem vE_fm (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (hE : n < r.E) : VertModel.vsOf sy (r.fm n) = r.vE n := (hr.keep n hC hE).2.2
+
+theorem vE_next (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (hE : n < r.E) :
+    r.vE (n + 1) = VertModel.vsOf sy (PipeTransition.frame (r.fm n) (r.inAt n)) := by
+  show VertModel.vsOf sy (r.fe (n + 1)) = _
+  rw [r.next hC (r.ups_lt hr hC hE)]
+
+/-- each frame before the entry comes to the player's routine at `arr n` -/
+theorem arr_pc (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (hE : n < r.E) :
+    (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)).pc = sy.PlayerCtrlRoutine :=
+  hr.reach n hC hE (r.up hC (r.ups_lt hr hC hE))
+
+/-- **A frame before the entry that starts in the air** is `vstepR` or its landing (`InRoom.air`) -/
+theorem air_E (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (hE : n + 1 < r.E) (hst : (r.vE n).st ≠ 0) :
+    ∃ a, ((vstepR sy m (r.vE n) a).st = 1 ∨ (vstepR sy m (r.vE n) a).st = 2) ∧
+      (r.vE (n + 1) = vstepR sy m (r.vE n) a ∨ (falling (vstepR sy m (r.vE n) a) = true ∧ r.vE (n + 1) = VertAir.land (vstepR sy m (r.vE n) a))) := by
+  have hv0 := r.vE_fm hr hC (show n < r.E by omega)
+  have hpc := r.arr_pc hr hC (show n < r.E by omega)
+  have hcl := hr.cut n hC (by omega) _ hpc
+  have hst' : peek (r.fm n) sy.Player_State ≠ 0 := by
+    have e : (VertModel.vsOf sy (r.fm n)).st = peek (r.fm n) sy.Player_State := rfl
+    rw [← e, hv0]
+    exact hst
+  have e := hr.air n hC hE hst' (r.arr n) hcl (hr.pair n hC (by omega)).1 (hr.pair n hC (by omega)).2
+  rw [r.vE_next hr hC (by omega), ← hv0]
+  exact ⟨_, e⟩
+
+/-- **A frame before the entry that starts standing with no jump** is `StandNext` (`InRoom.stand`) -/
+theorem stand_E (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (hE : n + 1 < r.E) (hst : (r.vE n).st = 0)
+    (hj : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n))).jump = false) : StandNext (r.vE n) (r.vE (n + 1)) := by
+  have hv0 := r.vE_fm hr hC (show n < r.E by omega)
+  have hpc := r.arr_pc hr hC (show n < r.E by omega)
+  have hst' : peek (r.fm n) sy.Player_State = 0 := by
+    have e : (VertModel.vsOf sy (r.fm n)).st = peek (r.fm n) sy.Player_State := rfl
+    rw [← e, hv0]
+    exact hst
+  rw [r.vE_next hr hC (by omega), ← hv0]
+  exact hr.stand n hC hE hst' (r.arr n) hpc hj
+
+/-- **A frame before the entry with a jump** ends on the takeoff of its height (`InRoom.jump`) -/
+theorem jump_E (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (hE : n + 1 < r.E)
+    (hj : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n))).jump = true) :
+    r.vE (n + 1) = jumpOffR sy m (r.vE n).y (peek (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n)) sy.Player_XSpeedAbsolute) := by
+  have hv0 := r.vE_fm hr hC (show n < r.E by omega)
+  have hpc := r.arr_pc hr hC (show n < r.E by omega)
+  have hcl := hr.cut n hC (by omega) _ hpc
+  rw [r.vE_next hr hC (by omega), ← hv0]
+  exact hr.jump n hC hE (r.arr n) hcl hj
+
+/-- **Every stand of the room before the entry has no vertical speed and is on a whole row** (round 34): at first control he falls (`startAir`), a landing has none
+(`VertAir.land`), a frame that starts standing with no jump keeps the height and the speed or lands (`StandNext`), and a takeoff from a whole row does not stand
+(`jumpAirCheck`) -/
+theorem stand_ok (H : Checks sy m N) (hr : r.InRoom) : ∀ d, r.C + d < r.E → StandOK (r.vE (r.C + d))
+  | 0, _ => by
+    intro h0
+    exfalso
+    have hv := hr.vstart
+    have h1 := List.all_eq_true.mp H.startAir _ hv
+    have h2 : (VertModel.vsOf sy (r.fe r.C)).st ≠ 0 := by simpa using h1
+    exact h2 (by simpa using h0)
+  | d + 1, h => by
+    have ih := stand_ok H hr d (by omega)
+    rw [show r.C + (d + 1) = r.C + d + 1 by omega]
+    intro h0
+    have hC : r.C ≤ r.C + d := by omega
+    have hE : r.C + d + 1 < r.E := by omega
+    by_cases hst : (r.vE (r.C + d)).st = 0
+    · cases hj : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm (r.C + d)) (r.inAt (r.C + d)) (r.arr (r.C + d)))).jump with
+      | false =>
+        obtain ⟨_, _, _, _, h5⟩ := r.stand_E hr hC hE hst hj
+        obtain ⟨i1, i2, i3⟩ := ih hst
+        rcases h5 with ⟨e1, e2, e3, _⟩ | ⟨_, e2, e3, e4⟩
+        · exact ⟨by rw [e2]; exact i1, by rw [e3]; exact i2, by rw [e1]; exact i3⟩
+        · refine ⟨e2, e3, ?_⟩
+          rw [e4]
+          have := land_row ⟨(r.vE (r.C + d)).y.toNat, (r.vE (r.C + d)).y.toNat_lt⟩
+          simpa using this
+      | true =>
+        exfalso
+        have e := r.jump_E hr hC hE hj
+        rw [e] at h0
+        exact jump_air H.jumpAir (ih hst).2.2 _ h0
+    · obtain ⟨a, hs12, e⟩ := r.air_E hr hC hE hst
+      rcases e with e | ⟨_, e⟩
+      · exfalso
+        rw [e] at h0
+        rcases hs12 with e1 | e1 <;> rw [e1] at h0 <;> exact absurd h0 (by decide)
+      · rw [e]
+        exact ⟨rfl, rfl, land_y_row _⟩
+
+/-- **From `t0` on each frame before the entry goes to a state of `offNext`**: a stand ends on the floor or one row above it (the field `offFloor`), so it is on a whole
+row -/
+theorem next_E (H : Checks sy m N) (hr : r.InRoom) {n : Nat} (hC : r.C ≤ n) (h0 : r.t0 ≤ n + 1) (hE : n + 1 < r.E)
+    (hrow : (r.vE n).st = 0 → (r.vE n).y &&& 0x0F = 0) :
+    r.vE (n + 1) ∈ offNext sy m (offTable sy m) (r.vE n) ∧ ((r.vE (n + 1)).st = 0 → (r.vE (n + 1)).y &&& 0x0F = 0) := by
+  have hland : (r.vE (n + 1)).st = 0 → offLand sy (r.vE (n + 1)) = true := fun h => by
+    have := r.offFloor (n + 1) h0 (by omega) h
+    simp only [offLand, Bool.or_eq_true, decide_eq_true_eq]
+    exact this
+  refine ⟨?_, fun h => row_offLand H.floorRow (hland h)⟩
+  by_cases hst : (r.vE n).st = 0
+  · cases hj : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm n) (r.inAt n) (r.arr n))).jump with
+    | false => exact offNext_stand hst (r.stand_E hr hC hE hst hj) hland
+    | true =>
+      rw [r.jump_E hr hC hE hj]
+      exact offNext_jump hst (hrow hst) _
+  · obtain ⟨a, _, e⟩ := r.air_E hr hC hE hst
+    rcases e with e | ⟨hf, e⟩
+    · rw [e]
+      exact offNext_air hst (Or.inl rfl)
+    · have hl := hland (by rw [e]; rfl)
+      rw [e] at hl ⊢
+      exact offNext_air hst (Or.inr ⟨hf, rfl, hl⟩)
+
+/-- **The frames past the block's right end follow `offNext`**: from a frame `D` with `t0 ≤ D + 1` whose state is in `L`, if `offB K L` holds, no frame `D + i` with
+`i ≤ K` before the entry is near the floor -/
+theorem offB_path (H : Checks sy m N) (hr : r.InRoom) {K : Nat} {L : List VS} (hc : offB sy m K L = true) {D : Nat} (hC : r.C ≤ D) (h0 : r.t0 ≤ D + 1)
+    (hL : r.vE D ∈ L) (hrow : (r.vE D).st = 0 → (r.vE D).y &&& 0x0F = 0) :
+    ∀ i, i ≤ K → D + i < r.E → OffDrop.nearB sy m (r.vE (D + i)) = false := by
+  have key : ∀ i, D + i < r.E → Cert.Reach (offNext sy m (offTable sy m)) (r.vE D) i (r.vE (D + i)) ∧
+      ((r.vE (D + i)).st = 0 → (r.vE (D + i)).y &&& 0x0F = 0) := by
+    intro i
+    induction i with
+    | zero => intro _; exact ⟨Cert.Reach.refl _, hrow⟩
+    | succ i ih =>
+      intro hi
+      obtain ⟨h1, h2⟩ := ih (by omega)
+      obtain ⟨h3, h4⟩ := r.next_E H hr (n := D + i) (by omega) (by omega) (by omega) h2
+      rw [show D + (i + 1) = D + i + 1 by omega]
+      exact ⟨OffDrop.reach_snoc h1 h3, h4⟩
+  intro i hi hE
+  exact offB_spec hc _ hL i _ hi (key i hE).1
+
+/-- the frame before the entry is near the floor, so the entry is more than `K` frames after a frame `D` from which `offB K L` holds -/
+theorem offB_gap (H : Checks sy m N) (hr : r.InRoom) {K : Nat} {L : List VS} (hc : offB sy m K L = true) {D : Nat} (hC : r.C ≤ D) (h0 : r.t0 ≤ D + 1)
+    (hDE : D < r.E) (hL : r.vE D ∈ L) (hrow : (r.vE D).st = 0 → (r.vE D).y &&& 0x0F = 0) : D + K + 1 < r.E := by
+  rcases Nat.lt_or_ge (D + K + 1) r.E with h | h
+  · exact h
+  · exfalso
+    have h1 := r.offB_path H hr hc hC h0 hL hrow (r.E - 1 - D) (by omega) (by omega)
+    rw [show D + (r.E - 1 - D) = r.E - 1 by omega] at h1
+    have h2 := r.offNear
+    rw [h1] at h2
+    cases h2
+
+/-- **The descent from a state of a jump from the block's top** at frame `D` (with `t0 ≤ D + 1`), on the real frames: `k` frames later the jump has come to the floor,
+or he has landed one row above the floor on a state of it, or the state is the jump's state `k` frames later and not at the floor -/
+theorem descend_k (H : Checks sy m N) (hr : r.InRoom) {x w : Arc} (hx : x ∈ arcStart sy m (standY sy N.h) N.h) {j : Nat}
+    (hw : Cert.Reach (arcSucc sy m N.h) x j w) {D : Nat} (hC : r.C ≤ D) (h0 : r.t0 ≤ D + 1) (hD : r.vE D = w.s)
+    (hnf : (falling w.s && decide (groundY sy ≤ w.s.y.toNat)) = false) :
+    ∀ k, D + k < r.E →
+      (∃ n v, n ≤ k ∧ Cert.Reach (arcSucc sy m N.h) w n v ∧ (falling v.s && decide (groundY sy ≤ v.s.y.toNat)) = true) ∨
+      (∃ n v, 1 ≤ n ∧ n ≤ k ∧ Cert.Reach (arcSucc sy m N.h) w n v ∧ falling v.s = true ∧ groundY sy ≤ v.s.y.toNat + 16 ∧ v.s.y.toNat < groundY sy ∧
+        r.vE (D + n) = VertAir.land v.s) ∨
+      (∃ v, Cert.Reach (arcSucc sy m N.h) w k v ∧ (falling v.s && decide (groundY sy ≤ v.s.y.toNat)) = false ∧ r.vE (D + k) = v.s) := by
+  intro k
+  induction k with
+  | zero => intro _; exact Or.inr (Or.inr ⟨w, Cert.Reach.refl _, hnf, hD⟩)
+  | succ k ih =>
+    intro hk
+    rcases ih (by omega) with ⟨n, v, hn, hv, hf⟩ | ⟨n, v, h1, hn, hv, hf, h2, h3, h4⟩ | ⟨v, hv, hnfv, hvD⟩
+    · exact Or.inl ⟨n, v, by omega, hv, hf⟩
+    · exact Or.inr (Or.inl ⟨n, v, h1, by omega, hv, hf, h2, h3, h4⟩)
+    · have hxv := OffDrop.reach_trans hw hv
+      have hb := VertAir.bridgeAll_of H.bridgeB hx hxv
+      have hne := OffDrop.arcSucc_ne_of (m := m) (h := N.h) hnfv
+      have hst : (r.vE (D + k)).st ≠ 0 := by
+        rw [hvD]
+        rcases hb.1 with e | e <;> rw [e] <;> decide
+      obtain ⟨a, _, e⟩ := r.air_E hr (n := D + k) (by omega) (by omega) hst
+      obtain ⟨v', hv', hvs⟩ := OffDrop.arcSucc_of (m := m) (h := N.h) hnfv a
+      have hs' : vstepR sy m (r.vE (D + k)) a = v'.s := by
+        rw [hvD, hvs]
+        exact hb.2 hne a
+      have hreach := OffDrop.reach_snoc hv hv'
+      rw [hs'] at e
+      rw [show D + (k + 1) = D + k + 1 by omega]
+      rcases e with e | ⟨hf, e⟩
+      · cases hfl : (falling v'.s && decide (groundY sy ≤ v'.s.y.toNat)) with
+        | true => exact Or.inl ⟨k + 1, v', Nat.le_refl _, hreach, hfl⟩
+        | false => exact Or.inr (Or.inr ⟨v', hreach, hfl, e⟩)
+      · have hst0 : (r.vE (D + k + 1)).st = 0 := by rw [e]; rfl
+        have hoff := r.offFloor (D + k + 1) (by omega) (by omega) hst0
+        have hoff' : (VertAir.land v'.s).y.toNat = groundY sy ∨ (VertAir.land v'.s).y.toNat + 16 = groundY sy := by
+          rw [← e]
+          exact hoff
+        obtain ⟨hy1, hy2⟩ := land_y v'.s
+        rcases hoff' with h | h
+        · refine Or.inl ⟨k + 1, v', Nat.le_refl _, hreach, ?_⟩
+          simp only [hf, Bool.true_and, decide_eq_true_eq]
+          omega
+        · exact Or.inr (Or.inl ⟨k + 1, v', by omega, Nat.le_refl _, hreach, hf, by omega, by omega, e⟩)
+
+/-- the jumps from the block's top end in time (`lenB`) -/
+theorem arc_short (H : Checks sy m N) {x u : Arc} (hx : x ∈ arcStart sy m (standY sy N.h) N.h) {n : Nat} (hr : Cert.Reach (arcSucc sy m N.h) x n u) :
+    n ≤ arcFrames := by
+  have h := arc_len H.lenB hx hr H.nums.len_ok.2.2.1 H.nums.len_ok.2.2.1
+  simp only [ite_self] at h
+  have := H.nums.len_ok.2.2.1
+  omega
+
+/-- **The floor after a jump from the block's top that was above it at frame `D`**: the jump's state at the floor `n` frames after `D` is at least `aboveF` (fast) or
+`aboveS` (slow) frames after `t0 − 1` (`dropOk`) -/
+theorem floor_bound (H : Checks sy m N) {x w u : Arc} (hx : x ∈ arcStart sy m (standY sy N.h) N.h) {j n : Nat} (hw : Cert.Reach (arcSucc sy m N.h) x j w)
+    (hwy : w.s.y.toNat < standY sy N.h) (hu : Cert.Reach (arcSucc sy m N.h) w n u) (hf : (falling u.s && decide (groundY sy ≤ u.s.y.toNat)) = true) :
+    (x.fast = true → N.aboveF ≤ n) ∧ (x.fast = false → N.aboveS ≤ n) := by
+  have hxu := OffDrop.reach_trans hw hu
+  have hle := arc_short H hx hxu
+  have hd := arc_spec H.drop x hx (j + n) u hle hxu
+  have hab := (OffDrop.above_after hx hxu).2 j w (by omega) hw (by rw [show j + n - j = n by omega]; exact hu) hwy
+  rw [show j + n - j = n by omega] at hab
+  have hfast := (arc_k hxu).2
+  unfold dropOk at hd
+  rw [hf, hfast] at hd
+  constructor
+  · intro h
+    rw [h] at hd
+    simp at hd
+    omega
+  · intro h
+    rw [h] at hd
+    simp at hd
+    omega
+
+/-- **A landing one row above the floor** (on the side pipe) after a jump from the block's top that was above it at frame `D`: it is at least `pipeA` frames after `D`
+(`pipeAOk`), and from there no frame is near the floor for `pipeB` frames (`offB`, `pipeLands`): the entry is at least `aboveF − 1` frames after `t0` -/
+theorem pipe_bound (H : Checks sy m N) (hr : r.InRoom) {x w v : Arc} (hx : x ∈ arcStart sy m (standY sy N.h) N.h) {j n : Nat}
+    (hw : Cert.Reach (arcSucc sy m N.h) x j w) (hwy : w.s.y.toNat < standY sy N.h) (hv : Cert.Reach (arcSucc sy m N.h) w n v) {D : Nat} (hC : r.C ≤ D)
+    (h0 : r.t0 ≤ D + 1) (hD1 : D + 1 ≤ r.t0) (hDE : D + n < r.E) (hf : falling v.s = true) (h1 : groundY sy ≤ v.s.y.toNat + 16) (h2 : v.s.y.toNat < groundY sy)
+    (hland : r.vE (D + n) = VertAir.land v.s) : r.t0 + N.aboveF ≤ r.E + 1 := by
+  have hxv := OffDrop.reach_trans hw hv
+  have hle := arc_short H hx hxv
+  have hpa := arc_spec H.pipeAc x hx (j + n) v hle hxv
+  have hab := (OffDrop.above_after hx hxv).2 j w (by omega) hw (by rw [show j + n - j = n by omega]; exact hv) hwy
+  rw [show j + n - j = n by omega] at hab
+  simp only [hf, Bool.true_and] at hpa
+  have hpa' : N.pipeA ≤ v.above := by
+    have e : decide (groundY sy ≤ v.s.y.toNat + 16) = true := decide_eq_true h1
+    rw [e] at hpa
+    simpa using hpa
+  have hmem := mem_pipeLands hx hle hxv hf h1 h2
+  have hgap := r.offB_gap H hr H.pipeBc (D := D + n) (by omega) (by omega) hDE (by rw [hland]; exact hmem)
+    (fun _ => by rw [hland]; exact land_y_row v.s)
+  have hs := H.nums.pipe_sum
+  omega
+
+/-- the sum of the moves of the frames of a slow jump (the field `offSlow`) -/
+theorem slow_sum {D : Nat} (hstep : ∀ i, i < N.aboveS → posP sy (r.fe (D + i + 1)) ≤ posP sy (r.fe (D + i)) + 16 * ((sy.AirFastSpeed.toNat : Int) - 1)) :
+    ∀ i, i ≤ N.aboveS → posP sy (r.fe (D + i)) ≤ posP sy (r.fe D) + 16 * ((sy.AirFastSpeed.toNat : Int) - 1) * (i : Int)
+  | 0, _ => by simp
+  | i + 1, h => by
+    have ih := slow_sum hstep i (by omega)
+    have e := hstep i (by omega)
+    rw [show D + (i + 1) = D + i + 1 by omega]
+    push_cast
+    rw [Int.mul_add, Int.mul_one]
+    omega
+
+/-- **After a jump from the block's top**: the last stand before `t0` is on the block's top at frame `T`, frame `T + 1 < t0` takes off, and the frames after it before
+`t0` are above the block's top (the field `offTop`). The real frames follow the jump (`InRoom.air`, `bridgeAll` on the jumps from the block's top) up to `t0 − 1`, and from
+there down to the floor (`descend_k`, the field `offNear`) or to a landing one row above it (`pipe_bound`). A fast jump comes to the floor at least `aboveF` frames after
+`t0 − 1` (`dropOk`); a slow one at least `aboveS`, and if the entry came then, every frame from `t0 − 1` on would be one of the slow jump (`slowArcs`), which moves at most
+the air speed (the field `offSlow`): too short of the mouth (`slow_mouth`) -/
+theorem off_arc (H : Checks sy m N) (hr : r.InRoom) {T : Nat} (hC : r.C ≤ T) (hT : T + 1 < r.t0) (h0 : (r.vE T).st = 0) (hy : (r.vE T).y.toNat = standY sy N.h)
+    (hair : ∀ j, T < j → j < r.t0 → (r.vE j).st ≠ 0 ∧ (r.vE j).y.toNat < standY sy N.h) : r.t0 + N.aboveF ≤ r.E + 1 := by
+  have hE0 := r.t0_le_E H hr
+  have hsg : standY sy N.h ≤ groundY sy := Nat.sub_le _ _
+  -- frame `T + 1` takes off
+  have hjT : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm T) (r.inAt T) (r.arr T))).jump = true := by
+    cases hj : (FrameModel.readIn sy (PipeEntryRule.trace (r.fm T) (r.inAt T) (r.arr T))).jump with
+    | true => rfl
+    | false =>
+      exfalso
+      have hsn := r.stand_E hr hC (by omega) h0 hj
+      obtain ⟨a1, a2⟩ := hair (T + 1) (by omega) (by omega)
+      obtain ⟨_, _, _, _, h5⟩ := hsn
+      rcases h5 with ⟨e1, _, _, _⟩ | ⟨e1, _, _, _⟩
+      · rw [e1] at a2
+        omega
+      · exact a1 e1
+  have hyT : (r.vE T).y = (standY sy N.h).toUInt8 := by rw [← hy]; exact (UInt8.ofNat_toNat).symm
+  have e1 := r.jump_E hr hC (by omega) hjT
+  rw [hyT] at e1
+  obtain ⟨x, hx, hxs⟩ := OffDrop.offAt_spec H.offT (peek (PipeEntryRule.trace (r.fm T) (r.inAt T) (r.arr T)) sy.Player_XSpeedAbsolute)
+  -- up to `t0 − 1` the real frames follow the jump
+  have phase : ∀ i, T + 1 + i ≤ r.t0 - 1 → ∃ v, Cert.Reach (arcSucc sy m N.h) x i v ∧ r.vE (T + 1 + i) = v.s := by
+    intro i
+    induction i with
+    | zero =>
+      intro _
+      exact ⟨x, Cert.Reach.refl _, by rw [Nat.add_zero, e1, hxs]⟩
+    | succ i ih =>
+      intro hi
+      obtain ⟨v, hv, hvs⟩ := ih (by omega)
+      obtain ⟨b1, b2⟩ := hair (T + 1 + i) (by omega) (by omega)
+      obtain ⟨c1, _⟩ := hair (T + 1 + i + 1) (by omega) (by omega)
+      have hnfv : (falling v.s && decide (groundY sy ≤ v.s.y.toNat)) = false := by
+        rw [← hvs]
+        simp only [Bool.and_eq_false_iff, decide_eq_false_iff_not]
+        right
+        omega
+      have hb := VertAir.bridgeAll_of H.bridgeB hx hv
+      obtain ⟨a, _, e⟩ := r.air_E hr (n := T + 1 + i) (by omega) (by omega) b1
+      obtain ⟨v', hv', hv's⟩ := OffDrop.arcSucc_of (m := m) (h := N.h) hnfv a
+      refine ⟨v', OffDrop.reach_snoc hv hv', ?_⟩
+      rw [show T + 1 + (i + 1) = T + 1 + i + 1 by omega]
+      rcases e with e | ⟨_, e⟩
+      · rw [e, hvs, hv's]
+        exact hb.2 (OffDrop.arcSucc_ne_of hnfv) a
+      · exfalso
+        apply c1
+        rw [e]
+        rfl
+  obtain ⟨w, hw, hws⟩ := phase (r.t0 - 2 - T) (by omega)
+  rw [show T + 1 + (r.t0 - 2 - T) = r.t0 - 1 by omega] at hws
+  obtain ⟨_, hwy⟩ := hair (r.t0 - 1) (by omega) (by omega)
+  rw [hws] at hwy
+  have hnfw : (falling w.s && decide (groundY sy ≤ w.s.y.toNat)) = false := by
+    simp only [Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    right
+    omega
+  have hD := r.descend_k H hr hx hw (D := r.t0 - 1) (by omega) (by omega) hws hnfw
+  -- the bound from a state at the floor `n` frames after `t0 − 1`, with `t0 − 1 + n ≤ E`
+  have fromFloor : ∀ n u, Cert.Reach (arcSucc sy m N.h) w n u → (falling u.s && decide (groundY sy ≤ u.s.y.toNat)) = true → r.t0 - 1 + n ≤ r.E →
+      r.t0 + N.aboveF ≤ r.E + 1 := by
+    intro n u hu hfu hnE
+    obtain ⟨fb1, fb2⟩ := floor_bound H hx hw hwy hu hfu
+    cases hfast : x.fast with
+    | true =>
+      have := fb1 hfast
+      omega
+    | false =>
+      have hS := fb2 hfast
+      rcases Nat.lt_or_ge (r.E + 1) (r.t0 + N.aboveF) with hlt | hge
+      · exfalso
+        have hal := H.nums.above_le
+        -- the entry comes `aboveS` frames after `t0 − 1`, and every frame up to it is one of the slow jump
+        have hEe : r.E = r.t0 - 1 + N.aboveS := by omega
+        have hstep : ∀ i, i < N.aboveS → posP sy (r.fe (r.t0 - 1 + i + 1)) ≤ posP sy (r.fe (r.t0 - 1 + i)) + 16 * ((sy.AirFastSpeed.toNat : Int) - 1) := by
+          intro i hi
+          rcases hD i (by omega) with ⟨n', u', hn', hu', hfu'⟩ | ⟨n', v', p1, pn, pv, pf, p2, p3, p4⟩ | ⟨v', hv', _, hvs'⟩
+          · have := (floor_bound H hx hw hwy hu' hfu').2 hfast
+            omega
+          · have := r.pipe_bound H hr hx hw hwy pv (D := r.t0 - 1) (by omega) (by omega) (by omega) (by omega) pf p2 p3 p4
+            omega
+          · have hxv := OffDrop.reach_trans hw hv'
+            obtain ⟨s1, s2⟩ := OffDrop.slowArcs_spec H.slowB hx (arc_short H hx hxv) hxv hfast
+            exact r.offSlow (r.t0 - 1 + i) (by omega) (by omega) (by rw [← hvs'] at s1; exact s1) (by rw [← hvs'] at s2; exact s2)
+        have hsum := r.slow_sum hstep N.aboveS (Nat.le_refl _)
+        rw [← hEe] at hsum
+        have hm := r.mouth_of hr
+        have hPE : r.fr.P r.E = posP sy (r.fe r.E) := by
+          rw [r.read_PE]
+          have e2 := r.next (n := r.E - 1) (by omega) (r.ups_lt hr (n := r.E - 1) (by omega) (by omega))
+          rw [show r.E - 1 + 1 = r.E by omega] at e2
+          rw [e2]
+        have hP0 : r.fr.P (r.t0 - 1) = posP sy (r.fe (r.t0 - 1)) := r.P_fe (by omega) (by omega)
+        have hfirst := r.first (r.t0 - 1) (by omega) (by omega)
+        have hsm := H.nums.slow_mouth
+        rw [hPE] at hm
+        rw [hP0] at hfirst
+        have hA := H.nums.air_pos
+        omega
+      · exact hge
+  rcases hD (r.E - 1 - (r.t0 - 1)) (by omega) with ⟨n, u, hn, hu, hfu⟩ | ⟨n, v, p1, pn, pv, pf, p2, p3, p4⟩ | ⟨v, hv, hnfv, hvs⟩
+  · exact fromFloor n u hu hfu (by omega)
+  · exact r.pipe_bound H hr hx hw hwy pv (D := r.t0 - 1) (by omega) (by omega) (by omega) (by omega) pf p2 p3 p4
+  · -- the frame before the entry is near the floor: one more frame of the jump reaches it
+    rw [show r.t0 - 1 + (r.E - 1 - (r.t0 - 1)) = r.E - 1 by omega] at hvs
+    have hnear := r.offNear
+    have e3 : OffDrop.nearB sy m v.s = true := by
+      rw [← hvs]
+      exact hnear
+    have hxv := OffDrop.reach_trans hw hv
+    have hb := VertAir.bridgeAll_of H.bridgeB hx hxv
+    have hst : v.s.st ≠ 0 := by rcases hb.1 with e | e <;> rw [e] <;> decide
+    have hst' : (v.s.st == 0) = false := by simpa using hst
+    have hst2 : (v.s.st != 0) = true := by simpa using hst
+    simp only [OffDrop.nearB, hst', hst2, Bool.false_and, Bool.false_or, Bool.true_and] at e3
+    rw [List.any_eq_true] at e3
+    obtain ⟨a, _, ha⟩ := e3
+    obtain ⟨v', hv', hv's⟩ := OffDrop.arcSucc_of (m := m) (h := N.h) hnfv a
+    have hfv' : (falling v'.s && decide (groundY sy ≤ v'.s.y.toNat)) = true := by
+      rw [hv's, ← hb.2 (OffDrop.arcSucc_ne_of hnfv) a]
+      exact ha
+    exact fromFloor _ v' (OffDrop.reach_snoc hv hv') hfv' (by omega)
+
+/-- the floor's height is a whole row (`floorRow`) -/
+theorem ground_row (H : Checks sy m N) : groundY sy % 16 = 0 := by
+  have hk : UInt8.ofNat ((groundY sy) % 256) = (groundY sy).toUInt8 := UInt8.toNat_inj.mp (by simp [Nat.toUInt8])
+  have hg := ((row_iff ⟨(groundY sy) % 256, Nat.mod_lt _ (by decide)⟩).2).1
+    (by show UInt8.ofNat ((groundY sy) % 256) &&& 0xF0 = UInt8.ofNat ((groundY sy) % 256); rw [hk]; exact H.floorRow)
+  simp only at hg
+  omega
+
+/-- **After a stand on the block's top at the end of frame `t0 − 1`**: it is a state of `standFam` (the fields `offTop`, `offStand`), and from it no state of `offNext`
+is near the floor for `aboveF − 1` frames (`standB`) -/
+theorem off_stand (H : Checks sy m N) (hr : r.InRoom) (hC : r.C ≤ r.t0 - 1) (h1 : 1 ≤ r.t0) (h0 : (r.vE (r.t0 - 1)).st = 0)
+    (hy : (r.vE (r.t0 - 1)).y.toNat = standY sy N.h) : r.t0 + N.aboveF ≤ r.E + 1 := by
+  have hE0 := r.t0_le_E H hr
+  obtain ⟨s3, s4, s5⟩ := r.offStand h0
+  have hok := r.stand_ok H hr (r.t0 - 1 - r.C) (by omega)
+  rw [show r.C + (r.t0 - 1 - r.C) = r.t0 - 1 by omega] at hok
+  obtain ⟨s1, s2, _⟩ := hok h0
+  have hmem : r.vE (r.t0 - 1) ∈ standFam sy m N := mem_standFam hy s2 s1 s3 s4 s5 h0
+  have hrow : (r.vE (r.t0 - 1)).st = 0 → (r.vE (r.t0 - 1)).y &&& 0x0F = 0 := by
+    intro _
+    have hg := ground_row H
+    have h3 := (row_iff ⟨(r.vE (r.t0 - 1)).y.toNat, (r.vE (r.t0 - 1)).y.toNat_lt⟩).1.2
+    simp only [UInt8.ofNat_toNat] at h3
+    apply h3
+    rw [hy]
+    unfold standY
+    omega
+  have hgap := r.offB_gap H hr H.standB (D := r.t0 - 1) hC (by omega) (by omega) hmem hrow
+  have h2 := H.nums.off_two
+  omega
+
+/-- **The entry comes at least `aboveF − 1` frames after `t0`** (round 34, page `1-1/c-7-8-2-OffDrop.md`): from the last stand before `t0` on the block's top (the field
+`offTop`), after a jump from it (`off_arc`) or from a stand there at `t0 − 1` (`off_stand`). Until round 33 the field `Off` of `way` -/
+theorem off_gap_of (H : Checks sy m N) (hr : r.InRoom) : r.t0 < r.E ∧ r.t0 + N.aboveF ≤ r.E + 1 := by
+  obtain ⟨T, hC, hT, h0, hy, hair⟩ := r.offTop
+  have hb : r.t0 + N.aboveF ≤ r.E + 1 := by
+    rcases Nat.lt_or_ge (T + 1) r.t0 with h | h
+    · exact r.off_arc H hr hC h h0 hy hair
+    · have e : T = r.t0 - 1 := by omega
+      subst e
+      exact r.off_stand H hr hC (by omega) h0 hy
+  have h2 := H.nums.off_two
+  exact ⟨by omega, hb⟩
+
 /-- the frames as numbers -/
 def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : RoomCore sy m N ((S.seq b).ram.get! (FrameModel.I sy.PlayerSize)) :=
   { r.toRoomFields with
@@ -7766,7 +8403,8 @@ def toCore (H : Checks sy m N) (st : StartAt sy N (r.fe r.C)) (hr : r.InRoom) : 
     off_ab := fun _ hC ht hE hj => r.off_ab_of H hr hC ht hE hj
     air_in := r.air_in_of H hr st, fall_long := r.fall_long_of H hr st, vfall := r.vfall_of H hr st, floor_at := r.floor_at_of H hr st
     start := r.start_hs st, startP0 := (r.start_P st).1, startP1 := (r.start_P st).2, v_start := r.start_v st
-    frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr st }
+    frames := r.frames_of H hr st, move_top := r.move_top_of H hr st, mouth := r.mouth_of hr, ab_of := r.ab_of_run H hr st
+    off_gap := r.off_gap_of H hr }
 
 /-- **The entry comes at least `goalF + aboveF` frames after first control.** `st` is the state at first control on the machine, `hr` what the room's frames give about frame
 `E`. -/

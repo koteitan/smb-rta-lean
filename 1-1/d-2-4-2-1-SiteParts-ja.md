@@ -43,7 +43,7 @@ roomLate  : Late(tr_n(j))          roomReads : ReadsAt(Z₁, tr_n(j))          r
 roomErase : Erase(tr_n(j))         roomXbit  : Xbit(tr_n(j))                 roomOff₆ : c(seq n) = 6  →  Off(tr_n(j))
 ```
 
-（ラウンド 27 の形。ラウンド 28 で `roomReads` は部屋の最初のフレームと制御 6 からのフレームの次のフレームだけに、`roomOff₆` は制御 6 からのフレームの次の制御 6 からのフレームだけに狭めた: [画面のバッファのレコード](d-2-4-2-2-BufferRecords-ja.md)。）
+（ラウンド 27 の形。ラウンド 34 で `roomRead` は `Read` の頭の半分に狭めた: [読みでのブロックのバッファのタイル](d-2-4-2-8-ReadTiles-ja.md)。`roomXbit` は入るフレームに狭めた: [横の土管の位置の読みは入るフレームだけ](d-2-4-2-9-SideRead-ja.md)。ラウンド 28 で `roomReads` は部屋の最初のフレームと制御 6 からのフレームの次のフレームだけに、`roomOff₆` は制御 6 からのフレームの次の制御 6 からのフレームだけに狭めた: [画面のバッファのレコード](d-2-4-2-2-BufferRecords-ja.md)。）
 
 Lean: `Theorems/SiteParts.lean`:
 

@@ -92,7 +92,7 @@ The far reads are counted on every frame in control, a superset of the touch's f
 
 ## What is not proved
 
-* `bufAll` at its 7 places: a store of a pole's tile only in the pole's column, and now also only when the parser's column at the frame's start has come to the pole's. A proof needs a walk of the parser's task `AreaParserCore` that follows its column to its store.
+* `bufAll` at its 7 places: a store of a pole's tile only in the pole's column, and now also only when the parser's column at the frame's start has come to the pole's. A proof needs a walk of the parser's task `AreaParserCore` that follows its column to its store. Round 34: the second part asks only that the parser's column has come to the pole's or the store is in the ring's column of the parser's column; the rest is proved ([the parser stores a column at its own place in the ring](f-6-17-16-PoleRing.md)).
 * `tilesCol` (`TileSlotC`): at a far read at the pole's column on the touch's frame, the parser has not yet come to the pole's column. (near) and (read) give it with the proved invariant. A proof of (near) needs his pixel on the touch's frame after the clamp of the scroll handler: part e proves the clamp's result only for the frames before the touch's frame, because its walks ask that no instruction of the frame writes the routine by its address, and the touch's frame does (the pole's write). (read) needs the read's address from his pixel; round 25 found that splitting the sum's high bits there passed 5.8 GB.
 * `ctlU` is narrowed by the next step ([the area parser's lag may grow up to 157 px](f-6-17-15-PoleLag.md)). `keepB`: not changed this round.
 

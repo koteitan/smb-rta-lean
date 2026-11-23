@@ -50,11 +50,14 @@ theorem mkF_dec {i lo hi : Nat} (hl : lo < 256) (hh : hi < 256) : fI (mkF i lo h
 /-- the index of the accumulator among the bounds' bytes (outside the RAM's 2048) -/
 def aI : Nat := 4096
 
-/-- the byte `i` of the machine: the accumulator for `aI`, else the RAM byte -/
-def valOf (m : Machine) (i : Nat) : UInt8 := if i = aI then m.a else m.ram.get! i
+/-- round 34: the index of `Y` among the bounds' bytes -/
+def yI : Nat := 4097
+
+/-- the byte `i` of the machine: the accumulator for `aI`, `Y` for `yI` (round 34), else the RAM byte -/
+def valOf (m : Machine) (i : Nat) : UInt8 := if i = aI then m.a else if i = yI then m.y else m.ram.get! i
 
 /-- what the abstract state knows of byte `i` -/
-def abK (A : AS) (i : Nat) : AB := if i = aI then A.a else A.getK i
+def abK (A : AS) (i : Nat) : AB := if i = aI then A.a else if i = yI then A.y else A.getK i
 
 /-- **The bounds hold**: each byte `fI f` (a RAM byte, or the accumulator) is at least `fLo f` and at most `fHi f` -/
 def FOK (l : List Nat) (m : Machine) : Prop := ∀ f ∈ l, fLo f ≤ (valOf m (fI f)).toNat ∧ (valOf m (fI f)).toNat ≤ fHi f
@@ -135,8 +138,8 @@ theorem hiOf_le : ∀ (l : List Nat) (i b : Nat), hiOf l i b ≤ b
 def rlo (A : AS) (i : Nat) : Nat := loOf A.log i (abK A i).minv.toNat
 def rhi (A : AS) (i : Nat) : Nat := hiOf A.log i (abK A i).maxv.toNat
 
-/-- a byte that the bounds may name: a RAM byte or the accumulator -/
-def okI (i : Nat) : Bool := decide (i < 2048) || i == aI
+/-- a byte that the bounds may name: a RAM byte, the accumulator, or `Y` (round 34) -/
+def okI (i : Nat) : Bool := decide (i < 2048) || i == aI || i == yI
 
 theorem abK_mem {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E F A m) {i : Nat} (hi : okI i = true) : (abK A i).mem (valOf m i) := by
   unfold abK valOf
@@ -144,8 +147,12 @@ theorem abK_mem {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E 
   · rw [if_pos e, if_pos e]
     exact hs.a
   · rw [if_neg e, if_neg e]
-    have : i < 2048 := by simpa [okI, e] using hi
-    exact hs.ram i this
+    by_cases e2 : i = yI
+    · rw [if_pos e2, if_pos e2]
+      exact hs.y
+    · rw [if_neg e2, if_neg e2]
+      have : i < 2048 := by simpa [okI, e, e2] using hi
+      exact hs.ram i this
 
 theorem range_ok {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E F A m) (hf : FOK A.log m) {i : Nat} (hi : okI i = true) :
     rlo A i ≤ (valOf m i).toNat ∧ (valOf m i).toNat ≤ rhi A i :=
@@ -153,7 +160,7 @@ theorem range_ok {E : Env} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E
 
 theorem valOf_ram {m : Machine} {i : Nat} (hi : i < 2048) : valOf m i = m.ram.get! i := by
   unfold valOf
-  rw [if_neg (by unfold aI; omega)]
+  rw [if_neg (by unfold aI; omega), if_neg (by unfold yI; omega)]
 
 theorem rlo_lt (A : AS) (i : Nat) : rlo A i < 256 := loOf_lt _ _ _ (UInt8.toNat_lt _)
 theorem rhi_lt (A : AS) (i : Nat) : rhi A i < 256 := Nat.lt_of_le_of_lt (hiOf_le _ _ _) (UInt8.toNat_lt _)
@@ -368,6 +375,27 @@ theorem go_staZp {m : Machine} (hp : m.pc ≥ 0x8000) (ht : m.trk = false) :
   simp only [go, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, ht]
   rfl
 
+/-- `STA zp` keeps the accumulator (round 34) -/
+theorem go_staZp_a {m : Machine} (hp : m.pc ≥ 0x8000) (ht : m.trk = false) : (go (opSTA mZp) m).2.a = m.a := by
+  have hlt : (m.prg.get! (m.pc &&& m.prgMask).toNat).toUInt16 < 0x2000 := by
+    have := UInt8.toNat_lt (m.prg.get! (m.pc &&& m.prgMask).toNat)
+    apply UInt16.lt_iff_toNat_lt.2
+    simp only [UInt8.toNat_toUInt16]
+    have e : (0x2000 : UInt16).toNat = 8192 := rfl
+    omega
+  have hf := TaintRun.fetch_rom hp
+  show (go (mZp >>= fun ad => get >>= fun s => wr ad s.a) m).2.a = _
+  have hm : go mZp m = ((m.prg.get! (m.pc &&& m.prgMask).toNat).toUInt16, { m with pc := m.pc + 1 }) := by
+    show go (fetch >>= fun b => pure b.toUInt16) m = _
+    rw [go_bind, hf]
+    rfl
+  rw [go_bind, hm]
+  show (go (wr _ m.a) { m with pc := m.pc + 1 }).2.a = _
+  unfold wr
+  rw [if_pos hlt]
+  simp only [go, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, ht]
+  rfl
+
 theorem add3_toNat (x y z : UInt8) : (x.toUInt16 + y.toUInt16 + z.toUInt16).toUInt8.toNat = (x.toNat + y.toNat + z.toNat) % 256 := by
   have hx := UInt8.toNat_lt x
   have hy := UInt8.toNat_lt y
@@ -425,6 +453,8 @@ theorem fok_one {m : Machine} {i lo hi : Nat} (hl : lo < 256) (hh : hi < 256) (h
   exact ⟨h1, h2⟩
 
 theorem valOf_a (m : Machine) : valOf m aI = m.a := by unfold valOf; rw [if_pos rfl]
+
+theorem valOf_y (m : Machine) : valOf m yI = m.y := by unfold valOf; rw [if_neg (by decide), if_pos rfl]
 
 theorem and1_le (x : UInt8) : (x &&& 1).toNat ≤ 1 := by
   rw [UInt8.toNat_and]
@@ -578,6 +608,59 @@ theorem xferA_ok {E : Env} {xq : List UInt16} {F : Nat × UInt8} {A : AS} {m : M
               · exact fok_nil _
   · exact fok_nil _
 
+/-- **The bounds of the accumulator and of `Y` over `STA zp` and `TAY`** (round 34): `STA zp` keeps the accumulator's bound; after `TAY` both the accumulator
+and `Y` have it. Only at the places `xq`. With it the walk knows a bound of `Y` at the block buffer routine's read, two instructions after the row's store -/
+def xferY (E : Env) (xq : List UInt16) (A : AS) : List Nat :=
+  if xq.contains A.pc = true ∧ A.nmi = false ∧ 0x8000 ≤ A.pc ∧ 0x8000 ≤ A.pc + 1 then
+    if opAt E A = 0x85 then [mkF aI (rlo A aI) (rhi A aI)]
+    else if opAt E A = 0xA8 then [mkF yI (rlo A aI) (rhi A aI), mkF aI (rlo A aI) (rhi A aI)]
+    else []
+  else []
+
+set_option maxRecDepth 100000 in
+theorem xferY_ok {E : Env} {xq : List UInt16} {F : Nat × UInt8} {A : AS} {m : Machine} (hs : Sim E F A m) (hf : FOK A.log m) :
+    FOK (xferY E xq A) (go step m).2 := by
+  unfold xferY
+  split
+  · rename_i hc
+    obtain ⟨_, hn0, hp, hp1⟩ := hc
+    have hn : m.nmiPending = false := by rw [hs.nmi]; exact hn0
+    have hh : m.halted = false := hs.halted
+    have hpm : m.pc ≥ 0x8000 := by rw [hs.pc]; exact hp
+    have ht : m.trk = false := hs.trk
+    have hop : m.prg.get! (m.pc &&& m.prgMask).toNat = opAt E A := by rw [hs.prg, hs.mask, hs.pc]; rfl
+    have hp1' : (m.pc + 1) ≥ 0x8000 := by rw [hs.pc]; exact hp1
+    have aOK := range_ok hs hf (i := aI) (by simp [okI])
+    rw [valOf_a] at aOK
+    split
+    · -- STA zp
+      rename_i e0
+      rw [e0] at hop
+      have ha : (go step m).2.a = m.a := by
+        rw [step_rom (f := opSTA mZp) hn hh hpm hop (by decide) rfl, tick_a]
+        exact go_staZp_a hp1' ht
+      apply fok_one (rlo_lt _ _) (rhi_lt _ _) <;> rw [valOf_a, ha]
+      · exact aOK.1
+      · exact aOK.2
+    · split
+      · -- TAY
+        rename_i _ e0
+        rw [e0] at hop
+        have e1 := step_rom (f := opTAY) hn hh hpm hop (by decide) rfl
+        have ha : (go step m).2.a = m.a := by rw [e1, tick_a]; rfl
+        have hy : (go step m).2.y = m.a := by rw [e1, RoomBlocks.tick_y]; rfl
+        intro f hf'
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hf'
+        rcases hf' with e | e <;> subst e
+        · obtain ⟨d1, d2, d3⟩ := mkF_dec (i := yI) (rlo_lt A aI) (rhi_lt A aI)
+          rw [d1, d2, d3, valOf_y, hy]
+          exact aOK
+        · obtain ⟨d1, d2, d3⟩ := mkF_dec (i := aI) (rlo_lt A aI) (rhi_lt A aI)
+          rw [d1, d2, d3, valOf_a, ha]
+          exact aOK
+      · exact fok_nil _
+  · exact fok_nil _
+
 /-- what the walk does with bounds: where it makes them from the known bits (`mkAt`, on the bytes `mkB`), where it drops them all (`dropAt`), where it moves
 the accumulator's (`xq`) -/
 structure Rules where
@@ -596,7 +679,7 @@ def Rules.drop (Ru : Rules) (pc : UInt16) : Bool := Ru.dropAt.contains pc
 accumulator's (`xferA` at `Ru.xq`), but on the bytes of `Ru.make B.pc`, for which new ones are made from `B`; bounds 0 to 255 are dropped -/
 def updF (Ru : Rules) (E : Env) (A1 B : AS) : AS :=
   if Ru.drop B.pc then { B with log := [] } else
-  let K := keepF E A1 A1.log ++ xferA E Ru.xq A1
+  let K := keepF E A1 A1.log ++ xferA E Ru.xq A1 ++ xferY E Ru.xq A1
   { B with log := (mkL (Ru.make B.pc) { B with log := K } ++ K.filter fun f => !(Ru.make B.pc).contains (fI f)).filter fun f => !(fLo f == 0 && fHi f == 255) }
 
 theorem updF_ok {Ru : Rules} {E : Env} {F : Nat × UInt8} {A1 B : AS} {m : Machine} (hs : Sim E F A1 m)
@@ -605,8 +688,8 @@ theorem updF_ok {Ru : Rules} {E : Env} {F : Nat × UInt8} {A1 B : AS} {m : Machi
   unfold updF
   split
   · exact ⟨sim_log _ hB, fok_nil _, rfl, rfl, rfl⟩
-  · have hK := fok_append (keepF_ok (l := A1.log) hs hf) (xferA_ok (xq := Ru.xq) hs hf)
-    exact ⟨sim_log _ hB, fok_filter _ (fok_append (mkL_ok (B := { B with log := keepF E A1 A1.log ++ xferA E Ru.xq A1 }) (sim_log _ hB) hK _) (fok_filter _ hK)),
+  · have hK := fok_append (fok_append (keepF_ok (l := A1.log) hs hf) (xferA_ok (xq := Ru.xq) hs hf)) (xferY_ok (xq := Ru.xq) hs hf)
+    exact ⟨sim_log _ hB, fok_filter _ (fok_append (mkL_ok (B := { B with log := keepF E A1 A1.log ++ xferA E Ru.xq A1 ++ xferY E Ru.xq A1 }) (sim_log _ hB) hK _) (fok_filter _ hK)),
       rfl, rfl, rfl⟩
 
 /-- the bounds of `D` hold on every machine of `W` -/
@@ -708,15 +791,201 @@ theorem spent_splitVal (d : Nat) : SpentKeep (splitVal d) := by
     rfl
   · cases h
 
+/-! ## The step with no hypothesis on the position's low bits (round 34)
+
+`ScreenPage.preS` splits the position at the side pipe's read (`xAt`) into pieces with a low bit set; it needs `SiteOK.xbit` there. `preSX` adds a fifth
+piece with the four low bits 0, so the step `pstepX` needs only `SiteX`, the other five parts of `SiteOK`. The other functions of the step do not look at
+`xAt`: with `xAt` moved off the machine's place (`movX`), `SiteX` is `SiteOK` (`siteOK_movX`). -/
+
+section
+open ScreenPage (preS stepS RamRom readVal readAddr writeAddr)
+open RoomPause (keepP inP)
+open StepWrites (SIn tabOK agrees refineAll retag forgetAll)
+variable {E : Env} {F : Nat × UInt8} {P : Places} {ops : Array (AM Unit)} {G : Reg}
+
+/-- **`SiteOK` but the position's low bits at the side pipe's read** -/
+structure SiteX (P : Places) (m : Machine) : Prop where
+  late : m.pc ≠ P.idle → m.fdot ≤ P.late
+  reads : 0x8000 ≤ m.pc → m.prg.get! (m.pc &&& m.prgMask).toNat = 0xB1 → RamRom (readAddr m)
+  read : m.pc = P.read → readVal m ∈ P.tiles ∧ (m.ram.get! P.saveI ∈ P.heads → readVal m ∈ P.headTiles)
+  erase : m.pc = P.erase → writeAddr m < 0x2000 ∧ P.bufLo ≤ (writeAddr m &&& 0x7FF).toNat ∧ (writeAddr m &&& 0x7FF).toNat < P.bufLo + P.bufN
+  off : m.pc ∈ P.offAt → (m.ram.get! P.offI).toNat < 64
+
+theorem siteX_of {m : Machine} (h : SiteOK P m) : SiteX P m := ⟨h.late, h.reads, h.read, h.erase, h.off⟩
+
+theorem siteOK_of_X {m : Machine} (h : SiteX P m) (hx : m.pc = P.xAt → m.ram.get! P.xI &&& 0x0F ≠ 0) : SiteOK P m :=
+  ⟨h.late, h.reads, h.read, h.erase, h.off, hx⟩
+
+/-- the places with the side pipe's read of the position at `q` -/
+def movX (P : Places) (q : UInt16) : Places := { P with xAt := q }
+
+theorem ne_add_one (x : UInt16) : x ≠ x + 1 := by
+  intro h
+  have h2 := congrArg UInt16.toNat h
+  rw [UInt16.toNat_add] at h2
+  have := x.toNat_lt
+  have e : (1 : UInt16).toNat = 1 := rfl
+  rw [e] at h2
+  omega
+
+theorem siteOK_movX {m : Machine} (h : SiteX P m) : SiteOK (movX P (m.pc + 1)) m :=
+  ⟨h.late, h.reads, h.read, h.erase, h.off, fun hpc => absurd hpc (ne_add_one _)⟩
+
+theorem placesOK_movX (h : PlacesOK E P) (q : UInt16) : PlacesOK E (movX P q) :=
+  ⟨h.late, h.read, h.erase, h.offI, h.xI, h.saveI, h.stI, h.hpI, h.noD⟩
+
+theorem stepS_movX (q : UInt16) (A : AS) : stepS (movX P q) E ops A = stepS P E ops A := rfl
+
+theorem keepP_movX (q : UInt16) (SB : List Nat) (A : AS) : keepP (movX P q) E SB A = keepP P E SB A := rfl
+
+/-- **The pieces before a step, with the fifth piece**: at the side pipe's read of the position the four pieces of `preS` with a low bit set, and the piece
+with the four low bits 0; elsewhere `preS` -/
+def preSX (P : Places) (A : AS) : List AS :=
+  if A.pc == P.xAt then
+    ([1, 2, 4, 8] : List UInt8).map (fun b => A.setK P.xI ((A.getK P.xI).or (AB.known b))) ++ [A.setK P.xI ((A.getK P.xI).and (AB.known 0xF0))]
+  else preS P A
+
+set_option maxRecDepth 100000 in
+theorem andF0_all : ((List.range 256).all fun n => (n.toUInt8 &&& 0x0F != 0) || (n.toUInt8 &&& 0xF0 == n.toUInt8)) = true := by decide
+
+theorem andF0_of {x : UInt8} (h : x &&& 0x0F = 0) : x &&& 0xF0 = x := by
+  have h1 := List.all_eq_true.1 andF0_all x.toNat (List.mem_range.2 x.toNat_lt)
+  have e : x.toNat.toUInt8 = x := by simp
+  rw [e] at h1
+  simp only [Bool.or_eq_true, bne_iff_ne, ne_eq, beq_iff_eq] at h1
+  rcases h1 with h2 | h2
+  · exact absurd h h2
+  · exact h2
+
+theorem cov_preSX (hO : PlacesOK E P) {A : AS} {m : Machine} (hs : Sim E F A m) (hh : SiteX P m) : ∃ B ∈ preSX P A, Sim E F B m ∧ B.k = A.k := by
+  unfold preSX
+  by_cases h2 : (A.pc == P.xAt) = true
+  · rw [if_pos h2]
+    by_cases hx : m.ram.get! P.xI &&& 0x0F = 0
+    · refine ⟨_, List.mem_append_right _ (List.mem_singleton_self _), ?_, rfl⟩
+      apply PipeEntryRule.sim_setK' hs
+      have := TaintRun.mem_and (hs.ram _ hO.xI) (mem_known_self (0xF0 : UInt8))
+      rwa [andF0_of hx] at this
+    · obtain ⟨b, hb, he⟩ := ScreenPage.or_bit_of hx
+      refine ⟨_, List.mem_append_left _ (List.mem_map.2 ⟨b, hb, rfl⟩), ?_, rfl⟩
+      apply PipeEntryRule.sim_setK' hs
+      have := TaintRun.mem_or (hs.ram _ hO.xI) (mem_known_self b)
+      rwa [he] at this
+  · rw [if_neg h2]
+    have hne : m.pc ≠ P.xAt := by
+      rw [hs.pc]
+      intro e
+      exact h2 (beq_iff_eq.2 e)
+    exact ScreenPage.cov_preS hO hs (siteOK_of_X hh (fun e => absurd e hne))
+
+/-- the step of `ScreenPage` with the fifth piece -/
+def baseSX (P : Places) (E : Env) (ops : Array (AM Unit)) (A : AS) : List (Option AS) := (preSX P (clampS P A)).flatMap (stepS P E ops)
+
+theorem s_baseSX (hO : PlacesOK E P) (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) {A : AS} {m : Machine} (hs : Sim E F A m) (hh : SiteX P m) :
+    ∃ r ∈ baseSX P E ops A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 := by
+  have hs0 := ScreenPage.sim_clamp hO.late hs hh.late
+  obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preSX hO hs0 hh
+  obtain ⟨r, hr, hB⟩ := ScreenPage.s_stepS (placesOK_movX hO (m.pc + 1)) hops hT hs1 (siteOK_movX hh)
+  rw [stepS_movX] at hr
+  refine ⟨r, List.mem_flatMap.2 ⟨A₁, hA, hr⟩, fun B hB' => ?_⟩
+  obtain ⟨g1, g2⟩ := hB B hB'
+  exact ⟨g1, StepWrites.stepRel_k (by rw [hk1, ScreenPage.clamp_k]) rfl g2⟩
+
+/-- **`RoomPause.pstep` with the fifth piece** -/
+def pstepX (P : Places) (E : Env) (ops : Array (AM Unit)) (G : Reg) (A : AS) : List (Option AS) :=
+  if A.spent then (baseSX P E ops A).map fun o => o.bind (inP G A)
+  else if A.pc == G.call then
+    G.T.flatMap fun t => if agrees t A then (baseSX P E ops (refineAll t A)).map fun o => o.map (retag true) else []
+  else (preSX P (clampS P A)).flatMap fun A₁ => if keepP P E G.SB A₁ then stepS P E ops A₁
+    else (stepS P E ops A₁).map fun o => o.bind fun B => if StepWrites.writeOK E G.SB G.T A₁ B then some B else none
+
+/-- **One step of `pstepX`**, as `RoomPause.s_pstep`, from `SiteX` -/
+theorem s_pstepX (hO : PlacesOK E P) (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat) (h0 : tabOK G.SB G.T = true) (hg : G.gI < 2048)
+    (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine} (hs : Sim E F A m) (hh : SiteX P m) (hph : Ph G A m) :
+    ∃ r ∈ pstepX P E ops G A, ∀ B, r = some B → Sim E F B (go step m).2 ∧ StepRel A B m (go step m).2 ∧ Ph G B (go step m).2 := by
+  have tab : ∀ t ∈ G.T, ∀ p ∈ t, G.SB.contains p.1 = true ∧ p.1 < 2048 := by
+    intro t ht p hp
+    simp only [tabOK, List.all_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h0
+    exact h0 t ht p hp
+  unfold pstepX
+  by_cases hsp : A.spent = true
+  · rw [if_pos hsp]
+    obtain ⟨r, hr, hB⟩ := s_baseSX hO hops hT hs hh
+    refine ⟨r.bind (inP G A), List.mem_map.2 ⟨r, hr, rfl⟩, fun B hB' => ?_⟩
+    cases r with
+    | none => cases hB'
+    | some B0 =>
+      obtain ⟨g1, g2⟩ := hB B0 rfl
+      simp only [Option.bind_some, inP] at hB'
+      split at hB'
+      · split at hB'
+        · rename_i _ hany
+          simp only [Option.some.injEq] at hB'
+          subst hB'
+          obtain ⟨t, ht, hle⟩ := List.any_eq_true.1 hany
+          exact ⟨RoomPause.sim_keepBits g1 G.keepB hkb (RoomPause.sim_keep0 g1 (StepWrites.sim_retag _ (StepWrites.sim_forgetAll _ g1)) hg),
+            StepWrites.stepRel_k rfl ((RoomPause.keepBits_k _ _ _).trans (StepWrites.forgetAll_k _ _)) g2, Or.inr ⟨t, ht, StepWrites.sIn_of_le g1 hle⟩⟩
+        · cases hB'
+      · simp only [Option.some.injEq] at hB'
+        subst hB'
+        exact ⟨StepWrites.sim_retag _ g1, StepWrites.stepRel_k rfl rfl g2, Or.inl rfl⟩
+  · rw [if_neg hsp]
+    obtain ⟨t, ht, htm⟩ : ∃ t ∈ G.T, SIn t m := by
+      rcases hph with h | h
+      · exact absurd h hsp
+      · exact h
+    by_cases hc : (A.pc == G.call) = true
+    · rw [if_pos hc]
+      have hag : agrees t A = true := StepWrites.agrees_of hs (fun p hp => (tab t ht p hp).2) htm
+      obtain ⟨r, hr, hB⟩ := s_baseSX hO hops hT (StepWrites.sim_refineAll t hs htm) hh
+      refine ⟨r.map (retag true), List.mem_flatMap.2 ⟨t, ht, by rw [if_pos hag]; exact List.mem_map.2 ⟨r, hr, rfl⟩⟩, fun B hB' => ?_⟩
+      cases r with
+      | none => cases hB'
+      | some B0 =>
+        simp only [Option.map_some, Option.some.injEq] at hB'
+        subst hB'
+        obtain ⟨g1, g2⟩ := hB B0 rfl
+        exact ⟨StepWrites.sim_retag _ g1, StepWrites.stepRel_k (StepWrites.refineAll_k t A).symm rfl g2, Or.inl rfl⟩
+    · rw [if_neg hc]
+      have hs0 := ScreenPage.sim_clamp hO.late hs hh.late
+      obtain ⟨A₁, hA, hs1, hk1⟩ := cov_preSX hO hs0 hh
+      have hO' := placesOK_movX hO (m.pc + 1)
+      have hh' := siteOK_movX hh
+      by_cases hk : keepP P E G.SB A₁ = true
+      · obtain ⟨r, hr, hB⟩ := ScreenPage.s_stepS hO' hops hT hs1 hh'
+        rw [stepS_movX] at hr
+        refine ⟨r, List.mem_flatMap.2 ⟨A₁, hA, by rw [if_pos hk]; exact hr⟩, fun B hB' => ?_⟩
+        obtain ⟨g1, g2⟩ := hB B hB'
+        exact ⟨g1, StepWrites.stepRel_k (by rw [hk1, ScreenPage.clamp_k]) rfl g2,
+          Or.inr ⟨t, ht, StepWrites.sIn_keep (fun p hp => (tab t ht p hp).1) htm (RoomPause.keepP_ok hO' hs1 hh' (by rw [keepP_movX]; exact hk))⟩⟩
+      · obtain ⟨r, hr, hB⟩ := ScreenPage.s_stepS hO' hops hT hs1 hh'
+        rw [stepS_movX] at hr
+        refine ⟨r.bind fun B => if StepWrites.writeOK E G.SB G.T A₁ B then some B else none,
+          List.mem_flatMap.2 ⟨A₁, hA, by rw [if_neg hk]; exact List.mem_map.2 ⟨r, hr, rfl⟩⟩, fun B hB' => ?_⟩
+        cases r with
+        | none => cases hB'
+        | some B0 =>
+          obtain ⟨g1, g2⟩ := hB B0 rfl
+          simp only [Option.bind_some] at hB'
+          split at hB'
+          · rename_i hw
+            simp only [Option.some.injEq] at hB'
+            subst hB'
+            exact ⟨g1, StepWrites.stepRel_k (by rw [hk1, ScreenPage.clamp_k]) rfl g2, Or.inr (StepWrites.sIn_write hs1 g1 hw ht htm)⟩
+          · cases hB'
+
+end
+
 /-! ## The walk with bounds -/
 
 section
 variable {G : Reg} {C : CfgS} {chk : AS → Bool} {Fu : Nat} {F : Nat × UInt8} {sq : UInt16 → Bool} {D : Nat} {sp : AS → List AS}
   {Ru : Rules}
 
-/-- **The step with bounds**: the pieces of `sp` that the bounds allow, the step of `RoomPause`, and the bounds after it -/
+/-- **The step with bounds**: the pieces of `sp` that the bounds allow, the step of `RoomPause` (round 34: with the fifth piece at the side pipe's read,
+`pstepX`), and the bounds after it -/
 def stepV (sp : AS → List AS) (Ru : Rules) (G : Reg) (C : CfgS) (A : AS) : List (Option AS) :=
-  (piecesF sp A).flatMap fun A1 => (pstep C.P C.E C.ops G A1).map fun r => r.map (updF Ru C.E A1)
+  (piecesF sp A).flatMap fun A1 => (pstepX C.P C.E C.ops G A1).map fun r => r.map (updF Ru C.E A1)
 
 /-- a state of the table with the same key covers `B`, with its bounds -/
 def coverV (C : CfgS) (B : AS) : Bool :=
@@ -776,7 +1045,7 @@ theorem weakenV_of {B : AS} {m : Machine} (hs : Sim C.E F B m) (hf : FOK B.log m
 
 /-- **One step of the walk with bounds**, as `EraseRow.live_stepG` -/
 theorem live_stepV (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R : Machine → Prop}
-    (hQ : ∀ {A : AS} {m : Machine}, Sim C.E F A m → FOK A.log m → chk A = true → R m → SiteOK C.P m)
+    (hQ : ∀ {A : AS} {m : Machine}, Sim C.E F A m → FOK A.log m → chk A = true → R m → SiteX C.P m)
     (hS : ∀ {m : Machine}, R m → LateS sq D m) (hD : D < dotsPerFrame)
     (hO : PlacesOK C.E C.P) (ht : C.t.all (walkV sp Ru G C chk sq D Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
     (h0 : StepWrites.tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine}
@@ -791,11 +1060,11 @@ theorem live_stepV (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R : Machine → P
     have hs1 : Sim C.E F (sclamp sq D A) m := sim_sclamp hD hs (hS hr)
     have hf1 : FOK (sclamp sq D A).log m := by unfold sclamp; split <;> exact hf
     have hp1 : Ph G (sclamp sq D A) m := RoomPause.ph_of_spent (sclamp_spent sq D A).symm hp
-    have hh : SiteOK C.P m := hQ hs1 hf1 (chkV_of_walk hw) hr
+    have hh : SiteX C.P m := hQ hs1 hf1 (chkV_of_walk hw) hr
     obtain ⟨A2, hA2, hs2, hk2, hlog2, hsp2⟩ := cov_pieces hcv hsk hs1 hf1
     have hf2 : FOK A2.log m := by rw [hlog2]; exact hf1
     have hp2 : Ph G A2 m := RoomPause.ph_of_spent hsp2.symm hp1
-    obtain ⟨r, hr', hB⟩ := RoomPause.s_pstep hO hops hT h0 hg hkb hs2 hh hp2
+    obtain ⟨r, hr', hB⟩ := s_pstepX hO hops hT h0 hg hkb hs2 hh hp2
     simp only [walkV, Bool.and_eq_true, List.all_eq_true] at hw
     have hw2 := hw.2 (r.map (updF Ru C.E A2)) (List.mem_flatMap.2 ⟨A2, hA2, List.mem_map.2 ⟨r, hr', rfl⟩⟩)
     cases r with
@@ -829,13 +1098,13 @@ theorem live_stepV (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R : Machine → P
 
 /-- **One frame of the walk with bounds**, as `EraseRow.frame_of_walkG` -/
 theorem frame_of_walkV (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R : Machine → Prop}
-    (hQ : ∀ {A : AS} {m : Machine}, Sim C.E F A m → FOK A.log m → chk A = true → R m → SiteOK C.P m)
+    (hQ : ∀ {A : AS} {m : Machine}, Sim C.E F A m → FOK A.log m → chk A = true → R m → SiteX C.P m)
     (hS : ∀ {m : Machine}, R m → LateS sq D m) (hD : D < dotsPerFrame)
     (hO : PlacesOK C.E C.P) (ht : C.t.all (walkV sp Ru G C chk sq D Fu) = true) (hops : C.ops = (aRows C.E).toArray) (hT : 2 ≤ F.2.toNat)
     (hp : C.E.pad = AB.top) (h0 : StepWrites.tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048)
     {S : AS} {m : Machine} {i : UInt8} (hw : walkV sp Ru G C chk sq D Fu S = true) (hs : Sim C.E F S m) (hf : FOK S.log m) (hph : Ph G S m)
     (hk : ∀ j, R (trace m i j)) :
-    (∀ j, SiteOK C.P (trace m i j)) ∧ ∃ B, C.fin B = true ∧ Sim C.E F B (frame m i) := by
+    (∀ j, SiteX C.P (trace m i j)) ∧ ∃ B, C.fin B = true ∧ Sim C.E F B (frame m i) := by
   have hs0 : Sim C.E F S { m with pad := smbToPad i } := { hs with pad := by rw [hp]; exact mem_top _ }
   have hph0 : Ph G S { m with pad := smbToPad i } := hph
   have hf0 : FOK S.log { m with pad := smbToPad i } := hf
@@ -880,6 +1149,16 @@ theorem frame_of_walkV (hcv : CovF C.E F sp) (hsk : SpentKeep sp) {R : Machine �
       omega
     · exact ⟨B, h2, h4⟩
 
+
+/-- **A successor covers the next machine** (round 34): one of the pieces of `sp` and one result of `pstepX` from it -/
+theorem succ_of {E : Env} {P : Places} {ops : Array (AM Unit)} (hcv : CovF E F sp) (hsk : SpentKeep sp) (hO : PlacesOK E P)
+    (hops : ops = (aRows E).toArray) (hT : 2 ≤ F.2.toNat)
+    (h0 : StepWrites.tabOK G.SB G.T = true) (hg : G.gI < 2048) (hkb : ∀ p ∈ G.keepB, p.1 < 2048) {A : AS} {m : Machine} (hs : Sim E F A m)
+    (hf : FOK A.log m) (hh : SiteX P m) (hp : Ph G A m) :
+    ∃ A2 ∈ piecesF sp A, ∃ r ∈ pstepX P E ops G A2, ∀ B, r = some B → Sim E F B (go step m).2 := by
+  obtain ⟨A2, hA2, hs2, _, _, hsp2⟩ := cov_pieces hcv hsk hs hf
+  obtain ⟨r, hr, hB⟩ := s_pstepX hO hops hT h0 hg hkb hs2 hh (RoomPause.ph_of_spent hsp2.symm hp)
+  exact ⟨A2, hA2, r, hr, fun B e => (hB B e).1⟩
 end
 
 /-! ## Finding the table: a search with the bounds, no part of the proof, and the check -/
@@ -1039,16 +1318,16 @@ end
 theorem frameV {sp : AS → List AS} {Ru : Rules} {E : Env} {P : Places} {G : Reg} {RK : List (Machine × List (Nat × UInt8))}
     {C : CfgS} {fin chk : AS → Bool} {sq : UInt16 → Bool} {D : Nat} {R : Machine → Prop} (hcv : ∀ F : Nat × UInt8, CovF E F sp) (hsk : SpentKeep sp)
     (h : VOK sp Ru E P G RK C fin chk sq D)
-    (hQ : ∀ {F : Nat × UInt8} {A : AS} {m : Machine}, Sim E F A m → FOK A.log m → chk A = true → R m → SiteOK P m)
+    (hQ : ∀ {F : Nat × UInt8} {A : AS} {m : Machine}, Sim E F A m → FOK A.log m → chk A = true → R m → SiteX P m)
     (hS : ∀ {m : Machine}, R m → LateS sq D m) {r : Machine} {K : List (Nat × UInt8)} (hq : (r, K) ∈ RK)
     {m : Machine} {i : UInt8} (hm : RoomCond E r K m) (hc : InCls G m) (hk : ∀ j, R (trace m i j)) :
-    (∀ j, SiteOK P (trace m i j)) ∧ ∃ B, fin B = true ∧ Sim E (m.frame, 2) B (frame m i) := by
+    (∀ j, SiteX P (trace m i j)) ∧ ∃ B, fin B = true ∧ Sim E (m.frame, 2) B (frame m i) := by
   obtain ⟨hM, hw0⟩ := h.starts _ hq
   obtain ⟨S0, hS0, hs⟩ := ScreenPage.sim_of_room (F := (m.frame, 2)) hM h.pad hm rfl
   have hO : PlacesOK C.E C.P := by rw [h.env, h.pl]; exact h.places
   have hw := hw0 S0 hS0
   have hs' : Sim C.E (m.frame, 2) { S0 with log := [] } m := by rw [h.env]; exact sim_log _ hs
-  have hQ' : ∀ {A : AS} {m' : Machine}, Sim C.E (m.frame, 2) A m' → FOK A.log m' → chk A = true → R m' → SiteOK C.P m' := by
+  have hQ' : ∀ {A : AS} {m' : Machine}, Sim C.E (m.frame, 2) A m' → FOK A.log m' → chk A = true → R m' → SiteX C.P m' := by
     intro A m' hs2 hf2 hc2 hr
     rw [h.pl]
     rw [h.env] at hs2
@@ -1186,9 +1465,9 @@ def aidsV (sy : Syms) (m0 : Machine) (P : Places) (Z : Aids) : Aids :=
   { Z1 with cutAY := Z1.cutAY ++ [P.erase + 2] }
 
 /-- **The rules of the bounds on the ROM**: made after the windows, dropped at the collision routine's return and after the erase, moved through the row's
-instructions -/
+instructions; round 34: and through the `TAY` before the block buffer routine's read (`xferY`), so that the read knows a bound of `Y` -/
 def rulesOf (sy : Syms) (m0 : Machine) (P : Places) (Z : Aids) : Rules :=
-  { mkAt := merges sy m0 P, mkB := [EraseRow.yIdx sy], dropAt := [Z.colEnd, P.erase + 2], xq := rowPcs sy m0 }
+  { mkAt := merges sy m0 P, mkB := [EraseRow.yIdx sy], dropAt := [Z.colEnd, P.erase + 2], xq := rowPcs sy m0 ++ [P.read - 1] }
 
 /-- what the search forgets, and where: `EraseRow.forgetAt`, and the height after each window -/
 def forgetV (sy : Syms) (m0 : Machine) (Z : Aids) (P : Places) : List (UInt16 × List Nat) :=

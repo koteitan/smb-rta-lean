@@ -381,18 +381,22 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
 
 /-- **What the touch's frame needs of the parser** (`PoleJoin.Run.TileColAll`, round 33; up to round 32 it was `TileCol` on the touch's frame, from the field
 `tilesCol` and the parser's invariant there): the column does not go back from frame to frame (`colMono_run`); and at control no byte of the block buffers holds
-a pole's tile (`hNT`, from the rows of the change: `PoleParser.inv₀`), so the slot's map holds there (`PoleSlot.slotMap_of_none`) -/
+a pole's tile (`hNT`, from the rows of the change: `PoleParser.inv₀`), so the slot's map holds there (`PoleSlot.slotMap_of_none`). Round 34: the parser's column
+at control less than 32 columns before the pole's (`hL`, from the rows: `low₀`), and the ring's facts of the pole's column (`hRg`, a check on the places) -/
 theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
     (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
-    (hNT : NoTiles (PoleFrame.spotsF sy m0) (R.seq 0)) : R.TileColAll := by
+    (hNT : NoTiles (PoleFrame.spotsF sy m0) (R.seq 0))
+    (hL : PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R.seq 0) + 32) (hRg : PoleRing.RingOK (PoleFrame.spotsF sy m0)) : R.TileColAll := by
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
-  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ, ?_⟩
-  rw [e0]
-  exact PoleSlot.slotMap_of_none hNT
+  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ, ?_, ?_, hRg⟩
+  · rw [e0]
+    exact PoleSlot.slotMap_of_none hNT
+  · rw [e0]
+    exact hL
 
 /-- **The parser's column at the start of the touch's frame is at most 384 px past the edge there** (`inv_run`, `PoleParser.col_le`): with it the round 30 parts
 (`near`) and (`read`) of the far reads give the field `tilesCol` of round 33 (`PoleSlot.tileSlotC_of_N`) -/
@@ -410,12 +414,80 @@ theorem colEdge_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
 
 end Run
 
+/-! ## Round 34: the parser's column at control is less than 32 columns before the pole's
+
+At control above ground the parser's column `c(0)` has `colP < c(0) + 32`: a check on the rows of the change out of the side pipe, as `PoleParser.col₀`. With the
+column not going back (`colMono_run`) it holds at every frame's start up to the touch's frame (`PoleJoin.Run.low`), which is what `PoleRing.noTileC_of_M` needs. -/
+
+/-- a state of a row: it knows the bytes of control, and if it has control, it knows the parser's column and its page, and the column is less than 32 columns before
+the pole's -/
+def rowLow (sy : Syms) (m0 : Machine) (S : TaintRun.AS) : Bool :=
+  (SurfaceFrames.ctlBytes sy).all (SideChangeEnd.knowsAd S) &&
+    (!controllable sy (SideChangeEnd.mOf S) || (SideChangeEnd.knowsAd S (places sy m0).page && SideChangeEnd.knowsAd S (places sy m0).col &&
+      decide (PoleSlot.colP (PoleFrame.spotsF sy m0) < colOf (places sy m0) (SideChangeEnd.mOf S) + 32)))
+
+/-- **The check on the ROM** (round 34): the ring's facts of the pole's column (`PoleRing.ringCheck`), and in every state with control of the rows of the change
+out of the side pipe the parser's column is less than 32 columns before the pole's -/
+def lowCheckK (sy : Syms) (m0 : Machine) (nm nx : PipeTransitionAll.Names) (e : Machine) (A B : Nat) (R : StepWrites.Rt) : Bool :=
+  PoleRing.ringCheck (PoleFrame.spotsF sy m0) && ((SideChangeSound.rowsOf sy nm nx e A B R).map (·.row)).all fun r => r.R.all (rowLow sy m0)
+
+theorem low_of_state {E : TaintRun.Env} {Fr : Nat × UInt8} {S : TaintRun.AS} {m : Machine} (hs : TaintRun.Sim E Fr S m) (hr : rowLow sy m0 S = true)
+    (h : controllable sy m = true) : PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 m + 32 := by
+  simp only [rowLow, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_true_eq] at hr
+  obtain ⟨hk, hr⟩ := hr
+  rcases hr with h1 | ⟨⟨h1, h2⟩, h3⟩
+  · have := SurfaceFrames.controllable_of_known hs hk h
+    rw [this] at h1
+    cases h1
+  · have e1 := peek_of_known hs h1
+    have e2 := peek_of_known hs h2
+    rw [parCol_eq]
+    unfold colOf at h3 ⊢
+    rw [e1, e2]
+    exact h3
+
+theorem low_of_invL {C : SideChangeEnd.Ctx} :
+    ∀ {l : List SideChangeEnd.Row}, (l.all fun r => r.R.all (rowLow sy m0)) = true → ∀ {m : Machine}, SideChangeEnd.InvL C l m → controllable sy m = true →
+      PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 m + 32
+  | [], _, _, h, _ => by cases h
+  | r :: t, hl, _, h, hc => by
+    simp only [List.all_cons, Bool.and_eq_true] at hl
+    rcases h with ⟨S, hS, hs⟩ | h
+    · exact low_of_state hs (List.all_eq_true.1 hl.1 S hS) hc
+    · exact low_of_invL hl.2 h hc
+
+/-- **The parser's column at control is less than 32 columns before the pole's**, on a real run of the change (as `PoleParser.EndRunQ.col`) -/
+theorem EndRunQ.low {nm nx : PipeTransitionAll.Names} {e : Machine} {A B : Nat} {R : StepWrites.Rt} {es : List Machine}
+    (S : SideChangeBound.Statement sy nm e es A B) (T : SideChangeSound.EndStatementK sy nm nx e A B R) (Q : SidePause.PipeQ sy nm nx e A B R)
+    (hk : lowCheckK sy m0 nm nx e A B R = true) (R' : SidePause.EndRunQ sy nm nx e A) (hc : ∀ n, R'.a ≤ n → n < R'.b → controllable sy (R'.seq n) = false) :
+    PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R'.seq R'.b) + 32 := by
+  simp only [lowCheckK, Bool.and_eq_true] at hk
+  exact low_of_invL hk.2 (SideChangeSound.invL_of_invS (SidePause.EndRunQ.inRows S T Q R' hc)) R'.atCtl
+
+/-- the ring's facts from the check -/
+theorem ring_of_low {nm nx : PipeTransitionAll.Names} {e : Machine} {A B : Nat} {R : StepWrites.Rt} (hk : lowCheckK sy m0 nm nx e A B R = true) :
+    PoleRing.RingOK (PoleFrame.spotsF sy m0) := by
+  simp only [lowCheckK, Bool.and_eq_true] at hk
+  exact PoleRing.ringOK_of_check hk.1
+
 section Route
 open Route
 
 variable {m0 : Machine} {N : Nat} {D : Int} {rN : RoomJoin.Nums}
   {b : Machine} {vs : List Jump.VS} {Ts J Nc : Nat} {F : Int} {q t0 : Nat} {nm₁ : PipeTransitionAll.Names} {d₁ : PipeChangeEnd.Data}
   {nm₂ nx₂ nmS : PipeTransitionAll.Names} {fc : FlagRule.Ctx} {tc : TitleStart.Ctx}
+
+/-- **The parser's column at control above ground is less than 32 columns before the pole's** (round 34), on the real machines (as `PoleParser.col₀`). `hm` is the
+check on the ROM. -/
+theorem low₀ {es : List Machine} {rt : StepWrites.Rt} (hS : SideChangeBound.Statement sy nm₂ (SideTransition.entry m0) es 160 122)
+    (hT : SideChangeSound.EndStatementK sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt) (hQ : SidePause.PipeQ sy nm₂ nx₂ (SideTransition.entry m0) 160 122 rt)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
+    (hm : lowCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
+    (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) {PA : PoleJoin.Box}
+    (R : Route.Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
+    PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R.pole.seq 0) + 32 := by
+  rw [R.atCtl]
+  exact EndRunQ.low hS hT hQ hm ((R.chgK hR hB hK).run₂ hR (R.entry₁ hB hK)) R.chg.ctlFirst₂
 
 /-- **What the touch's frame of the route needs of the parser** (`PoleJoin.Run.TileColAll`): `tilesCol_run` on `R.pole`, with the invariant, no pole's tile in
 the block buffers and the column at control from the rows of the change out of the side pipe (`PoleParser.inv₀`, `PoleParser.col₀`; the checks `hmI`, `hmC` on the ROM). The box is written `⟨M, dx, dy, rows⟩`, as in `PoleJoin.touch_castle`, so that
@@ -425,6 +497,7 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     (hmI : invCheckK sy m0 384 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true) (hmC : colCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hmJ : PoleStrict.jvCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
+    (hmL : lowCheckK sy m0 nm₂ nx₂ (SideTransition.entry m0) 160 122 rt = true)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) {M : Machine} {dx dy rows : Nat}
     (R : Route.Run sy m0 N D rN b vs ⟨M, dx, dy, rows⟩ Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
     (st : SurfaceFrames.Start sy ⟨M, dx, dy, rows⟩ (R.pole.seq 0)) (hN : SurfaceFrames.numbersCheck sy m0 ⟨M, dx, dy, rows⟩ J = true)
@@ -434,7 +507,7 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (htop : TopSpeed.top sy ≤ 48) : R.pole.TileColAll :=
   tilesCol_run R.pole hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop ⟨(inv₀ hS hT hQ hR hmI hB hK R).1, col₀ hS hT hQ hR hmC hB hK R⟩ (PoleStrict.jv₀ hS hT hQ hR hmJ hB hK R)
-    (inv₀ hS hT hQ hR hmI hB hK R).2
+    (inv₀ hS hT hQ hR hmI hB hK R).2 (low₀ hS hT hQ hR hmL hB hK R) (ring_of_low hmL)
 
 end Route
 

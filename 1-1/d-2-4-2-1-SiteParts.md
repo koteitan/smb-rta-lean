@@ -43,7 +43,7 @@ roomLate  : Late(tr_n(j))          roomReads : ReadsAt(Z₁, tr_n(j))          r
 roomErase : Erase(tr_n(j))         roomXbit  : Xbit(tr_n(j))                 roomOff₆ : c(seq n) = 6  →  Off(tr_n(j))
 ```
 
-(Round 27's forms. Round 28 narrowed `roomReads` to the room's first frame and the frames after a frame from the control at 6, and `roomOff₆` to a frame from 6 after a frame from 6: [The screen buffers' records](d-2-4-2-2-BufferRecords.md).)
+(Round 27's forms. Round 28 narrowed `roomReads` to the room's first frame and the frames after a frame from the control at 6, and `roomOff₆` to a frame from 6 after a frame from 6: [The screen buffers' records](d-2-4-2-2-BufferRecords.md). Round 34 narrowed `roomRead` to the head's half of `Read`: [The block buffers' tiles at the read](d-2-4-2-8-ReadTiles.md), and `roomXbit` to the entering frame: [The side pipe's read of the position, only on the entering frame](d-2-4-2-9-SideRead.md).)
 
 Lean: `Theorems/SiteParts.lean`:
 

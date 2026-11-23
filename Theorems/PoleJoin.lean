@@ -10,6 +10,7 @@ import Theorems.PoleTileFar
 import Theorems.PoleTileKeep
 import Theorems.PoleKeepFar
 import Theorems.PoleSlot
+import Theorems.PoleRing
 import Theorems.StopRead
 
 /-!
@@ -1383,9 +1384,12 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   block buffers, nor of a store through the zero page and `X`, nor of an `STA` of another byte (`PoleKeepFar.bufAt_of_V`).
   Round 33 (`1-1/f-6-17-14-PoleSlot.md`): at the same stores, a pole's tile goes into the block buffers only when the area parser's column at the frame's start
   has come to the pole's (`PoleSlot.BufVS`, `PoleSlot.bufC_of_VS`); this replaces the part (`slot`) of `tilesCol`. It is not weaker than the round 26 field: it
-  asks more at the stores of a pole's tile -/
+  asks more at the stores of a pole's tile. Round 34 (`1-1/f-6-17-16-PoleRing.md`): at those stores, the parser's column of the frame's start has come to the
+  pole's, or the store is in the column of the ring of the block buffers that the parser's column has (`PoleRing.BufVM`, `PoleRing.NoTileM`); the rest is proved
+  (`PoleRing.noTileC_of_M`, with the parser's column at control less than 32 columns before the pole's, `PoleParserRun.low₀`). It asks less than the round 33
+  field (`PoleRing.bufVM_of_VS`) -/
   bufAll : ∀ n, n < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k,
-    PoleSlot.BufVS (PoleFrame.spotsF sy m0) (parColOf sy m0 (S.seq (a + n))) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
+    PoleRing.BufVM (PoleFrame.spotsF sy m0) (parColOf sy m0 (S.seq (a + n))) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- round 25: each instruction of each frame up to the touch's frame, counted or not: a store through an index or a pointer writes neither of the two bytes that
   `PoleTileKeep` watches, the block objects' offset and the player's number (`PoleTileKeep.KeepB`). With their values at control (`PoleTileCtl.watch₀`) every
   frame keeps them (`PoleTileKeep.frames_keepY`), and the walk of the touch's frame tests each store inside the collision routine against the height
@@ -1592,7 +1596,7 @@ theorem Run.tilesStart {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   exact PoleTileKeep.frames_keepY hk (PoleTileKeep.keepY_of_Z hc) R.keep.toFrames hc0.start (R.watched₀ st hq hc0.castle) hwb hmap
-    (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k)) (fun n hn k => PoleSlot.bufAt_of_VS (R.bufAll n (by omega) k)) (R.keep.toFrames.ix R.g - 1) (by omega)
+    (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k)) (fun n hn k => PoleRing.bufAt_of_VM (R.bufAll n (by omega) k)) (R.keep.toFrames.ix R.g - 1) (by omega)
 
 /-- the touch's frame meets `KeepB` on each instruction: `keepB` on its frame, with `PoleKeepFar.keepB_of_R` -/
 theorem Run.keepB₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
@@ -1601,31 +1605,41 @@ theorem Run.keepB₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} 
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   exact PoleKeepFar.keepB_of_R (R.keepB (R.keep.toFrames.ix R.g - 1) (by omega) j)
 
-/-- the touch's frame meets `BufAt` on each instruction: `bufAll` on its frame, with `PoleSlot.bufAt_of_VS` -/
+/-- the touch's frame meets `BufAt` on each instruction: `bufAll` on its frame, with `PoleRing.bufAt_of_VM` -/
 theorem Run.bufAt₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (j : Nat) : PoleTileWalk.BufAt (PoleFrame.spotsF sy m0) (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j) := by
   have b := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
-  exact PoleSlot.bufAt_of_VS (R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j)
-
-/-- round 33: the touch's frame meets `PoleSlot.BufC` on each instruction, for the parser's column at its start: `bufAll` on its frame, with `PoleSlot.bufC_of_VS` -/
-theorem Run.bufC₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
-    (j : Nat) : PoleSlot.BufC (PoleFrame.spotsF sy m0) (parColOf sy m0 (R.keep.fm R.g)) (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j) := by
-  have b := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
-  have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
-  exact PoleSlot.bufC_of_VS (R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j)
+  exact PoleRing.bufAt_of_VM (R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j)
 
 /-- **What the touch's frame needs of the area parser** (round 33; the name is from round 29, when it was `TileCol` on each instruction of the touch's frame up to
 the write): the parser's column not going back from a frame's start to the next one up to the touch's frame; and at control the slot's map (`PoleSlot.SlotMap`: the parser's column has come to the pole's, or no byte of the
-block buffers holds a pole's tile). Both are theorems from the parser's rule and the rows of the change (`PoleParserRun.tilesCol_run`, after this
-file: the parser's invariant needs the rows of the change). With them, `bufAll` (`PoleSlot.frames_slot`) and the field `tilesCol`, the walk of the touch's frame
-proves `TileCol` right after each far read (`PoleSlot.no_write_frameZS`). -/
+block buffers holds a pole's tile). Round 34: also the parser's column at control less than 32 columns before the pole's, and that each byte of the pole's
+column is in the ring's column of the pole's column (`PoleRing.RingOK`). All are theorems from the parser's rule, the rows of the change and a check on the places
+(`PoleParserRun.tilesCol_run`, after this file: the parser's invariant needs the rows of the change). With them, `bufAll` (`PoleSlot.frames_slot`) and the field
+`tilesCol`, the walk of the touch's frame proves `TileCol` right after each far read (`PoleSlot.no_write_frameZS`). -/
 abbrev Run.TileColAll {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar) : Prop :=
   (∀ n, n + 1 < R.keep.toFrames.ix R.g → parColOf sy m0 (R.keep.toFrames.all n) ≤ parColOf sy m0 (R.keep.toFrames.all (n + 1))) ∧
-  PoleSlot.SlotMap (PoleFrame.spotsF sy m0) (parColOf sy m0 (R.keep.toFrames.all 0)) (R.keep.toFrames.all 0)
+  PoleSlot.SlotMap (PoleFrame.spotsF sy m0) (parColOf sy m0 (R.keep.toFrames.all 0)) (R.keep.toFrames.all 0) ∧
+  PoleSlot.colP (PoleFrame.spotsF sy m0) < parColOf sy m0 (R.keep.toFrames.all 0) + 32 ∧ PoleRing.RingOK (PoleFrame.spotsF sy m0)
+
+/-- round 34: at each frame's start up to the touch's frame the parser's column is less than 32 columns before the pole's: at control (`TileColAll`, from the rows
+of the change), and the column does not go back -/
+theorem Run.low {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+    (hT : R.TileColAll) : ∀ n, n < R.keep.toFrames.ix R.g → PoleSlot.colP (PoleFrame.spotsF sy m0) < parColOf sy m0 (R.keep.toFrames.all n) + 32 :=
+  PoleRing.low_mono (c := fun n => parColOf sy m0 (R.keep.toFrames.all n)) hT.2.2.1 hT.1
+
+/-- round 33: the touch's frame meets `PoleSlot.BufC` on each instruction, for the parser's column at its start: `bufAll` on its frame, with
+`PoleRing.bufC_of_VM` (round 34: with the ring's facts and the bound of `Run.low`) -/
+theorem Run.bufC₁ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
+    (hT : R.TileColAll) (j : Nat) :
+    PoleSlot.BufC (PoleFrame.spotsF sy m0) (parColOf sy m0 (R.keep.fm R.g)) (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j) := by
+  have b := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
+  have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
+  exact PoleRing.bufC_of_VM (R.bufAll (R.keep.toFrames.ix R.g - 1) (by omega) j) hT.2.2.2 (R.low hT (R.keep.toFrames.ix R.g - 1) (by omega))
 
 /-- **The slot's map at the start of the touch's frame** (round 33): from the slot's map at control and the parser's column not going back (`hT`), every frame
-before the touch's frame keeps it (`bufAll`: `PoleSlot.bufC_of_VS`; the walk of the frames of `PoleTileKeep`: `PoleSlot.frames_slot`) -/
+before the touch's frame keeps it (`bufAll`: `PoleRing.bufC_of_VM` from round 34; the walk of the frames of `PoleTileKeep`: `PoleSlot.frames_slot`) -/
 theorem Run.slotStart {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hc : PoleTileKeep.poleCheckZ sy m0 = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
     (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0))
@@ -1634,8 +1648,8 @@ theorem Run.slotStart {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat}
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
   have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   exact PoleSlot.frames_slot hk (PoleTileKeep.keepY_of_Z hc) R.keep.toFrames hc0.start (R.watched₀ st hq hc0.castle) hwb hmap
-    (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k)) (fun n hn k => PoleSlot.bufAt_of_VS (R.bufAll n (by omega) k))
-    (fun n => parColOf sy m0 (R.keep.toFrames.all n)) hT.1 (fun n hn k => PoleSlot.bufC_of_VS (R.bufAll n (by omega) k)) hT.2
+    (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k)) (fun n hn k => PoleRing.bufAt_of_VM (R.bufAll n (by omega) k))
+    (fun n => parColOf sy m0 (R.keep.toFrames.all n)) hT.1 (fun n hn k => PoleRing.bufC_of_VM (R.bufAll n (by omega) k) hT.2.2.2 (R.low hT n (by omega))) hT.2.1
     (R.keep.toFrames.ix R.g - 1) (by omega)
 
 /-- **A touch needs his position in the pole's range**: the walk of the whole frame of the touch (`PoleSlot.inRange_of_frameZS`, the walk of `PoleFrame` with more
@@ -1653,7 +1667,7 @@ theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {
   have hs := R.tilesStart hc hk st hq hc0 hmap hwb
   PoleSlot.inRange_of_frameZS hc R.touches (R.keep.toFrames.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _)) hs.2
     (fun j => PoleTileKeep.cleanK_GK (R.keep.toFrames.cleanAt R.g R.one_le (Nat.le_refl _) j) (R.keepB₁ j)) R.posKeep hs.1
-    (R.slotStart hc hk st hq hc0 hmap hwb hT) (fun _ _ j _ => R.bufAt₁ j) (fun _ _ j _ => R.bufC₁ j) R.tilesCol R.edge
+    (R.slotStart hc hk st hq hc0 hmap hwb hT) (fun _ _ j _ => R.bufAt₁ j) (fun _ _ j _ => R.bufC₁ hT j) R.tilesCol R.edge
     (fun _ j _ _ hj => R.moved (PoleTileKeep.subs_of_Z hc) hN hfr st hq hk hc0 hg j hj)
 
 /-- the numbers the join needs -/

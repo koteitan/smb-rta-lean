@@ -31,7 +31,7 @@ varc_of  :  OnArc(T, n),  n + 1 − (T + 1) ≤ 8,  n < t0,  n + 1 < E
 
 `vstepV` は機械 `vmach` の上の `vstep` です。ジャンプを止める値が 1 で、スタックポインタがプレイヤーのルーチンのものです。`RoomJoin` のジャンプは、レベルの始まりの機械の上の `vstep`（`vstep_m0`）を使います。そこでは止める値は 0 です。ルーチンが止める値を読むのは、ジャンプ中に A を離して上昇しているときだけです。ジャンプの始まりからどれだけ上にいるかと比べます。`bridgeOK` は、床からのジャンプの跳んでから 8 フレームまでの 1533 の状態で、A の両方の値について 2 つが同じになること、そこで状態が 1 か 2 であることを確かめます。
 
-Lean: `Theorems/RoomVert.lean`（`walkV`、`frame_of_walkV`、`before_R`、`after_Q`、`piecesQ_class`、`piecesQ_cover`、`erase_keep`、`air_frame`、`air_arc`）、`Theorems/VertAir.lean`（`AtV`、`vert_air`、`arcSet`、`bridgeOK`、`bridge_of`）、`Theorems/RoomJoin.lean`（`RoomRun.varc_of`、`RoomCore.varc`、`arc_step`、`t0_lt_E`）、`Theorems/RoomMap.lean`（`cond_of_rows`）、`Theorems/Route.lean`（`Run.roomVert`、`Run.inRoom`）。非公開の `Proof/RoomVert.lean`。
+Lean: `Theorems/RoomVert.lean`（`walkV`、`frame_of_walkV`、`before_R`、`after_Q`、`piecesQ_class`、`piecesQ_cover`、`erase_keep`、`air_frame`、`air_arc`）、`Theorems/VertAir.lean`（`AtV`、`vert_air`、`arcSet`、`bridgeOK`、`bridge_of`）、`Theorems/RoomJoin.lean`（`RoomRun.varc_of`、`RoomCore.varc`、`arc_step`、ラウンド 33 までは `t0_lt_E`、今は `RoomCore.off_gap`）、`Theorems/RoomMap.lean`（`cond_of_rows`）、`Theorems/Route.lean`（`Run.roomVert`、`Run.inRoom`）。非公開の `Proof/RoomVert.lean`。
 
 ## 方法
 
@@ -55,7 +55,7 @@ Lean: `Theorems/RoomVert.lean`（`walkV`、`frame_of_walkV`、`before_R`、`afte
 
 **フレーム.** 最初に `R` に来たところで `before_R` です。これはフレームの終わりより前です（歩きのフレームの終わりの状態は `R` にありません）。そこで `vert_air`、`FrameModel.trace_inFrame` でその機械をフレームの `k + kk` 命令目に置きます。ルーチンの各ステップは、フレームの終わりより 64 ドット以上前に走るならフレームを保ち（`InFrameN`）、`SiteOK` は 6000 を与えるからです。そこから終わりまで `after_Q` です。
 
-**`RoomJoin` では.** フィールド `vframes` は 2 種類のフレームで使われていました。床のフレームは `vfloor` として残りましたが、これも今は定理です（`RoomRun.vfloor_of`、項目 1-1-c-7-5-14）。ジャンプの最初の 8 フレーム（`OnArc`）のフレームは `RoomCore.varc` です。`RoomRun.varc_of` がこれを、`InRoom.vert`（上のフレーム）、`read_vs`、`clean`（到着での状態 `AtV`）、`InRoom.pair`（`halt`、`prevA`）、ジャンプの弧から証明します。`InRoom.vert` はフレームがプレイヤーのルーチンで終わることを求めるので、`n + 1 < E` について述べます。そのために `low_by` とその上の補題は `t0 < E` を取るようになりました（`t0_lt_E`。かたまりからの離れ方と、新しい数の事実 `vf` から）。これらのフレームの入力 `AirIn` は、今はフィールド `air_in` から出ます。
+**`RoomJoin` では.** フィールド `vframes` は 2 種類のフレームで使われていました。床のフレームは `vfloor` として残りましたが、これも今は定理です（`RoomRun.vfloor_of`、項目 1-1-c-7-5-14）。ジャンプの最初の 8 フレーム（`OnArc`）のフレームは `RoomCore.varc` です。`RoomRun.varc_of` がこれを、`InRoom.vert`（上のフレーム）、`read_vs`、`clean`（到着での状態 `AtV`）、`InRoom.pair`（`halt`、`prevA`）、ジャンプの弧から証明します。`InRoom.vert` はフレームがプレイヤーのルーチンで終わることを求めるので、`n + 1 < E` について述べます。そのために `low_by` とその上の補題は `t0 < E` を取るようになりました（`t0_lt_E`。かたまりからの離れ方と、新しい数の事実 `vf` から。ラウンド 34 からは `RoomCore.off_gap`、[かたまりの上から: 床までのフレーム](c-7-8-2-OffDrop-ja.md)）。これらのフレームの入力 `AirIn` は、今はフィールド `air_in` から出ます。
 
 ## 本物のフレームで確かめたこと
 

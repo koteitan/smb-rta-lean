@@ -90,5 +90,6 @@ NumFacts.amax_air（ROM のチェック）:   amax + 255 < 256 · A
 
 - 1 つ前のフレームが、保存された速さが `|v|` で押している向きが隠された状態でプレイヤーのルーチンに来るときの `ab_run` と `ab_early`。そこで `stored_path` は移動の終わりの保存された速さ `|v₂|` をくれますが、`v₂` は隠された向きでの摩擦のもので、`hstep` のものではありません。左と右を両方押して片方が隠されていると、`ImposeFriction` は速さをモデルと逆の向きに押すので、`|v₂|` はどのモデルの 1 歩よりも加える量 1 つ多くなりえます。測ったものはありません。
 - 空中で左も右も押さずに古い保存された速さを持ち越したあとの同じ 2 つのフィールド。保存された速さは前の止まりの移動の終わりのもので、落下の中では定理はそれを押さえません。`ab_early` に残った測ったフレーム 43 はどれもこれです。
+  ラウンド 34（[落ちるあいだの保存された速さ](c-7-6-2-FallCap-ja.md)）から、`ab_early` のこの場合は、それより前に向きを隠されたフレームがあるときだけ求めます。落ちるあいだ、保存された速さは空中のしきい値より下です（`RoomRun.ab_fall`）。
 
 **ファイル。** 新しい `Theorems/StoredClean.lean`（`tagsFrM`、`storedFricM`、`storedM`、`fric_absM`、`stored_c4M`、`stored_pathM`、`stored_c4F`、`stored_pathF`）。`Theorems/RoomJoin.lean`: `Checks.storedM`、`NumFacts.amax_air`、`RoomRun.end_cleanW`、`ab_cleanW`、`absOr0`、`stale_arith`、`ab_stale`。フィールド `ab_early`、`ab_run` を狭めた。`RoomCore.stop_run` は `C + 37` から。`rs_of_safe3`、`rs_of_safe` は `NoWall` を受け取る。`ab_of_run`、`stop_run_of`。`StoredClean.lean` には `frictionLowCheck`（移した）、`frictionBoth`、`friction_of_both` も。プログラム: `room-stored-check`（新しい）、`room-ab-check`（上の分け方）、`room-approach-check`（カウンター 82、83）。非公開: `Proof/TopSpeedFriction.lean`（`fric_both`）と `Proof/RoomFricLow.lean`。どちらも `genRoomFricLow` が書きます。

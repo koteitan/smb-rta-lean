@@ -26,6 +26,7 @@ The least frames after first control: `t0` at `C + 99`, `F` at `C + 111`, `E` at
 ## What remains (not proved)
 
 - `Off` (item 1-1-c-7-8) and the choice of the case of `way` stay fields. A proof would follow the vertical state after `t0` with the walks of the room (`InRoom.air` from a jump, `InRoom.stand` for the frames that start standing) to the floor, and tie the takeoff from the block's top to `VertJump.jumpOff` (`InRoom.jump`).
+  Since round 34 this is done ([Off the block's top: the frames to the floor](c-7-8-2-OffDrop.md)): `Off` is gone, and five fields on single frames are asked in its place.
 - `Over` (item 1-1-c-7-9) is proved impossible (`no_landing`) once `way` is given; that a real run is one of the two cases of `way` is the field.
 
 **Files.** `Main.lean`: the program `room-off-check` (measured only).

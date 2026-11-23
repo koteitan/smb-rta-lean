@@ -357,10 +357,14 @@ structure ChangesBase (sy : Syms) (m0 : Machine) (nm₁ : Names) (d₁ : PipeCha
   the other frames, it is proved (`SiteParts.musicCheck`, round 27; `BufferRecords.recCheck`, round 28: the frame before wrote records that the walk knows) -/
   roomReads : ∀ n, B.b₁ sy ≤ n → n < B.a₂ sy nmS m0 → (n = B.b₁ sy ∨ (B.b₁ sy < n ∧ (B.seq (n - 1)).ram.get! (EntryBuffer.ctlI nmS) = 6)) →
     ∀ j, SiteParts.ReadsAt (SiteParts.ptrS sy m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
-  /-- the block buffer routine reads a tile of the list -/
-  roomRead : ∀ n, B.b₁ sy ≤ n → n < B.a₂ sy nmS m0 → ∀ j, SiteParts.Read (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
-  /-- the position's low bits are not zero when the side pipe's code reads them -/
-  roomXbit : ∀ n, B.b₁ sy ≤ n → n < B.a₂ sy nmS m0 → ∀ j, SiteParts.Xbit (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
+  /-- the block buffer routine's read for the head gives the empty tile or a coin (round 34, `ReadTiles.ReadH`): that every read gives a tile of the list is
+  proved (the walks keep the block buffers' tiles from the room's first control and know that the read's address is in them, `ReadTiles`); before, this field
+  asked all of `SiteParts.Read` -/
+  roomRead : ∀ n, B.b₁ sy ≤ n → n < B.a₂ sy nmS m0 → ∀ j, ReadTiles.ReadH (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j)
+  /-- the position's low bits are not zero when the side pipe's code reads them, on the room's last frame (the entering frame `a₂ − 1`) only: on the frames
+  before it the side pipe's code does not read the position (round 34, `SideRead.no_xAt`: a frame that reads it ends with another routine than the player's) -/
+  roomXbit : B.b₁ sy < B.a₂ sy nmS m0 → ∀ j, SiteParts.Xbit (ScreenPage.placesR sy nmS m0)
+    (PipeEntryRule.trace (B.seq (B.a₂ sy nmS m0 - 1)) (B.inp (B.a₂ sy nmS m0 - 1)) j)
   /-- the sixth part, the first screen buffer's offset below 64 where the code uses it as an index, only on the frames that start with the control of the screen's
   buffers at 6 after a frame that starts with it at 6: on the frames that start with it at 0 it is proved (`SiteParts.music_sites_of_rows`,
   `ChangesK.roomSites`; round 27), and on those at 6 after a frame at 0 (`BufferRecords.recCheck`, round 28: the walk knows the offset that the frame before
@@ -425,12 +429,11 @@ theorem ChangesBase.roomStay (_C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS 
   have h := firstWith_first _ (B.b₁ sy) B.dR n h1 h2
   simpa using h
 
-/-- what the fields `roomRead`, `roomXbit` ask on each instruction of the room's frames, together (`roomLateU`, `roomLateS` and `roomReads` are taken
-apart: they are asked on some frames only) -/
+/-- what the field `roomRead` asks on each instruction of the room's frames (`roomLateU`, `roomLateS` and `roomReads` are taken apart: they are asked on
+some frames only; round 34: `roomXbit` only on the entering frame) -/
 theorem ChangesBase.roomRest (C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃ L) : ∀ n, B.b₁ sy ≤ n → n < B.a₂ sy nmS m0 →
-    ∀ j, SiteParts.Read (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j) ∧
-      SiteParts.Xbit (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j) :=
-  fun n h1 h2 j => ⟨C.roomRead n h1 h2 j, C.roomXbit n h1 h2 j⟩
+    ∀ j, ReadTiles.ReadH (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j) :=
+  fun n h1 h2 j => C.roomRead n h1 h2 j
 
 theorem ChangesBase.order₂ (_C : ChangesBase sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃ L) : B.a₂ sy nmS m0 ≤ B.b₂ sy nmS m0 := firstWith_ge _ (B.a₂ sy nmS m0) B.d₂
 
@@ -578,8 +581,8 @@ theorem ChangesK.roomAt (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS)
     ScreenPage.Room sy nmS m0 (B.seq (B.b₁ sy)) :=
   ScreenStart.room_of_rows hR.start ((C.run₁ he).inRowsT hR.pipe C.ctlFirst₁) C.ctl₁
 
-/-- **Each instruction of the room's frames meets `SiteOK`** (it was the field `roomSites` until round 27): `Late`, `Read`, `Erase`, `Xbit` from the fields
-(`ChangesBase.roomRest`); `Reads` through the screen update's pointer from the field `roomReads` on the room's first frame and on the frames after a frame that
+/-- **Each instruction of the room's frames meets `SiteOK`** (it was the field `roomSites` until round 27): the head's half of `Read` and `Xbit` from the fields
+(`ChangesBase.roomRest`; round 34: the rest of `Read` from the walks, `ReadTiles`, with the block buffers' tiles at the first control from `hR.mapStart`); `Reads` through the screen update's pointer from the field `roomReads` on the room's first frame and on the frames after a frame that
 starts with the control of the screen's buffers at 6, on the other frames and through any other pointer from the four walks of `BufferRecords` with the checks (`BufferRecords.recCheck`, in `hR.buffer.music`); `Off` on a frame that starts with the control at 0, or at 6 after a
 frame at 0, from the same walks, on one that starts with it at 6 after a frame at 6 from the field `roomOff₆`. The frames are taken in order (`BufferRecords.records_sites_of_rows`; round 28). -/
 theorem ChangesK.roomSites (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C : ChangesK sy m0 nm₁ d₁ nm₂ nx₂ nmS B kind e₁ c₂ e₂ c₃ L)
@@ -587,7 +590,7 @@ theorem ChangesK.roomSites (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (C
     ∀ n, B.b₁ sy ≤ n → n < B.a₂ sy nmS m0 → ∀ j, ScreenPage.SiteOK (ScreenPage.placesR sy nmS m0) (PipeEntryRule.trace (B.seq n) (B.inp n) j) := by
   obtain ⟨_, _, _, hM, hO⟩ := hR.buffer.music
   exact LoopTime.loop_sites_of_rows hR.map hR.mapStart hR.buffer.ctl.keep hR.buffer.ctl.start hM hO B.next ((C.run₁ he).inRowsT hR.pipe C.ctlFirst₁)
-    C.ctl₁ (C.roomAt hR he) C.toChangesBase.roomRest C.roomLateU C.roomLateS C.roomReads C.roomOff₆ C.roomStay hR.height.keepR hR.height.keep0
+    C.ctl₁ (C.roomAt hR he) C.toChangesBase.roomRest C.roomXbit C.roomLateU C.roomLateS C.roomReads C.roomOff₆ C.roomStay hR.height.keepR hR.height.keep0
     (SizeKeep.size_of_rows hR.height.rowsS ((C.run₁ he).inRowsT hR.pipe C.ctlFirst₁) C.ctl₁)
 
 /-- **The routine at the side pipe's entry is the side pipe's**: `entry₂` with the default 11 bytes and the check `RoomChecks.rt`. In `Run`, `chg` asks 10 bytes and

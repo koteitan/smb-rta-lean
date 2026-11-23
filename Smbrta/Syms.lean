@@ -198,6 +198,10 @@ structure Syms where
   MovePlayerVertically : UInt16
   NoJSChk : UInt16
   RghtFrict : UInt16
+  AreaParserCore : UInt16
+  GetBlockBufferAddr : UInt16
+  PlayerHeadCollision : UInt16
+  BlockObjectsCore : UInt16
   deriving Repr, Inhabited
 
 /-- every field with its name, in the order of `tools/smb-symbols.txt` -/
@@ -388,7 +392,11 @@ def Syms.fields : List (String × (Syms → UInt16)) := [
   ("PJumpSnd", fun s => s.PJumpSnd),
   ("MovePlayerVertically", fun s => s.MovePlayerVertically),
   ("NoJSChk", fun s => s.NoJSChk),
-  ("RghtFrict", fun s => s.RghtFrict)]
+  ("RghtFrict", fun s => s.RghtFrict),
+  ("AreaParserCore", fun s => s.AreaParserCore),
+  ("GetBlockBufferAddr", fun s => s.GetBlockBufferAddr),
+  ("PlayerHeadCollision", fun s => s.PlayerHeadCollision),
+  ("BlockObjectsCore", fun s => s.BlockObjectsCore)]
 
 set_option maxRecDepth 100000 in
 /-- Parse a symbol file (`key value` per line, decimal). -/
@@ -589,6 +597,10 @@ def Syms.parse (text : String) : Except String Syms := do
     MovePlayerVertically := ← get "MovePlayerVertically"
     NoJSChk := ← get "NoJSChk"
     RghtFrict := ← get "RghtFrict"
+    AreaParserCore := ← get "AreaParserCore"
+    GetBlockBufferAddr := ← get "GetBlockBufferAddr"
+    PlayerHeadCollision := ← get "PlayerHeadCollision"
+    BlockObjectsCore := ← get "BlockObjectsCore"
   }
 
 def Syms.load (path : String) : IO Syms := do
