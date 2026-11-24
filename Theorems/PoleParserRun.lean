@@ -194,7 +194,7 @@ variable {b : Machine} {vs : List Jump.VS} {B : PoleJoin.Box} {T J Nc : Nat} {F 
 /-- **The edge below 64,896 px at every frame's start before the touch's frame**: the frame starts with the edge of the end of a counted
 frame `d < g` (`lag_edge`), and there the edge is at most `posP(B.m) + 16·top·d` (`SurfaceFrames.OnFrames.readAllB`, with `g ≤ farN`); `hb` is the number on the ROM -/
 theorem edgeLow_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
-    (st : SurfaceFrames.Start sy B (R.seq 0)) (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n))
     (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) :
     ∀ n, n + 1 < R.keep.toFrames.ix R.g → ScrollRule.left16 (ScrollRule.places sy m0) (R.keep.toFrames.all n) + 384 < 65280 := by
@@ -202,7 +202,7 @@ theorem edgeLow_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
   have hw0 := R.watched₀ st hfq hc0.castle
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start hw0 n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   have h16 : (16 : Int) ≤ (TopSpeed.top sy : Int) := by
     have := (FrameModel.facts_of Nm.model).top16
     show (16 : Int) ≤ (TopSpeed.top sy : Int)
@@ -231,7 +231,7 @@ byte the move stores is his pixel's move from the arrival when it is in 1 ‥ 12
 (`SurfaceRead.read_move`), and the platforms' force is 0 (`OnFrames.scrollAt`, `OnFrames.platPrev`). With `top ≤ 48` (`htop`, on the ROM), `256·X ≤ 16·48 + 255`,
 so `X ≤ 3`. The frame comes to the scroll handler once (`GuardE.subs_onceE`). -/
 theorem amount_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
-    (st : SurfaceFrames.Start sy B (R.seq 0)) (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n))
     (hg : R.g ≤ SurfaceFrames.farN sy B.m) (htop : TopSpeed.top sy ≤ 48) :
     ∀ n, n + 1 < R.keep.toFrames.ix R.g → ∀ n₀, (trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) n₀).pc = sy.PlayerCtrlRoutine →
       (trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) n₀).frame = (R.keep.toFrames.all n).frame →
@@ -243,7 +243,7 @@ theorem amount_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceF
   have hw0 := R.watched₀ st hfq hc0.castle
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start hw0 n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   intro n hn n₀ a1 a2 k hk0 hpk _ hxo
   obtain ⟨c, c1, c2, c3⟩ := counted_of Nm.ctrl Ar R.frames hst hn a1 a2
   have efm : R.keep.toFrames.fm c = R.keep.toFrames.all n := by
@@ -319,7 +319,7 @@ theorem amount_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceF
 the number on the ROM) -/
 theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
-    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
@@ -328,38 +328,38 @@ theorem invJ_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFra
     ∀ n, n < R.keep.toFrames.ix R.g →
       (Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n)) ∧ PoleLag.JY (valsOf (places sy m0) (R.keep.toFrames.all n)) := by
   subst hv
-  have hE := edgeLow_run R hN hfr st hfq hk hc0 hg hb
+  have hE := edgeLow_run R hN hfr st hfq hk hc0 hF hg hb
   have Nm := SurfaceFrames.numbers_of_check hN
   have hw0 := R.watched₀ st hfq hc0.castle
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start hw0 n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
   have hix : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   refine PoleStrict.invJ_onFrames R.keep.toFrames hk hc0.start hw0 Nm.ctrl hq Ar.eq he hs hsc Nm.idle (by rw [e0]; exact h0) (by rw [e0]; exact PoleLag.jy_of_jv hJ)
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
     (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK hcN hcB hIB n (by omega) k hpu hf))
-    (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
+    (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hF hg htop n hn n₀ a1 a2 k hk0 hkp hf)
     (fun n hn => by rw [← edge_eq]; exact hE n hn)
 
 /-- **The parser's invariant and its column below 16 at every frame's start up to the touch's frame** (`invJ_run`) -/
 theorem inv_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
-    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
     (hcC : PoleCoin.coinCheck sy m0 = true) (hmK : PoleTileWalk.ColMap (PoleCoin.coinOf sy m0).Q (R.seq 0))
     (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     ∀ n, n < R.keep.toFrames.ix R.g → Inv (places sy m0) 384 (R.keep.toFrames.all n) ∧ ColOK sy m0 (R.keep.toFrames.all n) :=
-  fun n hn => (invJ_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB n hn).1
+  fun n hn => (invJ_run R hN hfr st hfq hk hc0 hF hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB n hn).1
 
 /-- **The parser's column does not go back** from a frame's start to the next one up to the touch's frame (round 33): the weak rule of each frame
 (`PoleStrict.ruleW_onFrames`, under the conditions of `invJ_run`) keeps the column or adds one (`PoleStrict.col_of_ruleW`) -/
 theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
-    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
@@ -368,12 +368,12 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     ∀ n, n + 1 < R.keep.toFrames.ix R.g →
       PoleJoin.parColOf sy m0 (R.keep.toFrames.all n) ≤ PoleJoin.parColOf sy m0 (R.keep.toFrames.all (n + 1)) := by
   subst hv
-  have hE := edgeLow_run R hN hfr st hfq hk hc0 hg hb
+  have hE := edgeLow_run R hN hfr st hfq hk hc0 hF hg hb
   have Nm := SurfaceFrames.numbers_of_check hN
   have hw0 := R.watched₀ st hfq hc0.castle
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start hw0 n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
   have hix : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   intro n hn
@@ -382,7 +382,7 @@ theorem colMono_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (fun n hn k => cleanPI_of_E (R.keep.cleanE n (by omega) k)) (fun n hn => Ar.all n (by omega))
     (fun n hn n₀ a1 a2 _ k hk hpc j hj hf => cut_of_posW Nm.ctrl Ar R.frames hst hn a1 a2 hk hpc hj hf)
     (fun n hn n₀ a1 a2 k hpu hf => Or.inl (R.ctl6 hk hcC hc0.start hw0 hmK hcN hcB hIB n (by omega) k hpu hf))
-    (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hg htop n hn n₀ a1 a2 k hk0 hkp hf)
+    (fun n hn n₀ a1 a2 k hk0 hkp hf => amount_run R hN hfr st hfq hk hc0 hF hg htop n hn n₀ a1 a2 k hk0 hkp hf)
     (fun n hn => by rw [← edge_eq]; exact hE n hn) n hn)
 
 /-- **What the touch's frame needs of the parser** (`PoleJoin.Run.TileColAll`, round 33; up to round 32 it was `TileCol` on the touch's frame, from the field
@@ -391,7 +391,7 @@ a pole's tile (`hNT`, from the rows of the change: `PoleParser.inv₀`), so the 
 at control less than 32 columns before the pole's (`hL`, from the rows: `low₀`), and the ring's facts of the pole's column (`hRg`, a check on the places) -/
 theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
-    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
@@ -400,7 +400,7 @@ theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surfac
     (hL : PoleSlot.colP (PoleFrame.spotsF sy m0) < PoleJoin.parColOf sy m0 (R.seq 0) + 32) (hRg : PoleRing.RingOK (PoleFrame.spotsF sy m0))
     (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) : R.TileColAll := by
   have e0 : R.keep.toFrames.all 0 = R.seq 0 := R.keep.toFrames.seq0.symm
-  refine ⟨colMono_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB, ?_, ?_, hRg, ?_⟩
+  refine ⟨colMono_run R hN hfr st hfq hk hc0 hF hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB, ?_, ?_, hRg, ?_⟩
   · rw [e0]
     exact PoleSlot.slotMap_of_none hNT
   · rw [e0]
@@ -415,7 +415,7 @@ theorem tilesCol_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surfac
 (`near`) and (`read`) of the far reads give the field `tilesCol` of round 33 (`PoleSlot.tileSlotC_of_N`) -/
 theorem colEdge_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : TopSpeed.frictionCheck sy m0 = true)
     (st : SurfaceFrames.Start sy B (R.seq 0))
-    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
+    (hfq : PoleJoin.fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hb : posP sy B.m + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy B.m : Int) < 64896 * 256) {v : UInt8} (hv : peek B.m sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true) (htop : TopSpeed.top sy ≤ 48)
     (h0 : Inv (places sy m0) 384 (R.seq 0) ∧ ColOK sy m0 (R.seq 0)) (hJ : PoleWrap.JV (valsOf (places sy m0) (R.seq 0)))
@@ -423,7 +423,7 @@ theorem colEdge_run (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar) (hN : Surface
     (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
     16 * PoleJoin.parColOf sy m0 (R.keep.fm R.g) ≤ ScrollRule.left16 (ScrollRule.places sy m0) (R.keep.fm R.g) + 384 := by
   have h1 := R.keep.toFrames.one_le_ix R.one_le (Nat.le_refl _)
-  have hI := inv_run R hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB (R.keep.toFrames.ix R.g - 1) (by omega)
+  have hI := inv_run R hN hfr st hfq hk hc0 hF hg hb hv hq he hs hsc htop h0 hJ hcC hmK hcN hcB hIB (R.keep.toFrames.ix R.g - 1) (by omega)
   rw [parCol_eq, edge_eq]
   exact col_le hI.1
 
@@ -616,11 +616,11 @@ theorem tilesCol_route {es : List Machine} {rt : StepWrites.Rt} (hS : SideChange
     (R : Route.Run sy m0 N D rN b vs ⟨M, dx, dy, rows⟩ Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
     (st : SurfaceFrames.Start sy ⟨M, dx, dy, rows⟩ (R.pole.seq 0)) (hN : SurfaceFrames.numbersCheck sy m0 ⟨M, dx, dy, rows⟩ J = true)
     (hfr : TopSpeed.frictionCheck sy m0 = true) (hfq : PoleJoin.fracCheck sy M = true)
-    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.pole.seq 0)) (hg : R.pole.g ≤ SurfaceFrames.farN sy M)
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.pole.seq 0)) (hF : ∀ n, n < R.pole.keep.toFrames.ix R.pole.g → SideAcross.FactsAt sy (R.pole.keep.toFrames.all n) (R.pole.keep.toFrames.inp n)) (hg : R.pole.g ≤ SurfaceFrames.farN sy M)
     (hb : posP sy M + 16 * (TopSpeed.top sy : Int) * (SurfaceFrames.farN sy M : Int) < 64896 * 256) {v : UInt8} (hv : peek M sy.AreaType = v)
     (hq : qCheckP sy m0 v = true) (he : eCheckP sy m0 v = true) (hs : checkS sy m0 = true) (hsc : ScrollRule.check sy m0 = true)
     (htop : TopSpeed.top sy ≤ 48) : R.pole.TileColAll :=
-  tilesCol_run R.pole hN hfr st hfq hk hc0 hg hb hv hq he hs hsc htop ⟨(inv₀ hS hT hQ hR hmI hB hK R).1, col₀ hS hT hQ hR hmC hB hK R⟩ (PoleStrict.jv₀ hS hT hQ hR hmJ hB hK R)
+  tilesCol_run R.pole hN hfr st hfq hk hc0 hF hg hb hv hq he hs hsc htop ⟨(inv₀ hS hT hQ hR hmI hB hK R).1, col₀ hS hT hQ hR hmC hB hK R⟩ (PoleStrict.jv₀ hS hT hQ hR hmJ hB hK R)
     hcC (coinMap₀ hS hT hQ hR hmK hB hK R) hcN (inv₀ hS hT hQ hR hmI hB hK R).2 (low₀ hS hT hQ hR hmL hB hK R) (ring_of_low hmL) hcB
     (bInv₀ hS hT hQ hR hmB hB hK R)
 

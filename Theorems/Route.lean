@@ -14,6 +14,7 @@ import Theorems.RoomWall
 import Theorems.RoomFace
 import Theorems.RoomRunSpeed
 import Theorems.RoomAbsKeep
+import Theorems.RoomSpeedKeep
 import Theorems.RoomCorner
 import Theorems.PoleJoin
 import Theorems.CastleToLevel
@@ -1960,6 +1961,30 @@ theorem Run.roomAbs {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement s
   obtain ⟨u1, u2⟩ := RoomAbsKeep.abs_frame hXc hXa hcond hsites
   exact ⟨u1, u2 hstay⟩
 
+/-- **A frame of `room` before the entering frame ends with the speed of its end of the move, or 0**, on the real machines (round 37): `RoomSpeedKeep.speed_frame`, the
+walk of the room's whole frame from `PlayerSubs`, as `roomAbs`. `hVc`, `hVa` are the checks of `RoomSpeedKeep` -/
+theorem Run.roomSpeed {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy nm₁ d₁ (PipeTransition.entry m0) es₁)
+    (hM : RoomMap.MapFacts sy nmS m0) (hS : RoomMap.startCheckT sy nm₁ d₁ (PipeTransition.entry m0) nmS m0 = true)
+    (hVc : RoomSpeedKeep.checkV sy nmS m0 = true) (hVa : RoomSpeedKeep.apartV sy (ScreenPage.placesR sy nmS m0) = true)
+    (hR : RoomChecks sy m0 nm₁ d₁ nm₂ nx₂ nmS) (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc)
+    {n : Nat} (hC : R.room.C ≤ n) (hE : n + 1 < R.room.E) :
+    ∀ k, (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k).pc = sy.PlayerSubs → (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k).frame = (R.room.fm n).frame →
+      peek (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) sy.Player_X_Speed = peek (PipeEntryRule.trace (R.room.fm n) (R.room.inAt n) k) sy.Player_X_Speed ∨
+        peek (PipeTransition.frame (R.room.fm n) (R.room.inAt n)) sy.Player_X_Speed = 0 := by
+  obtain ⟨hk0, hk1⟩ := R.roomIdx hC (show n < R.room.E by omega)
+  obtain ⟨_, hk2⟩ := R.roomIdx (n := n + 1) (by omega) hE
+  have hm := R.roomMany
+  have hlt := R.room.ix_lt (k := n + 1 - R.room.C) (by omega)
+  have h1 := (R.room.ix_at (k := n + 1 - R.room.C) (by omega) (by omega)).1
+  rw [show n + 1 + 1 - R.room.C = n + 1 - R.room.C + 1 by omega] at hk2
+  have hk : R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1 < R.base.a₂ sy nmS m0 := by omega
+  have hin' := (R.chg.run₁ (R.entry₁ hB hK)).inRowsT hT₁ R.chg.ctlFirst₁
+  have hcond := RoomMap.cond_of_rows hM hS R.base.next hin' R.chg.ctl₁ (R.roomSites hR hB hK) R.chg.roomStay _ hk0 hk1
+  have hsites := (R.roomSites hR hB hK) _ hk0 hk1
+  have hstay := R.chg.roomStay (R.base.b₁ sy + (R.room.ix (n + 1 - R.room.C) - 1) + 1) (by omega) hk
+  rw [R.base.next] at hstay
+  exact RoomSpeedKeep.speed_frame hVc hVa hcond hsites hstay
+
 theorem mem_ysUp {sy : Syms} {ylo : Nat} {y : UInt8} (h1 : ylo ≤ y.toNat) (h2 : y.toNat ≤ Jump.groundY sy) : y ∈ RoomCorner.ysUp sy ylo := by
   unfold RoomCorner.ysUp
   refine List.mem_map.2 ⟨y.toNat - ylo, List.mem_range.2 (by omega), ?_⟩
@@ -2467,6 +2492,7 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     (hFc : RoomFace.checkF sy nmS m0 = true) (hFa : RoomFace.apartF sy (ScreenPage.placesR sy nmS m0) = true)
     (hRc : RoomRunSpeed.checkR sy nmS m0 = true) (hRa : RoomRunSpeed.apartR sy = true)
     (hXc : RoomAbsKeep.checkX sy nmS m0 = true) (hXa : RoomAbsKeep.apartX sy (ScreenPage.placesR sy nmS m0) = true)
+    (hVc : RoomSpeedKeep.checkV sy nmS m0 = true) (hVa : RoomSpeedKeep.apartV sy (ScreenPage.placesR sy nmS m0) = true)
     {ylo : Nat} (hCo : RoomCorner.Checks sy nmS m0 rN.h ylo) (hHi : RoomHigh.Checks sy nmS m0 rN.h rN.rise ylo)
     (hB : TitleStart.check sy tc t0 = true) (hK : EntryKeep.Checks sy m0 d₁ tc) (R : Run sy m0 N D rN b vs PA Ts J Nc F q t0 nm₁ d₁ nm₂ nx₂ nmS fc tc) :
     R.room.InRoom :=
@@ -2492,6 +2518,7 @@ theorem Run.inRoom {es₁ : List Machine} (hT₁ : PipeChangeEnd.EndStatement sy
     R.roomAbsBefore hT₁ hM hS hV.vert hR hB hK,
     fun n hC hE => R.roomKeepA hT₁ hM hS hV.vert hR hB hK n hC hE (RoomVert.I sy.Player_XSpeedAbsolute) (by simp [RoomVert.vKeepA]),
     fun _ hC hE => R.roomAbs hT₁ hM hS hXc hXa hR hB hK hC hE,
+    fun _ hC hE => R.roomSpeed hT₁ hM hS hVc hVa hR hB hK hC hE,
     fun hCE hst _ hAt hd hp => R.roomAirL hT₁ hM hS hV.vert hV.fall hV.idle hV.quad hV.pair hR hB hK hCE hst hAt hd hp,
     fun hCE hst _ hRk hn => R.roomStandL hT₁ hM hS hV.vert hV.stand hR hB hK hCE hst hRk hn,
     fun hCE _ hAt hj => R.roomJumpL hT₁ hM hS hV.vert hV.jump hV.idle hR hB hK hCE hAt hj,

@@ -254,14 +254,15 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
 
       </details>
     - 🚨 1-1-c-7-7 Takeoff and landing (`Approach`)
-    - 🚨 1-1-c-7-8 The ways off the block (`offTop`, `offSlow`)
-      <details><summary>5 lines of proved parts (the parent's own assumptions remain)</summary>
+    - 🚨 1-1-c-7-8 The ways off the block (`offTop`, `offCollide`)
+      <details><summary>6 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-c-7-8-1 The ways off the block, measured (no field changed)
       - ✅ 1-1-c-7-8-2 From the block's top to the floor on the real frames (`Off` gone; five fields on single frames)
       - ✅ 1-1-c-7-8-3 A stand on the block's top: the bytes a fall does not read (`offStand` gone)
       - ✅ 1-1-c-7-8-4 Past the block's right end: a landing at any height (`offFloor` gone; it was false)
       - ✅ 1-1-c-7-8-5 The entering frame: the frame before the entry is near the floor (`offNear` gone)
+      - ✅ 1-1-c-7-8-6 The air speed cap after `t0`: the frames of a slow jump (`offSlow` gone; new `offCollide`)
 
       </details>
     - 🚨 1-1-c-7-9 A jump over the whole block (`Over`)
@@ -424,8 +425,8 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-e-2-10 Frames are read from machines (`reads`, `fr` gone; `fr` is the definition `frOf`)
       - ✅ 1-1-e-2-10-1 Each frame is a `TopSpeed.Frame` (`frame_readE`)
       - ✅ 1-1-e-2-10-2 The collision bits are one of four values (`coll` gone: a walk with `X` split at `ImpedePlayerMove`; new `spareC`)
-      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.endKeep`, `OnFrames.sideW`, `OnFrames.castleRow`)
-        <details><summary>25 lines of proved parts (the parent's own assumptions remain)</summary>
+      - 🚨 1-1-e-2-10-3 The position after the scroll handler, and the subspeed on frames that end with speed 0 and subspeed 0 (`collide`, `CollideS`, `posW`, `clampR`, `OnFrames.endKeep`, `OnFrames.castleRow`; `OnFrames.sideW` gone)
+        <details><summary>26 lines of proved parts (the parent's own assumptions remain)</summary>
 
         - ✅ 1-1-e-2-10-3-1 The speed after the scroll handler (a walk that follows the speed; `spareV` is a part of `keep.cleanE`)
         - ✅ 1-1-e-2-10-3-2 The subspeed on the other frames (a walk that follows it)
@@ -452,6 +453,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
         - ✅ 1-1-e-2-10-3-24 The stores that may reach the side timer, outside the area parser (`sideW` only in the area parser and the head's collision with a block)
         - ✅ 1-1-e-2-10-3-25 The stores that may reach the side timer, in the area parser's loops (`sideW` only at 4 stores: through a pointer, and the castle's loop)
         - ✅ 1-1-e-2-10-3-26 The stores that may reach the side timer, with two bytes kept across frames (`sideW` only on frames without part f's two facts; new `castleRow`)
+        - ✅ 1-1-e-2-10-3-27 Part f's facts of the two bytes on the route (`sideW` gone)
 
         </details>
         - 🚨 1-1-e-2-10-3-10 The push's bound from the screen's left edge (`collide` fixed in round 24 after it was found false, assumed; `edge₀` is a theorem since round 25 and `OnFrames.edge` since round 26)
@@ -488,7 +490,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
     - 🚨 1-1-f-6-15 He does not go over the flag and come back
     - ✅ 1-1-f-6-16 Only that instruction writes the routine (`pass` removed; the walk of the whole touch frame, `PoleFrame`)
     - 🚨 1-1-f-6-17 The pole's tiles: stores and reads (`bufAll`, `keepB`, `bKeep`, `tilesCol`, `coinBuf`, `readC`, `ctlKeep`; `tiles`, `tilesRead`, `ySide`, `tilesFar`, `yKeep`, `parWrap`, `ctlU` gone)
-      <details><summary>19 lines of proved parts (the parent's own assumptions remain)</summary>
+      <details><summary>20 lines of proved parts (the parent's own assumptions remain)</summary>
 
       - ✅ 1-1-f-6-17-1 `TileRead` at an actual load from a frame-start tile condition (`PoleTiles`; the write checks and the read range remain)
       - ✅ 1-1-f-6-17-2 `TileRead` from the map at control (`PoleTileWalk`; `tiles` gone; new fields `bufAll`, `tilesRead`)
@@ -509,6 +511,7 @@ A label is `<world>-<stage>-<part>-<number>[-<sub>]`. `0-0` is what several stag
       - ✅ 1-1-f-6-17-17 No coin in the block buffers (`PoleCoin`; `ctlU` gone, new `coinBuf`, `readC`, `ctlKeep`)
       - ✅ 1-1-f-6-17-18 The parser's store at the block buffer's column (`PoleBcol`; `bufAll` narrowed, new `bKeep`)
       - ✅ 1-1-f-6-17-19 The stores that may reach the control byte or B (`PoleNear`; `ctlKeep`, `bKeep` narrowed)
+      - ✅ 1-1-f-6-17-20 The head's collision with the offset known (`PoleOffset`; `ctlKeep` narrowed)
 
       </details>
     - 🚨 1-1-f-6-18 The edge store does not bring him into the range (`edge`); `P₂(g)` is the position at the end of the move (`moved` removed: 1-1-f-6-18-2)

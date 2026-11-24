@@ -25,7 +25,7 @@ The places where the walk does not know enough:
 
 The table's key (`keyN`) also holds `X`, `Y` and the zero page byte 0 in the code of `SideRange.residB` and in the sprites' shuffle (`SpriteShuffler`), so that
 the states of a loop with a counter are not joined; it is no part of what the walk proves. The search that makes the table is no part of the proof (`searchN`);
-the check is `nCheck`. A test for the coin's tiles in the block buffers (`missB`, `bufAt_of_missB`) is proved but not used: the walk does not know enough for it.
+the check is `nCheckN` (round 37: `PoleNear.nCheck`, in `PoleOffset`, is this check and that of `PoleOffset`). A test for the coin's tiles in the block buffers (`missB`, `bufAt_of_missB`) is proved but not used: the walk does not know enough for it.
 There is no game data in this file. Page: `1-1/f-6-17-19-PoleNear.md`.
 -/
 
@@ -383,8 +383,9 @@ def cfgN (sy : Syms) (m0 : Machine) : SideRange.CfgR :=
   { E, ops := (aRows E).toArray, S, G, t := q.1, kl := q.1.map knownOf, idx := q.2.1, cut := q.2.2, key, W := SideRange.wLim,
     sp := SideLoop.spL sy E, ok := okN sy P E }
 
-/-- **The check on the ROM**: the walk from every piece of every state of the table and from the two states of a frame's start -/
-def nCheck (sy : Syms) (m0 : Machine) : Bool :=
+/-- **The check on the ROM**: the walk from every piece of every state of the table and from the two states of a frame's start (round 36; from round 37
+`nCheck` is this check and that of `PoleOffset`) -/
+def nCheckN (sy : Syms) (m0 : Machine) : Bool :=
   let C := cfgN sy m0
   let G := FrameKeep.guardE sy m0
   SideRange.tableOK C (FrameKeep.ctlI sy) FrameKeep.fuelK && SideRange.walkR C (FrameKeep.ctlI sy) FrameKeep.fuelK (FrameKeep.startK G [] false) &&
@@ -449,7 +450,7 @@ theorem start_E {m : Machine} (h : FrameKeep.StartK sy m0 m) : FrameStart (Frame
 /-- **One frame in control**: up to its first store of the routine, the mode or the task by its address, each instruction of the frame but the parser's store
 of a column writes the control byte through an index or a pointer only at a place of `ResidC`, and `B` only at a place of `ResidB`. `hc` is the check on the
 ROM; `hcl` is `CleanK` of `FrameKeep.guardE` on the instructions of the frame (the field `keep.cleanE`) -/
-theorem near_frame (hc : nCheck sy m0 = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
+theorem near_frame (hc : nCheckN sy m0 = true) {m : Machine} {i : UInt8} (h0 : FrameKeep.StartK sy m0 m)
     (hcl : ∀ j, (trace m i j).frame = m.frame → CleanK (FrameKeep.guardE sy m0) (FrameKeep.spotOf sy m0).store (trace m i j)) :
     ∀ k, (∀ j, j < k → FrameKeep.CtlStore sy (trace m i j) = false) → (trace m i k).frame = m.frame → (trace m i k).pc ≠ (PoleBcol.bcOf sy m0).store →
       (¬ ResidC sy m0 (trace m i k) → NoW (PoleBcol.bcOf sy m0).ctlI (trace m i k)) ∧ (¬ ResidB sy m0 (trace m i k) → NoW (PoleBcol.bcOf sy m0).bI (trace m i k)) := by
@@ -457,7 +458,7 @@ theorem near_frame (hc : nCheck sy m0 = true) {m : Machine} {i : UInt8} (h0 : Fr
   cases hk : FrameKeep.CtlStore sy (trace m i k) with
   | true => exact ⟨fun _ => noW_of_storesTo hk _, fun _ => noW_of_storesTo hk _⟩
   | false =>
-    simp only [nCheck, Bool.and_eq_true] at hc
+    simp only [nCheckN, Bool.and_eq_true] at hc
     obtain ⟨⟨ht, hw0⟩, hw1⟩ := hc
     obtain ⟨b, hs⟩ := FrameKeep.sim_startK (W := []) (E := PipeEntryRule.envOf m0) rfl (start_E h0) (fun _ h => by cases h)
     have hs0 : Sim (PipeEntryRule.envOf m0) (m.frame, 2) (FrameKeep.startK (FrameKeep.guardE sy m0) [] b) (trace m i 0) :=
@@ -491,7 +492,7 @@ theorem near_frame (hc : nCheck sy m0 = true) {m : Machine} {i : UInt8} (h0 : Fr
 /-- **On every frame up to the touch's frame**, up to its first store of the routine, the mode or the task by its address, each instruction of the frame but the
 parser's store of a column writes the control byte through an index or a pointer only at a place of `ResidC`, and `B` only at a place of `ResidB`. `hcK` is the
 check of the walk of `FrameKeep` (every frame starts in control), `hcN` the check of this file -/
-theorem near_frames {Sr : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (hcK : FrameKeep.keepCheckOf sy m0 = true) (hcN : nCheck sy m0 = true)
+theorem near_frames {Sr : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machine} (hcK : FrameKeep.keepCheckOf sy m0 = true) (hcN : nCheckN sy m0 = true)
     (Fr : FrameKeep.Frames sy m0 Sr a g seq) (hs0 : FrameKeep.StartK sy m0 (seq 0)) (h0 : FrameKeep.Watched (FrameKeep.watchOf sy) (seq 0)) :
     ∀ n, n < Fr.ix g → ∀ k, (∀ j, j < k → FrameKeep.CtlStore sy (trace (Fr.all n) (Fr.inp n) j) = false) →
       (trace (Fr.all n) (Fr.inp n) k).frame = (Fr.all n).frame → (trace (Fr.all n) (Fr.inp n) k).pc ≠ (PoleBcol.bcOf sy m0).store →

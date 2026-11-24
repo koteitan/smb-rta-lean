@@ -13,7 +13,7 @@ import Theorems.PoleSlot
 import Theorems.PoleRing
 import Theorems.PoleCoin
 import Theorems.PoleBcol
-import Theorems.PoleNear
+import Theorems.PoleOffset
 import Theorems.StopRead
 
 /-!
@@ -1437,8 +1437,14 @@ structure Run (sy : Syms) (m0 b : Machine) (vs : List Jump.VS) (B : Box) (T J Nc
   /-- round 35: each instruction of each frame before the touch's frame: a store through an index or a pointer that `PoleKeepFar.farStore` does not settle does
   not write the screen buffers' control byte (`PoleCoin.CtlR`), so the walk of `PoleCoin` keeps it known. Round 36 (`1-1/f-6-17-19-PoleNear.md`): asked only at
   the places of `PoleNear.ResidC` (a store through a pointer in the code of the head's collision with a block, the castle's loop of rows, the store of
-  `RenderUnderPart`): at the other instructions the walk of `PoleNear` proves it, and at the parser's store the walk of `PoleBcol` (`Run.ctlR`) -/
-  ctlKeep : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k, PoleNear.ResidC sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) →
+  `RenderUnderPart`): at the other instructions the walk of `PoleNear` proves it, and at the parser's store the walk of `PoleBcol` (`Run.ctlR`).
+  Round 37 (`1-1/f-6-17-20-PoleOffset.md`): asked only at the places of `PoleOffset.ResidC` (the castle's loop of rows and the store of `RenderUnderPart`), and
+  at the two stores of the head's collision only on a frame that does not start with bits 1 to 7 of the block objects' offset 0 (`PoleOffset.InvS`): on a
+  frame that starts so, the walk of `PoleOffset` proves it there (the offset known, the pointer of the head's collision stays known). It asks less than the
+  round 36 field -/
+  ctlKeep : ∀ n, n + 1 < FrameKeep.ixOf sy m0 S a keep.top g → ∀ k,
+    (PoleOffset.ResidC sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k) ∨
+      (¬ PoleOffset.InvS sy m0 (S.seq (a + n)) ∧ PoleNear.ResidC sy m0 (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k))) →
     PoleCoin.CtlR (PoleCoin.coinOf sy m0) (PipeEntryRule.trace (S.seq (a + n)) (S.inp (a + n)) k)
   /-- up to the write, a store through an index or a pointer that writes the position's pixel or page is one of the move routine's stores of them, with the index 0 -/
   posKeep : ∀ n, PoleEntryRule.WriteStep sy (keep.fm g) (keep.pad g) n → ∀ j, j ≤ n → PoleFrame.PosKeep sy m0 (PipeEntryRule.trace (keep.fm g) (keep.pad g) j)
@@ -1497,19 +1503,19 @@ theorem Run.watched₀ {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat
 is not later than `SurfaceFrames.farN` frames after control (a later touch is `SurfaceLate`). -/
 theorem Run.reads {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
-    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) : SurfaceFrames.Reads sy R.g R.seq R.fr := by
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) : SurfaceFrames.Reads sy R.g R.seq R.fr := by
   have Nm := SurfaceFrames.numbers_of_check hN
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   exact R.frames.reads Nm.ctrl Nm.model hfr Nm.idle hst Ar (SurfaceFrames.start_v0 hN st) st.P hg
 
 /-- the frames up to the touch follow each other: they are read from the machines (`Run.reads`) -/
 theorem Run.next {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
-    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) :
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) :
     ∀ j, 1 ≤ j → j < R.g → Next (R.fr j) (R.fr (j + 1)) :=
-  SurfaceFrames.next_of_reads (R.reads hN hfr st hq hk hc0 hg)
+  SurfaceFrames.next_of_reads (R.reads hN hfr st hq hk hc0 hF hg)
 
 /-- **The fraction is a multiple of 1/16 px** on each frame up to the touch: it is one at control (`fracCheck` on the machine `B.m`, `Start.P`), and each frame keeps it: the walk of one
 whole frame in control (`FrameKeep.keep_frame`, on the frames of `keep`). `hk` is the walk's check on the ROM. -/
@@ -1557,12 +1563,12 @@ the write of the pole's routine). So at every instruction of the frame at the en
 and each instruction is `CleanK` (`keep.clean`). `hs` is the check of `SubsOnce` on the ROM; `hN`, `hfr`, `st`, `hq`, `hk`, `hc0`, `hg` are as in `Run.reads`. -/
 theorem Run.moved {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (hs : SubsOnce.subsCheck sy m0 = true)
     (R : Run sy m0 b vs B T J Nc F Sr ar) (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0))
-    (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) :
+    (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) :
     ∀ j, (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j).pc = sy.PlayerSubs → (R.fr R.g).P₂ = posP sy (PipeEntryRule.trace (R.keep.fm R.g) (R.keep.pad R.g) j) := by
   have Nm := SurfaceFrames.numbers_of_check hN
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   obtain ⟨k, _, hpc, hP, _⟩ := R.frames.touchMove Nm.ctrl Nm.model hfr Nm.idle hst Ar (SurfaceFrames.start_v0 hN st) st.P hg R.one_le
   intro j hj
   have e := SubsOnce.subs_once hs (R.keep.toFrames.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _))
@@ -1575,7 +1581,7 @@ speed `|v₂|`, or with the stored speed and the moving direction of the frame b
 the scroll handler (`StopRead.stored_subs`), and `GuardE.keepHE` from there to the frame's end. `hN`, `hfr`, `st`, `hq`, `hk`, `hc0`, `hg` are as in `Run.reads`. -/
 theorem Run.stop_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
-    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g)
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g)
     (h0 : (R.fr j).v = 0) :
     (peek (R.seq j) sy.Player_XSpeedAbsolute).toNat = (R.fr j).v₂.natAbs ∨
       (peek (R.seq j) sy.Player_XSpeedAbsolute = peek (R.seq (j - 1)) sy.Player_XSpeedAbsolute ∧
@@ -1583,7 +1589,7 @@ theorem Run.stop_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat}
   have Nm := SurfaceFrames.numbers_of_check hN
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   exact StopRead.stop_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3 h0
 
 /-- **A frame writes the stored speed or keeps it**: a counted frame before the touch ends with the stored speed `|v₂|`, or with the stored speed of the frame
@@ -1591,13 +1597,13 @@ before (`StopRead.stored_step` on the frames of `keep`). Nothing is asked of the
 jump (`approach_of_cases`), where the old fields `onGround` and `ground` of `ApproachCases` were asked. The hypotheses are as in `Run.stop_step`. -/
 theorem Run.stored_step {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true) (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true)
-    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g) :
+    (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hg : R.g ≤ SurfaceFrames.farN sy B.m) {j : Nat} (h1 : 1 ≤ j) (h3 : j < R.g) :
     (peek (R.seq j) sy.Player_XSpeedAbsolute).toNat = (R.fr j).v₂.natAbs ∨
       peek (R.seq j) sy.Player_XSpeedAbsolute = peek (R.seq (j - 1)) sy.Player_XSpeedAbsolute := by
   have Nm := SurfaceFrames.numbers_of_check hN
   have hst : ∀ n, n < R.keep.toFrames.ix R.g → FrameKeep.StartK sy m0 (R.keep.toFrames.all n) :=
     fun n hn => (R.keep.toFrames.all_start hk hc0.start (R.watched₀ st hq hc0.castle) n hn).1
-  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst
+  have Ar : SurfaceFrames.AreaRun sy m0 R.keep.toFrames (peek B.m sy.AreaType) := R.frames.areaRun Nm st hst hF
   exact StopRead.stored_step Nm.ctrl Nm.model hfr Nm.storedW Nm.idle R.frames hst Ar (SurfaceFrames.start_v0 hN st) st.P hg h1 h3
 
 /-- **The map and the two bytes at the start of the touch's frame**: the map and the two bytes at control (`hmap`: `PoleTileCtl.colMap₀`, `hwb`:
@@ -1665,12 +1671,13 @@ theorem Run.bNoW {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F :
       | true => exact absurd ⟨j, hj, e⟩ hx
     by_cases hr : PoleNear.ResidB sy m0 (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k)
     · exact PoleBcol.b_of_R (R.bKeep n hn k (Or.inl hr))
-    · exact (PoleNear.near_frames hk hcN R.keep.toFrames hs0 hw0 n hn k hx' hf hpc).2 hr
+    · exact (PoleNear.near_frames hk (PoleNear.nCheck_n hcN) R.keep.toFrames hs0 hw0 n hn k hx' hf hpc).2 hr
 
 /-- round 36: **on each frame before the touch's frame no store through an index or a pointer writes the control byte** (`PoleCoin.CtlR` on each instruction of
 the frame): at the parser's store of a column by the walk of `PoleBcol` (`PoleBcol.frames_bcol`, which knows `B` there, with `Run.bNoW`), at the places of
 `PoleNear.ResidC` by the field `ctlKeep`, elsewhere by the walk of `PoleNear` (no frame before the touch's frame stores the routine, the mode or the task by its
-address: `keep.noStore`) -/
+address: `keep.noStore`). Round 37: on a frame that starts with `PoleOffset.InvS`, by the walk of `PoleOffset` away from `PoleOffset.ResidC` (`hcN` is both
+checks; `keepB` gives the offset's protection), and by `ctlKeep` at `PoleOffset.ResidC` -/
 theorem Run.ctlR {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hk : FrameKeep.keepCheckOf sy m0 = true) (hcN : PoleNear.nCheck sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
     (hs0 : FrameKeep.StartK sy m0 (R.seq 0)) (hw0 : FrameKeep.Watched (FrameKeep.watchOf sy) (R.seq 0)) (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) :
@@ -1679,9 +1686,14 @@ theorem Run.ctlR {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F :
   intro n hn k hf _
   by_cases hpc : (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k).pc = (PoleBcol.bcOf sy m0).store
   · exact ((PoleBcol.frames_bcol hk hcB R.keep.toFrames hs0 hw0 hIB (R.bNoW hk hcN hs0 hw0) n (by omega)).2 k hpc).2.2
-  · by_cases hr : PoleNear.ResidC sy m0 (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k)
-    · exact PoleCoin.ctl_of_R (R.ctlKeep n hn k hr)
-    · exact (PoleNear.near_frames hk hcN R.keep.toFrames hs0 hw0 n (by omega) k (fun j _ => R.keep.toFrames.noStore n hn j) hf hpc).1 hr
+  · by_cases hr2 : PoleOffset.ResidC sy m0 (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k)
+    · exact PoleCoin.ctl_of_R (R.ctlKeep n hn k (Or.inl hr2))
+    · by_cases hS : PoleOffset.InvS sy m0 (R.keep.toFrames.all n)
+      · exact PoleOffset.off_frames hk (PoleNear.nCheck_o hcN) R.keep.toFrames hs0 hw0
+          (fun n' hn' k' => PoleKeepFar.keepB_of_R (R.keepB n' hn' k')) n (by omega) hS k (fun j _ => R.keep.toFrames.noStore n hn j) hf hpc hr2
+      · by_cases hr : PoleNear.ResidC sy m0 (PipeEntryRule.trace (R.keep.toFrames.all n) (R.keep.toFrames.inp n) k)
+        · exact PoleCoin.ctl_of_R (R.ctlKeep n hn k (Or.inr ⟨hS, hr⟩))
+        · exact (PoleNear.near_frames hk (PoleNear.nCheck_n hcN) R.keep.toFrames hs0 hw0 n (by omega) k (fun j _ => R.keep.toFrames.noStore n hn j) hf hpc).1 hr
 
 /-- **Round 35: the screen buffers' control byte is not 6 at `UpdScrollVar`** on each frame before the touch's frame (`PoleCoin.frames_coin`), from no coin's tile
 in the block buffers at control (`hm0`, from the rows of the change: `PoleParserRun.coinMap₀`), the walk of `PoleCoin` (`hcC`) and that of `FrameKeep` (`hk`), and
@@ -1731,7 +1743,7 @@ map (`Run.slotStart`, round 33).
 `P₂(g)` is the position at the end of the move (`Run.moved`). `hc` is the walk's check on the ROM, `hk` that of `FrameKeep`; `hN`, `hfr`, `hg` are as in `Run.reads`. -/
 theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat} (hc : PoleTileKeep.poleCheckZ sy m0 = true) (R : Run sy m0 b vs B T J Nc F Sr ar)
     (hN : SurfaceFrames.numbersCheck sy m0 B J = true) (hfr : frictionCheck sy m0 = true)
-    (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : fracCheck sy B.m = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n))
     (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hg : R.g ≤ SurfaceFrames.farN sy B.m)
     (hT : R.TileColAll) :
     poleP sy m0 ≤ (R.fr R.g).P₂ :=
@@ -1739,7 +1751,7 @@ theorem Run.inRange {b : Machine} {vs : List Jump.VS} {B : Box} {T J Nc : Nat} {
   PoleSlot.inRange_of_frameZS hc R.touches (R.keep.toFrames.start hk hc0.start (R.watched₀ st hq hc0.castle) R.g R.one_le (Nat.le_refl _)) hs.2
     (fun j => PoleTileKeep.cleanK_GK (R.keep.toFrames.cleanAt R.g R.one_le (Nat.le_refl _) j) (R.keepB₁ j)) R.posKeep hs.1
     (R.slotStart hc hk st hq hc0 hmap hwb hT) (fun _ _ j _ => R.bufAt₁ j) (fun _ _ j _ => R.bufC₁ hT j) R.tilesCol R.edge
-    (fun _ j _ _ hj => R.moved (PoleTileKeep.subs_of_Z hc) hN hfr st hq hk hc0 hg j hj)
+    (fun _ j _ _ hj => R.moved (PoleTileKeep.subs_of_Z hc) hN hfr st hq hk hc0 hF hg j hj)
 
 /-- the numbers the join needs -/
 def joinCheck (sy : Syms) (m0 : Machine) (X : Int) (N E T J Nc lo : Nat) (F : Int) : Bool :=
@@ -1788,28 +1800,28 @@ abbrev AtControl (sy : Syms) (m0 : Machine) (n dx dy rows J : Nat) (m : Machine)
 /-- `hB` of `slow_short` on a run, with `B = PA + X + 16·top·(T − N)` and `PA` the position of `SurfaceRun.above` -/
 theorem hB_run (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (H : Numbers sy m0 X N E T J Nc lo F)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n))
     (hg : R.g ≤ SurfaceFrames.farN sy (above m0 n)) (e d : Nat) (he1 : 1 ≤ e) (heg : e ≤ R.g) (hd : e + d = T)
     (hPf : feetP sy m0 ≤ (R.fr e).P₂) :
     (R.fr e).P₂ + 16 * (top sy : Int) * (d : Int) ≤
       posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int) := by
   have hgap := S.gap
   have hearly := H.hearly
-  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 S.fric H.hJT S.far R.frames A.2 (fun n hn => (R.keep.toFrames.all_start hkc hc0.start (R.watched₀ A.2 hfq hc0.castle) n hn).1) hg
-  exact hB_of_line (PA := posP sy (above m0 n)) Fa S H.h16 H.h255 H.hE H.hJ Rs (first_of_surface S.noHit H.hJT Rs) (R.next A.1 S.fric A.2 hfq hkc hc0 hg) (R.startV A.1 A.2) (R.startP A.2)
+  obtain ⟨w, h, Rs⟩ := SurfaceFrames.surface_of_frames Fa S.noHit A.1 S.fric H.hJT S.far R.frames A.2 (fun n hn => (R.keep.toFrames.all_start hkc hc0.start (R.watched₀ A.2 hfq hc0.castle) n hn).1) hF hg
+  exact hB_of_line (PA := posP sy (above m0 n)) Fa S H.h16 H.h255 H.hE H.hJ Rs (first_of_surface S.noHit H.hJT Rs) (R.next A.1 S.fric A.2 hfq hkc hc0 hF hg) (R.startV A.1 A.2) (R.startP A.2)
     (by omega) e d he1 heg hd hPf
 
 /-- The position bound forbids standing on the base by frame `T`: with his feet over it on frame `w − 1`, `w` is past `T`. -/
 theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (H : Numbers sy m0 X N E T J Nc lo F)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n))
     (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n)) (w : Nat) (h2 : 2 ≤ w) (hg : w ≤ R.g) (hPf : feetP sy m0 ≤ (R.fr (w - 1)).P₂) :
     T + 1 ≤ w := by
   by_cases hw : T + 1 ≤ w
   · exact hw
   · exfalso
     obtain ⟨d, hd⟩ : ∃ d, (w - 1) + (d + 1) = T := ⟨T - w, by omega⟩
-    have h1 := hB_run Fa S H hfq hkc R A hc0 hgN (w - 1) (d + 1) (by omega) (by omega) hd hPf
+    have h1 := hB_run Fa S H hfq hkc R A hc0 hF hgN (w - 1) (d + 1) (by omega) (by omega) hd hPf
     have h3 := S.gap
     have h4 := H.hfeet
     have h16 := H.h16
@@ -1822,18 +1834,18 @@ theorem base_late (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
 /-- No touch up to frame `T`: this is `P₂(g) < P₀` from the position bound, hits included. -/
 theorem touch_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T J dx dy) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hc : PoleTileKeep.poleCheckZ sy m0 = true) (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true)
-    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0))
+    (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0)) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0))
     (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
     (hT : R.TileColAll) : T + 1 ≤ R.g := by
   have H := numbers_of_check hn
   by_cases hgT : R.g ≤ T
   · exfalso
     have hgap := S.gap
-    have hr := R.inRange hc A.1 S.fric A.2 hfq hkc hc0 hmap hwb hgN hT
+    have hr := R.inRange hc A.1 S.fric A.2 hfq hkc hc0 hF hmap hwb hgN hT
     have h16 := H.h16
     have hfar := H.hfar
     by_cases hPf : feetP sy m0 ≤ (R.fr R.g).P₂
-    · have h1 := hB_run Fa S H hfq hkc R A hc0 hgN R.g (T - R.g) R.one_le (Nat.le_refl _) (by omega) hPf
+    · have h1 := hB_run Fa S H hfq hkc R A hc0 hF hgN R.g (T - R.g) R.one_le (Nat.le_refl _) (by omega) hPf
       have h2 : 0 ≤ 16 * (top sy : Int) * ((T - R.g : Nat) : Int) := Int.mul_nonneg (by omega) (by omega)
       omega
     · omega
@@ -1847,38 +1859,38 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hr' : fallCheck sy m0 rows = true) (hc : PoleTileKeep.poleCheckZ sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
-    (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
+    (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
     (hT : R.TileColAll) (hd : IsDirect sy R.touchY R.touchRising) :
     T + 7 ≤ R.g ∧ (R.g ≤ T + 8 → R.g + Nc ≤ R.c) ∧ R.g + Nc ≤ R.c + 1 := by
   have H := numbers_of_check hn
   obtain ⟨q, L, T', a, u, W⟩ := R.direct hd
   have hrise := grab_frame hj W.path (by rw [W.atRising, hd.1]; rfl) (by rw [W.atY]; exact hd.2.1) (by rw [W.atY]; exact hd.2.2)
   have hq := W.one_le
-  have hnx : ∀ j, q ≤ j → j < R.g → Next (R.fr j) (R.fr (j + 1)) := fun j h1 h2 => R.next A.1 S.fric A.2 hfq hkc hc0 hgN j (by omega) h2
+  have hnx : ∀ j, q ≤ j → j < R.g → Next (R.fr j) (R.fr (j + 1)) := fun j h1 h2 => R.next A.1 S.fric A.2 hfq hkc hc0 hF hgN j (by omega) h2
   have hv : ∀ j, q ≤ j → j ≤ R.g → -(top sy : Int) ≤ (R.fr j).v ∧ (R.fr j).v ≤ (top sy : Int) := fun j h1 h2 => by
     obtain ⟨i, hi⟩ : ∃ i, j = i + 1 := ⟨j - 1, by omega⟩
     subst hi
-    exact speed_range H.h16 (R.next A.1 S.fric A.2 hfq hkc hc0 hgN) (R.startV A.1 A.2) i h2
-  have hin := R.inRange hc A.1 S.fric A.2 hfq hkc hc0 hmap hwb hgN hT
+    exact speed_range H.h16 (R.next A.1 S.fric A.2 hfq hkc hc0 hF hgN) (R.startV A.1 A.2) i h2
+  have hin := R.inRange hc A.1 S.fric A.2 hfq hkc hc0 hF hmap hwb hgN hT
   have hgap := S.gap
   have hN := H.hN
   have hTg := W.path.before
   have hbase : q < L → L < T' → ∀ w, 2 ≤ w → w ≤ q → feetP sy m0 ≤ (R.fr (w - 1)).P₂ → T + 1 ≤ w :=
-    fun h1 h2 w h3 h4 h5 => base_late Fa S H hfq hkc R A hc0 hgN w h3 (by omega) h5
+    fun h1 h2 w h3 h4 h5 => base_late Fa S H hfq hkc R A hc0 hF hgN w h3 (by omega) h5
   -- the stored speed of the frames before the jump, read from the machines
   have hstop : ∀ j, 1 ≤ j → j < R.g → (R.fr j).v = 0 →
       (trackOf sy R.keep.toFrames u).abs j = (R.fr j).v₂.natAbs ∨
         ((trackOf sy R.keep.toFrames u).abs j = (trackOf sy R.keep.toFrames u).abs (j - 1) ∧
           (trackOf sy R.keep.toFrames u).md j = (trackOf sy R.keep.toFrames u).md (j - 1)) := by
     intro j h1 h2 h0
-    rcases R.stop_step A.1 hf A.2 hfq hkc hc0 hgN (j := j) h1 h2 h0 with e | ⟨e1, e2⟩
+    rcases R.stop_step A.1 hf A.2 hfq hkc hc0 hF hgN (j := j) h1 h2 h0 with e | ⟨e1, e2⟩
     · exact Or.inl e
     · exact Or.inr ⟨congrArg UInt8.toNat e1, e2⟩
   have hkeep : ∀ j, 1 ≤ j → j < R.g →
       (trackOf sy R.keep.toFrames u).abs j = (R.fr j).v₂.natAbs ∨
         (trackOf sy R.keep.toFrames u).abs j = (trackOf sy R.keep.toFrames u).abs (j - 1) := by
     intro j h1 h2
-    rcases R.stored_step A.1 hf A.2 hfq hkc hc0 hgN (j := j) h1 h2 with e | e
+    rcases R.stored_step A.1 hf A.2 hfq hkc hc0 hF hgN (j := j) h1 h2 with e | e
     · exact Or.inl e
     · exact Or.inr (congrArg UInt8.toNat e)
   cases hfa : (a T').fast with
@@ -1903,7 +1915,7 @@ theorem direct_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N
       rw [hfa] at hA
       have := slow_short H.h16 H.hA R.fr (sideP sy m0) (feetP sy m0) (poleP sy m0)
         (posP sy (above m0 n) + X + 16 * (top sy : Int) * ((T - N : Nat) : Int)) T H.hPs H.hfar (by omega)
-        (fun e d h1 h2 h3 h4 => hB_run Fa S H hfq hkc R A hc0 hgN e d (by omega) (by omega) h3 h4) hnx hv hA hr hg
+        (fun e d h1 h2 h3 h4 => hB_run Fa S H hfq hkc R A hc0 hF hgN e d (by omega) (by omega) h3 h4) hnx hv hA hr hg
       omega
     · have hu := R.frac_mem A.2 hfq hkc hc0
       have h0 := castle_of_direct C (n := Nc - 2) hu (by omega) (W.flagAny hfa) R.atCastle (R.afterTouch A.2 hfq hkc hc0)
@@ -1930,16 +1942,16 @@ theorem castle_ge (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N E T
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleTileKeep.poleCheckZ sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
-    (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
+    (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
     (hT : R.TileColAll) : T + 7 + Nc ≤ R.c := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hr hc hfq hkc R A hc0 hmap hwb hgN hT hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hr hc hfq hkc R A hc0 hF hmap hwb hgN hT hd
     by_cases hg : R.g ≤ T + 8
     · have := h2 hg
       omega
     · omega
-  · have h1 := touch_ge Fa S hn hc hfq hkc R A hc0 hmap hwb hgN hT
+  · have h1 := touch_ge Fa S hn hc hfq hkc R A hc0 hF hmap hwb hgN hT
     have h2 := castle_of_other C (n := Nc + 5) (by have := H.hNlo; omega) (R.other hd) R.atCastle (R.afterTouch A.2 hfq hkc hc0)
     omega
 
@@ -1950,16 +1962,16 @@ theorem touch_castle (Fa : FastTakeoff.TFacts sy m0) (S : Statement sy m0 n X N 
     (hp : poleCheck sy m0 = true) (hm : maskCheck sy m0 = true) (hn : joinCheck sy m0 X N E T J Nc lo F = true)
     (hf : frictionCheck sy m0 = true) (hr : fallCheck sy m0 rows = true) (hc : PoleTileKeep.poleCheckZ sy m0 = true)
     (hfq : fracCheck sy (above m0 n) = true) (hkc : FrameKeep.keepCheckOf sy m0 = true) (R : Run sy m0 b vs ⟨above m0 n, dx, dy, rows⟩ T J Nc F Sr ar) (A : AtControl sy m0 n dx dy rows J (R.seq 0))
-    (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
+    (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0)) (hF : ∀ n, n < R.keep.toFrames.ix R.g → SideAcross.FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0)) (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0)) (hgN : R.g ≤ SurfaceFrames.farN sy (above m0 n))
     (hT : R.TileColAll) :
     (T + 1 ≤ R.g ∧ R.g + Nc + 6 ≤ R.c) ∨ (T + 7 ≤ R.g ∧ R.g ≤ T + 8 ∧ R.g + Nc ≤ R.c) ∨ (T + 9 ≤ R.g ∧ R.g + Nc ≤ R.c + 1) := by
   have H := numbers_of_check hn
   by_cases hd : IsDirect sy R.touchY R.touchRising
-  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hr hc hfq hkc R A hc0 hmap hwb hgN hT hd
+  · obtain ⟨h1, h2, h3⟩ := direct_castle Fa S C hj hp hm hn hf hr hc hfq hkc R A hc0 hF hmap hwb hgN hT hd
     by_cases hg : R.g ≤ T + 8
     · exact Or.inr (Or.inl ⟨h1, hg, h2 hg⟩)
     · exact Or.inr (Or.inr ⟨by omega, h3⟩)
-  · have h1 := touch_ge Fa S hn hc hfq hkc R A hc0 hmap hwb hgN hT
+  · have h1 := touch_ge Fa S hn hc hfq hkc R A hc0 hF hmap hwb hgN hT
     have h2 := castle_of_other C (n := Nc + 5) (by have := H.hNlo; omega) (R.other hd) R.atCastle (R.afterTouch A.2 hfq hkc hc0)
     exact Or.inl ⟨h1, by omega⟩
 

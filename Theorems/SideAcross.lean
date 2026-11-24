@@ -27,7 +27,8 @@ timer (`near_sideA`). Two more things make it pass:
   pointer's high byte and the range of `Y` (`takeP`, `SideRange.missP`, `izy_locs`): the pointer itself stays known through the parser's loop of rows and through
   the head's collision.
 
-So the field `sideW` is asked only on a frame without `FactsAt`, and the castle's part of it becomes the field `OnFrames.castleRow`.
+So the field `sideW` is asked only on a frame without `FactsAt`, and the castle's part of it becomes the field `OnFrames.castleRow`. Round 37: every frame of
+the route has `FactsAt` (`SurfaceFrames.AreaRun.facts`, from part f's fields: `SideAcross.Run.factsK`), so the field `sideW` is gone.
 The searches that make the tables are no part of the proof; the checks are `aCheck` and `keepCheckA`. There is no game data in this file: the two bytes and the
 loop's head are symbols. Page: `1-1/e-2-10-3-26-SideAcross.md`.
 -/

@@ -63,6 +63,21 @@ theorem slowArcs_spec {sy : Syms} {m : Machine} {y0 h : Nat} (hc : slowArcs sy m
   rw [(arc_k hr).2, hs] at h1
   simpa using h1
 
+/-- **The check on the ROM of a slow takeoff's stored speed** (round 37): a takeoff from a stand at `y0` with the fall force of a slow takeoff (`slowF`) read a stored
+speed below the air threshold -/
+def slowAbs (sy : Syms) (m : Machine) (y0 h : Nat) : Bool :=
+  (List.range 256).all fun v => !(slowF sy m y0 h).contains (offR sy m y0.toUInt8 v.toUInt8).vfd || decide (v < sy.AirFastSpeed.toNat)
+
+theorem slowAbs_spec {sy : Syms} {m : Machine} {y0 h : Nat} (hc : slowAbs sy m y0 h = true) (abs : UInt8)
+    (hv : (offR sy m y0.toUInt8 abs).vfd ∈ slowF sy m y0 h) : abs.toNat < sy.AirFastSpeed.toNat := by
+  have h1 := List.all_eq_true.mp hc abs.toNat (List.mem_range.2 abs.toNat_lt)
+  simp only [UInt8.ofNat_toNat, Bool.or_eq_true, Bool.not_eq_true', decide_eq_true_eq] at h1
+  rcases h1 with h1 | h1
+  · have h2 : (slowF sy m y0 h).contains (offR sy m y0.toUInt8 abs).vfd = true := List.contains_iff_mem.2 hv
+    rw [h1] at h2
+    cases h2
+  · exact h1
+
 /-! ## Every layer of a search -/
 
 /-- the states of the layers `0..n` from `L`, each layer once -/

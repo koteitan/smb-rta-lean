@@ -113,6 +113,7 @@ bKeep   :  ∀ n, n < ix g → ∀ k,  (ResidB(trace(all n, k)) ∨ ∃ j < k, C
 ## 証明していないこと
 
 * `ResidC` の場所での `ctlKeep`、`ResidB` の場所と、触るフレームでルーチン、モード、タスクの最初の書き込みのあとでの `bKeep`（偽になるところは測って 0）。
+* 37 回目（[ブロックのオブジェクトのオフセットを知って、頭が当たるとき](f-6-17-20-PoleOffset-ja.md)）: このページのチェック `nCheck` は `PoleNear.nCheckN` になりました。`PoleNear.nCheck` はそれと `PoleOffset` のチェックです。オフセットを知ると、`ctlKeep` は頭が当たるときのコードでは、オフセットが 0 か 1 で始まらないフレームでだけ求めます。
 * `coinBuf`、`readC`、`bufAll`、`keepB`、`tilesCol`: 変わらない。
 
 **ファイル。** `Theorems/PoleNear.lean`（新しい）。`Theorems/PoleBcol.lean`（`NoW`、`Bc.ctlI`、`missS`、`store_target`、`store_miss`、`cov_preB0`、歩きとその定理）。`Theorems/PoleCoin.lean`（フレームの命令での `CleanK` と `CtlR`）。`Theorems/PoleJoin.lean`（`ctlKeep`、`bKeep`、`Run.bNoW`、`Run.ctlR`、`Run.ctl6`）。`Theorems/PoleParserRun.lean`（シグネチャ）。`Smbrta/Syms.lean`、`tools/smb-symbols.txt`（`SpriteShuffler`、`RenderUnderPart`）。`Main.lean`（`genPoleNear`、Route のブロック、`pole-keep near-check`、`near-search`、`near`、`pole-keep parser` の数）。

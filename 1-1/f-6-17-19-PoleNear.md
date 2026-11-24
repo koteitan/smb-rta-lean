@@ -112,6 +112,7 @@ The frames: 719 on the TAS, 14,318 and 25,980 on the random runs (the frames tha
 
 ## What is not proved
 
+* Round 37 ([the head's collision with the block objects' offset known](f-6-17-20-PoleOffset.md)): the check `nCheck` of this page is now `PoleNear.nCheckN`; `PoleNear.nCheck` is it and the check of `PoleOffset`. With the offset known, `ctlKeep` is asked at the head's collision only on a frame that does not start with the offset 0 or 1.
 * `ctlKeep` at the places of `ResidC`, `bKeep` at the places of `ResidB` and on the touch's frame after its first store of the routine, the mode or the task (0 measured where they are false).
 * `coinBuf`, `readC`, `bufAll`, `keepB`, `tilesCol`: unchanged.
 

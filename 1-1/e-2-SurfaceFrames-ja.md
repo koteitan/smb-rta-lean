@@ -30,6 +30,8 @@
 
 **第 36 回.** フィールド `sideW` は、`SideAcross.FactsAt` のないフレームでだけ求めます（[フレームをまたいで残る 2 つのバイトと城の始めの行、横のタイマーに届きうる書き込み](e-2-10-3-26-SideAcross-ja.md)）: フレームはブロックのバッファの列が 32 より小さく `SprDataOffset_Ctrl` が 0 か 1 で始まり、添え字かポインタを通した書き込みはどちらのバイトも書かない。`FactsAt` のあるフレームでは定理です（`SideAcross.near_sideA`）: 第 35 回の歩きに、2 つのバイトを守ってスクロールの処理の呼び出しから知らせ、上のバイトを知るポインタを通した書き込みのあとでゼロページを取り戻し、城の行のループの頭で行を 0 から 10 に分けるものです。分けは新しいフィールド `castleRow`（`SideAcross.CastleRow`: そこの行は高々 10）によります。`castleRow` は `sideW` が求めたフレームと命令から求めます。第 35 回の `sideW` の城の部分より弱くはありません（行 11 から始まり、タイマーに届く前にフレームが終わるループは、それを満たしこれを満たさない）。ルートのフレームでは `FactsAt` はパート f のフィールド `bKeep` と `keepB` から来ます（`SideAcross.Run.factsAll`）が、ルートはまだ使いません。`numbersCheck` は確かめを 1 つ多く持ちます（`SideAcross.check`、ネイティブで約 17 秒）。
 
+**第 37 回.** フィールド `sideW` はなくなりました（[ルートでのパート f の 2 つのバイトの条件](e-2-10-3-27-SideFacts-ja.md)）。`AreaRun` に新しい部分 `facts` があります: タッチのフレームまでのどのフレームも `SideAcross.FactsAt` を満たします。`OnFrames.areaRun` はそれを仮定 `hF` として受け取り、ルートは `hF` をパート f のフィールド `bKeep`、`keepB`、`bufAll` と操作を得たときの 2 つのバイトから証明します（`SideAcross.Run.factsK`）。そのため `OnFrames.sideWAt` はどのフレームでも、フィールド `castleRow` を使う `SideAcross.near_sideA` です。`numbersCheck` から `SideLoop.lCheck`（ネイティブで約 15 秒）を外しました。それを使っていたのは `FactsAt` のないフレームだけでした。`castleRow` は残ります: エリアのデータのポインタを知り、読み込みの位置をその値に分ける歩みは、21 分で 5.8 GB を超えました（ページを見てください）。
+
 単位は 1/256 ピクセルです。`seq j` は数えるフレーム `j` の終わりの機械です。`seq 0` は操作できるときの機械です。`B.m` は非公開の証明が持つ、操作できるときの機械です。
 
 ## 1 フレームの形
@@ -139,15 +141,16 @@ endKeep  : 1 ≤ j, j + 1 < g  →  EndKeep(seq j)   （第 32 回: 1 つの状�
            （第 32 回: side(seq j) ≤ 1 → pixel16(seq j) = pixel16(Rt)（Rt はスクロールの処理の戻りの命令）は定理: PushTimer.pix_end と posW、sideW。
            第 30 回、第 31 回は、押し戻しか補正を呼び右への速さを保たないフレームで、これをここで求めていた）
            （left16(seq j) = left16(Rt) は定理: 呼び出しの次の命令からの EdgeStep.keep_r の歩き）
-sideW    : 1 ≤ j < g、side(seq j) ≠ t₁₆、Q はスクロールの処理、R は Q からフレームの終わりまでの命令、NearW(R)、Resid(R)、¬FactsAt(fm j)  →  SideW(R)
-           （第 36 回。第 35 回: ¬FactsAt(fm j) なし。第 34 回: Resid₃₄(R)。第 33 回: Resid(R) なし。第 32 回: j + 1 < g、side(seq j) ≤ 1、lock(seq j) = 0、thr ≤ pfs(seq j)、すべての R）
+sideW    : なくなった（第 37 回）。前は: 1 ≤ j < g、side(seq j) ≠ t₁₆、Q はスクロールの処理、R は Q からフレームの終わりまでの命令、NearW(R)、Resid(R)、
+           ¬FactsAt(fm j)  →  SideW(R)   （第 36 回。第 35 回: ¬FactsAt(fm j) なし。第 34 回: Resid₃₄(R)。第 33 回: Resid(R) なし。第 32 回: すべての R）
            FactsAt(M) := M[BlockBufferColumnPos] < 32 ∧ M[SprDataOffset_Ctrl] ≤ 1 ∧ M のフレームの添え字かポインタを通した書き込みはどちらのバイトも書かない
-           （FactsAt と castleRow のあるフレームでは、NearW(R) → SideW(R) は SideAcross.near_sideA）
+           （AreaRun.facts: ∀ n < ix g, FactsAt(all n)。パート f のフィールドから SideAcross.Run.factsK で出る。castleRow と合わせて NearW(R) → SideW(R) は
+           SideAcross.near_sideA、定理 OnFrames.sideWAt）
 castleRow: 1 ≤ j < g、side(seq j) ≠ t₁₆、Q はスクロールの処理、R は Q からフレームの終わりまでの命令  →  CastleRow(R)   （第 36 回）
            CastleRow(R) := pc(R) = CRendLoop → X(R) ≤ 10   （城の始めの行。城の行のループでの sideW のかわり）
            Resid(R) := （Resid₃₄(R) ∧ R の命令は STA (zp),Y）∨ CRendLoop ≤ pc(R) < ChkCFloor（城の行のループ）
            Resid₃₄(R) := AreaParserCore ≤ pc(R) < GetBlockBufferAddr（エリアの読み込みのコード）、または PlayerHeadCollision ≤ pc(R) < BlockObjectsCore（頭がブロックに当たるとき）
-           （NearW(R) ∧ ¬Resid(R) → SideW(R) は SideLoop.near_side）
+           （第 35 回: NearW(R) ∧ ¬Resid(R) → SideW(R) は SideLoop.near_side。第 37 回: 使わない）
            SideW(R) := R での添え字かポインタを通した書き込みは横のタイマーを書かない
            NearW(R) := R で、絶対アドレスに添え字を足した書き込みで、ある添え字が元のアドレスからタイマーに届くもの、またはポインタを通した書き込み（¬NearW(R) → SideW(R) は PushTimer.sideW_far）
            ClampSide.left_after と合わせて NearM(seq j) を出す（OnFrames.nearStepAt、前のフィールド nearStep）。NearM(seq 0) と数えないフレームと合わせて、
@@ -223,7 +226,7 @@ vert_of    : vertOK ∧ ctrlCheck ∧ OnFrames ∧ (∀ n < ix g, StartK(all n))
 | `collide` の 3 番目の場合 P(b) ≤ P(M) + 256（本物のフレームで偽、第 23 回） | 第 24 回: 画面の左端を入れた P(b) ≤ base(M) + 256。新しい: フィールド `edge`（1 フレーム）と `edge₀`（操作の始めの状態） |
 | `edge`: 1 ≤ j < g → edge(seq j) ≤ max(base(seq (j − 1)), P(seq j))（第 24 回） | 第 26 回: `EdgeStep` の歩き、スクロールの規則、`collide`、`posW` からの定理 `OnFrames.edgeAt`。新しいフィールドはスクロールの処理での `near`。`guardE` は端の 2 つのバイトを守る（[フレームの端の進み](e-2-10-3-13-EdgeStep-ja.md)） |
 | `rightRel`: 画面の外のビットのルーチンで、右端は左端 + 255 px（2¹⁶ を法として）で、左端のページは 255 でない（第 30 回） | 第 31 回: 定理 `OnFrames.relAll`（`RightEdge.scroll_rel`、右端の 2 バイトも追う `EdgeStep` の歩き、`Start.rightX`、`Start.rightP` から）と `OnFrames.pageAll`（`readAllP`: `PageOK` つきの `readAllB` の限り、`numbersCheck` のもう 1 つの数）。新しいフィールドはない。`guardE` が右端の 2 バイトを守る（[スクロールの処理での画面の右端](e-2-10-3-19-RightEdge-ja.md)） |
-| スクロールの処理からのすべての命令での `sideW`（第 32 回） | 第 33 回: 横のタイマーに届きうる書き込み（`PushTimer.NearW`）でだけ求める。ほかの命令は定理 `PushTimer.sideW_far`。タイマーが押し戻しの値で終わらない旗に触る前のどの数えるフレームでも求める（第 32 回: 高々 1 で、ロックが 0 で場所のバイトがしきい値以上のとき、最後のフレームは除く）: 各フレームではより少なく、より多くのフレームで求める（[横のタイマーに届きうる書き込み](e-2-10-3-22-SideNear-ja.md)）。第 34 回: そのような書き込みのうち、エリアの読み込みのコードと頭がブロックに当たるときのコードにあるものでだけ求め、ほかは定理 `SideRange.near_side`（[エリアの読み込みの外の、横のタイマーに届きうる書き込み](e-2-10-3-24-SideRange-ja.md)）。第 35 回: そこのポインタを通した書き込みと城の行のループの書き込みでだけ求め、ほかは定理 `SideLoop.near_side`（[エリアの読み込みのループの、横のタイマーに届きうる書き込み](e-2-10-3-25-SideLoop-ja.md)）。第 36 回: `SideAcross.FactsAt`（フレームの始まりのブロックのバッファの列と `SprDataOffset_Ctrl`、それへの添え字かポインタを通した書き込みがないこと）のないフレームでだけ求める。それがあればどの書き込みも定理 `SideAcross.near_sideA` で、城のループのかわりに新しいフィールド `castleRow`（城の始めの行は高々 10）を使う（[フレームをまたいで残る 2 つのバイトと城の始めの行、横のタイマーに届きうる書き込み](e-2-10-3-26-SideAcross-ja.md)） |
+| スクロールの処理からのすべての命令での `sideW`（第 32 回） | 第 33 回: 横のタイマーに届きうる書き込み（`PushTimer.NearW`）でだけ求める。ほかの命令は定理 `PushTimer.sideW_far`。タイマーが押し戻しの値で終わらない旗に触る前のどの数えるフレームでも求める（第 32 回: 高々 1 で、ロックが 0 で場所のバイトがしきい値以上のとき、最後のフレームは除く）: 各フレームではより少なく、より多くのフレームで求める（[横のタイマーに届きうる書き込み](e-2-10-3-22-SideNear-ja.md)）。第 34 回: そのような書き込みのうち、エリアの読み込みのコードと頭がブロックに当たるときのコードにあるものでだけ求め、ほかは定理 `SideRange.near_side`（[エリアの読み込みの外の、横のタイマーに届きうる書き込み](e-2-10-3-24-SideRange-ja.md)）。第 35 回: そこのポインタを通した書き込みと城の行のループの書き込みでだけ求め、ほかは定理 `SideLoop.near_side`（[エリアの読み込みのループの、横のタイマーに届きうる書き込み](e-2-10-3-25-SideLoop-ja.md)）。第 36 回: `SideAcross.FactsAt`（フレームの始まりのブロックのバッファの列と `SprDataOffset_Ctrl`、それへの添え字かポインタを通した書き込みがないこと）のないフレームでだけ求める。それがあればどの書き込みも定理 `SideAcross.near_sideA` で、城のループのかわりに新しいフィールド `castleRow`（城の始めの行は高々 10）を使う（[フレームをまたいで残る 2 つのバイトと城の始めの行、横のタイマーに届きうる書き込み](e-2-10-3-26-SideAcross-ja.md)）。第 37 回: なくなった: ルートのどのフレームも `FactsAt` を持つ（`AreaRun.facts`、パート f のフィールドから: `SideAcross.Run.factsK`）（[ルートでのパート f の 2 つのバイトの条件](e-2-10-3-27-SideFacts-ja.md)） |
 | スクロールの処理で彼が画面の左端より右にいるか、フレームが左端より左で始まるときの `Moves.stop`（第 32 回） | 第 33 回: 押し戻しのあるフレームでだけ求める: スクロールの処理で端より右で終わりでタイマーが押し戻しの値、または始めで端より左でそこでタイマーがその値。ほかのフレームは定理 `OnFrames.stopRight`（`StopClamp.stop_clamp`、`PushTimer.pix_end` の速さの歩き、`ClampSide.clamp_end` の速さ、確認 `ClampSide.rightAmt`）、`OnFrames.noStopRight`（`EdgeStep.NearX` で）、`OnFrames.leftEnd`。新しいフィールドはない（[補正が止めるフレームは画面の左端で終わる](e-2-10-3-23-StopClamp-ja.md)） |
 | きれいな状態からのどのフレームでも `Moves.stop`（第 28 回） | 第 32 回: スクロールの処理で彼が画面の左端より右にいるか、フレームが左端より左で始まるときだけ求める。それ以外のフレームは定理 `OnFrames.stopAt`（フレームはスクロールの処理まで左端を保つ: `EdgeStep.keep_q`、`OnFrames.edgeLag`。`StopEdge.stop_of_edge`）。新しいフィールドはない（[画面の左端で彼を止めるフレーム](e-2-10-3-21-StopEdge-ja.md)） |
 | `endKeep` のピクセルの部分: 横のタイマーが高々 1 で終わり、右への速さを保たずに押し戻しか補正を呼ぶフレームでは、終わりでの彼のピクセルはスクロールの処理の戻りの命令でのもの（第 30 回、第 31 回） | 第 32 回: タイマーが高々 1 で終わるすべてのフレームで定理 `PushTimer.pix_end`（スクロールの処理の呼び出しの次の命令からの歩きで、ピクセルとページを追い、彼を動かす押し戻しのあとはタイマーを 16 と知る）。1 つの命令についての新しいフィールド `sideW`。`endKeep` は 1 つの状態での場所のバイト。`numbersCheck` の確認が 1 つ増えた（[彼を動かす押し戻しは横のタイマーを 16 にする](e-2-10-3-20-PushTimer-ja.md)） |

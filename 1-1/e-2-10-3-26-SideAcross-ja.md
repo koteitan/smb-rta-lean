@@ -73,6 +73,6 @@ castleRow : ∀ j, 1 ≤ j → j < g → side(seq j) ≠ t₁₆ →
 **ここで証明していないこと.**
 
 - `castleRow`。始めの行は、エリアのデータの城のオブジェクトの 2 つ目のバイトの下の 4 ビットです。それを証明するには、歩きが、フレームをまたいで残るエリアのデータのポインタと、読み込みのデータの中の位置と、1-1 の城のオブジェクトの行を知らなければなりません。
-- ルートでの `FactsAt`: それは仮定であるパート f のフィールド `bKeep` と `keepB` から来ます（`Run.factsAll`）が、ルートはまだそれを使いません。
+- ルートでの `FactsAt`: それは仮定であるパート f のフィールド `bKeep` と `keepB` から来ます（`Run.factsAll`）が、ルートはまだそれを使いません。 第 37 回: ルートはそれを使い、`sideW` はなくなりました（[ルートでのパート f の 2 つのバイトの条件](e-2-10-3-27-SideFacts-ja.md)）。
 
 **ファイル:** `Theorems/SideAcross.lean`（`bcpI`、`sdoI`、`InvB`、`MissB`、`FactsAt`、`CastleRow`、`spC`、`CovH`、`cov_spC`、`guardA`、`cleanK_A`、`setB`、`sim_setB`、`missP_ne`、`izy_locs`、`takeP`、`fixP`、`fixP_sim`、`sideW_of_missK`、`okA`、`okA_spec`、`walkP`、`live_stepP`、`okP_all`、`searchA`、`aCfg`、`aCheck`、`keepCheckA`、`check`、`keep_cutA`、`keep_subsA`、`near_sideA`）、`Theorems/SideAcrossRun.lean`（`factsAt_frames`、`Run.factsAll`）。変えたもの: `Theorems/SurfaceFrames.lean`（フィールド `sideW` と `castleRow`、`OnFrames.sideWAt`、`numbersCheck`、`Numbers.acrossC`、`AreaRun.ac`、`movesScan`）、`Main.lean`（`surface-frames-check` の数え）。

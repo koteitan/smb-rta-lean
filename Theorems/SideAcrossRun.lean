@@ -10,7 +10,10 @@ column and the offset at control, by the walks of whole frames `PoleBcol.frames_
 `PoleTileKeep.frames_keepY` (bits 1 to 7 of the offset stay 0) (`Run.factsAll`). The two pairs of RAM indices (the symbols of `SideAcross`, the operands that part
 f reads from the code) are the same: the checks `he1`, `he2` on the ROM.
 
-So on the route's frames the field `OnFrames.sideW`, which asks only on a frame without `FactsAt`, asks nothing: there is no such frame. The route does not use this theorem yet (its theorems that take `SurfaceFrames.AreaRun` would need the facts at control as hypotheses).
+So on the route's frames the old field `OnFrames.sideW`, which round 36 asked only on a frame without `FactsAt`, asked nothing: there is no such frame. Round 37:
+the route passes `Run.factsK` (every frame of `keep` up to the touch's frame) to part e as the hypothesis `hF` of `SurfaceFrames.OnFrames.areaRun` (the field
+`SurfaceFrames.AreaRun.facts`), and the field `sideW` is gone. The theorems of `PoleJoin` and `PoleParserRun` that build an `AreaRun` take `hF`; the private proof
+of the route makes it from the facts at control (`PoleParserRun.bInv₀`, `PoleTileCtl.colMap₀`, `PoleTileCtl.watch₀`) and `he1`, `he2` on the ROM.
 Page: `1-1/e-2-10-3-26-SideAcross.md`.
 -/
 
@@ -64,9 +67,38 @@ theorem factsAt_frames {Sr : FrameKeep.RealRun} {a g : Nat} {seq : Nat → Machi
     · exact hkb n hn k t ht hlt (by rw [e, ← he2]; simp [PoleTileKeep.bI])
 
 set_option maxRecDepth 100000 in
-/-- **`FactsAt` on every counted frame of `PoleJoin.Run` up to the touch** (the frames of `OnFrames`: `Run.frames`), from its fields `bKeep` (through
-`Run.bNoW` and the check `hcN`), `keepB`, `bufAll`
-and the two bytes at control (`hIB`: `PoleParserRun.bInv₀`; `hwb`: `PoleTileCtl.watch₀`; with the map `hmap`: `PoleTileCtl.colMap₀`), as `Run.tilesStart` -/
+/-- **`FactsAt` on every frame of `PoleJoin.Run` up to the touch's frame** (counted or not: the frames of `keep`, as `SurfaceFrames.AreaRun.facts` asks it), from
+its fields `bKeep` (through `Run.bNoW` and the check `hcN`), `keepB`, `bufAll` and the two bytes at control (`hIB`: `PoleParserRun.bInv₀`; `hwb`:
+`PoleTileCtl.watch₀`; with the map `hmap`: `PoleTileCtl.colMap₀`), as `Run.tilesStart`. Round 37: the route passes it to part e (`SurfaceFrames.OnFrames.areaRun`), so
+the field `OnFrames.sideW` is gone. -/
+theorem Run.factsK {b : Machine} {vs : List Jump.VS} {B : PoleJoin.Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat}
+    (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar)
+    (hc : PoleTileKeep.poleCheckZ sy m0 = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
+    (hcN : PoleNear.nCheck sy m0 = true)
+    (st : SurfaceFrames.Start sy B (R.seq 0)) (hq : PoleJoin.fracCheck sy B.m = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0))
+    (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0))
+    (he1 : (PoleBcol.bcOf sy m0).bI = bcpI sy) (he2 : PoleTileKeep.sprI sy m0 = sdoI sy) :
+    ∀ n, n < R.keep.toFrames.ix R.g → FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n) := by
+  have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
+  exact factsAt_frames R.keep.toFrames hk hcB (PoleTileKeep.keepY_of_Z hc) hc0.start (R.watched₀ st hq hc0.castle) hIB hwb hmap
+    (R.bNoW hk hcN hc0.start (R.watched₀ st hq hc0.castle)) (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k))
+    (fun n hn k => PoleRing.bufAt_of_VR (R.bufAll n (by omega) k)) he1 he2
+
+/-- `Run.factsK` with the box written `⟨M, dx, dy, rows⟩`, as `PoleJoin.touch_castle` writes it, so that the private proof's facts on its machine `M` match
+without unfolding it -/
+theorem Run.factsKM {b : Machine} {vs : List Jump.VS} {M : Machine} {dx dy rows T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat}
+    (R : PoleJoin.Run sy m0 b vs ⟨M, dx, dy, rows⟩ T J Nc F Sr ar)
+    (hc : PoleTileKeep.poleCheckZ sy m0 = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
+    (hcN : PoleNear.nCheck sy m0 = true)
+    (st : SurfaceFrames.Start sy ⟨M, dx, dy, rows⟩ (R.seq 0)) (hq : PoleJoin.fracCheck sy M = true) (hc0 : FrameKeep.AtCtl sy m0 (R.seq 0))
+    (hIB : PoleBcol.BInv (PoleBcol.bcOf sy m0) (R.seq 0)) (hmap : PoleTileWalk.ColMap (PoleFrame.spotsF sy m0) (R.seq 0))
+    (hwb : FrameKeep.Watched (PoleTileKeep.watchB sy m0) (R.seq 0))
+    (he1 : (PoleBcol.bcOf sy m0).bI = bcpI sy) (he2 : PoleTileKeep.sprI sy m0 = sdoI sy) :
+    ∀ n, n < R.keep.toFrames.ix R.g → FactsAt sy (R.keep.toFrames.all n) (R.keep.toFrames.inp n) :=
+  Run.factsK R hc hk hcB hcN st hq hc0 hIB hmap hwb he1 he2
+
+/-- **`FactsAt` on every counted frame of `PoleJoin.Run` up to the touch** (the frames of `OnFrames`: `Run.frames`): `Run.factsK` at the counted frames -/
 theorem Run.factsAll {b : Machine} {vs : List Jump.VS} {B : PoleJoin.Box} {T J Nc : Nat} {F : Int} {Sr : FrameKeep.RealRun} {ar : Nat}
     (R : PoleJoin.Run sy m0 b vs B T J Nc F Sr ar)
     (hc : PoleTileKeep.poleCheckZ sy m0 = true) (hk : FrameKeep.keepCheckOf sy m0 = true) (hcB : PoleBcol.bcolCheck sy m0 = true)
@@ -77,11 +109,8 @@ theorem Run.factsAll {b : Machine} {vs : List Jump.VS} {B : PoleJoin.Box} {T J N
     (he1 : (PoleBcol.bcOf sy m0).bI = bcpI sy) (he2 : PoleTileKeep.sprI sy m0 = sdoI sy) :
     ∀ j, 1 ≤ j → j ≤ R.g → FactsAt sy (R.keep.fm j) (R.keep.pad j) := by
   intro j h1 h2
-  have e : R.keep.toFrames.ix R.g = FrameKeep.ixOf sy m0 Sr ar R.keep.top R.g := rfl
   have h3 := R.keep.toFrames.one_le_ix h1 h2
   have h4 := R.keep.toFrames.ix_mono j R.g h2 (Nat.le_refl _)
-  exact factsAt_frames R.keep.toFrames hk hcB (PoleTileKeep.keepY_of_Z hc) hc0.start (R.watched₀ st hq hc0.castle) hIB hwb hmap
-    (R.bNoW hk hcN hc0.start (R.watched₀ st hq hc0.castle)) (fun n hn k => PoleKeepFar.keepB_of_R (R.keepB n (by omega) k))
-    (fun n hn k => PoleRing.bufAt_of_VR (R.bufAll n (by omega) k)) he1 he2 (R.keep.toFrames.ix j - 1) (by omega)
+  exact Run.factsK R hc hk hcB hcN st hq hc0 hIB hmap hwb he1 he2 (R.keep.toFrames.ix j - 1) (by omega)
 
 end Smbrta.SideAcross

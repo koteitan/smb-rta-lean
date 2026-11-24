@@ -73,6 +73,6 @@ where `Resid` is round 35's `SideLoop.Resid` (the four stores). `OnFrames.sideWA
 **What is not proved here.**
 
 - `castleRow`. The start row is the low 4 bits of the castle object's second byte in the area's data. To prove it a walk must know the area's data pointer and the parser's offsets into the data, which live across frames, and the rows of 1-1's castle objects.
-- `FactsAt` on the route: it follows from part f's fields `bKeep` and `keepB` (`Run.factsAll`), which are assumed, and the route does not use it yet.
+- `FactsAt` on the route: it follows from part f's fields `bKeep` and `keepB` (`Run.factsAll`), which are assumed, and the route does not use it yet. Round 37: the route uses it, and `sideW` is gone ([Part f's facts of the two bytes on the route](e-2-10-3-27-SideFacts.md)).
 
 **Files:** `Theorems/SideAcross.lean` (`bcpI`, `sdoI`, `InvB`, `MissB`, `FactsAt`, `CastleRow`, `spC`, `CovH`, `cov_spC`, `guardA`, `cleanK_A`, `setB`, `sim_setB`, `missP_ne`, `izy_locs`, `takeP`, `fixP`, `fixP_sim`, `sideW_of_missK`, `okA`, `okA_spec`, `walkP`, `live_stepP`, `okP_all`, `searchA`, `aCfg`, `aCheck`, `keepCheckA`, `check`, `keep_cutA`, `keep_subsA`, `near_sideA`), `Theorems/SideAcrossRun.lean` (`factsAt_frames`, `Run.factsAll`). Changed: `Theorems/SurfaceFrames.lean` (the fields `sideW` and `castleRow`, `OnFrames.sideWAt`, `numbersCheck`, `Numbers.acrossC`, `AreaRun.ac`, `movesScan`), `Main.lean` (a count in `surface-frames-check`).
